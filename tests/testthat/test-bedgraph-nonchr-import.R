@@ -4,6 +4,10 @@
 # "chr" prefix check, which silently mis-parsed any 4-field line
 # from such genomes as an INVALID_FORMAT error.
 
+# This file re-roots into a database of its own. Put a usable root back for whichever file
+# the parallel worker picks up next, which would otherwise inherit this one.
+restore_groot_on_exit()
+
 test_that("gtrack.import parses bedGraph with non-chr-prefixed contig names", {
     local_db_state()
     withr::with_tempdir({

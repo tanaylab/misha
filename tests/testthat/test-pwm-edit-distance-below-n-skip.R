@@ -15,6 +15,11 @@
 # This needs sequence containing real N bases, so we build a tiny genome whose
 # .seq is all N (misha .seq files are raw bytes, position == coordinate).
 
+# Re-roots into a database of its own; hand this process's overlay back to the next
+# file in the parallel worker (helper-test_db.R).
+restore_groot_on_exit()
+
+
 make_all_n_genome <- function(root, chrom_size = 120L) {
     dir.create(root)
     dir.create(file.path(root, "tracks"))

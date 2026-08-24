@@ -1,3 +1,7 @@
+# Re-roots into a database of its own; hand this process's overlay back to the next
+# file in the parallel worker (helper-test_db.R).
+restore_groot_on_exit()
+
 load_test_db()
 
 # Regression for the stale-mmap-window bug in GenomeTrackFixedBin (introduced by
@@ -56,7 +60,7 @@ make_indexed_track_with_empty_trailing_chrom <- function(root, binsize = 20L,
 
     misha:::.gcall(
         "gtrack_pack_per_chrom_to_indexed",
-        trackdir, c("chr1", "chr2"), "dense", misha:::.misha_env()
+        trackdir, c("chr1", "chr2"), "dense"
     )
     expect_true(file.exists(file.path(trackdir, "track.dat")))
     expect_true(file.exists(file.path(trackdir, "track.idx")))

@@ -276,9 +276,9 @@ SEXP C_gsynth_replace_kmer(SEXP _target, SEXP _replacement, SEXP _intervals,
         if (output_format == 2) {
             // Return character vector
             SEXP result;
-            PROTECT(result = Rf_allocVector(STRSXP, collected_seqs.size()));
+            PROTECT(result = RSaneAllocVector(STRSXP, collected_seqs.size()));
             for (size_t i = 0; i < collected_seqs.size(); ++i) {
-                SET_STRING_ELT(result, i, Rf_mkChar(collected_seqs[i].c_str()));
+                SET_STRING_ELT(result, i, RSaneMkChar(collected_seqs[i].c_str()));
             }
             UNPROTECT(1);
             return result;

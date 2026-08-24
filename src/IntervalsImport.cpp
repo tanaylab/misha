@@ -303,7 +303,7 @@ SEXP gintervals_import_genes(SEXP _genes_fname, SEXP _annots_fname, SEXP _annots
                             }
                         }
 
-                        SET_STRING_ELT(rannots[iannot], intervs_size, Rf_mkChar(annot.c_str()));
+                        SET_STRING_ELT(rannots[iannot], intervs_size, RSaneMkChar(annot.c_str()));
 					}
 
 					intervs_size++;

@@ -8,6 +8,11 @@
 # chr1 (example db) N-region facts:
 #   chr1[0, 167280)        : non-N
 #   chr1[167280, 217280)   : 50000 bp of 'N'
+
+# Re-roots into a database of its own; hand this process's overlay back to the next
+# file in the parallel worker (helper-test_db.R).
+restore_groot_on_exit()
+
 N_START <- 167280L
 
 # Boundary-crossing sample window: 20bp ACGT then 20bp N

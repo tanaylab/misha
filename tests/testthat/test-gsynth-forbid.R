@@ -1,5 +1,10 @@
 # Tests for gsynth.forbid_kmer()
 
+# Re-roots into a database of its own; hand this process's overlay back to the next
+# file in the parallel worker (helper-test_db.R).
+restore_groot_on_exit()
+
+
 .gfb_train <- function(intervals = gintervals(1, 0, 50000), iterator = 200, k = 5L) {
     if ("test_vt" %in% gvtrack.ls()) gvtrack.rm("test_vt")
     gvtrack.create("test_vt", "dense_track", "avg")

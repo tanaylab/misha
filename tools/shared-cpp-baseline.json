@@ -21,7 +21,7 @@
   },
   "BufferedFile.h": {
     "identical": false,
-    "misha": "6f8386203ee67d3d",
+    "misha": "a2073d95a55a4c53",
     "pymisha": "64a5dee828740bfd"
   },
   "CRC64.h": {
@@ -111,7 +111,7 @@
   },
   "GenomeTrackFixedBin.h": {
     "identical": false,
-    "misha": "21efa4c299a87e14",
+    "misha": "f5f4ffc6c5099e43",
     "pymisha": "c594accfebff68f8"
   },
   "GenomeTrackSparse.cpp": {
@@ -256,13 +256,13 @@
   },
   "TGLException.cpp": {
     "identical": true,
-    "misha": "cfd8e4ec1f60e24e",
-    "pymisha": "cfd8e4ec1f60e24e"
+    "misha": "a8291a799c695cd4",
+    "pymisha": "a8291a799c695cd4"
   },
   "TGLException.h": {
     "identical": true,
-    "misha": "e4a1fddf699f620d",
-    "pymisha": "e4a1fddf699f620d"
+    "misha": "1bb9ad56e81f5af9",
+    "pymisha": "1bb9ad56e81f5af9"
   },
   "TrackIndex.cpp": {
     "identical": false,

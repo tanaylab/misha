@@ -34,6 +34,7 @@
 #include "DnaPSSM.h"
 #include "PWMScorer.h"
 #include "PwmCoreParams.h"
+#include "rdbutils.h"
 #include <set>
 #include <algorithm>
 #include <cmath>
@@ -1055,8 +1056,13 @@ SEXP C_gseq_pwm_edits(SEXP r_seqs, SEXP r_pssm, SEXP r_score_thresh,
                        SEXP r_direction)
 {
     try {
-        if (!Rf_isString(r_seqs)) Rf_error("seqs must be a character vector");
-        if (!Rf_isMatrix(r_pssm) || !Rf_isReal(r_pssm)) Rf_error("pssm must be a numeric matrix");
+        // check_interrupt() below reads a flag only misha's own SIGINT handler sets, and
+        // that handler exists only while an RdbInitializer does. Rf_error() would longjmp
+        // straight past it, so validation reports through verror() from here on.
+        RdbInitializer rdb_init;
+
+        if (!Rf_isString(r_seqs)) rdb::verror("seqs must be a character vector");
+        if (!Rf_isMatrix(r_pssm) || !Rf_isReal(r_pssm)) rdb::verror("pssm must be a numeric matrix");
 
         int n_seqs = Rf_length(r_seqs);
         if (n_seqs == 0) {
@@ -1226,6 +1232,11 @@ SEXP C_gseq_pwm_edits(SEXP r_seqs, SEXP r_pssm, SEXP r_score_thresh,
         std::vector<EditRow> all_rows;
 
         for (int si = 0; si < n_seqs; si++) {
+            // Per sequence, not per window: each iteration runs a full edit-distance DP
+            // over every window of the sequence, so a flag test here costs nothing and is
+            // the only point at which a long scan can be interrupted.
+            rdb::check_interrupt();
+
             SEXP r_str = STRING_ELT(r_seqs, si);
             if (r_str == NA_STRING) continue;
 
@@ -1311,20 +1322,20 @@ SEXP C_gseq_pwm_edits(SEXP r_seqs, SEXP r_pssm, SEXP r_score_thresh,
         // Build R data frame
         int n_rows = static_cast<int>(all_rows.size());
 
-        SEXP r_seq_idx = PROTECT(Rf_allocVector(INTSXP, n_rows));
-        SEXP r_strand_out = PROTECT(Rf_allocVector(INTSXP, n_rows));
-        SEXP r_wstart = PROTECT(Rf_allocVector(INTSXP, n_rows));
-        SEXP r_sbefore = PROTECT(Rf_allocVector(REALSXP, n_rows));
-        SEXP r_safter = PROTECT(Rf_allocVector(REALSXP, n_rows));
-        SEXP r_nedits = PROTECT(Rf_allocVector(INTSXP, n_rows));
-        SEXP r_editnum = PROTECT(Rf_allocVector(INTSXP, n_rows));
-        SEXP r_mcol = PROTECT(Rf_allocVector(INTSXP, n_rows));
-        SEXP r_ref = PROTECT(Rf_allocVector(STRSXP, n_rows));
-        SEXP r_alt = PROTECT(Rf_allocVector(STRSXP, n_rows));
-        SEXP r_gain = PROTECT(Rf_allocVector(REALSXP, n_rows));
-        SEXP r_etype = PROTECT(Rf_allocVector(STRSXP, n_rows));
-        SEXP r_wseq = PROTECT(Rf_allocVector(STRSXP, n_rows));
-        SEXP r_mseq = PROTECT(Rf_allocVector(STRSXP, n_rows));
+        SEXP r_seq_idx = PROTECT(rdb::RSaneAllocVector(INTSXP, n_rows));
+        SEXP r_strand_out = PROTECT(rdb::RSaneAllocVector(INTSXP, n_rows));
+        SEXP r_wstart = PROTECT(rdb::RSaneAllocVector(INTSXP, n_rows));
+        SEXP r_sbefore = PROTECT(rdb::RSaneAllocVector(REALSXP, n_rows));
+        SEXP r_safter = PROTECT(rdb::RSaneAllocVector(REALSXP, n_rows));
+        SEXP r_nedits = PROTECT(rdb::RSaneAllocVector(INTSXP, n_rows));
+        SEXP r_editnum = PROTECT(rdb::RSaneAllocVector(INTSXP, n_rows));
+        SEXP r_mcol = PROTECT(rdb::RSaneAllocVector(INTSXP, n_rows));
+        SEXP r_ref = PROTECT(rdb::RSaneAllocVector(STRSXP, n_rows));
+        SEXP r_alt = PROTECT(rdb::RSaneAllocVector(STRSXP, n_rows));
+        SEXP r_gain = PROTECT(rdb::RSaneAllocVector(REALSXP, n_rows));
+        SEXP r_etype = PROTECT(rdb::RSaneAllocVector(STRSXP, n_rows));
+        SEXP r_wseq = PROTECT(rdb::RSaneAllocVector(STRSXP, n_rows));
+        SEXP r_mseq = PROTECT(rdb::RSaneAllocVector(STRSXP, n_rows));
 
         for (int i = 0; i < n_rows; i++) {
             const EditRow& row = all_rows[i];
@@ -1361,8 +1372,11 @@ SEXP C_gseq_pwm_edits(SEXP r_seqs, SEXP r_pssm, SEXP r_score_thresh,
                 SET_STRING_ELT(r_etype, i, Rf_mkChar(row.edit_type.c_str()));
             }
 
-            SET_STRING_ELT(r_wseq, i, Rf_mkChar(row.window_seq.c_str()));
-            SET_STRING_ELT(r_mseq, i, Rf_mkChar(row.mutated_seq.c_str()));
+            // One fresh CHARSXP per row: window_seq/mutated_seq are distinct
+            // strings, so unlike ref/alt/edit_type above they are not answered
+            // from R's CHARSXP cache and do allocate n_rows times.
+            SET_STRING_ELT(r_wseq, i, rdb::RSaneMkChar(row.window_seq.c_str()));
+            SET_STRING_ELT(r_mseq, i, rdb::RSaneMkChar(row.mutated_seq.c_str()));
         }
 
         // Assemble data frame
@@ -1404,6 +1418,9 @@ SEXP C_gseq_pwm_edits(SEXP r_seqs, SEXP r_pssm, SEXP r_score_thresh,
         UNPROTECT(18);
         return result_df;
 
+    } catch (TGLException &e) {
+        // rdb_init lives inside the try, so it is destroyed before this longjmp.
+        Rf_error("%s", e.msg());
     } catch (std::exception& e) {
         Rf_error("C_gseq_pwm_edits: %s", e.what());
     } catch (...) {

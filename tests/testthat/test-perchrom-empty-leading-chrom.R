@@ -1,3 +1,7 @@
+# Re-roots into a database of its own; hand this process's overlay back to the next
+# file in the parallel worker (helper-test_db.R).
+restore_groot_on_exit()
+
 load_test_db()
 
 # Per-chrom analog of the indexed empty-leading-chrom bug (#133).

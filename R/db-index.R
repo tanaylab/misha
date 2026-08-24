@@ -1087,8 +1087,7 @@ gtrack.convert_to_indexed <- function(track = NULL) {
     }
     .gcall(
         "gtrack_split_indexed_to_per_chrom",
-        track_dir, as.character(chrom_names), isTRUE(remove_indexed),
-        .misha_env()
+        track_dir, as.character(chrom_names), isTRUE(remove_indexed)
     )
     # Track layout flipped indexed -> per-chrom; the cached TrackIndex is
     # now invalid.
@@ -1102,8 +1101,7 @@ gtrack.convert_to_indexed <- function(track = NULL) {
     }
     .gcall(
         "gtrack_pack_per_chrom_to_indexed",
-        track_dir, as.character(chrom_names), as.character(track_type),
-        .misha_env()
+        track_dir, as.character(chrom_names), as.character(track_type)
     )
     .gdb.invalidate_dir_cache(track_dir)
     invisible()

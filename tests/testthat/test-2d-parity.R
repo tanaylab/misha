@@ -1,3 +1,7 @@
+# Re-roots into a database of its own; hand this process's overlay back to the next
+# file in the parallel worker (helper-test_db.R).
+restore_groot_on_exit()
+
 interv2path <- function(intervname) {
     path <- gsub("\\.", "/", intervname)
     return(paste0(get("GWD", envir = .misha), "/", path, ".interv"))

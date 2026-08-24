@@ -60,6 +60,7 @@ static SEXP build_rintervals_quantiles(GIntervalsFetcher1D *out_intervals1d, GIn
 	SEXP answer;
 	unsigned num_interv_cols;
 	uint64_t num_intervs;
+	unsigned protect_mark = protect_depth();
 
 	if (out_intervals1d) {
 		num_interv_cols = GInterval::NUM_COLS;
@@ -88,7 +89,11 @@ static SEXP build_rintervals_quantiles(GIntervalsFetcher1D *out_intervals1d, GIn
 		SET_STRING_ELT(colnames, num_interv_cols + ip->index, Rf_mkChar(buf));
 	}
 
-    runprotect(1); // colnames
+	// Keep "answer" (protected first by convert_intervs) and drop the scratch this
+	// function added on top - all of it is reachable from "answer" now. The
+	// intervals.set.out path calls this once per contig, so anything left here
+	// accumulates on R's 50,000-slot protect stack.
+	runprotect_to(protect_mark + 1);
     return answer;
 }
 
@@ -766,6 +771,7 @@ SEXP gintervals_quantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 
 							SEXP rintervals = build_rintervals_quantiles(out_intervals.get(), NULL, percentiles, medians, iu, false);
 							GIntervalsBigSet1D::save_chrom(intervset_out.c_str(), out_intervals.get(), rintervals, iu, chromstats1d);
+							runprotect(rintervals); // one contig's worth of protect slots; the loop runs per contig
 							chroms1d.erase(last_scope_interval1d.chromid);
 							medians.clear();
 						}
@@ -776,6 +782,7 @@ SEXP gintervals_quantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 
 							SEXP rintervals = build_rintervals_quantiles(NULL, out_intervals.get(), percentiles, medians, iu, false);
 							GIntervalsBigSet2D::save_chrom(intervset_out.c_str(), out_intervals.get(), rintervals, iu, chromstats2d);
+							runprotect(rintervals); // one contig's worth of protect slots; the loop runs per contig
 							chroms2d.erase(ChromPair(last_scope_interval2d.chromid1(), last_scope_interval2d.chromid2()));
 							medians.clear();
 						}
@@ -793,6 +800,7 @@ SEXP gintervals_quantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 					medians.resize(size * num_percentiles, numeric_limits<double>::quiet_NaN());
 					SEXP rintervals = build_rintervals_quantiles(out_intervals.get(), NULL, percentiles, medians, iu, false);
 					GIntervalsBigSet1D::save_chrom(intervset_out.c_str(), out_intervals.get(), rintervals, iu, chromstats1d);
+					runprotect(rintervals); // one contig's worth of protect slots; the loop runs per contig
 					medians.clear();
 				}
 
@@ -808,6 +816,7 @@ SEXP gintervals_quantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 					medians.resize(size * num_percentiles, numeric_limits<double>::quiet_NaN());
 					SEXP rintervals = build_rintervals_quantiles(NULL, out_intervals.get(), percentiles, medians, iu, false);
 					GIntervalsBigSet2D::save_chrom(intervset_out.c_str(), out_intervals.get(), rintervals, iu, chromstats2d);
+					runprotect(rintervals); // one contig's worth of protect slots; the loop runs per contig
 					medians.clear();
 				}
 
@@ -1019,6 +1028,7 @@ SEXP gintervals_quantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentil
 
 								SEXP rintervals = build_rintervals_quantiles(out_intervals.get(), NULL, percentiles, medians, iu, false);
 								GIntervalsBigSet1D::save_chrom(intervset_out.c_str(), out_intervals.get(), rintervals, iu, chromstats1d);
+								runprotect(rintervals); // one contig's worth of protect slots; the loop runs per contig
 								medians.clear();
 							}
 						} else {
@@ -1028,6 +1038,7 @@ SEXP gintervals_quantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentil
 
 								SEXP rintervals = build_rintervals_quantiles(NULL, out_intervals.get(), percentiles, medians, iu, false);
 								GIntervalsBigSet2D::save_chrom(intervset_out.c_str(), out_intervals.get(), rintervals, iu, chromstats2d);
+								runprotect(rintervals); // one contig's worth of protect slots; the loop runs per contig
 								medians.clear();
 							}
 						}
@@ -1085,6 +1096,7 @@ SEXP gintervals_quantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentil
 						medians.resize(size * num_percentiles, numeric_limits<double>::quiet_NaN());
 						SEXP rintervals = build_rintervals_quantiles(out_intervals.get(), NULL, percentiles, medians, iu, false);
 						GIntervalsBigSet1D::save_chrom(intervset_out.c_str(), out_intervals.get(), rintervals, iu, chromstats1d);
+						runprotect(rintervals); // one contig's worth of protect slots; the loop runs per contig
 						medians.clear();
 					}
 
@@ -1100,6 +1112,7 @@ SEXP gintervals_quantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentil
 						medians.resize(size * num_percentiles, numeric_limits<double>::quiet_NaN());
 						SEXP rintervals = build_rintervals_quantiles(NULL, out_intervals.get(), percentiles, medians, iu, false);
 						GIntervalsBigSet2D::save_chrom(intervset_out.c_str(), out_intervals.get(), rintervals, iu, chromstats2d);
+						runprotect(rintervals); // one contig's worth of protect slots; the loop runs per contig
 						medians.clear();
 					}
 
@@ -1370,6 +1383,8 @@ SEXP gbins_quantiles(SEXP _track_exprs, SEXP _breaks, SEXP _include_lowest, SEXP
 
 		Rf_setAttrib(answer, R_DimSymbol, dim);
 		Rf_setAttrib(answer, R_DimNamesSymbol, dimnames);
+		// answer, dim, dimnames, dimname. BinsManager::set_dims() ran in between and
+		// is balanced (it releases each dimname inside its own loop iteration).
 		runprotect(4);
 		return answer;
 	} catch (TGLException &e) {

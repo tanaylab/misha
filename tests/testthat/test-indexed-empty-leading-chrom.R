@@ -1,3 +1,7 @@
+# Re-roots into a database of its own; hand this process's overlay back to the next
+# file in the parallel worker (helper-test_db.R).
+restore_groot_on_exit()
+
 load_test_db()
 
 # Regression for the gtrack.copy SIGFPE / gtrack.info bin_size=0 bug.
@@ -36,7 +40,7 @@ test_that("indexed dense track with empty leading chrom reports correct bin_size
     # Pack with both chroms in the dest chrom order; chr1 will get length=0.
     misha:::.gcall(
         "gtrack_pack_per_chrom_to_indexed",
-        trackdir, c("chr1", "chr2"), "dense", misha:::.misha_env()
+        trackdir, c("chr1", "chr2"), "dense"
     )
     expect_true(file.exists(file.path(trackdir, "track.dat")))
     expect_true(file.exists(file.path(trackdir, "track.idx")))

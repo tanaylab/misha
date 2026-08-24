@@ -446,6 +446,7 @@ SEXP IntervalConverter::convert_intervs(GIntervalsFetcher1D *intervals, unsigned
 	SEXP row_names;
 	SEXP col_names;
 
+	unsigned protect_mark = protect_depth();
 	rprotect(answer = RSaneAllocVector(VECSXP, num_cols));
     rprotect(chroms_idx = RSaneAllocVector(INTSXP, intervals->size()));
     rprotect(starts = RSaneAllocVector(REALSXP, intervals->size()));
@@ -481,6 +482,18 @@ SEXP IntervalConverter::convert_intervs(GIntervalsFetcher1D *intervals, unsigned
     Rf_setAttrib(answer, R_ClassSymbol, Rf_mkString("data.frame"));
     Rf_setAttrib(answer, R_RowNamesSymbol, row_names);
 
+	// Everything above "answer" on the protect stack is now reachable from it -
+	// chroms_idx/starts/ends as columns, chroms as the factor levels, col_names and
+	// row_names as attributes - so only "answer" still needs a slot. Releasing the
+	// rest matters because the intervals.set.out writers call this once per contig
+	// and R's protect stack holds 50,000 entries: keeping all seven overflowed it at
+	// ~7,100 contigs, and real genomes exceed that (aque has 13,397).
+	//
+	// runprotect_to rather than a count: the iteration above runs an arbitrary
+	// GIntervalsFetcher1D, and GIntervalsBigSet1D::load_chrom() protects and releases
+	// while it walks - balanced today, but not this function's business.
+	runprotect_to(protect_mark + 1);
+
 	return answer;
 }
 
@@ -498,8 +511,8 @@ SEXP IntervalConverter::convert_intervs(GIntervalsFetcher2D *intervals, unsigned
 	SEXP row_names;
 	SEXP col_names;
 
+	unsigned protect_mark = protect_depth();
 	rprotect(answer = RSaneAllocVector(VECSXP, num_cols));
-    rprotect(chroms1 = RSaneAllocVector(STRSXP, num_chroms));
     rprotect(starts1 = RSaneAllocVector(REALSXP, intervals->size()));
     rprotect(ends1 = RSaneAllocVector(REALSXP, intervals->size()));
     rprotect(chroms_idx1 = RSaneAllocVector(INTSXP, intervals->size()));
@@ -548,6 +561,10 @@ SEXP IntervalConverter::convert_intervs(GIntervalsFetcher2D *intervals, unsigned
     Rf_setAttrib(answer, R_NamesSymbol, col_names);
     Rf_setAttrib(answer, R_ClassSymbol, Rf_mkString("data.frame"));
     Rf_setAttrib(answer, R_RowNamesSymbol, row_names);
+
+	// See the 1D overload: "answer" is protected first and everything else is now
+	// reachable from it, so release everything above it.
+	runprotect_to(protect_mark + 1);
 
     return answer;
 }

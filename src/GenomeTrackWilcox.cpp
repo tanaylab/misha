@@ -25,6 +25,7 @@ static SEXP build_rintervals_wilcox(const vector<IntervalPval> &res_intervals, G
 	for (vector<IntervalPval>::const_iterator iinterval = res_intervals.begin(); iinterval != res_intervals.end(); ++iinterval)
 		out_intervals.push_back((GInterval)*iinterval);
 
+	unsigned protect_mark = protect_depth();
 	SEXP answer = iu.convert_intervs(&out_intervals, IntervalPval::NUM_COLS, false);
 	SEXP pvals;
 
@@ -35,7 +36,11 @@ static SEXP build_rintervals_wilcox(const vector<IntervalPval> &res_intervals, G
 	SET_VECTOR_ELT(answer, IntervalPval::PVAL, pvals);
     SEXP colnames = rprotect_ptr(Rf_getAttrib(answer, R_NamesSymbol));
 	SET_STRING_ELT(colnames, IntervalPval::PVAL, Rf_mkChar(IntervalPval::COL_NAMES[IntervalPval::PVAL]));
-    runprotect(2); // pvals, colnames
+	// Keep "answer" (protected first by convert_intervs) and drop the scratch this
+	// function added on top - all of it is reachable from "answer" now. The
+	// intervals.set.out path calls this once per contig, so anything left here
+	// accumulates on R's 50,000-slot protect stack.
+	runprotect_to(protect_mark + 1);
     return answer;
 }
 
@@ -300,6 +305,7 @@ SEXP C_gwilcox(SEXP _expr, SEXP _intervals, SEXP _winsize1, SEXP _winsize2, SEXP
 				if (!intervset_out.empty() && !res_intervals.empty()) {
 					SEXP answer = build_rintervals_wilcox(res_intervals, out_intervals, iu);
 					GIntervalsBigSet1D::save_chrom(intervset_out.c_str(), &out_intervals, answer, iu, chromstats);
+					runprotect(answer); // one contig's worth of protect slots; the loop runs per contig
 					res_intervals.clear();
 					out_intervals.clear();
 				}
@@ -321,6 +327,7 @@ SEXP C_gwilcox(SEXP _expr, SEXP _intervals, SEXP _winsize1, SEXP _winsize2, SEXP
 			if (!res_intervals.empty()) {
 				SEXP answer = build_rintervals_wilcox(res_intervals, out_intervals, iu);
 				GIntervalsBigSet1D::save_chrom(intervset_out.c_str(), &out_intervals, answer, iu, chromstats);
+				runprotect(answer); // one contig's worth of protect slots; the loop runs per contig
 				res_intervals.clear();
 				out_intervals.clear();
 			}

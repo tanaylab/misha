@@ -138,6 +138,7 @@ static SEXP build_rintervals_extract(GIntervalsFetcher1D *out_intervals1d, GInte
 	SEXP answer;
 	unsigned num_interv_cols;
 	unsigned num_exprs = values.size();
+	unsigned protect_mark = protect_depth();
 
 	if (out_intervals1d) {
 		answer = iu.convert_intervs(out_intervals1d, interv_ids ? GInterval::NUM_COLS + num_exprs + 1 : GInterval::NUM_COLS + num_exprs, false);
@@ -174,9 +175,13 @@ static SEXP build_rintervals_extract(GIntervalsFetcher1D *out_intervals1d, GInte
 
 		SET_STRING_ELT(col_names, num_interv_cols + num_exprs, Rf_mkChar("intervalID"));
 	}
-    
-	    runprotect(1); // col_names
-	    return answer;
+
+	// Keep "answer" (the first thing convert_intervs protected) and drop everything
+	// this function added on top: the value columns, col_names and ids are all
+	// reachable from it now. The intervals.set.out path calls this once per contig,
+	// so anything left here accumulates on a 50,000-slot stack.
+	runprotect_to(protect_mark + 1);
+	return answer;
 }
 
 static void unpack_kid_extract_result(
@@ -703,6 +708,7 @@ SEXP C_gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_pol
 					if (scanner.isend() || last_scope_interval1d.chromid != scanner.last_scope_interval1d().chromid) {
 						SEXP rintervals = build_rintervals_extract(&out_intervals1d, NULL, values, NULL, _exprs, _colnames, iu);
 						GIntervalsBigSet1D::save_chrom(intervset_out.c_str(), &out_intervals1d, rintervals, iu, chromstats1d);
+						runprotect(rintervals); // one contig's worth of protect slots; the loop runs per contig
 						out_intervals1d.clear();
 						for (vector< vector<double> >::iterator ivalues = values.begin(); ivalues != values.end(); ++ivalues)
 							ivalues->clear();
@@ -711,6 +717,7 @@ SEXP C_gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_pol
 					if (scanner.isend() || !last_scope_interval2d.is_same_chrom(scanner.last_scope_interval2d())) {
 						SEXP rintervals = build_rintervals_extract(NULL, &out_intervals2d, values, NULL, _exprs, _colnames, iu);
 						GIntervalsBigSet2D::save_chrom(intervset_out.c_str(), &out_intervals2d, rintervals, iu, chromstats2d);
+						runprotect(rintervals); // one contig's worth of protect slots; the loop runs per contig
 						out_intervals2d.clear();
 						for (vector< vector<double> >::iterator ivalues = values.begin(); ivalues != values.end(); ++ivalues)
 							ivalues->clear();
@@ -1342,6 +1349,7 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 						if (scanner.isend() || last_scope_interval1d.chromid != scanner.last_scope_interval1d().chromid) {
 							SEXP rintervals = build_rintervals_extract(&out_intervals1d, NULL, values, NULL, _exprs, _colnames, iu);
 							GIntervalsBigSet1D::save_chrom(intervset_out.c_str(), &out_intervals1d, rintervals, iu, chromstats1d);
+							runprotect(rintervals); // one contig's worth of protect slots; the loop runs per contig
 							out_intervals1d.clear();
 							for (vector< vector<double> >::iterator ivalues = values.begin(); ivalues != values.end(); ++ivalues) 
 								ivalues->clear();
@@ -1350,6 +1358,7 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 						if (scanner.isend() || !last_scope_interval2d.is_same_chrom(scanner.last_scope_interval2d())) {
 							SEXP rintervals = build_rintervals_extract(NULL, &out_intervals2d, values, NULL, _exprs, _colnames, iu);
 							GIntervalsBigSet2D::save_chrom(intervset_out.c_str(), &out_intervals2d, rintervals, iu, chromstats2d);
+							runprotect(rintervals); // one contig's worth of protect slots; the loop runs per contig
 							out_intervals2d.clear();
 							for (vector< vector<double> >::iterator ivalues = values.begin(); ivalues != values.end(); ++ivalues) 
 								ivalues->clear();
@@ -1423,8 +1432,13 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 							estimated_records = inflate_estimated_records(iu, base_estimated_records, max_records_factor);
 							continue;
 						}
-					if (!RdbInitializer::is_kid())   // see the outer catch: a kid must never return to R
-						return C_gextract(_intervals, _exprs, _colnames, _iterator_policy, _band, R_NilValue, _intervals_set_out, _intervals_join, _envir);
+					// Hand the serial run to the SingleShard tail below. Calling C_gextract()
+					// from here would run it while this frame still holds its RdbInitializer,
+					// and an error inside it would longjmp past our destructor (see
+					// rdb::SingleShard). A kid must never return to R, so it falls through to
+					// the rethrow and reports through the outer catch instead.
+					if (!RdbInitializer::is_kid())
+						throw rdb::SingleShard();
 				}
 				throw;
 			}
@@ -1537,7 +1551,10 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 			SET_VECTOR_ELT(answer, num_interv_cols + num_exprs, ids);
 
 			set_extract_value_column_names(answer, num_interv_cols, num_exprs, _exprs, _colnames);
-			runprotect(1); // ids
+			// r_expr_vals and ids were protected *before* convert_intervs, so they are
+			// not on top of the stack: runprotect(1) here would pop whatever
+			// convert_intervs left instead. Name the object.
+			runprotect(ids);
 
 			if (profile) {
 				auto t_end = std::chrono::steady_clock::now();
@@ -1567,8 +1584,9 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 	} catch (const bad_alloc &e) {
 		rerror("Out of memory");
 	}
-	// The scope fits in a single shard: forking one kid would buy no parallelism, only a
-	// fork, a shared-memory segment and a wait. Run the serial entry point instead - the
+	// Multitasking is off the table: either the scope fits in a single shard (forking one
+	// kid would buy no parallelism, only a fork, a shared-memory segment and a wait) or the
+	// shared-memory arena could not be allocated. Run the serial entry point instead - the
 	// very path gmultitasking = FALSE takes. This must happen out here, after the try
 	// block has destroyed our RdbInitializer (see rdb::SingleShard).
 	if (single_shard)

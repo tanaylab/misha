@@ -8,6 +8,7 @@
 #ifndef QUADTREE_H_
 #define QUADTREE_H_
 
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <inttypes.h>
@@ -25,6 +26,23 @@
 #include "Rectangle.h"
 
 using namespace std;
+
+// A one-byte member appended to S is placed at S's data size - the offset just past S's last
+// data member - because the Itanium C++ ABI lets a derived class reuse the base's tail padding.
+// MISHA_ASSERT_LAST_MEMBER(S, m) therefore fails to compile as soon as anything is declared
+// after m, including a member small enough to fit inside the existing padding.
+//
+// Types with a base class that has data members are not standard-layout, so offsetof on them is
+// only conditionally supported; it is exact on gcc and clang, which are the compilers misha is
+// built with, and the warning is silenced deliberately rather than by accident.
+template<typename S> struct MishaTailProbe : S { char misha_probe_; };
+
+#define MISHA_ASSERT_LAST_MEMBER(S, m)                                                    \
+	_Pragma("GCC diagnostic push")                                                          \
+	_Pragma("GCC diagnostic ignored \"-Winvalid-offsetof\"")                                \
+	static_assert(offsetof(MishaTailProbe<S>, misha_probe_) == offsetof(S, m) + sizeof(S::m), \
+	              #m " must stay the last member of " #S ": clear_padding() zeroes every byte after it"); \
+	_Pragma("GCC diagnostic pop")
 
 #pragma pack(push)
 #pragma pack(8)
@@ -44,6 +62,12 @@ struct Rectangle_val : public Rectangle {
 	// never be produced, no matter how it was created.
 	// The cost is one store for the padded instantiations and nothing at all for the unpadded ones (memset of
 	// zero bytes), so the object creation path is not affected.
+	//
+	// Declaring the copy constructor suppresses the implicit MOVE constructor, and that is deliberate: T is
+	// always a scalar here, so a hand-written move would do byte-for-byte the same work as the copy and buy
+	// nothing (measured), while a "= default" move would copy the members and leave the destination's padding
+	// undefined - exactly the defect this code exists to prevent. One fewer place to keep in sync with
+	// clear_padding() is worth more than a move that cannot be faster.
 	Rectangle_val() { clear_padding(); }
 	Rectangle_val(const Rectangle_val &o) : Rectangle(o), v(o.v) { clear_padding(); }
 	Rectangle_val(int64_t _x1, int64_t _y1, int64_t _x2, int64_t _y2, const T &_v = T()) : Rectangle(_x1, _y1, _x2, _y2), v(_v) { clear_padding(); }
@@ -52,7 +76,12 @@ struct Rectangle_val : public Rectangle {
 	Rectangle_val &operator=(const Rectangle_val &o) = default;
 
 	// "v" is the last member, so everything between its end and the end of the structure is padding.
-	void clear_padding() { char *v_end = (char *)&v + sizeof(v); memset(v_end, 0, (char *)this + sizeof(*this) - v_end); }
+	// The static_assert is what makes that a guarantee rather than a comment: adding a member after "v"
+	// stops the header compiling instead of silently getting zeroed on every construction.
+	void clear_padding() {
+		MISHA_ASSERT_LAST_MEMBER(Rectangle_val, v)
+		char *v_end = (char *)&v + sizeof(v); memset(v_end, 0, (char *)this + sizeof(*this) - v_end);
+	}
 
 	double val(const Rectangle &, void *) const { return v; }
 	double val(const Rectangle &, const DiagonalBand &, void *) const { return v; }
@@ -80,7 +109,10 @@ struct Point_val : public Point {
 
 	Point_val &operator=(const Point_val &o) = default;
 
-	void clear_padding() { char *v_end = (char *)&v + sizeof(v); memset(v_end, 0, (char *)this + sizeof(*this) - v_end); }
+	void clear_padding() {
+		MISHA_ASSERT_LAST_MEMBER(Point_val, v)
+		char *v_end = (char *)&v + sizeof(v); memset(v_end, 0, (char *)this + sizeof(*this) - v_end);
+	}
 
 	double val(const Rectangle &, void *) const { return v; }
 	double val(const Rectangle &, const DiagonalBand &, void *) const { return v; }

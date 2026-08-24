@@ -1,5 +1,10 @@
 # Tests for gdb.install_intervals partial-failure handling.
 
+# Re-roots into a database of its own; hand this process's overlay back to the next
+# file in the parallel worker (helper-test_db.R).
+restore_groot_on_exit()
+
+
 make_tiny_groot_for_install <- function() {
     groot <- tempfile("misha_test_install_")
     dir.create(groot)
