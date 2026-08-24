@@ -83,7 +83,7 @@ void DataFrameUtils::copy_data_frame_row(const vector<SEXP> &src_cols, int src_r
 		else if (Rf_isLogical(src_col))
 			LOGICAL(tgt_col)[tgt_row] = LOGICAL(src_col)[src_row];
 		else if (Rf_isString(src_col))
-			SET_STRING_ELT(tgt_col, tgt_row, Rf_mkChar(CHAR(STRING_ELT(src_col, src_row))));
+			SET_STRING_ELT(tgt_col, tgt_row, STRING_ELT(src_col, src_row));
 	}
 }
 
@@ -110,7 +110,7 @@ void DataFrameUtils::copy_data_frame_rows(const vector<SEXP> &src_cols, int src_
 				tgt_vals[tgt_row + i] = src_vals[src_row + i];
 		} else if (Rf_isString(src_col)) {
 			for (int i = 0; i < num_rows; ++i) 
-				SET_STRING_ELT(tgt_col, tgt_row + i, Rf_mkChar(CHAR(STRING_ELT(src_col, src_row + i))));
+				SET_STRING_ELT(tgt_col, tgt_row + i, STRING_ELT(src_col, src_row + i));
 		}
 	}
 }
