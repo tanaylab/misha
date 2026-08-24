@@ -43,11 +43,12 @@ To run a specific test in a file do (e.g.):
 
 R -e "testthat::test_file('tests/testthat/test-pwm-sliding-window.R', desc = 'PWM sliding window MAX_POS mode works with iterator=20 and shifts')"
 
-Only ONE suite may run at a time: the tests share a single database on NFS
-(`tests/testthat/helper-test_db.R`), so two concurrent runs corrupt each other
-and separate TMPDIRs do not help. Failures that move between files from run to
-run are that, not flaky tests. Re-run anything not green serially before
-believing it.
+Concurrent test runs are safe: each process gets a private overlay of the lab
+database (`tests/testthat/helper-test_db.R`), so runs cannot see each other's
+tracks or interval sets, and a full suite leaves the shared database untouched.
+This was not true before 5.11.22 - two runs corrupted each other, which is where
+this project's "flaky tests" reputation came from. Give each concurrent run its
+own `TMPDIR` all the same, since the overlays live there.
 
 To run all tests in parallel (preferred - serial mode is dramatically slower):
 
