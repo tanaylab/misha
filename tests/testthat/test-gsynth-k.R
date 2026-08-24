@@ -1,5 +1,10 @@
 # Tests for variable Markov order k parameter in gsynth functions
 
+# Re-roots into a database of its own; hand this process's overlay back to the next
+# file in the parallel worker (helper-test_db.R).
+restore_groot_on_exit()
+
+
 test_that("gsynth.train errors on invalid k values", {
     gdb.init("/home/aviezerl/hg38")
 

@@ -1,4 +1,9 @@
 # tests/testthat/test-track-copy-crossdb.R
+
+# Every test here gsetroot()s into a tempdir database that withr removes on exit, leaving
+# GROOT dangling for whichever file the parallel worker picks up next.
+restore_groot_on_exit()
+
 test_that(".gdb.is_indexed_at and .gdb.chrom_names_at probe a db without loading it", {
     withr::with_tempdir({
         create_test_db("perchrom_db")

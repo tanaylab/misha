@@ -495,6 +495,61 @@ template<typename T> void unpack_data(void *&ptr, T &data, uint64_t n) {
 #define MAX_KIDS 1000
 #define rreturn(retv) { if (RdbInitializer::is_kid()) rexit(); return(retv); }
 
+//---------------------------------------------------------------------------------------------
+//                          THE C++/R LIFETIME CONTRACT (C1 - C6)
+//---------------------------------------------------------------------------------------------
+//
+// Every misha .Call entry point runs inside an RdbInitializer. That object owns process-wide
+// state - the SIGINT handler, the set of file descriptors the call opened, misha's PROTECT
+// counter, the shared-memory arena and kid bookkeeping used by multitasking - and ~RdbInitializer
+// is the only thing that puts it back. So any path that leaves the frame without running the
+// destructor does not fail the current call: it corrupts every later call in the session.
+//
+// The six rules below are what keeps that from happening. They are written here rather than in a
+// design document because four defects in one week came from breaking them, two of which ended
+// up deleting a database, and none of them was reported by rchk, valgrind, ASAN or UBSAN.
+//
+// C1  Every .Call entry point owns an RdbInitializer, declared inside a try block that catches
+//     TGLException (and std::exception). Nothing else restores the SIGINT handler, closes the
+//     files the call opened, or drains the protect stack.
+//
+// C2  Nothing holding an RdbInitializer may call another entry point INLINE. The inner entry
+//     point constructs a second RdbInitializer; an error raised inside it reaches R through
+//     Rf_error/Rf_errorcall, whose longjmp goes to R's top level and skips both destructors, so
+//     s_ref_count and s_protect_counter stay above their entry values for the rest of the
+//     session - and every later multitasking call reuses stale shared memory and a stale kid
+//     index. Use rdb::SingleShard (declared just below) instead: throw it, catch it OUTSIDE the
+//     try block that owns the RdbInitializer, and call the serial entry point from there, with
+//     the first frame already unwound.
+//
+//     This is about DIRECT inline C++ calls. A misha call nested through eval_in_R() - a track
+//     expression, say - is safe: R_tryEval() runs it under R_ToplevelExec(), which blanks the
+//     handler stack, so the inner Rf_errorcall lands on that context and the surrounding C++
+//     frames unwind normally.
+//
+// C3  Nothing inside the scope may longjmp. That rules out Rf_error, Rf_warning, and any
+//     allocator that can fail into R's error path (Rf_allocVector, Rf_mkChar, R_alloc). Use
+//     rerror/verror, add_pending_diagnostic(), RSaneAllocVector() and RSaneMkChar(), which all
+//     report through C++ and let the stack unwind. An exiting R-level handler makes this bite in
+//     places that look harmless: options(warn = 2) turns a plain Rf_warning() into a longjmp.
+//
+// C4  A forked multitasking child must never longjmp into R. It shares the parent's R heap image
+//     but owns none of its resources, so unwinding into R's error path there runs R's shutdown
+//     code - including the part that removes the session temp directory - in a process that does
+//     not own it. Children leave through rexit()/rreturn(), which raise SIGTERM on themselves so
+//     the process dies without unwinding at all. (That deliberate non-unwinding is also why
+//     valgrind reports "possibly lost" blocks in kids; see tools/valgrind.supp.)
+//
+// C5  Protection is balanced on every path, including error and interrupt. Prefer the by-object
+//     runprotect(SEXP &) over the count-based runprotect(unsigned): a count computed once outside
+//     a loop and unprotected inside it is exactly how TrackVars.cpp came to read freed memory.
+//
+// C6  s_ref_count and s_protect_counter are back at their entry values on every exit. This is the
+//     observable consequence of C1 - C5 rather than a separate rule: if it does not hold, one of
+//     the five above was broken somewhere.
+//
+//---------------------------------------------------------------------------------------------
+
 namespace rdb {
 
 // Thrown by a multitasking entry point that has decided not to multitask after all: either

@@ -1,4 +1,9 @@
 # Helper: build a tiny in-memory groot with two contigs.
+
+# Re-roots into a database of its own; hand this process's overlay back to the next
+# file in the parallel worker (helper-test_db.R).
+restore_groot_on_exit()
+
 make_test_groot <- function() {
     groot <- tempfile()
     dir.create(groot)
