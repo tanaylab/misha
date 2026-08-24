@@ -1,6 +1,7 @@
 # misha 5.11.22
 
 * misha's C routines are now registered with R, so a call made with the wrong number of arguments is reported instead of silently running.
+* An error while `gextract()` or `gscreen()` recovers from a failed shared-memory allocation no longer breaks the rest of the session.
 
 # misha 5.11.21
 
