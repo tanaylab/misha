@@ -100,7 +100,7 @@ extern "C" {
     extern SEXP gbigintervs_2d_indexed_create(SEXP, SEXP, SEXP);
     extern SEXP gbigintervs_2d_indexed_finalize(SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gtrack_liftover(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
-    extern SEXP gtrack_modify(SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP gtrack_modify(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gtracksummary(SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gtracksummary_multitask(SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gwilcox(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);    
@@ -217,7 +217,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"gbigintervs_2d_indexed_create", (DL_FUNC)&gbigintervs_2d_indexed_create, 3},
     {"gbigintervs_2d_indexed_finalize", (DL_FUNC)&gbigintervs_2d_indexed_finalize, 5},
     {"gtrack_liftover", (DL_FUNC)&gtrack_liftover, 11},
-    {"gtrack_modify", (DL_FUNC)&gtrack_modify, 5},
+    {"gtrack_modify", (DL_FUNC)&gtrack_modify, 6},
     {"gtracksummary", (DL_FUNC)&gtracksummary, 5},
     {"gtracksummary_multitask", (DL_FUNC)&gtracksummary_multitask, 5},
     {"C_gwilcox", (DL_FUNC)&C_gwilcox, 10},    

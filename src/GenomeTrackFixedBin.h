@@ -10,6 +10,8 @@
 
 #include <cstdint>
 #include <cmath>
+#include <cstring>
+#include <cerrno>
 #include <deque>
 #include <limits>
 #include <string>
@@ -34,6 +36,15 @@ public:
 	void init_write(const char *filename, unsigned bin_size, int chromid);
 
 	void init_update(const char *filename, int chromid) { init_read(filename, "rb+", chromid, true); }
+
+	// Pushes pending writes out of the 1 MiB stdio buffer and reports a short
+	// write. Without this a full disk only surfaces at fclose() in the
+	// destructor, where nothing can be thrown and the truncation is silent.
+	void flush_writes()
+	{
+		if (m_bfile.opened() && m_bfile.flush())
+			TGLError<GenomeTrackFixedBin>("Failed to write a dense track file %s: %s", m_bfile.file_name().c_str(), strerror(errno));
+	}
 
 	// Metadata-only init for callers that just need bin_size / num_samples
 	// (e.g. the create_expr_iterator validation loop). Skips the mmap setup
