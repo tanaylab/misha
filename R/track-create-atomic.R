@@ -35,6 +35,18 @@
 # it; a concurrent gdb.reload(rescan=TRUE) WILL pick it up. This
 # is acceptable - the window is microseconds wide and no design
 # without locking avoids it.
+# Force `path` to stable storage. R has no fsync, so this is a thin .Call
+# wrapper (src/GdbFsync.cpp). `recursive = TRUE` on a directory syncs every
+# file under it and then the directory itself.
+#
+# Not swallowed: an fsync that fails means the writeback failed (EIO,
+# ENOSPC on NFS), which is exactly the case where committing the rename
+# would publish damaged data under the final name.
+.gdb.fsync <- function(path, recursive = FALSE) {
+    .gcall("gdb_fsync", path, isTRUE(recursive), .misha_env())
+    invisible(NULL)
+}
+
 .gtrack.create_atomic <- function(trackname, create_fn) {
     final_dir <- .track_dir(trackname)
     parent <- dirname(final_dir)
@@ -76,11 +88,19 @@
                     call. = FALSE
                 )
             }
+            # Durability, not just atomicity: rename() publishes the name
+            # but guarantees nothing about the bytes reaching stable
+            # storage, so a machine death (as opposed to a process death)
+            # can leave the committed name pointing at a half-written
+            # track. Sync the staged tree before the rename and the parent
+            # directory after it.
+            .gdb.fsync(tmp_dir, recursive = TRUE)
             if (!file.rename(tmp_dir, final_dir)) {
                 stop(sprintf("Failed to rename %s -> %s", tmp_dir, final_dir),
                     call. = FALSE
                 )
             }
+            .gdb.fsync(parent)
             # Drop any stale cache entry for final_dir left over from a
             # previous track lifecycle at this path. Without this, readers
             # consulting GenomeTrack::s_index_cache may route to the wrong
