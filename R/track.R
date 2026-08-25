@@ -181,7 +181,6 @@ gtrack.convert <- function(src.track = NULL, tgt.track = NULL) {
 }
 
 
-
 #' Creates a track from a track expression
 #'
 #' Creates a track from a track expression.
@@ -270,7 +269,6 @@ gtrack.create <- function(track = NULL, description = NULL, expr = NULL, iterato
 }
 
 
-
 #' Creates a new track from PSSM energy function
 #'
 #' Creates a new track from PSSM energy function.
@@ -354,7 +352,6 @@ gtrack.create_pwm_energy <- function(track = NULL, description = NULL, pssmset =
 }
 
 
-
 #' Creates a 'Sparse' track from intervals and values
 #'
 #' Creates a 'Sparse' track from intervals and values.
@@ -425,7 +422,6 @@ gtrack.create_sparse <- function(track = NULL, description = NULL, intervals = N
     )
     retv <- 0 # suppress return value
 }
-
 
 
 #' Tests for a track existence
@@ -737,7 +733,6 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
 }
 
 
-
 #' Creates a track from a file of mapped sequences
 #'
 #' Creates a track from a file of mapped sequences.
@@ -826,7 +821,6 @@ gtrack.import_mappedseq <- function(track = NULL, description = NULL, file = NUL
     )
     retv
 }
-
 
 
 #' Creates one or more tracks from multiple WIG / BigWig / BedGraph /
@@ -972,7 +966,6 @@ gtrack.import_set <- function(description = NULL, path = NULL, binsize = NULL, t
 }
 
 
-
 #' Returns information about a track
 #'
 #' Returns information about a track.
@@ -1003,7 +996,6 @@ gtrack.info <- function(track = NULL) {
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
     .gcall("gtrackinfo", trackstr, .misha_env())
 }
-
 
 
 #' Imports a track from another assembly
@@ -1073,7 +1065,6 @@ gtrack.liftover <- function(track = NULL, description = NULL, src.track.dir = NU
     )
     retv <- 0 # suppress return value
 }
-
 
 
 #' Creates a new track from a lookup table based on track expression
@@ -1204,7 +1195,6 @@ gtrack.lookup <- function(track = NULL, description = NULL, lookup_table = NULL,
 }
 
 
-
 #' Returns a list of track names
 #'
 #' Returns a list of track names in Genomic Database.
@@ -1303,7 +1293,6 @@ gtrack.ls <- function(..., ignore.case = FALSE, perl = FALSE, fixed = FALSE, use
 }
 
 
-
 #' Modifies track contents
 #'
 #' Modifies 'Dense' track contents.
@@ -1361,7 +1350,6 @@ gtrack.modify <- function(track = NULL, expr = NULL, intervals = NULL) {
 
     retv <- 0 # suppress return value
 }
-
 
 
 #' Deletes a track
@@ -1430,7 +1418,6 @@ gtrack.rm <- function(track = NULL, force = FALSE) {
         }
     }
 }
-
 
 
 #' Creates a new track from smoothed values of track expression

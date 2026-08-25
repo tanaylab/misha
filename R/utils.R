@@ -157,8 +157,6 @@ gwget <- function(url = NULL, path = NULL) {
 }
 
 
-
-
 #' Runs R commands on a cluster
 #'
 #' Runs R commands on a cluster that supports SGE.

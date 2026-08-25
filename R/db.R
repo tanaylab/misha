@@ -119,8 +119,6 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
 }
 
 
-
-
 #' Changes current working directory in Genomic Database
 #'
 #' Changes current working directory in Genomic Database.
@@ -259,7 +257,6 @@ gtrack.create_dirs <- function(track, mode = "0777") {
 }
 
 
-
 #' Returns the current working directory in Genomic Database
 #'
 #' Returns the absolute path of the current working directory in Genomic
@@ -362,8 +359,6 @@ gdir.rm <- function(dir = NULL, recursive = FALSE, force = FALSE) {
 }
 
 
-
-
 #' Sets read-only track attributes
 #'
 #' Sets read-only track attributes.
@@ -405,8 +400,6 @@ gdb.set_readonly_attrs <- function(attrs) {
     }
     retv <- 0 # suppress return value
 }
-
-
 
 
 #' Creates a new Genomic Database
@@ -606,8 +599,6 @@ gdb.create_genome <- function(genome, path = getwd(), tmpdir = tempdir()) {
 }
 
 
-
-
 #' Returns a list of read-only track attributes
 #'
 #' Returns a list of read-only track attributes.
@@ -701,7 +692,6 @@ gdb.init_examples <- function() {
     utils::untar(system.file("testdb.tar.gz", package = "misha"), exdir = db_dir)
     gsetroot(file.path(db_dir, "trackdb/test"))
 }
-
 
 
 #' Reloads database from the disk

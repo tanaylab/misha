@@ -40,7 +40,6 @@
 }
 
 
-
 #' Returns value of a track variable
 #'
 #' Returns value of a track variable.
@@ -131,7 +130,6 @@ gtrack.var.ls <- function(track = NULL, pattern = "", ignore.case = FALSE, perl 
 }
 
 
-
 #' Deletes a track variable
 #'
 #' Deletes a track variable.
@@ -173,7 +171,6 @@ gtrack.var.rm <- function(track = NULL, var = NULL) {
     filename <- paste(trackdir, "vars", var, sep = "/")
     invisible(file.remove(filename))
 }
-
 
 
 #' Assigns value to a track variable
