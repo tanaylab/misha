@@ -89,7 +89,6 @@
 }
 
 
-
 #' Creates a new virtual track
 #'
 #' Creates a new virtual track.
@@ -228,7 +227,6 @@ gvtrack.create <- function(vtrack = NULL, src = NULL, func = NULL, params = NULL
 }
 
 
-
 #' Returns the definition of a virtual track
 #'
 #' Returns the definition of a virtual track.
@@ -258,7 +256,6 @@ gvtrack.info <- function(vtrack = NULL) {
     vtrackstr <- do.call(.gvtrack, list(substitute(vtrack)), envir = parent.frame())
     .gvtrack.get(vtrackstr)
 }
-
 
 
 #' Defines modification rules for a one-dimensional iterator in a virtual track
@@ -322,7 +319,6 @@ gvtrack.iterator <- function(vtrack = NULL, dim = NULL, sshift = 0, eshift = 0) 
     .gvtrack.set(vtrackstr, var)
     retv <- NULL
 }
-
 
 
 #' Defines modification rules for a two-dimensional iterator in a virtual track

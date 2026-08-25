@@ -91,7 +91,6 @@ gcis_decay <- function(expr = NULL, breaks = NULL, src = NULL, domain = NULL, in
 }
 
 
-
 #' Calculates distribution of track expressions
 #'
 #' Calculates distribution of track expressions' values over the given set of
@@ -174,7 +173,6 @@ gdist <- function(..., intervals = NULL, include.lowest = FALSE, iterator = NULL
     attr(res, "breaks") <- breaks
     res
 }
-
 
 
 #' Returns evaluated track expression
@@ -312,7 +310,6 @@ gextract <- function(..., intervals = NULL, colnames = NULL, iterator = NULL, ba
         res
     }
 }
-
 
 
 #' Partitions the values of track expression
@@ -1055,7 +1052,6 @@ gbins.quantiles <- function(..., expr = NULL, percentiles = 0.5, intervals = get
 }
 
 
-
 #' Calculates summary statistics of a track expression for bins
 #'
 #' Calculates summary statistics of a track expression for bins.
@@ -1189,9 +1185,6 @@ gbins.summary <- function(..., expr = NULL, intervals = get("ALLGENOME", envir =
     )
     chroms
 }
-
-
-
 
 
 #' Returns DNA sequences

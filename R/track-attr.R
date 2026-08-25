@@ -86,7 +86,6 @@ gtrack.attr.export <- function(tracks = NULL, attrs = NULL) {
 }
 
 
-
 #' Imports track attributes values
 #'
 #' Imports track attributes values.
@@ -159,7 +158,6 @@ gtrack.attr.import <- function(table = NULL, remove.others = FALSE) {
     .gtrack.attr.import(table, remove.others, FALSE)
     retv <- 0 # suppress return value
 }
-
 
 
 #' Returns value of a track attribute

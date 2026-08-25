@@ -143,8 +143,6 @@
 }
 
 
-
-
 #' Returns values from 'Array' track
 #'
 #' Returns values from 'Array' track.
@@ -391,7 +389,6 @@ gtrack.array.import <- function(track = NULL, description = NULL, ...) {
     )
     retv <- 0 # suppress return value
 }
-
 
 
 #' Sets column names of array track
