@@ -1,6 +1,16 @@
 # Changelog
 
+## misha 5.11.24
+
+- Track creation and
+  [`gtrack.modify()`](https://tanaylab.github.io/misha/reference/gtrack.modify.md)
+  now flush the new files to disk before committing them, so a machine
+  crash cannot leave a completed track name pointing at half-written
+  data.
+
 ## misha 5.11.23
+
+CRAN release: 2026-08-24
 
 - Packaging fix for the CRAN submission; no user-visible changes.
 
