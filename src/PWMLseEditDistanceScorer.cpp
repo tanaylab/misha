@@ -127,11 +127,13 @@ float PWMLseEditDistanceScorer::encode_position(size_t index,
                                                  size_t motif_length,
                                                  int direction) const
 {
-    // Convert 0-based index to 1-based position
+    // Convert 0-based index to 1-based position.
+    // No strand remap: this scorer never sets expanded_interval.strand, so the
+    // target is always the forward strand and `index` is already a forward-strand
+    // offset (reverse matches are scored with the RC of the PSSM at that index).
+    (void)target_length;
+    (void)motif_length;
     float pos = static_cast<float>(index) + 1.0f;
-    if (m_strand == -1) {
-        pos = static_cast<float>(target_length) - pos + 1.0f;
-    }
     if (m_pssm.is_bidirect()) {
         pos *= static_cast<float>(direction);
     }

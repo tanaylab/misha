@@ -3,6 +3,7 @@
 #include <limits>
 #include <cstring> // For strcmp
 #include <cmath>   // For log
+#include <cstddef> // For ptrdiff_t
 
 // Forward declaration for log_sum_log (defined in util.h)
 extern inline void log_sum_log(float& a, float b);
@@ -169,9 +170,14 @@ float PWMScorer::compute_position_result(size_t index, size_t target_length,
                                          size_t motif_length, int direction) const
 {
     float pos_result = float(index) + 1.0f; // 1-based
-    
+
     if (m_strand == -1) {
-        pos_result = target_length - pos_result - motif_length + 1;
+        // target is reverse-complemented: a window at target index `index` covers
+        // forward-strand 0-based [target_length - index - motif_length, ...), so the
+        // 1-based forward offset is target_length - index - motif_length + 1.
+        // signed arithmetic: index + motif_length <= target_length holds at every
+        // call site, but an unsigned underflow here would read as a huge position.
+        pos_result = float(std::ptrdiff_t(target_length) - std::ptrdiff_t(index) - std::ptrdiff_t(motif_length)) + 1.0f;
     }
     
     if (m_pssm.is_bidirect()) {
@@ -279,12 +285,11 @@ float PWMScorer::get_max_likelihood_pos_with_spatial(const std::string& target, 
 
         float spat_log = m_spat_log_factors[spat_bin];
 
-        // Forward strand
+        // Forward strand. Must go through the *_original helpers: when m_strand == -1
+        // the target is already reverse-complemented, so calc_like() on it would score
+        // the original MINUS strand while reporting best_dir = 1.
         if (check_forward) {
-            float logp = 0;
-            std::string::const_iterator it = target.begin() + i;
-            m_pssm.calc_like(it, logp);
-            float val = logp + spat_log;
+            float val = score_forward_original(m_pssm, target, i, m_strand) + spat_log;
             if (val > best_val) {
                 best_val = val;
                 best_index = i;
@@ -294,10 +299,7 @@ float PWMScorer::get_max_likelihood_pos_with_spatial(const std::string& target, 
 
         // Reverse strand
         if (check_reverse) {
-            float logp_rc = 0;
-            std::string::const_iterator it2 = target.begin() + i;
-            m_pssm.calc_like_rc(it2, logp_rc);
-            float val_rc = logp_rc + spat_log;
+            float val_rc = score_reverse_original(m_pssm, target, i, m_strand) + spat_log;
             if (val_rc > best_val) {
                 best_val = val_rc;
                 best_index = i;

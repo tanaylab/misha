@@ -1,3 +1,9 @@
+# misha 5.11.25
+
+* `pwm.max.pos` and `pwm.edit_distance.pos` now report the 1-based start of the match in forward-strand coordinates for `strand = -1`, matching `gseq.pwm()` and the forward-strand case. They previously returned positions shifted by one (`pwm.max.pos`) or in reverse-complemented coordinates (`pwm.edit_distance.pos`).
+* `pwm.max.pos` with spatial weights no longer reports the wrong strand when the scan window size varies between iterator intervals.
+* `strand` is now genuinely ignored when `bidirect = TRUE`, as documented; it previously inverted the strand sign reported by the `*.pos` funcs.
+
 # misha 5.11.24
 
 * Track creation and `gtrack.modify()` now flush the new files to disk before committing them, so a machine crash cannot leave a completed track name pointing at half-written data.

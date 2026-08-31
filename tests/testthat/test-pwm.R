@@ -790,3 +790,96 @@ test_that("virtual track pwm.count accepts PSSM with extra columns", {
     expect_lt(scores$vt_count_regular[1], test_intervals$end - test_intervals$start)
     expect_equal(scores$vt_count_extra[1], scores$vt_count_regular[1])
 })
+
+test_that("*.pos reports the 1-based forward-strand start for strand = -1", {
+    remove_all_vtracks()
+
+    # Plant a motif whose reverse complement is unique on the minus strand, so the
+    # correct answer is known independently of the scan: a hit at 1-based offset
+    # `pos0 + 1` of the interval, on the minus strand.
+    iv <- gintervals(1, 500, 600)
+    seq <- toupper(gseq.extract(iv))
+    motif_len <- 8L
+    pos0 <- 40L
+    word <- substr(seq, pos0 + 1L, pos0 + motif_len)
+    rc_word <- chartr("ACGT", "TGCA", paste(rev(strsplit(word, "")[[1]]), collapse = ""))
+    # Assert, do not skip: if the fixture stops being unique the test must fail
+    # loudly rather than silently pass without checking anything.
+    expect_length(gregexpr(word, seq, fixed = TRUE)[[1]], 1L)
+    expect_equal(gregexpr(rc_word, seq, fixed = TRUE)[[1]][1], -1L, ignore_attr = TRUE)
+
+    make_pssm <- function(w) {
+        m <- matrix(0.001, nrow = motif_len, ncol = 4, dimnames = list(NULL, c("A", "C", "G", "T")))
+        for (i in seq_len(motif_len)) m[i, substr(w, i, i)] <- 0.997
+        m
+    }
+    # A PSSM whose consensus is the reverse complement of `word` matches the MINUS
+    # strand at that site; one whose consensus is `word` matches the PLUS strand.
+    pssm_minus <- make_pssm(rc_word)
+    pssm_plus <- make_pssm(word)
+    expected <- pos0 + 1L
+
+    for (ext in c(TRUE, FALSE)) {
+        gvtrack.create("p_minus", NULL, "pwm.max.pos",
+            params = list(pssm = pssm_minus, prior = 0, bidirect = FALSE, strand = -1, extend = ext)
+        )
+        gvtrack.create("p_plus", NULL, "pwm.max.pos",
+            params = list(pssm = pssm_plus, prior = 0, bidirect = FALSE, strand = 1, extend = ext)
+        )
+        gvtrack.create("e_minus", NULL, "pwm.edit_distance.pos",
+            params = list(
+                pssm = pssm_minus, prior = 0, bidirect = FALSE, strand = -1,
+                extend = ext, score.thresh = -1
+            )
+        )
+        r <- gextract(c("p_minus", "p_plus", "e_minus"), iv, iterator = iv)
+
+        # Both strands must report the same convention: the forward-strand start.
+        expect_equal(r$p_minus[1], expected, ignore_attr = TRUE)
+        expect_equal(r$p_plus[1], expected, ignore_attr = TRUE)
+        # The edit-distance position must land inside the same window, not in
+        # reverse-complemented target coordinates.
+        expect_gte(r$e_minus[1], expected)
+        expect_lte(r$e_minus[1], expected + motif_len - 1L)
+    }
+
+    # gseq.pwm is an independent implementation; it must agree.
+    expect_equal(
+        as.numeric(gseq.pwm(seq, pssm_minus, mode = "pos", strand = -1, bidirect = FALSE, prior = 0)[1]),
+        as.numeric(expected)
+    )
+})
+
+test_that("strand is ignored when bidirect = TRUE", {
+    remove_all_vtracks()
+
+    iv <- gintervals(1, 500, 600)
+    seq <- toupper(gseq.extract(iv))
+    motif_len <- 8L
+    pos0 <- 40L
+    word <- substr(seq, pos0 + 1L, pos0 + motif_len)
+    rc_word <- chartr("ACGT", "TGCA", paste(rev(strsplit(word, "")[[1]]), collapse = ""))
+    # Assert, do not skip: if the fixture stops being unique the test must fail
+    # loudly rather than silently pass without checking anything.
+    expect_length(gregexpr(word, seq, fixed = TRUE)[[1]], 1L)
+    expect_equal(gregexpr(rc_word, seq, fixed = TRUE)[[1]][1], -1L, ignore_attr = TRUE)
+
+    make_pssm <- function(w) {
+        m <- matrix(0.001, nrow = motif_len, ncol = 4, dimnames = list(NULL, c("A", "C", "G", "T")))
+        for (i in seq_len(motif_len)) m[i, substr(w, i, i)] <- 0.997
+        m
+    }
+
+    # Under bidirect = TRUE the sign of *.pos records which strand matched, and must
+    # not depend on the (ignored) strand argument.
+    for (w in list(list(p = make_pssm(word), sgn = 1), list(p = make_pssm(rc_word), sgn = -1))) {
+        vals <- vapply(c(1, -1), function(st) {
+            gvtrack.create("v", NULL, "pwm.max.pos",
+                params = list(pssm = w$p, prior = 0, bidirect = TRUE, strand = st)
+            )
+            gextract("v", iv, iterator = iv)$v[1]
+        }, numeric(1))
+        expect_equal(vals[1], vals[2])
+        expect_equal(vals[1], w$sgn * (pos0 + 1L), ignore_attr = TRUE)
+    }
+})

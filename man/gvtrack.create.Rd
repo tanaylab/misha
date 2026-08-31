@@ -194,7 +194,7 @@ The sections below provide additional notes for motif, interval, k-mer, and mask
   \item \code{prior}: Pseudocount added to frequencies (default 0.01). Set to 0 to disable.
   \item \code{extend}: Extends the fetched sequence so boundary-anchored motifs retain full context (default TRUE). The END coordinate is padded by motif_length - 1 for all strand modes; anchors must still start inside the iterator.
   \item Neutral characters (\code{N}, \code{n}, \code{*}) contribute the mean log-probability of the corresponding PSSM column on both strands.
-  \item \code{strand}: Used only when \code{bidirect = FALSE}; 1 scans the forward strand, -1 scans the reverse strand. For \code{pwm.max.pos}, strand = -1 reports the hit position at the end of the match (still relative to the forward orientation).
+  \item \code{strand}: Used only when \code{bidirect = FALSE}; 1 scans the forward strand, -1 scans the reverse strand. The \code{*.pos} funcs report the same thing for both strands: the 1-based position of the first base of the match in forward-strand orientation.
   \item \code{score.thresh}: Threshold for \code{pwm.count}, and mandatory for it - there is no default, and it must be a single value.
     Anchors with log-likelihood >= \code{score.thresh} are counted; only one count per genomic start.
     PWM scores are log-likelihoods, so the usable range depends on the PSSM, the prior and any spatial
