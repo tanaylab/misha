@@ -169,6 +169,13 @@ inline float PWMScorer::get_spatial_log_factor(size_t pos_index) const
 float PWMScorer::compute_position_result(size_t index, size_t target_length, 
                                          size_t motif_length, int direction) const
 {
+    // A target shorter than the motif has no window at all; max_like_match()
+    // returns begin() with -Inf. Report NaN rather than a fabricated position
+    // (extend = FALSE already returns NaN for this case).
+    if (target_length < motif_length) {
+        return std::numeric_limits<float>::quiet_NaN();
+    }
+
     float pos_result = float(index) + 1.0f; // 1-based
 
     if (m_strand == -1) {
@@ -326,7 +333,7 @@ float PWMScorer::score_without_spatial(const std::string& target, int64_t motif_
     
     // MAX_LIKELIHOOD or MAX_LIKELIHOOD_POS
     float best_logp;
-    int best_dir;
+    int best_dir = 1; // max_like_match() returns early without setting it
     bool combine_strands = (m_mode == MAX_LIKELIHOOD);
     std::string::const_iterator best_pos = m_pssm.max_like_match(target, best_logp, best_dir, combine_strands);
 

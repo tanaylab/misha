@@ -883,3 +883,63 @@ test_that("strand is ignored when bidirect = TRUE", {
         expect_equal(vals[1], w$sgn * (pos0 + 1L), ignore_attr = TRUE)
     }
 })
+
+test_that("pwm.edit_distance.lse.pos points at a real edit on the reverse strand", {
+    remove_all_vtracks()
+
+    # The reverse pass of PWMLseEditDistanceScorer scores a reverse-complemented
+    # COPY of the target, so its indices need remapping back to forward
+    # coordinates. Getting that wrong mirrors the position about the interval,
+    # which still looks like a plausible answer - so verify functionally, with
+    # gseq.pwm() as an independent oracle: applying the single best edit AT the
+    # reported position must cross the threshold, and at the mirrored position it
+    # must not.
+    lse_of <- function(sq, p, strand) {
+        gseq.pwm(sq, p, mode = "lse", strand = strand, bidirect = FALSE, prior = 0)
+    }
+    motif_len <- 7L
+    set.seed(17)
+    pssm <- matrix(runif(motif_len * 4, 0.05, 1),
+        nrow = motif_len, dimnames = list(NULL, c("A", "C", "G", "T"))
+    )
+    pssm <- pssm / rowSums(pssm)
+
+    # Find a window that needs exactly one edit, so the reported position is
+    # unambiguously "the" impactful edit (with two or more edits the optimum is a
+    # set and either member may legitimately be reported).
+    found <- 0L
+    for (start in seq(2000L, 40000L, by = 1000L)) {
+        iv <- gintervals(1, start, start + 40L)
+        target <- toupper(gseq.extract(gintervals(1, start, start + 40L + motif_len - 1L)))
+        if (grepl("N", target, fixed = TRUE)) next
+        thresh <- as.numeric(lse_of(target, pssm, -1)) + 0.35
+
+        params <- list(
+            pssm = pssm, prior = 0, bidirect = FALSE, strand = -1,
+            extend = TRUE, score.thresh = thresh, direction = "above"
+        )
+        gvtrack.create("k", NULL, "pwm.edit_distance.lse", params = params)
+        gvtrack.create("q", NULL, "pwm.edit_distance.lse.pos", params = params)
+        r <- gextract(c("k", "q"), iv, iterator = iv)
+        if (is.na(r$k[1]) || r$k[1] != 1) next
+
+        pos <- r$q[1]
+        n <- nchar(target)
+        best_at <- function(at) {
+            if (at < 1 || at > n) {
+                return(-Inf)
+            }
+            max(vapply(c("A", "C", "G", "T"), function(b) {
+                mutated <- target
+                substr(mutated, at, at) <- b
+                as.numeric(lse_of(mutated, pssm, -1))
+            }, numeric(1)))
+        }
+        expect_gte(best_at(pos), thresh - 1e-6)
+        expect_lt(best_at(n + 1L - pos), thresh - 1e-6)
+        found <- found + 1L
+        if (found >= 3L) break
+    }
+    # Assert rather than skip: no usable window means the test checked nothing.
+    expect_gte(found, 1L)
+})
