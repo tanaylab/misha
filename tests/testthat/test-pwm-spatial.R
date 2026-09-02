@@ -306,3 +306,74 @@ test_that("spatial PWM error handling", {
         "positive"
     )
 })
+
+test_that("spatial sliding agrees with non-sliding scoring", {
+    remove_all_vtracks()
+
+    # The spatial sliding window is an optimization: it must return exactly what
+    # the straightforward per-interval scan returns. MISHA_DISABLE_SPATIAL_SLIDING
+    # selects the reference path, so the two can be compared directly.
+    # Regression coverage for three defects that made them disagree:
+    #   - the incoming anchor was read from a fixed offset, so a stride > 1 slide
+    #     (any fixed-size iterator) reused one base for every step;
+    #   - the per-bin max rescan re-selected the element being evicted or moved;
+    #   - the seed's hit count stopped at bins*B, missing the positions that clamp
+    #     into the last bin when the spatial profile is shorter than the window.
+    old <- Sys.getenv("MISHA_DISABLE_SPATIAL_SLIDING", unset = NA)
+    on.exit(
+        {
+            if (is.na(old)) {
+                Sys.unsetenv("MISHA_DISABLE_SPATIAL_SLIDING")
+            } else {
+                Sys.setenv(MISHA_DISABLE_SPATIAL_SLIDING = old)
+            }
+        },
+        add = TRUE
+    )
+
+    set.seed(23)
+    intervals <- gintervals(1, 2000, 2300)
+    checked <- 0L
+    for (motif_len in c(6L, 9L)) {
+        pssm <- matrix(runif(motif_len * 4, 0.05, 1),
+            nrow = motif_len, dimnames = list(NULL, c("A", "C", "G", "T"))
+        )
+        pssm <- pssm / rowSums(pssm)
+        for (spat_bin in c(1L, 5L)) {
+            # A short profile relative to the window exercises the last-bin clamp.
+            for (spat_len in c(10L, 60L)) {
+                spat <- runif(spat_len, 0.2, 3)
+                for (func in c("pwm", "pwm.max", "pwm.max.pos", "pwm.count")) {
+                    for (strand in c(1, -1)) {
+                        params <- list(
+                            pssm = pssm, prior = 0, bidirect = FALSE, strand = strand,
+                            extend = TRUE, spat_factor = spat, spat_bin = spat_bin
+                        )
+                        if (func == "pwm.count") params$score.thresh <- -12
+                        gvtrack.create("spat_v", NULL, func, params = params)
+
+                        Sys.setenv(MISHA_DISABLE_SPATIAL_SLIDING = "")
+                        slid <- gextract("spat_v", intervals, iterator = 50)
+                        Sys.setenv(MISHA_DISABLE_SPATIAL_SLIDING = "1")
+                        ref <- gextract("spat_v", intervals, iterator = 50)
+
+                        slid <- slid[order(slid$start), ]
+                        ref <- ref[order(ref$start), ]
+                        expect_equal(slid$spat_v, ref$spat_v,
+                            tolerance = 1e-5,
+                            info = sprintf(
+                                "func=%s strand=%d spat_bin=%d spat_len=%d motif_len=%d",
+                                func, strand, spat_bin, spat_len, motif_len
+                            )
+                        )
+                        checked <- checked + 1L
+                    }
+                }
+            }
+        }
+    }
+    # More than one bin must be produced, or sliding never happens and the test
+    # would pass without exercising anything.
+    expect_gt(nrow(ref), 1L)
+    expect_gt(checked, 0L)
+})

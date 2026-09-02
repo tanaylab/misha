@@ -820,9 +820,16 @@ float PWMScorer::score_interval(const GInterval& interval, const GenomeChromKey&
                         // Need to seed
                         spat_seed(target, expanded_interval, i_min, i_max, motif_len);
                     } else {
-                        // Can slide - loop stride times to handle stride>1
+                        // Can slide - loop stride times to handle stride>1.
+                        // Step s brings in one anchor: walking forward from the
+                        // old window's edge to the new one. Plus strand takes
+                        // them at the high (i_max) end, minus strand - whose
+                        // target is reverse-complemented - at the low (i_min) end.
                         for (size_t s = 0; s < stride; ++s) {
-                            spat_slide_once(target, expanded_interval, i_min, i_max, motif_len);
+                            const size_t i_in_target = (m_strand == -1)
+                                ? (i_min + (stride - 1 - s))
+                                : (i_max - (stride - 1 - s));
+                            spat_slide_once(target, expanded_interval, i_min, i_max, motif_len, i_in_target);
                             if (!m_spat_slide.valid) {
                                 // Sliding failed, reseed
                                 spat_seed(target, expanded_interval, i_min, i_max, motif_len);
@@ -1011,7 +1018,7 @@ void PWMScorer::bin_total_remove(size_t b, float m, bool is_rc) {
 }
 
 // MAX / MAX_POS per-bin maintenance
-void PWMScorer::bin_max_maybe_recompute(size_t b) {
+void PWMScorer::bin_max_maybe_recompute(size_t b, int exclude_ridx) {
     SpatSlideCache& S = m_spat_slide;
     const size_t j0 = b * (size_t)S.B;
     const size_t j1 = (b == S.bins - 1) ? (S.W - 1) : (std::min(S.W, (b+1)*(size_t)S.B) - 1);
@@ -1026,6 +1033,7 @@ void PWMScorer::bin_max_maybe_recompute(size_t b) {
 
     for (size_t j = j0; j <= j1; ++j) {
         const size_t ridx = ring_idx_from_j(j);
+        if ((int)ridx == exclude_ridx) continue;
 
         if (use_lse && S.has_fwd[ridx] && S.has_rc[ridx]) {
             // Combine forward and reverse using log-sum-exp
@@ -1109,7 +1117,11 @@ void PWMScorer::spat_seed(const std::string& target, const GInterval& expd,
         // COUNT: compute initial counts using combined (per-position) scores
         int cpos = 0;
         const size_t j_start = b * (size_t)S.B;
-        const size_t j_end   = std::min(S.W, (b+1)*(size_t)S.B);
+        // The last bin absorbs every position past bins*B: `bins` is capped at the
+        // length of the spatial profile, so when the profile is shorter than the
+        // window, bins*B < W and those positions clamp into it (see bin_of_j).
+        // bin_total_recompute and bin_max_maybe_recompute already special-case this.
+        const size_t j_end   = (b == S.bins - 1) ? S.W : std::min(S.W, (b+1)*(size_t)S.B);
         for (size_t j = j_start; j < j_end; ++j) {
             const size_t ridx = ring_idx_from_j(j);
             const float combined = combined_motif_score(ridx);
@@ -1127,7 +1139,8 @@ void PWMScorer::spat_seed(const std::string& target, const GInterval& expd,
 
 // Slide the spatial window by one position
 void PWMScorer::spat_slide_once(const std::string& target, const GInterval& expd,
-                                size_t i_min, size_t i_max, size_t motif_len) {
+                                size_t i_min, size_t i_max, size_t motif_len,
+                                size_t i_in_target) {
     SpatSlideCache& S = m_spat_slide;
     const size_t W = S.W;
     const int B = S.B;
@@ -1149,7 +1162,7 @@ void PWMScorer::spat_slide_once(const std::string& target, const GInterval& expd
 
         // MAX remove if outgoing was argmax (needs re-scan)
         if (S.bin_max[b_out].idx == (int)ridx_out) {
-            bin_max_maybe_recompute(b_out);
+            bin_max_maybe_recompute(b_out, (int)ridx_out);
         }
 
         // COUNT decrement hits if this position contributed under bin b_out
@@ -1183,6 +1196,14 @@ void PWMScorer::spat_slide_once(const std::string& target, const GInterval& expd
         }
     }
 
+    // Order matters for the per-bin MAX, which is rescanned by j-range while the
+    // adds are made by bin. A mover must not be written into a bin that a later
+    // mover will then rescan and clear. Minus strand moves j -> j+1, so walk it
+    // in descending j; plus strand moves j -> j-1 and is already ascending.
+    if (is_minus) {
+        std::reverse(boundary_j_vals.begin(), boundary_j_vals.end());
+    }
+
     for (size_t j_old : boundary_j_vals) {
         const size_t ridx = ring_idx_from_j(j_old);
         const size_t b_old = bin_of_j(j_old);
@@ -1203,7 +1224,7 @@ void PWMScorer::spat_slide_once(const std::string& target, const GInterval& expd
 
         // move MAX participation
         if (S.bin_max[b_old].idx == (int)ridx) {
-            bin_max_maybe_recompute(b_old);
+            bin_max_maybe_recompute(b_old, (int)ridx);
         }
 
         // consider as candidate in new bin (motif-only)
@@ -1243,7 +1264,9 @@ void PWMScorer::spat_slide_once(const std::string& target, const GInterval& expd
     const size_t j_in = is_minus ? 0 : (W - 1);
     {
         const size_t ridx_in = ring_idx_from_j(j_in);
-        const size_t i_in_target = i_min + j_in; // new sequence offset
+        // i_in_target comes from the caller: sliding by `stride` walks `stride`
+        // distinct new anchors, so it is NOT i_min + j_in (that is fixed and
+        // would read the same base on every step of the walk).
         if (i_in_target + motif_len > target.size()) {
             // Safety: mark invalid if we're out of bounds
             S.valid = false;

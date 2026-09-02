@@ -122,8 +122,13 @@ private:
     void spat_seed(const std::string& target, const GInterval& expd,
                    size_t i_min, size_t i_max, size_t motif_len);
 
+    // i_in_target: sequence offset of the anchor entering the window on THIS
+    // one-position step. The caller advances by `stride` positions by calling
+    // this `stride` times, so it differs per call and cannot be derived from
+    // i_min/i_max alone.
     void spat_slide_once(const std::string& target, const GInterval& expd,
-                         size_t i_min, size_t i_max, size_t motif_len);
+                         size_t i_min, size_t i_max, size_t motif_len,
+                         size_t i_in_target);
 
     // Answers (return the window's score for the current mode)
     float spat_answer_TOTAL();
@@ -145,7 +150,10 @@ private:
     void bin_total_remove(size_t b, float m, bool is_rc);
 
     // MAX / MAX_POS per-bin maintenance
-    void bin_max_maybe_recompute(size_t b);
+    // exclude_ridx: a ring slot to ignore during the rescan. The element being
+    // evicted or moved to another bin is still physically in the ring and still
+    // maps into this bin, so without excluding it the rescan simply re-selects it.
+    void bin_max_maybe_recompute(size_t b, int exclude_ridx = -1);
     void bin_max_consider(size_t b, float m, int ridx, int dir);
 
     // COUNT helper
