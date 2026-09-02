@@ -794,7 +794,7 @@
 #' \tabular{llll}{
 #'   Source \tab func \tab Key params \tab Description \cr
 #'   NULL (sequence) \tab pwm.edit_distance.lse \tab pssm, score.thresh, max_edits, score.min, score.max, direction, bidirect, prior, extend, strand \tab Minimum number of substitution edits needed to raise the LSE score (log-sum-exp of per-window PWM scores) above \code{score.thresh}. Exhaustive for k<=2, greedy heuristic for k>=3. \cr
-#'   NULL (sequence) \tab pwm.edit_distance.lse.pos \tab pssm, score.thresh, max_edits, score.min, score.max, direction, bidirect, prior, extend, strand \tab 1-based position of the most impactful single edit for raising the LSE score. \cr
+#'   NULL (sequence) \tab pwm.edit_distance.lse.pos \tab pssm, score.thresh, max_edits, score.min, score.max, direction, bidirect, prior, extend, strand \tab 1-based position of an edit in the optimal edit set for raising the LSE score. Exactly "the most impactful single edit" only when one edit suffices; when the optimum needs two or more edits this is one member of that set, and which member is reported depends on scan orientation. \cr
 #' }
 #'
 #' \strong{K-mer summarizers}
@@ -820,14 +820,14 @@
 #'   \item \code{prior}: Pseudocount added to frequencies (default 0.01). Set to 0 to disable.
 #'   \item \code{extend}: Extends the fetched sequence so boundary-anchored motifs retain full context (default TRUE). The END coordinate is padded by motif_length - 1 for all strand modes; anchors must still start inside the iterator.
 #'   \item Neutral characters (\code{N}, \code{n}, \code{*}) contribute the mean log-probability of the corresponding PSSM column on both strands.
-#'   \item \code{strand}: Used only when \code{bidirect = FALSE}; 1 scans the forward strand, -1 scans the reverse strand. For \code{pwm.max.pos}, strand = -1 reports the hit position at the end of the match (still relative to the forward orientation).
+#'   \item \code{strand}: Used only when \code{bidirect = FALSE}; 1 scans the forward strand, -1 scans the reverse strand. The \code{*.pos} funcs report the same thing for both strands: the 1-based position of the first base of the match in forward-strand orientation.
 #'   \item \code{score.thresh}: Threshold for \code{pwm.count}, and mandatory for it - there is no default, and it must be a single value.
 #'     Anchors with log-likelihood >= \code{score.thresh} are counted; only one count per genomic start.
 #'     PWM scores are log-likelihoods, so the usable range depends on the PSSM, the prior and any spatial
 #'     weights; calibrate with a \code{pwm} or \code{pwm.max} virtual track over the same intervals before
 #'     choosing one. \code{pwm}, \code{pwm.max} and \code{pwm.max.pos} accept \code{score.thresh} but ignore it.
 #'   \item Spatial weighting (\code{spat_factor}, \code{spat_bin}, \code{spat_min}, \code{spat_max}): optional position-dependent weights applied in log-space. Provide a positive numeric vector \code{spat_factor}; \code{spat_bin} (integer > 0) defines bin width; \code{spat_min}/\code{spat_max} restrict the scanning window.
-#'   \item \code{pwm.max.pos}: Positions are reported 1-based relative to the final scan window (after iterator shifts and spatial trimming). Ties resolve to the most 5' anchor; the forward strand wins ties at the same coordinate. Values are signed when \code{bidirect = TRUE} (positive for forward, negative for reverse).
+#'   \item \code{pwm.max.pos}: Positions are reported 1-based relative to the final scan window (after iterator shifts and spatial trimming). Values are signed when \code{bidirect = TRUE} (positive for forward, negative for reverse). Ties are broken by scan order, which is strand-dependent: with \code{strand = 1} (and under \code{bidirect = TRUE}) the most 5' tied anchor wins and the forward strand wins a tie at the same coordinate, but \code{bidirect = FALSE, strand = -1} scans the reverse-complemented sequence and so keeps the most 3' tied anchor in forward coordinates.
 #' }
 #'
 #' \strong{Edit distance notes}

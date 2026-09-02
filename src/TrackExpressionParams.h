@@ -156,6 +156,14 @@ struct PWMParams {
             }
         }
 
+        // `strand` is documented as used only when bidirect = FALSE. Under
+        // bidirect = TRUE both strands are scored at every position anyway, so
+        // honouring strand here would only reverse-complement the scan target and
+        // invert the strand sign reported by the *.pos funcs.
+        if (params.core.bidirect) {
+            params.core.strand_mode = 1;
+        }
+
         if (params_is_list) {
             int spat_idx = findListElementIndex(rparams, "spat_factor");
             SEXP rspat = R_NilValue;

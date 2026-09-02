@@ -127,10 +127,16 @@ float PWMLseEditDistanceScorer::encode_position(size_t index,
                                                  size_t motif_length,
                                                  int direction) const
 {
-    // Convert 0-based index to 1-based position
+    // The reverse pass scores a reversed-and-complemented COPY of the target
+    // (see compute_lse_edits: seq_bases[q] = complement(seq[R-1-q])), so `index`
+    // is an RC-array index there and maps to forward 1-based R - index. Gate on
+    // the pass direction, not on m_strand: the reverse pass also runs under
+    // bidirect = TRUE, where m_strand is not -1. `index` is a single edit
+    // position, not a window start, so motif_length does not enter.
+    (void)motif_length;
     float pos = static_cast<float>(index) + 1.0f;
-    if (m_strand == -1) {
-        pos = static_cast<float>(target_length) - pos + 1.0f;
+    if (direction == -1) {
+        pos = static_cast<float>(target_length) - static_cast<float>(index);
     }
     if (m_pssm.is_bidirect()) {
         pos *= static_cast<float>(direction);

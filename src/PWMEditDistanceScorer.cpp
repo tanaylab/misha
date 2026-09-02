@@ -622,10 +622,13 @@ float PWMEditDistanceScorer::encode_position(size_t index,
                                              size_t motif_length,
                                              int direction) const
 {
+    // No strand remap here: unlike PWMScorer, this scorer never sets
+    // expanded_interval.strand, so the target is always the forward strand and
+    // `index` is already a forward-strand offset. Reverse-strand matches are
+    // scored with calc_like_rc() at the same index.
+    (void)target_length;
+    (void)motif_length;
     float pos = static_cast<float>(index) + 1.0f;
-    if (m_strand == -1) {
-        pos = static_cast<float>(target_length) - pos - static_cast<float>(motif_length) + 1.0f;
-    }
     if (m_pssm.is_bidirect()) {
         pos *= static_cast<float>(direction);
     }

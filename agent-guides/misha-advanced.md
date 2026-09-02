@@ -283,7 +283,7 @@ For de-novo motifs, train a PSSM from labelled sequences with `prego::regress_pw
 | `func` | What it returns per iterator bin | Aggregation across windows |
 |---|---|---|
 | `pwm`     | log-sum-exp of all window scores in the iterator interval | LSE (soft sum) |
-| `pwm.max` | the maximum window score in the iterator interval | best-window |
+| `pwm.max` | the maximum window score in the iterator interval. Under `bidirect = TRUE` each window's score is itself the LSE over the two strands - see the bidirect table below | best-window |
 | `pwm.max.pos` | the **1-based** position of the best-scoring window's first base, measured in bp from the start of the scanned region. **Sign carries strand** when `bidirect = TRUE`: `+pos` = best window is on the forward strand, `-pos` = reverse strand. With `bidirect = FALSE` the value is always positive. | argmax |
 | `pwm.count` | number of windows with score ≥ `score.thresh` (**required** - see below) | count above threshold |
 | `pwm.edit_distance` | min #edits to raise (`direction = "above"`) or disrupt (`direction = "below"`) the best-window score across `score.thresh` | search over edit budget |
@@ -304,15 +304,16 @@ The two params interact, and which one wins depends on `bidirect`:
 
 | `bidirect` | `strand` | What the engine actually scans |
 |---|---|---|
-| `TRUE` *(default)* | *(ignored)* | Both strands at every window position; the per-window score is the LSE of forward + reverse-complement matches (for `pwm` / `pwm.count`) or the max of the two (for `pwm.max` / `*.pos`). |
+| `TRUE` *(default)* | *(ignored)* | Both strands at every window position. For `pwm`, `pwm.count` **and `pwm.max`** the per-window score is the LSE of the forward and reverse-complement matches; `pwm.max` then takes the max over those per-window LSEs. A hit in a palindromic window therefore reads `single-strand max + log 2`. Only the `*.pos` funcs take the per-window max instead of the LSE - they have to pick one strand to report in the sign. |
 | `FALSE` | `+1` *(default)* | Forward strand only. |
-| `FALSE` | `-1` | Reverse-complement strand only. (Positions are remapped back to the original strand's coordinates, so values stay positive and comparable to the forward-strand walk.) |
+| `FALSE` | `-1` | Reverse-complement strand only. Positions are remapped back to forward-strand coordinates, so values stay positive and use the same convention as the forward walk. |
 
 So `strand` is a no-op while `bidirect = TRUE`. To get strand-resolved hits, you must set `bidirect = FALSE` explicitly. Note also that there is **no `strand = 0`** for PWM (that's the kmer convention); the PWM equivalent of "both strands" is `bidirect = TRUE`.
 
 ```r
-# bidirect = TRUE (default): both strands at every position, keep the better.
-# The .pos value carries strand info: +pos = forward hit, -pos = reverse hit.
+# bidirect = TRUE (default): both strands at every position, LSE-combined
+# into the pwm.max score. The .pos value instead picks the better strand and
+# carries it in the sign: +pos = forward hit, -pos = reverse hit.
 gvtrack.create("ctcf_max",
                func   = "pwm.max",
                params = list(pssm = ctcf_pssm, prior = 0.01,
@@ -329,6 +330,10 @@ gvtrack.create("ctcf_rev", func = "pwm.max",
 ```
 
 **Position semantics (`pwm.max.pos`, `pwm.edit_distance.pos`).** All `*.pos` values are **1-based** bp offsets *relative to the iterator interval* (after any `gvtrack.iterator()` `sshift` / `eshift` shifts), pointing at the first base of the best window. `pos = 1` means the best window starts at the very first base of the (possibly shifted) iterator interval; the motif occupies `pos .. pos + nrow(pssm) - 1`. The sign convention above only applies under `bidirect = TRUE`; under `bidirect = FALSE` the value is always positive regardless of `strand`.
+
+**Which end does `*.pos` point at.** `|pos|` is always the **start** of the match in *forward-strand* coordinates - on both strands, under either `bidirect` setting. Under `bidirect = TRUE` the sign tells you which strand won, not which end you are pointed at. So span arithmetic is `pos .. pos + nrow(pssm) - 1` in forward coordinates in every case. Note the consequence of the LSE/max split above: the window `pwm.max.pos` points at is **not** guaranteed to be the window that produced the `pwm.max` score - `*.pos` is the argmax of the per-position max, `pwm.max` is the max of the per-position LSE, and they diverge whenever the reverse strand contributes enough at a neighbouring position to flip which window wins the LSE. Measured over ~3M motif hits the two agree for 99.6%; the rest re-score up to `log 2` below the bin score. Do not treat `pwm.max` as "the score at `pwm.max.pos`".
+
+> **Version caveat.** That uniform convention holds from misha 5.11.25. In 5.11.24 and earlier, `bidirect = FALSE, strand = -1` returned a position one less than the 1-based forward start, `pwm.edit_distance.pos` returned reverse-complemented target coordinates, and passing `strand = -1` alongside `bidirect = TRUE` inverted the reported strand sign. Reading positions off an older build: verify the offset on a planted motif before building spans from it.
 
 `prior` controls the strength of the uniform-background regularizer (smaller = sharper PWM; typical range 0.001-0.05). Tune by AUC on labelled data.
 
