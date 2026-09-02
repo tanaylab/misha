@@ -1,6 +1,6 @@
 # misha 5.11.26
 
-* Fixed spatially-weighted PWM virtual tracks (`spat_factor`) returning wrong values for every iterator bin after the first. `gextract(..., iterator = N)` on a `pwm`, `pwm.max`, `pwm.max.pos` or `pwm.count` vtrack with spatial weights was affected; the error could exceed 3 log-likelihood units. Also fixes `pwm.count` undercounting whenever the spatial profile is shorter than the scan window.
+* PWM virtual tracks with `spat_factor` returned wrong values in every iterator bin after the first, affecting `pwm`, `pwm.max`, `pwm.max.pos` and `pwm.count`. Recompute anything derived from a spatially-weighted PWM track.
 
 # misha 5.11.25
 
