@@ -1,3 +1,7 @@
+# misha 5.11.26
+
+* Fixed spatially-weighted PWM virtual tracks (`spat_factor`) returning wrong values for every iterator bin after the first. `gextract(..., iterator = N)` on a `pwm`, `pwm.max`, `pwm.max.pos` or `pwm.count` vtrack with spatial weights was affected; the error could exceed 3 log-likelihood units. Also fixes `pwm.count` undercounting whenever the spatial profile is shorter than the scan window.
+
 # misha 5.11.25
 
 * `pwm.max.pos` and `pwm.edit_distance.pos` now report the 1-based start of the match in forward-strand coordinates for `strand = -1`, matching `gseq.pwm()` and the forward-strand case. They previously returned positions shifted by one (`pwm.max.pos`) or in reverse-complemented coordinates (`pwm.edit_distance.pos`).
