@@ -1,5 +1,12 @@
 # Changelog
 
+## misha 5.11.26
+
+- PWM virtual tracks with `spat_factor` returned wrong values in every
+  iterator bin after the first, affecting `pwm`, `pwm.max`,
+  `pwm.max.pos` and `pwm.count`. Recompute anything derived from a
+  spatially-weighted PWM track.
+
 ## misha 5.11.25
 
 - `pwm.max.pos` and `pwm.edit_distance.pos` now report the 1-based start
