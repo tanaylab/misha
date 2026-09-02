@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">misha</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.11.24</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.11.25</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -39,6 +39,19 @@
       <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="5.11.25" id="misha-51125">misha 5.11.25<a class="anchor" aria-label="anchor" href="#misha-51125"></a></h2>
+<ul><li>
+<code>pwm.max.pos</code> and <code>pwm.edit_distance.pos</code> now report the 1-based start of the match in forward-strand coordinates for <code>strand = -1</code>, matching <code><a href="../reference/gseq.pwm.html">gseq.pwm()</a></code> and the forward-strand case. They previously returned positions shifted by one (<code>pwm.max.pos</code>) or in reverse-complemented coordinates (<code>pwm.edit_distance.pos</code>).</li>
+<li>
+<code>pwm.max.pos</code> with spatial weights no longer reports the wrong strand when the scan window size varies between iterator intervals.</li>
+<li>
+<code>strand</code> is now genuinely ignored when <code>bidirect = TRUE</code>, as documented; it previously inverted the strand sign reported by the <code>*.pos</code> funcs. If you combined <code>bidirect = TRUE</code> with <code>strand = -1</code> <strong>and</strong> spatial weights (<code>spat_factor</code>, <code>spat_min</code>, <code>spat_max</code>), this also changes <code>pwm</code>, <code>pwm.max</code> and <code>pwm.count</code> values: spatial positions were measured along the reverse-complemented scan target and are now measured from the forward 5’ end. Rebuild any stored track created with that combination.</li>
+<li>
+<code>pwm.edit_distance.lse.pos</code> now reports the correct position for reverse-strand matches under <code>bidirect = TRUE</code> as well as <code>strand = -1</code>.</li>
+<li>
+<code>pwm.max.pos</code> returns <code>NA</code> instead of a fabricated position when the fetched sequence is shorter than the PSSM, which happens at a chromosome end with <code>extend = TRUE</code>.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="5.11.24" id="misha-51124">misha 5.11.24<a class="anchor" aria-label="anchor" href="#misha-51124"></a></h2>
 <ul><li>Track creation and <code><a href="../reference/gtrack.modify.html">gtrack.modify()</a></code> now flush the new files to disk before committing them, so a machine crash cannot leave a completed track name pointing at half-written data.</li>

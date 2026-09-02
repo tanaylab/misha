@@ -1,5 +1,30 @@
 # Changelog
 
+## misha 5.11.25
+
+- `pwm.max.pos` and `pwm.edit_distance.pos` now report the 1-based start
+  of the match in forward-strand coordinates for `strand = -1`, matching
+  [`gseq.pwm()`](https://tanaylab.github.io/misha/reference/gseq.pwm.md)
+  and the forward-strand case. They previously returned positions
+  shifted by one (`pwm.max.pos`) or in reverse-complemented coordinates
+  (`pwm.edit_distance.pos`).
+- `pwm.max.pos` with spatial weights no longer reports the wrong strand
+  when the scan window size varies between iterator intervals.
+- `strand` is now genuinely ignored when `bidirect = TRUE`, as
+  documented; it previously inverted the strand sign reported by the
+  `*.pos` funcs. If you combined `bidirect = TRUE` with `strand = -1`
+  **and** spatial weights (`spat_factor`, `spat_min`, `spat_max`), this
+  also changes `pwm`, `pwm.max` and `pwm.count` values: spatial
+  positions were measured along the reverse-complemented scan target and
+  are now measured from the forward 5’ end. Rebuild any stored track
+  created with that combination.
+- `pwm.edit_distance.lse.pos` now reports the correct position for
+  reverse-strand matches under `bidirect = TRUE` as well as
+  `strand = -1`.
+- `pwm.max.pos` returns `NA` instead of a fabricated position when the
+  fetched sequence is shorter than the PSSM, which happens at a
+  chromosome end with `extend = TRUE`.
+
 ## misha 5.11.24
 
 - Track creation and
