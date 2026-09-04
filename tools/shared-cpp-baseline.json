@@ -22,7 +22,7 @@
   "BufferedFile.h": {
     "identical": false,
     "misha": "a2073d95a55a4c53",
-    "pymisha": "64a5dee828740bfd"
+    "pymisha": "5743e45d47ed3775"
   },
   "CRC64.h": {
     "identical": true,
@@ -92,12 +92,12 @@
   "GenomeTrack.cpp": {
     "identical": false,
     "misha": "1a61f79d471e7222",
-    "pymisha": "d312ada5df574193"
+    "pymisha": "b2043bf4e113b0ea"
   },
   "GenomeTrack.h": {
     "identical": false,
     "misha": "ab20d589af65ed3a",
-    "pymisha": "e24ccec4f5043d33"
+    "pymisha": "465ca052cce7373f"
   },
   "GenomeTrack1D.h": {
     "identical": false,
@@ -107,22 +107,22 @@
   "GenomeTrackFixedBin.cpp": {
     "identical": false,
     "misha": "3469cf82e4d809f9",
-    "pymisha": "087f37ebf7c46007"
+    "pymisha": "9259e2835cbeb971"
   },
   "GenomeTrackFixedBin.h": {
     "identical": false,
     "misha": "f5f4ffc6c5099e43",
-    "pymisha": "c594accfebff68f8"
+    "pymisha": "92dbe81aa88dc406"
   },
   "GenomeTrackSparse.cpp": {
     "identical": false,
     "misha": "3844e0562b784467",
-    "pymisha": "172be69d6248752d"
+    "pymisha": "c47d360e15f67d43"
   },
   "GenomeTrackSparse.h": {
     "identical": false,
     "misha": "7d1193c2f65cf9c4",
-    "pymisha": "ccc0ad188edf331c"
+    "pymisha": "11a999628ae7c941"
   },
   "GenomeUtils.cpp": {
     "identical": true,
@@ -180,19 +180,19 @@
     "pymisha": "adca921a2f225b60"
   },
   "PWMEditDistanceScorer.cpp": {
-    "identical": false,
-    "misha": "3229ed62dde9a386",
-    "pymisha": "0b01313cce750e5c"
+    "identical": true,
+    "misha": "bf6433c50dd51ec3",
+    "pymisha": "bf6433c50dd51ec3"
   },
   "PWMEditDistanceScorer.h": {
-    "identical": false,
+    "identical": true,
     "misha": "76494c4309f4ec48",
-    "pymisha": "6c61a2e7df11ea65"
+    "pymisha": "76494c4309f4ec48"
   },
   "PWMLseEditDistanceScorer.cpp": {
     "identical": true,
-    "misha": "259d2eed913ff819",
-    "pymisha": "259d2eed913ff819"
+    "misha": "03ddc76baa2e1266",
+    "pymisha": "03ddc76baa2e1266"
   },
   "PWMLseEditDistanceScorer.h": {
     "identical": true,
@@ -201,13 +201,13 @@
   },
   "PWMScorer.cpp": {
     "identical": false,
-    "misha": "4d077ea1f6b92aff",
-    "pymisha": "7b2f7f55d27d8b7b"
+    "misha": "652e13229ba08d72",
+    "pymisha": "3dda88d53280d2b9"
   },
   "PWMScorer.h": {
     "identical": false,
-    "misha": "0bb1f52e7f02db94",
-    "pymisha": "35db31ca817dfbee"
+    "misha": "5ed62bf51c1d727c",
+    "pymisha": "f6138b7fc1621abd"
   },
   "RaList.h": {
     "identical": true,
@@ -277,12 +277,12 @@
   "TrackIndex2D.cpp": {
     "identical": false,
     "misha": "c0aa32cdfe20a0ae",
-    "pymisha": "692e88ffa48a48e6"
+    "pymisha": "e7e69622847df10a"
   },
   "TrackIndex2D.h": {
     "identical": false,
     "misha": "5c6d5a86bb4edeed",
-    "pymisha": "df2556b472dc8278"
+    "pymisha": "0fca23ffb03970fd"
   },
   "config.h": {
     "identical": true,
