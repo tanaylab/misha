@@ -1,5 +1,12 @@
 # Changelog
 
+## misha 5.11.27
+
+- Four source files used `drand48()`, `getenv()` or `atof()` without
+  including `<stdlib.h>`, relying on it arriving indirectly. Nothing
+  changes for users; it removes a build failure that appears when a
+  compiler toolchain stops providing that header for free.
+
 ## misha 5.11.26
 
 - PWM virtual tracks with `spat_factor` returned wrong values in every

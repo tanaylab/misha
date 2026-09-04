@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">misha</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.11.26</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.11.27</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -39,6 +39,10 @@
       <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="5.11.27" id="misha-51127">misha 5.11.27<a class="anchor" aria-label="anchor" href="#misha-51127"></a></h2>
+<ul><li>Four source files used <code>drand48()</code>, <code>getenv()</code> or <code>atof()</code> without including <code>&lt;stdlib.h&gt;</code>, relying on it arriving indirectly. Nothing changes for users; it removes a build failure that appears when a compiler toolchain stops providing that header for free.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="5.11.26" id="misha-51126">misha 5.11.26<a class="anchor" aria-label="anchor" href="#misha-51126"></a></h2>
 <ul><li>PWM virtual tracks with <code>spat_factor</code> returned wrong values in every iterator bin after the first, affecting <code>pwm</code>, <code>pwm.max</code>, <code>pwm.max.pos</code> and <code>pwm.count</code>. Recompute anything derived from a spatially-weighted PWM track.</li>
