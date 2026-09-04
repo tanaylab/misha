@@ -1,3 +1,5 @@
+#include <stdlib.h>   // atof
+
 #include "TGLException.h"
 #include "strutil.h"
 
