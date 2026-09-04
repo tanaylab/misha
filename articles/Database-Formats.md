@@ -108,7 +108,7 @@ The full record:
 
 gdb.info()
 #> $path
-#> [1] "/tmp/RtmpKeVDcV/trackdb/test"
+#> [1] "/tmp/Rtmp5nTt6v/trackdb/test"
 #> 
 #> $is_db
 #> [1] TRUE
@@ -274,7 +274,7 @@ source_db <- .misha$GROOT
 target_db <- file.path(tempdir(), "target_db")
 unlink(target_db, recursive = TRUE)
 gdb.create_linked(target_db, parent = source_db)
-#> Created linked database at /tmp/RtmpKeVDcV/target_db (linked to /tmp/RtmpKeVDcV/trackdb/test)
+#> Created linked database at /tmp/Rtmp5nTt6v/target_db (linked to /tmp/Rtmp5nTt6v/trackdb/test)
 
 # One track, or many
 gtrack.copy("dense_track", db = target_db)

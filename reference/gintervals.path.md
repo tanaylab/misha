@@ -37,8 +37,8 @@ vector of names.
 
 gdb.init_examples()
 gintervals.path("annotations")
-#> [1] "/tmp/RtmptwYWUn/trackdb/test/tracks/annotations.interv"
+#> [1] "/tmp/RtmpLRFtNu/trackdb/test/tracks/annotations.interv"
 gintervals.path(c("annotations", "coding"))
-#> [1] "/tmp/RtmptwYWUn/trackdb/test/tracks/annotations.interv"
-#> [2] "/tmp/RtmptwYWUn/trackdb/test/tracks/coding.interv"     
+#> [1] "/tmp/RtmpLRFtNu/trackdb/test/tracks/annotations.interv"
+#> [2] "/tmp/RtmpLRFtNu/trackdb/test/tracks/coding.interv"     
 ```
