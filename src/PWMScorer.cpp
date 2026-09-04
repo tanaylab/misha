@@ -1,6 +1,7 @@
 #include "PWMScorer.h"
 #include <algorithm>
 #include <limits>
+#include <stdlib.h>
 #include <cstring> // For strcmp
 #include <cmath>   // For log
 #include <cstddef> // For ptrdiff_t

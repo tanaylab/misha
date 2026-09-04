@@ -3,6 +3,8 @@
 
 #define HAS_RAND48 1
 
+#include <stdlib.h>   // drand48, used below
+
 class Random {
 private:
         static int bits_num;
