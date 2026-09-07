@@ -123,8 +123,17 @@ double aggregate_edit_distance_parts(
 // which at the time reduced PWM (total likelihood) by summing the per-part
 // scores rather than by log-sum-exp, and picked PWM_MAX_POS's part by
 // comparing part-relative positions and then reported one without its offset.
-// Both are fixed now and the two reductions agree, but keep them in step by
-// hand: they are separate functions.
+// Both are fixed now. The two loops agree on the part-by-part reduction: each
+// drops a part whose score is NaN (a part the scorer cannot score at all) and
+// reduces over the rest, and each answers NaN when no part was scorable.
+//
+// They still differ in ONE place, deliberately: a filter that masks the
+// interval away entirely, so there is no part to score. potts.count answers 0
+// there and pwm.count answers NaN, because NaN is what released misha has
+// always answered for a fully masked pwm interval and changing it would move
+// numbers under existing users. Every other func answers NaN in both.
+//
+// Keep them in step by hand: they are separate functions.
 //
 // potts        -> log-sum-exp across parts
 // potts.max    -> maximum
@@ -633,20 +642,35 @@ void SequenceVarProcessor::process_individual_sequence_vars(
 				// For the other three funcs a one-element reduction is exactly
 				// what the fast path did.
 				double lse = -numeric_limits<double>::infinity();  // PWM
-				double best = 0.0;                                 // PWM_MAX
+				double best = -numeric_limits<double>::infinity();  // PWM_MAX
 				double total = 0.0;                                // PWM_COUNT
 				double best_pos = numeric_limits<double>::quiet_NaN();  // PWM_MAX_POS
 				double best_max = -numeric_limits<double>::infinity();
-				bool lse_seeded = false;
 				bool pos_seeded = false;
-				bool first = true;
+				bool any = false;
 
 				for (const auto& part : unmasked_parts) {
 					double part_score = ivar->pwm_scorer->score_interval(part, m_iu.get_chromkey());
 
+					// A part score_interval() cannot score at all - the part
+					// is narrower than the PSSM under extend = FALSE, or the
+					// fetch threw - is left OUT of the reduction, for every
+					// func, exactly as score_potts_var() leaves one out. It is
+					// not the same thing as a part with no MATCH: an assembly
+					// gap scores -inf (pwm charges an N the mean of the
+					// column, so its anchors are scorable and merely hopeless)
+					// and -inf is the identity of both a log-sum-exp and a
+					// maximum, so it reduces on its own. A NaN is not an
+					// identity for anything: it used to seed PWM_MAX and
+					// poison PWM_COUNT's sum, so one unscorable part - the
+					// FIRST one for PWM_MAX, any of them for PWM_COUNT - took
+					// the whole bin's answer with it.
+					if (std::isnan(part_score))
+						continue;
+
 					switch (ivar->val_func) {
 					case TrackExpressionVars::Track_var::PWM_MAX:
-						if (first || part_score > best)
+						if (!any || part_score > best)
 							best = part_score;
 						break;
 
@@ -658,8 +682,6 @@ void SequenceVarProcessor::process_individual_sequence_vars(
 						// match is; and the winner's position is relative to
 						// its own part, so it has to be offset before it means
 						// anything relative to seq_interval.
-						if (std::isnan(part_score))
-							break;  // no scorable anchor in this part
 						const double part_max = ivar->pwm_scorer->get_last_max_score();
 						if (!pos_seeded || part_max > best_max) {
 							best_max = part_max;
@@ -686,15 +708,13 @@ void SequenceVarProcessor::process_individual_sequence_vars(
 						// interval" - and is not what the unfiltered scorer
 						// computes across the anchors of one interval either.
 						//
-						// Seeded from the first part and guarded against a
-						// second -inf: util.h's double log_sum_log() has no
-						// isinf() check (its float overload does), so
-						// log_sum_log(-inf, -inf) computes exp(NaN) = NaN.
-						if (!lse_seeded) {
+						// Seeded from the first scorable part and guarded
+						// against a second -inf: util.h's double
+						// log_sum_log() has no isinf() check (its float
+						// overload does), so log_sum_log(-inf, -inf) computes
+						// exp(NaN) = NaN.
+						if (!any) {
 							lse = part_score;
-							lse_seeded = true;
-						} else if (std::isnan(lse) || std::isnan(part_score)) {
-							lse = numeric_limits<double>::quiet_NaN();
 						} else if (!std::isfinite(lse)) {
 							lse = part_score;      // lse was -inf: contributes nothing
 						} else if (std::isfinite(part_score)) {
@@ -702,12 +722,12 @@ void SequenceVarProcessor::process_individual_sequence_vars(
 						}                          // else part_score is -inf: contributes nothing
 						break;
 					}
-					first = false;
+					any = true;
 				}
 
 				switch (ivar->val_func) {
 				case TrackExpressionVars::Track_var::PWM_MAX:
-					ivar->var[idx] = best;
+					ivar->var[idx] = any ? best : numeric_limits<double>::quiet_NaN();
 					break;
 				case TrackExpressionVars::Track_var::PWM_MAX_POS:
 					ivar->var[idx] = best_pos;
@@ -716,7 +736,7 @@ void SequenceVarProcessor::process_individual_sequence_vars(
 					ivar->var[idx] = total;
 					break;
 				default:
-					ivar->var[idx] = lse;
+					ivar->var[idx] = any ? lse : numeric_limits<double>::quiet_NaN();
 					break;
 				}
 			}

@@ -240,3 +240,77 @@ test_that("a fully masked pwm interval reports NA", {
         expect_true(is.na(gextract("t", iv, iterator = iv)$t), info = fn)
     }
 })
+
+test_that("a pwm part the scorer cannot score is left out of the aggregation", {
+    # Not an assembly gap, although that is the case the potts side cares
+    # about: pwm charges an N the mean of its PSSM column, so an all-N part
+    # scores -Inf (0 for pwm.count), and -Inf is the identity of both a
+    # log-sum-exp and a maximum - it reduces correctly on its own. The part a
+    # pwm scorer genuinely cannot score is one with no anchor to place at all:
+    # narrower than the PSSM with extend = FALSE, where score_interval()
+    # returns NaN.
+    #
+    # The mask leaves that part FIRST, which is the ordering that exposes it:
+    # pwm.max seeded itself from the first part and could never recover once
+    # that seed was NaN. pwm.count is order-independent - a NaN poisons its sum
+    # from anywhere - and pwm.max.pos already skipped.
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    pssm <- filter_agg_pssm() # 6 rows
+    iv <- gintervals(1, 4000, 4300)
+    mask <- gintervals(1, 4003, 4200) # leaves a 3bp first part, < nrow(pssm)
+    part_a <- gintervals(1, 4000, 4003)
+    part_b <- gintervals(1, 4200, 4300)
+
+    params <- list(
+        pssm = pssm, bidirect = FALSE, strand = 1,
+        extend = FALSE, prior = 0.01, score.thresh = -12
+    )
+
+    for (fn in c("pwm", "pwm.max", "pwm.count", "pwm.max.pos")) {
+        remove_all_vtracks()
+        gvtrack.create("t", NULL, fn, params = params)
+        gvtrack.filter("t", filter = mask)
+        gvtrack.create("t_part", NULL, fn, params = params)
+
+        # the geometry has to actually produce one unscorable part and one
+        # scorable one, or this test asserts nothing
+        expect_true(is.na(gextract("t_part", part_a, iterator = part_a)$t_part), info = fn)
+        b <- gextract("t_part", part_b, iterator = part_b)$t_part
+        expect_false(is.na(b), info = fn)
+
+        got <- gextract("t", iv, iterator = iv)$t
+        expected <- if (fn == "pwm.max.pos") b + (part_b$start - iv$start) else b
+        expect_equal(got, expected, tolerance = 1e-5, info = fn)
+    }
+})
+
+test_that("a pwm filter whose every part is unscorable reduces like potts", {
+    # Both parts narrower than the PSSM under extend = FALSE, so the reduction
+    # has nothing to reduce. Same answers score_potts_var() gives on the same
+    # geometry: NaN for the three log/max-based funcs, 0 for the count.
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    pssm <- filter_agg_pssm() # 6 rows
+    iv <- gintervals(1, 4000, 4300)
+    mask <- gintervals(1, 4003, 4297) # leaves 3bp at each end
+
+    params <- list(
+        pssm = pssm, bidirect = FALSE, strand = 1,
+        extend = FALSE, prior = 0.01, score.thresh = -12
+    )
+
+    for (fn in c("pwm", "pwm.max", "pwm.max.pos", "pwm.count")) {
+        remove_all_vtracks()
+        gvtrack.create("t", NULL, fn, params = params)
+        gvtrack.filter("t", filter = mask)
+        got <- gextract("t", iv, iterator = iv)$t
+        if (fn == "pwm.count") {
+            expect_equal(got, 0, info = fn)
+        } else {
+            expect_true(is.na(got), info = fn)
+        }
+    }
+})
