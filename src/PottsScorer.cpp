@@ -375,20 +375,22 @@ float PottsScorer::try_slide_window(const GInterval &original_interval,
             m_slide.rlse.pop_front();
 
         // RunningLogSumExp::push(-INFINITY) while its running maximum is
-        // already -inf evaluates exp(-inf + inf) = NaN into sum_scaled, and the
-        // NaN then survives into the first FINITE push - so the window reports
-        // NaN for the rest of its life although it has scorable anchors. It is
-        // not reachable from the pwm family, whose per-anchor value is -inf
-        // only for a zero-prior PSSM, which is why the shared utility has never
-        // needed a guard; it is reached here by an unscorable anchor, which is
-        // ordinary genomic N.
+        // already -inf used to evaluate exp(-inf + inf) = NaN into sum_scaled,
+        // where value()'s short-circuit on a non-finite maximum hid it until
+        // the first FINITE push - after which the window reported NaN for the
+        // rest of its life although it had scorable anchors. This is the call
+        // site that reaches it with ordinary genomic N; pwm's per-anchor value
+        // is -inf only for a zero-prior PSSM.
         //
-        // Guarded rather than fixed in RunningLogSumExp.h, which pwm shares:
-        // the batch that pushes -Inf and then a real value while the window
-        // holds nothing scorable gives up and re-seeds, which rebuilds the
-        // accumulator from scratch. A window that stays entirely unscorable is
-        // left alone - value() short-circuits on the non-finite maximum and
-        // never reads sum_scaled - so a scan of an assembly gap still slides.
+        // It is now fixed at the source, in RunningLogSumExp.h's
+        // scaled_contrib(), which pwm shares. The re-seed below is belt and
+        // braces rather than the fix: a batch that brings the window from
+        // entirely unscorable to holding a scorable anchor gives up and
+        // rebuilds the accumulator from scratch, which is the right answer
+        // either way and costs one comparison per slid batch. A window that
+        // STAYS entirely unscorable is left alone - value() short-circuits on
+        // the non-finite maximum and never reads sum_scaled - so a scan of an
+        // assembly gap still slides.
         const bool nothing_scorable = !std::isfinite(m_slide.rlse.M);
         bool incoming_scorable = false;
         for (size_t k = 0; k < stride; ++k) {
