@@ -320,15 +320,16 @@ test_that("gseq.potts mode = pos works on the reverse strand alone", {
     )
 })
 
-test_that("the blocked kernel agrees with the naive one on 1e6 random windows at W = 20", {
-    # score_codes() dispatches to score_codes_blocked() by default (see
-    # PottsModel.h and dev/notes/2026-09-07_potts-kernel-bench.md for why:
-    # measured ~3.1x faster than score_codes_naive() at W = 20, full pairwise,
-    # through gseq.potts(), well past the 1.5x adoption bar). This is the
-    # equivalence check that adoption was conditioned on, kept as a permanent
-    # regression test - C_potts_score_codes_cmp is a test-only entry point
-    # that scores an integer code matrix with BOTH kernels directly, without
-    # a DNA string or gseq.potts() in between.
+test_that("the blocked kernel agrees with the naive one on 1e6 random windows at W = 20, full pairwise", {
+    # PottsModel.h's score_codes() only dispatches to score_codes_blocked()
+    # when it has FEWER lookups than score_codes_naive() for this model - a
+    # dense model like this one (W = 20, every pair present) is exactly the
+    # case that wins, measured well past the point where it's worth it,
+    # through gseq.potts() on an idle host. This is the equivalence check
+    # that decision was conditioned on, kept as a permanent regression test -
+    # C_potts_score_codes_cmp is a test-only entry point that scores an
+    # integer code matrix with BOTH kernels directly, without a DNA string or
+    # gseq.potts() in between.
     m <- potts_ref_model(W = 20L, npair_mode = "full", seed = 1L)
     params <- misha:::.potts_params(m,
         bidirect = TRUE, extend = FALSE, strand = 1L, score.thresh = 0,
@@ -345,3 +346,33 @@ test_that("the blocked kernel agrees with the naive one on 1e6 random windows at
     max_diff <- max(abs(res$naive - res$blocked))
     expect_true(max_diff < 1e-9, info = sprintf("max |naive - blocked| = %.3e over %d windows", max_diff, n))
 })
+
+# The trailing size-1 block build_blocked_tables() uses for an odd W has no
+# coverage anywhere else in this file - every W above (4, 6, 8, 20) is even.
+# Sweep W = 20/21 (even/odd) x every pairing density: score_codes_blocked()
+# must agree with score_codes_naive() at EVERY density, even the ones where
+# PottsModel.h's gate picks naive for production score_codes() - the
+# equivalence check goes through C_potts_score_codes_cmp, which calls both
+# kernels directly and does not go through that gate.
+for (.W in c(20L, 21L)) {
+    for (.npair_mode in c("full", "sparse", "none")) {
+        test_that(sprintf("blocked kernel agrees with naive: W = %d, npair_mode = %s", .W, .npair_mode), {
+            m <- potts_ref_model(W = .W, npair_mode = .npair_mode, seed = 3L)
+            params <- misha:::.potts_params(m,
+                bidirect = TRUE, extend = FALSE, strand = 1L, score.thresh = 0,
+                what = "kernel equivalence test"
+            )
+
+            set.seed(4L)
+            n <- 50000
+            codes <- matrix(sample(0:3, .W * n, replace = TRUE), nrow = .W, ncol = n)
+            storage.mode(codes) <- "integer"
+
+            res <- .Call("C_potts_score_codes_cmp", params, codes)
+            max_diff <- max(abs(res$naive - res$blocked))
+            expect_true(max_diff < 1e-9,
+                info = sprintf("W=%d %s: max |naive - blocked| = %.3e over %d windows", .W, .npair_mode, max_diff, n)
+            )
+        })
+    }
+}

@@ -181,6 +181,12 @@ SEXP C_potts_score_codes_cmp(SEXP r_params, SEXP r_codes)
         const int n = INTEGER(dim)[1];
         if (W != model.width())
             verror("codes matrix has %d rows but the model width is %d", W, model.width());
+        // score_codes_blocked()'s contract (PottsModel.h) requires this -
+        // false only for W > 256, unreachable through any real model today,
+        // but a guarded, honest error beats silently comparing against a
+        // bare intercept.
+        if (!model.blocked_available())
+            verror("potts kernel equivalence check: blocked kernel unavailable for W = %d", W);
 
         const int *codes = INTEGER(r_codes);
 
