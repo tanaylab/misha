@@ -843,7 +843,8 @@ test_that("potts.max.pos aggregates across a filter's unmasked parts by score, n
     # reverse complement give the same max-union, so two anchors (here,
     # potentially one per part) can tie exactly, and either is a correct
     # answer - see "potts.max.pos and potts.count work on a genome interval"
-    # above and C8-3 in the task-8 corrections.
+    # above, which ties this same window/revcomp degeneracy to the exact
+    # values involved.
     p <- abs(got)
     expect_true(p %in% unmasked_idx, info = paste("p =", p))
     expect_equal(as.numeric(a_max[p]), expected_max, tolerance = 1e-5, ignore_attr = TRUE)
@@ -853,5 +854,77 @@ test_that("potts.max.pos aggregates across a filter's unmasked parts by score, n
     r <- as.numeric(potts_ref_window(win, potts_ref_rc(m)))
     if (abs(f - r) > 1e-9) {
         expect_equal(sign(got), if (r > f) -1 else 1)
+    }
+})
+
+test_that("a single unmasked part is scored like the unfiltered survivor, offset when it is a position", {
+    # A mask flush with one edge of the iterator interval leaves exactly one
+    # unmasked part rather than two - the only geometry that exercises the
+    # aggregation's one-part case, which the earlier tests in this file never
+    # reached (they all mask out the MIDDLE, leaving two parts). potts,
+    # potts.max and potts.count don't care: a lone part is just scored
+    # directly. potts.max.pos does care: its answer is a position, and a mask
+    # that clips the START of the interval moves the surviving part's own
+    # start away from the interval's start, so the position the part reports
+    # (relative to itself) has to be offset before it means anything relative
+    # to the original interval - exactly the offset the two-or-more-parts case
+    # already applies. A mask that clips the END leaves the surviving part
+    # flush with the interval's start (offset zero), so that side alone could
+    # never have caught a missing offset.
+    remove_all_vtracks()
+    m <- potts_ref_model(W = 6L, npair_mode = "full", seed = 139L)
+    iv <- gintervals(1, 4000, 4300)
+    th <- 0
+
+    clips <- list(
+        start = list(mask = gintervals(1, 4000, 4100), part = gintervals(1, 4100, 4300)),
+        end = list(mask = gintervals(1, 4200, 4300), part = gintervals(1, 4000, 4200))
+    )
+
+    for (nm in names(clips)) {
+        mask <- clips[[nm]]$mask
+        part <- clips[[nm]]$part
+
+        for (fn in c("potts", "potts.max", "potts.count")) {
+            remove_all_vtracks()
+            gvtrack.create("t", NULL, fn, params = c(m, list(extend = TRUE, score.thresh = th)))
+            gvtrack.filter("t", filter = mask)
+            gvtrack.create("t_part", NULL, fn, params = c(m, list(extend = TRUE, score.thresh = th)))
+
+            got <- gextract("t", iv, iterator = iv)$t
+            expected <- gextract("t_part", part, iterator = part)$t_part
+            expect_equal(got, expected, tolerance = 1e-5, info = paste(nm, fn))
+        }
+
+        remove_all_vtracks()
+        gvtrack.create("t_pos", NULL, "potts.max.pos", params = c(m, list(extend = TRUE)))
+        gvtrack.filter("t_pos", filter = mask)
+        gvtrack.create("p_pos", NULL, "potts.max.pos", params = c(m, list(extend = TRUE)))
+
+        got <- gextract("t_pos", iv, iterator = iv)$t_pos
+        local_pos <- gextract("p_pos", part, iterator = part)$p_pos
+        offset <- part$start - iv$start
+        expected <- if (local_pos > 0) {
+            local_pos + offset
+        } else if (local_pos < 0) {
+            local_pos - offset
+        } else {
+            local_pos
+        }
+        expect_equal(got, expected, info = paste(nm, "potts.max.pos value"))
+
+        # The assertion that actually would have caught the bug this test
+        # guards against: a position that survives the filter must resolve to
+        # a genomic coordinate OUTSIDE the mask. The old one-part fast path
+        # returned the part-relative position unadjusted, which - for the
+        # "start" clip - decodes to a coordinate INSIDE the masked region
+        # (verified: iv = [4000,4300), mask = [4000,4100) reported -65,
+        # decoding to iv$start + 65 - 1 = 4064, inside [4000,4100); the fixed
+        # code reports -165, decoding to 4164, outside it).
+        genomic_anchor_start <- iv$start + abs(got) - 1L
+        outside_mask <- genomic_anchor_start < mask$start || genomic_anchor_start >= mask$end
+        expect_true(outside_mask, info = paste(
+            nm, "anchor at", genomic_anchor_start, "mask", mask$start, mask$end
+        ))
     }
 })

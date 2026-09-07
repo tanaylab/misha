@@ -165,29 +165,39 @@ static void score_potts_var(TrackExpressionVars::Track_var *ivar, const GInterva
 			? 0.0 : numeric_limits<double>::quiet_NaN();
 		return;
 	}
-	if (unmasked_parts.size() == 1) {
-		ivar->var[idx] = ivar->potts_scorer->score_interval(unmasked_parts[0], chromkey);
-		return;
-	}
-
-	// Two or more parts here are, by construction, separated by at least one
-	// masked-out base - Filter::subtract() never returns adjacent or
-	// overlapping pieces - so no invalidate_cache() call is made between
-	// them: score_with_sliding_window()'s own stride guard already refuses to
-	// slide across that gap. Two ways to see why, for any pair of parts with
-	// widths w_a, w_b separated by a gap g >= 1:
+	// No one-part fast path: a lone unmasked part still needs its
+	// POTTS_MAX_POS answer offset into seq_interval's coordinate frame
+	// whenever the part does not start at seq_interval.start (a mask
+	// clipping the front of the interval), and score_interval() alone
+	// reports a position in the PART's frame. Routing every part - one or
+	// many - through the same loop makes that offset unconditional instead
+	// of something a fast path can forget. The loop's one-part case is not
+	// merely equivalent to the special case that used to be here; the
+	// special case computed a different, wrong number for POTTS_MAX_POS
+	// whenever it applied. It costs nothing extra: a one-element loop is the
+	// same work the fast path did, plus the `switch` this function needs to
+	// do at the end regardless.
+	//
+	// No invalidate_cache() call is made between iterations, whether there
+	// are one or several: two DIFFERENT parts are always separated by a gap
+	// g >= 0 (Filter::subtract() can abut a masked region exactly at
+	// seq_interval's own edge, but never returns two parts that touch each
+	// other, since that would just be one larger part), and
+	// score_with_sliding_window()'s own stride guard already refuses to
+	// slide across it. For parts of widths w_a, w_b:
 	//   - w_a != w_b: original_interval.start and .end do not step by the
 	//     same amount (step_end - step_start = w_b - w_a != 0), so
 	//     score_with_sliding_window() leaves stride at 0 and can_slide is
 	//     false on "stride > 0" alone.
 	//   - w_a == w_b: stride = w_a + g, and the guard requires
-	//     stride < window_size, where window_size is at most w_a (extend is
-	//     END-only, so the scored window can only be narrower than the part,
-	//     never wider). w_a + g < w_a is impossible for g >= 1, so can_slide
-	//     is false on "stride < window_size" instead.
-	// Verified empirically too: the Step-1 test below asserts the filtered
-	// result equals the same two parts scored on their own, which a wrongly
-	// accepted slide would not reproduce.
+	//     stride < window_size, where window_size <= w_a (extend is
+	//     END-only, so the scored window can never be wider than the part).
+	//     stride = w_a + g >= w_a >= window_size, which already contradicts
+	//     "stride < window_size" - true even at g == 0, so this holds for
+	//     abutting parts too, not only ones with a real gap between them.
+	// Verified empirically too: the tests below assert the filtered result
+	// equals the same parts scored on their own, which a wrongly accepted
+	// slide would not reproduce.
 	double lse = -numeric_limits<double>::infinity();
 	double best_score = -numeric_limits<double>::infinity();
 	double best_pos = numeric_limits<double>::quiet_NaN();
