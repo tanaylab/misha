@@ -103,8 +103,9 @@ unknown bases in both orientations. Each neutral contributes the mean log-probab
 corresponding PSSM column, yielding identical penalties on forward and reverse strands without
 hard-coded background scores. In \code{mode = "max"} the reported value is the single best
 strand score after applying any spatial weights; forward and reverse contributions are not
-aggregated. This matches the default behavior of the PWM virtual tracks (\code{pwm.max},
-\code{pwm.max.pos}, etc.).
+aggregated. This matches the \code{pwm.max.pos} virtual track's strand handling, but differs
+from the \code{pwm.max} virtual track, which log-sum-exps the two strands at each anchor
+instead of taking their maximum - the two can differ by up to \code{log 2} on the same input.
 }
 \examples{
 \dontrun{
