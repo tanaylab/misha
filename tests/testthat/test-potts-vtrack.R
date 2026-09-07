@@ -225,17 +225,24 @@ test_that("a potts vtrack over an all-N interval is NaN", {
     expect_equal(got$t_cnt, 0)
 })
 
-test_that("a filtered potts vtrack refuses loudly", {
+test_that("a filtered potts vtrack aggregates instead of refusing", {
     remove_all_vtracks()
     m <- potts_ref_model(W = 6L, npair_mode = "sparse", seed = 131L)
 
-    gvtrack.create("t_flt", NULL, "potts", params = c(m, list(extend = TRUE)))
-    gvtrack.filter("t_flt", filter = gintervals(1, 2050, 2100))
+    iv <- gintervals(1, 2000, 2200)
+    mask <- gintervals(1, 2050, 2100)
 
-    expect_error(
-        gextract("t_flt", gintervals(1, 2000, 2200), iterator = 50),
-        "not yet supported"
-    )
+    gvtrack.create("t_flt", NULL, "potts", params = c(m, list(extend = TRUE)))
+    gvtrack.filter("t_flt", filter = mask)
+    got <- gextract("t_flt", iv, iterator = iv)$t_flt
+
+    # the two parts gvtrack.filter's complement leaves, scored on their own
+    gvtrack.create("t_a", NULL, "potts", params = c(m, list(extend = TRUE)))
+    gvtrack.create("t_b", NULL, "potts", params = c(m, list(extend = TRUE)))
+    part_a <- gextract("t_a", gintervals(1, 2000, 2050), iterator = gintervals(1, 2000, 2050))$t_a
+    part_b <- gextract("t_b", gintervals(1, 2100, 2200), iterator = gintervals(1, 2100, 2200))$t_b
+
+    expect_equal(got, log_sum_exp(c(part_a, part_b)), tolerance = 1e-5)
 })
 
 test_that("potts.max.pos reports the argmax anchor when one strand is scored", {
@@ -753,5 +760,98 @@ test_that("a potts cache batch that straddles the end of an N run agrees too", {
             expect_true(any(is.na(v)), info = info)
             expect_true(any(is.finite(v)), info = info)
         }
+    }
+})
+
+test_that("potts vtracks aggregate across a filter's unmasked parts", {
+    remove_all_vtracks()
+    m <- potts_ref_model(W = 6L, npair_mode = "full", seed = 139L)
+
+    iv <- gintervals(1, 4000, 4300)
+    mask <- gintervals(1, 4100, 4200) # punches the middle out
+
+    th <- 0
+    for (fn in c("potts", "potts.max", "potts.count")) {
+        remove_all_vtracks()
+        gvtrack.create("t", NULL, fn,
+            params = c(m, list(extend = TRUE, score.thresh = th))
+        )
+        gvtrack.filter("t", filter = mask)
+        # scores each unmasked part on its own, with the same func and params
+        # and no filter - the reference the filtered result is aggregated from
+        gvtrack.create("t_part", NULL, fn,
+            params = c(m, list(extend = TRUE, score.thresh = th))
+        )
+        got <- gextract("t", iv, iterator = iv)$t
+
+        # the two unmasked parts, scored separately
+        parts <- c(
+            gextract("t_part", gintervals(1, 4000, 4100), iterator = gintervals(1, 4000, 4100))$t_part,
+            gextract("t_part", gintervals(1, 4200, 4300), iterator = gintervals(1, 4200, 4300))$t_part
+        )
+
+        expected <- switch(fn,
+            potts = log_sum_exp(parts),
+            potts.max = max(parts),
+            potts.count = sum(parts)
+        )
+        expect_equal(got, expected, tolerance = 1e-5, info = fn)
+    }
+
+    # a fully masked interval scores nothing - NaN for the three log/max-based
+    # funcs, 0 (not NaN) for potts.count: an empty count is a count of zero.
+    for (fn in c("potts", "potts.max", "potts.max.pos", "potts.count")) {
+        remove_all_vtracks()
+        gvtrack.create("t", NULL, fn, params = c(m, list(extend = TRUE, score.thresh = th)))
+        gvtrack.filter("t", filter = iv)
+        got <- gextract("t", iv, iterator = iv)$t
+        if (fn == "potts.count") {
+            expect_equal(got, 0, info = fn)
+        } else {
+            expect_true(is.na(got), info = fn)
+        }
+    }
+})
+
+test_that("potts.max.pos aggregates across a filter's unmasked parts by score, not index", {
+    remove_all_vtracks()
+    W <- 6L
+    m <- potts_ref_model(W = W, npair_mode = "full", seed = 139L)
+
+    iv <- gintervals(1, 4000, 4300)
+    mask <- gintervals(1, 4100, 4200) # same punched-out middle as above
+
+    seq_ext <- toupper(gseq.extract(gintervals(1, iv$start, iv$end + W - 1L)))
+    a_max <- potts_ref_anchors(seq_ext, m, bidirect = TRUE, union = "max")
+
+    # 1-based anchor indices (relative to iv$start) that the filter leaves
+    # unmasked - the two parts gvtrack.filter's complement produces, expressed
+    # as index ranges into a_max rather than as separate gextract calls, so
+    # this does not depend on the C++ aggregation's part-vs-part tie-break.
+    unmasked_idx <- c(
+        seq_len(mask$start - iv$start),
+        seq.int(mask$end - iv$start + 1L, length(a_max))
+    )
+    expected_max <- max(a_max[unmasked_idx])
+
+    gvtrack.create("t_pos", NULL, "potts.max.pos", params = c(m, list(extend = TRUE)))
+    gvtrack.filter("t_pos", filter = mask)
+    got <- gextract("t_pos", iv, iterator = iv)$t_pos
+
+    # Assert the SCORE at the reported anchor, and that the anchor sits in an
+    # unmasked part - never the argmax index. Under bidirect a window and its
+    # reverse complement give the same max-union, so two anchors (here,
+    # potentially one per part) can tie exactly, and either is a correct
+    # answer - see "potts.max.pos and potts.count work on a genome interval"
+    # above and C8-3 in the task-8 corrections.
+    p <- abs(got)
+    expect_true(p %in% unmasked_idx, info = paste("p =", p))
+    expect_equal(as.numeric(a_max[p]), expected_max, tolerance = 1e-5, ignore_attr = TRUE)
+
+    win <- substr(seq_ext, p, p + W - 1L)
+    f <- as.numeric(potts_ref_window(win, m))
+    r <- as.numeric(potts_ref_window(win, potts_ref_rc(m)))
+    if (abs(f - r) > 1e-9) {
+        expect_equal(sign(got), if (r > f) -1 else 1)
     }
 })

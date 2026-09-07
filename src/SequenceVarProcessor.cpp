@@ -16,6 +16,7 @@
 #include "PWMLseEditDistanceScorer.h"
 #include "MaskedBpCounter.h"
 #include "rdbutils.h"
+#include "util.h" // log_sum_log, for the potts TOTAL_LIKELIHOOD filter aggregation
 
 using namespace rdb;
 using namespace std;
@@ -114,6 +115,152 @@ double aggregate_edit_distance_parts(
 	return numeric_limits<double>::quiet_NaN(); // unreachable
 }
 
+// Score a potts vtrack over seq_interval, honouring its filter (if any) by
+// scoring each of the filter's unmasked parts separately and aggregating.
+//
+// WRITTEN FROM THE AGGREGATION SPEC, NOT BY ANALOGY WITH THE PWM BRANCH a few
+// dozen lines above (process_individual_sequence_vars()'s pwm_vtracks loop).
+// That branch has two defects this must not reproduce: for PWM (total
+// likelihood) it sums the per-part scores, where the reduction is a
+// log-sum-exp, and for PWM_MAX_POS it assigns the max score to the output as
+// if it were a position. Both are pre-existing bugs in the pwm family and out
+// of scope here.
+//
+// potts        -> log-sum-exp across parts
+// potts.max    -> maximum
+// potts.count  -> sum
+// potts.max.pos-> the position from the part with the highest max score
+//                 (get_last_max_score(), which is what makes "highest max
+//                 score" a knowable quantity - the position alone does not
+//                 say which part it came from), offset into the original
+//                 interval and re-signed.
+//
+// Called from both SequenceVarProcessor entry points that can reach a
+// filtered potts vtrack today (see the comment at the batch potts loop in
+// process_sequence_vars(): m_any_filtered forces every filtered vtrack, potts
+// included, onto the individual path, so this is presently reached only from
+// process_individual_sequence_vars(); it is factored out anyway so the two
+// cannot drift if that ever changes).
+static void score_potts_var(TrackExpressionVars::Track_var *ivar, const GInterval &seq_interval,
+                            const GenomeChromKey &chromkey, unsigned idx)
+{
+	if (!ivar->potts_scorer) {
+		ivar->var[idx] = numeric_limits<double>::quiet_NaN();
+		return;
+	}
+
+	if (!ivar->filter) {
+		ivar->var[idx] = ivar->potts_scorer->score_interval(seq_interval, chromkey);
+		return;
+	}
+
+	vector<GInterval> unmasked_parts;
+	ivar->filter->subtract(seq_interval, unmasked_parts);
+
+	if (unmasked_parts.empty()) {
+		// An empty count is a count of zero, not "no answer"; every other
+		// mode has no scorable anchor left to report and is NaN, exactly as a
+		// single fully-masked interval already is.
+		ivar->var[idx] = (ivar->val_func == TrackExpressionVars::Track_var::POTTS_COUNT)
+			? 0.0 : numeric_limits<double>::quiet_NaN();
+		return;
+	}
+	if (unmasked_parts.size() == 1) {
+		ivar->var[idx] = ivar->potts_scorer->score_interval(unmasked_parts[0], chromkey);
+		return;
+	}
+
+	// Two or more parts here are, by construction, separated by at least one
+	// masked-out base - Filter::subtract() never returns adjacent or
+	// overlapping pieces - so no invalidate_cache() call is made between
+	// them: score_with_sliding_window()'s own stride guard already refuses to
+	// slide across that gap. Two ways to see why, for any pair of parts with
+	// widths w_a, w_b separated by a gap g >= 1:
+	//   - w_a != w_b: original_interval.start and .end do not step by the
+	//     same amount (step_end - step_start = w_b - w_a != 0), so
+	//     score_with_sliding_window() leaves stride at 0 and can_slide is
+	//     false on "stride > 0" alone.
+	//   - w_a == w_b: stride = w_a + g, and the guard requires
+	//     stride < window_size, where window_size is at most w_a (extend is
+	//     END-only, so the scored window can only be narrower than the part,
+	//     never wider). w_a + g < w_a is impossible for g >= 1, so can_slide
+	//     is false on "stride < window_size" instead.
+	// Verified empirically too: the Step-1 test below asserts the filtered
+	// result equals the same two parts scored on their own, which a wrongly
+	// accepted slide would not reproduce.
+	double lse = -numeric_limits<double>::infinity();
+	double best_score = -numeric_limits<double>::infinity();
+	double best_pos = numeric_limits<double>::quiet_NaN();
+	double best_max = -numeric_limits<double>::infinity();
+	double total = 0.0;
+	bool any = false;
+
+	for (const auto &part : unmasked_parts) {
+		const double s = ivar->potts_scorer->score_interval(part, chromkey);
+		const double pmax = ivar->potts_scorer->get_last_max_score();
+
+		switch (ivar->val_func) {
+		case TrackExpressionVars::Track_var::POTTS:
+			// Seeded from the first finite part, never from -inf: util.h's
+			// double log_sum_log() (util.h:57) has no isinf() guard, unlike
+			// the float overload (util.h:16), so log_sum_log(-inf, -inf)
+			// computes exp(NaN) = NaN. Same guard as C_gseq_potts and as
+			// PottsScorer::score_direct()'s own accumulator.
+			if (!std::isnan(s)) {
+				if (!any)
+					lse = s;
+				else
+					log_sum_log(lse, s);
+				any = true;
+			}
+			break;
+		case TrackExpressionVars::Track_var::POTTS_MAX:
+			if (!std::isnan(s) && (!any || s > best_score)) {
+				best_score = s;
+				any = true;
+			}
+			break;
+		case TrackExpressionVars::Track_var::POTTS_COUNT:
+			if (!std::isnan(s)) {
+				total += s;
+				any = true;
+			}
+			break;
+		case TrackExpressionVars::Track_var::POTTS_MAX_POS:
+			// pmax is -inf exactly when s is NaN (no scorable anchor in this
+			// part - see PottsScorer::score_interval()'s reset of
+			// m_last_max_score at the top of every call), so gating on s
+			// here and comparing pmax are consistent.
+			if (!std::isnan(s) && (!any || pmax > best_max)) {
+				best_max = pmax;
+				const double offset = double(part.start - seq_interval.start);
+				// s is signed by strand; the offset moves it further from
+				// zero in whichever direction it already points.
+				best_pos = (s > 0) ? s + offset : (s < 0) ? s - offset : s;
+				any = true;
+			}
+			break;
+		default:
+			break;
+		}
+	}
+
+	switch (ivar->val_func) {
+	case TrackExpressionVars::Track_var::POTTS:
+		ivar->var[idx] = any ? lse : numeric_limits<double>::quiet_NaN();
+		break;
+	case TrackExpressionVars::Track_var::POTTS_MAX:
+		ivar->var[idx] = any ? best_score : numeric_limits<double>::quiet_NaN();
+		break;
+	case TrackExpressionVars::Track_var::POTTS_COUNT:
+		ivar->var[idx] = total;
+		break;
+	default:
+		ivar->var[idx] = best_pos;
+		break;
+	}
+}
+
 } // anonymous namespace
 
 void SequenceVarProcessor::classify_track_vars(
@@ -205,6 +352,14 @@ void SequenceVarProcessor::process_sequence_vars(
 		batch_process_sequence_vtracks(m_kmer_vtracks, m_pwm_vtracks, interval, idx);
 		// Score potts vtracks individually even in batch mode: there is nothing
 		// to batch, each one carries its own model.
+		//
+		// No filter handling needed here: this whole branch is guarded by
+		// !m_any_filtered above, and m_any_filtered is set the moment ANY
+		// sequence vtrack in the scan - potts included - carries a filter
+		// (classify_track_vars() above checks m_potts_vtracks explicitly). So
+		// a filtered potts vtrack always takes the individual path via
+		// process_individual_sequence_vars(), which calls score_potts_var(),
+		// never this one.
 		for (TrackExpressionVars::Track_var* ivar : m_potts_vtracks) {
 			if (seq_var_out_of_range(ivar, idx))
 				continue;
@@ -502,15 +657,7 @@ void SequenceVarProcessor::process_individual_sequence_vars(
 			continue;
 
 		const GInterval &seq_interval = ivar->seq_imdf1d ? ivar->seq_imdf1d->interval : interval;
-
-		// Filter support lands with the rest of the family. A loud refusal is
-		// correct for now; a silently unfiltered score never is.
-		if (ivar->filter)
-			verror("gvtrack.filter is not yet supported for potts virtual tracks");
-
-		ivar->var[idx] = ivar->potts_scorer
-			? ivar->potts_scorer->score_interval(seq_interval, m_iu.get_chromkey())
-			: numeric_limits<double>::quiet_NaN();
+		score_potts_var(ivar, seq_interval, m_iu.get_chromkey(), idx);
 	}
 
 	// Process kmer vtracks

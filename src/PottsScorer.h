@@ -47,17 +47,19 @@ public:
     void invalidate_cache();
 
     // The best per-anchor score from the last score_interval() call, or -inf if
-    // it scored nothing. SequenceVarProcessor needs it to aggregate
-    // MAX_LIKELIHOOD_POS across a filter's unmasked parts - the position alone
-    // does not say which part's position to keep. Mirrors
-    // PWMEditDistanceScorer::get_last_min_edits().
+    // it scored nothing. SequenceVarProcessor::score_potts_var() (in
+    // SequenceVarProcessor.cpp) calls this to aggregate MAX_LIKELIHOOD_POS
+    // across a filter's unmasked parts - the position alone does not say which
+    // part's position to keep. Mirrors PWMEditDistanceScorer::get_last_min_edits().
     //
     // On a call answered by a SLID window it comes out of the aggregator, so it
     // carries the float precision the aggregators store rather than the double
-    // the direct reduction computes, and for MOTIF_COUNT - the one mode that
-    // keeps no running maximum - it is left at -inf. Both are invisible today:
-    // a filtered potts vtrack is refused in TrackExpressionVars, so nothing
-    // calls this yet.
+    // the direct reduction computes; the only current caller reads it under
+    // MAX_LIKELIHOOD_POS, so this can affect which of two nearly-tied parts its
+    // filter aggregation prefers, but not correctness beyond that. For
+    // MOTIF_COUNT - the one mode that keeps no running maximum - it is left at
+    // -inf; not read there today, since a filtered potts.count sums scores, not
+    // this.
     double get_last_max_score() const { return m_last_max_score; }
 
 private:
