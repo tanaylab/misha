@@ -265,6 +265,69 @@ test_that("potts.max.pos reports the argmax anchor when one strand is scored", {
     expect_equal(got$t_max, max(a_fwd), tolerance = 1e-5, ignore_attr = TRUE)
 })
 
+test_that("the reverse orientation is scored and reported in forward coordinates", {
+    remove_all_vtracks()
+    W <- 6L
+    m <- potts_ref_model(W = W, npair_mode = "full", seed = 113L)
+
+    # The twin of the test above, and the ONLY suite coverage of PottsScorer's
+    # m_strand == -1 half: the model/rc swap that reads the original reverse
+    # strand off an already reverse-complemented target, and the reverse ->
+    # forward coordinate mapping that turns a target index back into a
+    # forward-strand position. bidirect = TRUE cannot reach either, because
+    # .potts_params() clamps strand to 1 there (both strands are scored at
+    # every anchor anyway), and C_gseq_potts cannot: it scores a string, so it
+    # has no fetch, no reverse-complemented target and no position mapping.
+    iv <- gintervals(1, 2000, 2200)
+    seq_ext <- toupper(gseq.extract(gintervals(1, 2000, 2200 + W - 1L)))
+    a_rev <- potts_ref_anchors(seq_ext, m, bidirect = FALSE, strand = -1L)
+
+    # Same gapped threshold as the count test above, for the same reason: even
+    # on one strand a repeated k-mer gives exactly tied anchor scores (8 of the
+    # 200 here are duplicates), and a threshold landing on one is decided by
+    # the last bit of a double in C++ and in R separately. Taken from the
+    # middle of the distribution so the count cannot agree by saturating.
+    srt <- sort(a_rev)
+    n <- length(srt)
+    idx <- seq.int(floor(0.2 * n), floor(0.8 * n))
+    j <- idx[which.max(srt[idx + 1L] - srt[idx])]
+    th <- (srt[j] + srt[j + 1L]) / 2
+    expect_gt(srt[j + 1L] - srt[j], 1e-3)
+
+    p <- c(m, list(bidirect = FALSE, strand = -1, extend = TRUE))
+    gvtrack.create("r_lse", NULL, "potts", params = p)
+    gvtrack.create("r_max", NULL, "potts.max", params = p)
+    gvtrack.create("r_pos", NULL, "potts.max.pos", params = p)
+    gvtrack.create("r_cnt", NULL, "potts.count", params = c(p, list(score.thresh = th)))
+    gvtrack.create("r_all", NULL, "potts.count",
+        params = c(p, list(score.thresh = min(a_rev) - 1))
+    )
+    gvtrack.create("r_none", NULL, "potts.count",
+        params = c(p, list(score.thresh = max(a_rev) + 1))
+    )
+
+    got <- gextract(c("r_lse", "r_max", "r_pos", "r_cnt", "r_all", "r_none"),
+        iv,
+        iterator = iv
+    )
+
+    expect_equal(got$r_lse, log_sum_exp(a_rev), tolerance = 1e-5, ignore_attr = TRUE)
+    expect_equal(got$r_max, max(a_rev), tolerance = 1e-5, ignore_attr = TRUE)
+    expect_equal(got$r_cnt, n - j)
+    expect_equal(got$r_cnt, sum(a_rev >= th))
+    expect_equal(got$r_all, n)
+    expect_equal(got$r_none, 0)
+
+    # The position is reported in FORWARD-strand coordinates even though the
+    # target was fetched reverse-complemented, so it indexes a_rev directly.
+    # Asserted as the score at the reported anchor, not as an argmax index:
+    # ties make the index itself undefined.
+    pos <- got$r_pos
+    expect_gt(pos, 0) # unsigned: the sign is only applied when bidirect
+    expect_lte(pos, n)
+    expect_equal(as.numeric(a_rev[pos]), max(a_rev), tolerance = 1e-5, ignore_attr = TRUE)
+})
+
 test_that("a potts vtrack honours gvtrack.iterator shifts", {
     remove_all_vtracks()
     m <- potts_ref_model(W = 6L, npair_mode = "full", seed = 113L)

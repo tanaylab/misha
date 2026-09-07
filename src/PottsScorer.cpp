@@ -8,7 +8,7 @@
 
 PottsScorer::PottsScorer(const PottsModel &model, const std::string &genome_root,
                          bool extend, ScoringMode mode, bool bidirect, char strand,
-                         float score_thresh)
+                         double score_thresh)
     : GenomeSeqScorer(genome_root, extend, strand), m_model(model), m_rc(model.rc()),
       m_mode(mode), m_bidirect(bidirect), m_score_thresh(score_thresh)
 {
@@ -16,7 +16,7 @@ PottsScorer::PottsScorer(const PottsModel &model, const std::string &genome_root
 
 PottsScorer::PottsScorer(const PottsModel &model, GenomeSeqFetch *shared_seqfetch,
                          bool extend, ScoringMode mode, bool bidirect, char strand,
-                         float score_thresh)
+                         double score_thresh)
     : GenomeSeqScorer(shared_seqfetch, extend, strand), m_model(model), m_rc(model.rc()),
       m_mode(mode), m_bidirect(bidirect), m_score_thresh(score_thresh)
 {
@@ -132,9 +132,17 @@ float PottsScorer::score_interval(const GInterval &interval, const GenomeChromKe
                 i_min = std::max(i_min, lo);
                 i_max = std::min(i_max, hi);
             } else {
+                // Unreachable as written: clamp_index() is monotone, so
+                // interval_len > 0 forces lo <= hi. Kept because the sibling
+                // has it.
                 i_min = i_max = lo;
             }
         }
+        // Also unreachable: lo <= max_valid, so i_min <= i_max above. If it
+        // ever went live it would reset the scan to index 0 and score anchors
+        // OUTSIDE the interval, which is why it is worth naming rather than
+        // trusting - the sibling's identical line is the only reason it is
+        // still here.
         if (i_min > i_max)
             i_min = 0;
 
@@ -177,7 +185,7 @@ float PottsScorer::score_interval(const GInterval &interval, const GenomeChromKe
                 } else {
                     log_sum_log(acc, u);
                 }
-            } else if (m_mode == MOTIF_COUNT && u >= (double)m_score_thresh) {
+            } else if (m_mode == MOTIF_COUNT && u >= m_score_thresh) {
                 ++count;
             }
         }

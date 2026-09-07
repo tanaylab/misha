@@ -922,7 +922,7 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
                 PottsScorer::MOTIF_COUNT,
                 potts_params.bidirect,
                 potts_params.strand_mode,
-                static_cast<float>(potts_params.score_thresh)
+                potts_params.score_thresh
             );
 
             // Parse optional iterator modifier (sshift/eshift) for sequence-based vtracks

@@ -27,13 +27,17 @@ public:
         MOTIF_COUNT         // anchors at or above score_thresh
     };
 
+    // score_thresh is double, unlike PWMScorer's float: the tables, the
+    // accumulator and the comparison in score_interval() are all double, and
+    // this value comes straight from the user, so there is no reason to round
+    // it to ~7 digits on the way in.
     PottsScorer(const PottsModel &model, const std::string &genome_root,
                 bool extend, ScoringMode mode, bool bidirect, char strand,
-                float score_thresh);
+                double score_thresh);
 
     PottsScorer(const PottsModel &model, GenomeSeqFetch *shared_seqfetch,
                 bool extend, ScoringMode mode, bool bidirect, char strand,
-                float score_thresh);
+                double score_thresh);
 
     float score_interval(const GInterval &interval, const GenomeChromKey &chromkey) override;
 
@@ -64,7 +68,7 @@ private:
     PottsModel m_rc;
     ScoringMode m_mode;
     bool m_bidirect;
-    float m_score_thresh;
+    double m_score_thresh;
     double m_last_max_score = -std::numeric_limits<double>::infinity();
 
     // Scratch, reused across calls so a per-bp iterator does not reallocate.
