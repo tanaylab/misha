@@ -830,6 +830,15 @@
 #'   NULL (sequence) \tab pwm.count \tab pssm, score.thresh (required), bidirect, prior, extend, strand, spat_* \tab Count of anchors scoring >= \code{score.thresh} (per-position union). \cr
 #' }
 #'
+#' \strong{Potts (pairwise energy) summarizers}
+#' \tabular{llll}{
+#'   Source \tab func \tab Key params \tab Description \cr
+#'   NULL (sequence) \tab potts \tab e, J, pairs, intercept, bidirect, extend, strand \tab Log-sum-exp of the pairwise-energy score over all anchors inside the iterator interval. \cr
+#'   NULL (sequence) \tab potts.max \tab e, J, pairs, intercept, bidirect, extend, strand \tab Highest-scoring anchor. \cr
+#'   NULL (sequence) \tab potts.max.pos \tab e, J, pairs, intercept, bidirect, extend, strand \tab 1-based position of the best anchor, signed by strand when \code{bidirect = TRUE}. \cr
+#'   NULL (sequence) \tab potts.count \tab e, J, pairs, intercept, score.thresh (required), bidirect, extend, strand \tab Number of anchors scoring at least \code{score.thresh}. \cr
+#' }
+#'
 #' \strong{Edit distance summarizers}
 #' \tabular{llll}{
 #'   Source \tab func \tab Key params \tab Description \cr
@@ -865,7 +874,7 @@
 #'   NULL (sequence) \tab masked.frac \tab NULL \tab Fraction of base pairs in the iterator interval that are masked (lowercase). \cr
 #' }
 #'
-#' The sections below provide additional notes for motif, interval, k-mer, and masked sequence functions.
+#' The sections below provide additional notes for motif, potts, interval, k-mer, and masked sequence functions.
 #'
 #' \strong{Motif (PWM) notes}
 #' \itemize{
@@ -882,6 +891,17 @@
 #'     choosing one. \code{pwm}, \code{pwm.max} and \code{pwm.max.pos} accept \code{score.thresh} but ignore it.
 #'   \item Spatial weighting (\code{spat_factor}, \code{spat_bin}, \code{spat_min}, \code{spat_max}): optional position-dependent weights applied in log-space. Provide a positive numeric vector \code{spat_factor}; \code{spat_bin} (integer > 0) defines bin width; \code{spat_min}/\code{spat_max} restrict the scanning window.
 #'   \item \code{pwm.max.pos}: Positions are reported 1-based relative to the final scan window (after iterator shifts and spatial trimming). Values are signed when \code{bidirect = TRUE} (positive for forward, negative for reverse). Ties are broken by scan order, which is strand-dependent: with \code{strand = 1} (and under \code{bidirect = TRUE}) the most 5' tied anchor wins and the forward strand wins a tie at the same coordinate, but \code{bidirect = FALSE, strand = -1} scans the reverse-complemented sequence and so keeps the most 3' tied anchor in forward coordinates.
+#' }
+#'
+#' \strong{Potts (pairwise energy) notes}
+#' \itemize{
+#'   \item The score of one window is \code{intercept + sum_i e[i, x_i] + sum_k J_k[x_i, x_j]}: \code{e} is a \code{W x 4} matrix of per-position energies (columns \code{A}, \code{C}, \code{G}, \code{T}), and each row of \code{pairs} names a coupled pair of positions (1-based, lower position first) whose \code{4 x 4} coupling table is the matching entry of \code{J}, indexed with the lower position on the rows.
+#'   \item \strong{No \code{prior} and no \code{spat_*}.} A Potts carries energies, not probabilities, so there is no pseudocount and no spatial weighting. A window containing any non-ACGT base is not scored and is left out of the reduction.
+#'   \item \strong{"Counted nothing" and "nothing to count" are different answers.} An interval that has anchors but none of them scorable (for example, all \code{N}) gives \code{NaN} for \code{potts}, \code{potts.max} and \code{potts.max.pos}, and \code{0} for \code{potts.count}. An interval with no anchor at all - narrower than the model with \code{extend = FALSE} - gives \code{NaN} for all four, matching \code{pwm.count}.
+#'   \item \code{strand}: Used only when \code{bidirect = FALSE}; it is clamped to 1 when \code{bidirect = TRUE}, as in the \code{pwm} family.
+#'   \item \strong{The strand union, and the wart.} \code{potts}, \code{potts.max} and \code{potts.count} combine the two strands at each anchor by log-sum-exp; \code{potts.max.pos} takes the maximum, because it has to name a strand. So \code{potts.max} and \code{potts.max.pos} can select \strong{different anchors}. This matches the \code{pwm} family exactly (\code{pwm.max} combines by log-sum-exp, \code{pwm.max.pos} does not) and is inherited on purpose rather than fixed on one side.
+#'   \item \code{e}/\code{J}/\code{pairs}/\code{intercept} can be supplied as a whole fitted model: a \code{motifmodel} \code{Potts} object has exactly the fields this family needs plus \code{width}, \code{pair_strength}, \code{attr} and \code{link}; those four are accepted and ignored, so the model can be passed verbatim as \code{params}, and \code{width} is cross-checked against \code{nrow(e)} when present.
+#'   \item \code{score.thresh}: Mandatory for \code{potts.count} - there is no default, since a Potts score is an energy whose usable range depends on the model - and ignored by the rest of the family.
 #' }
 #'
 #' \strong{Edit distance notes}
@@ -1062,6 +1082,23 @@
 #'     gintervals(1, 0, 10000),
 #'     iterator = 500
 #' )
+#'
+#' # Potts (pairwise energy) examples - a small hand-written W=2 model
+#' potts_e <- matrix(c(
+#'     1, 0, 0, 0,
+#'     0, 1, 0, 0
+#' ), ncol = 4, byrow = TRUE, dimnames = list(NULL, c("A", "C", "G", "T")))
+#' potts_J <- list(matrix(0, 4, 4))
+#' potts_pairs <- matrix(c(1L, 2L), ncol = 2)
+#' potts_model <- list(e = potts_e, J = potts_J, pairs = potts_pairs, intercept = 0)
+#'
+#' gvtrack.create("potts_max", NULL, "potts.max", params = potts_model)
+#' gextract("potts_max", gintervals(1, 0, 1000), iterator = 200)
+#'
+#' gvtrack.create("potts_count", NULL, "potts.count",
+#'     params = c(potts_model, list(score.thresh = 1.5))
+#' )
+#' gextract("potts_count", gintervals(1, 0, 1000), iterator = 200)
 #'
 #' # Kmer counting examples
 #' gvtrack.create("cg_count", NULL, "kmer.count", kmer = "CG", strand = 1)
@@ -1746,7 +1783,7 @@ gvtrack.array.slice <- function(vtrack = NULL, slice = NULL, func = "avg", param
 #'   \item \strong{Aggregations (avg/sum/min/max/stddev/quantile):} Length-weighted over unmasked regions
 #'   \item \strong{coverage:} Returns (covered length in unmasked region) / (total unmasked length)
 #'   \item \strong{distance/distance.center:} Unaffected by mask (pure geometry)
-#'   \item \strong{PWM/kmer:} Masked bases act as hard boundaries; matches cannot span masked regions.
+#'   \item \strong{PWM/kmer/potts:} Masked bases act as hard boundaries; matches cannot span masked regions.
 #'         \strong{Important:} When \code{extend=TRUE} (the default), motifs at the boundaries of unmasked
 #'         segments can use bases from the adjacent masked regions to complete the motif scoring.
 #'         For example, if a 4bp motif starts at position 1998 in an unmasked region that ends at 2000,
@@ -1754,10 +1791,18 @@ gvtrack.array.slice <- function(vtrack = NULL, slice = NULL, func = "avg", param
 #'         In other words, motif matches \emph{starting positions} must be in unmasked regions,
 #'         but the motif sequence itself can extend into masked regions when \code{extend=TRUE}.
 #'         Set \code{extend=FALSE} to prevent any use of masked bases in scoring.
+#'   \item \strong{potts family specifically:} each unmasked part of the iterator interval is scored on
+#'         its own and the parts are combined: log-sum-exp for \code{potts}, maximum for \code{potts.max},
+#'         sum for \code{potts.count}, and for \code{potts.max.pos} the position from whichever part
+#'         carried the highest score, reported in the iterator interval's own coordinates. A fully
+#'         masked interval gives \code{NA} for \code{potts}, \code{potts.max} and \code{potts.max.pos},
+#'         and \code{0} (not \code{NA}) for \code{potts.count}.
 #' }
 #'
 #' \strong{Completely Masked Intervals:}
-#' If an entire iterator interval is masked, the function returns \code{NA} (not 0).
+#' If an entire iterator interval is masked, the function returns \code{NA} (not 0) - except
+#' \code{potts.count}, which returns \code{0}: an empty count is a count of zero, the same
+#' exception \code{potts.count} makes for an interval with nothing to count at all.
 #'
 #'
 #' @return None (invisibly).

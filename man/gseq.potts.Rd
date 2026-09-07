@@ -33,7 +33,7 @@ number of windows scoring at least \code{score.thresh}.}
 \item{bidirect}{if \code{TRUE} (default) both strands are read. The two
 strands are combined at each window by log-sum-exp for \code{"lse"},
 \code{"max"} and \code{"count"}, and by the maximum for \code{"pos"},
-which has to name a strand. This asymmetry matches
+which has to name a strand - see above for how \code{"max"} compares to
 \code{\link{gseq.pwm}}.}
 
 \item{strand}{used only when \code{bidirect = FALSE}: \code{1} for the
@@ -62,6 +62,13 @@ A Potts carries energies, not probabilities, so there is no \code{prior} and
 no fallback for an ambiguous base: a window containing any non-ACGT base is
 not scored and is left out of the reduction. A sequence with no scorable
 window at all returns \code{NA} (\code{0} for \code{mode = "count"}).
+
+Under \code{bidirect = TRUE}, \code{mode = "max"} combines the two strands
+at each window by log-sum-exp, matching the \code{potts} and
+\code{potts.max} virtual tracks. This differs from
+\code{\link{gseq.pwm}} with \code{mode = "max"}, which combines the two
+strands by taking the maximum instead - the two functions are not
+directly comparable on that mode.
 }
 \examples{
 e <- matrix(c(

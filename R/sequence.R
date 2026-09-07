@@ -415,6 +415,13 @@ gseq.pwm <- function(seqs,
 #' not scored and is left out of the reduction. A sequence with no scorable
 #' window at all returns \code{NA} (\code{0} for \code{mode = "count"}).
 #'
+#' Under \code{bidirect = TRUE}, \code{mode = "max"} combines the two strands
+#' at each window by log-sum-exp, matching the \code{potts} and
+#' \code{potts.max} virtual tracks. This differs from
+#' \code{\link{gseq.pwm}} with \code{mode = "max"}, which combines the two
+#' strands by taking the maximum instead - the two functions are not
+#' directly comparable on that mode.
+#'
 #' @param seqs character vector of sequences (case-insensitive).
 #' @param model the energy model: a list with \code{e} (a \code{W x 4} numeric
 #'   matrix, columns \code{A}, \code{C}, \code{G}, \code{T}), \code{J} (a list
@@ -430,7 +437,7 @@ gseq.pwm <- function(seqs,
 #' @param bidirect if \code{TRUE} (default) both strands are read. The two
 #'   strands are combined at each window by log-sum-exp for \code{"lse"},
 #'   \code{"max"} and \code{"count"}, and by the maximum for \code{"pos"},
-#'   which has to name a strand. This asymmetry matches
+#'   which has to name a strand - see above for how \code{"max"} compares to
 #'   \code{\link{gseq.pwm}}.
 #' @param strand used only when \code{bidirect = FALSE}: \code{1} for the
 #'   forward strand, \code{-1} for the reverse.

@@ -46,7 +46,7 @@ Filters are applied \emph{after} iterator modifiers (sshift/eshift/dim). The ord
   \item \strong{Aggregations (avg/sum/min/max/stddev/quantile):} Length-weighted over unmasked regions
   \item \strong{coverage:} Returns (covered length in unmasked region) / (total unmasked length)
   \item \strong{distance/distance.center:} Unaffected by mask (pure geometry)
-  \item \strong{PWM/kmer:} Masked bases act as hard boundaries; matches cannot span masked regions.
+  \item \strong{PWM/kmer/potts:} Masked bases act as hard boundaries; matches cannot span masked regions.
         \strong{Important:} When \code{extend=TRUE} (the default), motifs at the boundaries of unmasked
         segments can use bases from the adjacent masked regions to complete the motif scoring.
         For example, if a 4bp motif starts at position 1998 in an unmasked region that ends at 2000,
@@ -54,10 +54,18 @@ Filters are applied \emph{after} iterator modifiers (sshift/eshift/dim). The ord
         In other words, motif matches \emph{starting positions} must be in unmasked regions,
         but the motif sequence itself can extend into masked regions when \code{extend=TRUE}.
         Set \code{extend=FALSE} to prevent any use of masked bases in scoring.
+  \item \strong{potts family specifically:} each unmasked part of the iterator interval is scored on
+        its own and the parts are combined: log-sum-exp for \code{potts}, maximum for \code{potts.max},
+        sum for \code{potts.count}, and for \code{potts.max.pos} the position from whichever part
+        carried the highest score, reported in the iterator interval's own coordinates. A fully
+        masked interval gives \code{NA} for \code{potts}, \code{potts.max} and \code{potts.max.pos},
+        and \code{0} (not \code{NA}) for \code{potts.count}.
 }
 
 \strong{Completely Masked Intervals:}
-If an entire iterator interval is masked, the function returns \code{NA} (not 0).
+If an entire iterator interval is masked, the function returns \code{NA} (not 0) - except
+\code{potts.count}, which returns \code{0}: an empty count is a count of zero, the same
+exception \code{potts.count} makes for an interval with nothing to count at all.
 }
 \examples{
 \dontshow{
