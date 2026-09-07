@@ -576,6 +576,66 @@ test_that("the potts cache is invalidated on a chromosome change", {
     expect_equal(both$t, sep$t, tolerance = 1e-6)
 })
 
+# A model under which EVERY scorable anchor scores exactly the same: all-zero
+# `e` and `J`, zero intercept. Nothing else makes a tie-break testable. With a
+# random model an exact tie is a fixture accident, so a comparison that only
+# ever sees distinct scores says nothing about which of two equal maximisers a
+# path picks - and picking differently is precisely how the cached and the
+# uncached paths can disagree while both look right.
+potts_tied_model <- function(W) {
+    full <- t(utils::combn(W, 2))
+    storage.mode(full) <- "integer"
+    dimnames(full) <- NULL
+    list(
+        e = matrix(0, nrow = W, ncol = 4L, dimnames = list(NULL, POTTS_BASES)),
+        J = lapply(seq_len(nrow(full)), function(k) matrix(0, 4L, 4L)),
+        pairs = full,
+        intercept = 0
+    )
+}
+
+test_that("the potts cache breaks a tie the same way whatever the scan's shape", {
+    m <- potts_tied_model(8L)
+    iv <- gintervals(1, 5000, 5200)
+
+    # potts.max.pos is the only mode a tie-break can reach - the other three
+    # reduce to a number that does not depend on WHICH maximiser is named - but
+    # all four are compared, because a tied model is also the cheapest check
+    # that nothing else in the cache depends on the scores being distinct.
+    #
+    # The geometries matter more than usual here. `noshift` is the case where
+    # consecutive windows share no anchor, so the cache declines to keep one and
+    # every call after the first answers from score_direct() - a SECOND code
+    # path for the same question, and therefore a second chance to break a tie
+    # differently from the deque. The one-interval-at-a-time reference always
+    # takes the first call of a fresh scorer, so the two only agree if both
+    # paths use one rule.
+    geoms <- list(
+        list(nm = "pad40/it1", pad = 40L, it = 1L),
+        list(nm = "pad40/it7", pad = 40L, it = 7L),
+        list(nm = "noshift/it10", pad = NA_integer_, it = 10L),
+        list(nm = "noshift/it1", pad = NA_integer_, it = 1L)
+    )
+    orients <- list(
+        forward = list(bidirect = TRUE, strand = 1),
+        forward_uni = list(bidirect = FALSE, strand = 1),
+        reverse = list(bidirect = FALSE, strand = -1)
+    )
+
+    for (nm in names(orients)) {
+        for (g in geoms) {
+            for (fn in c("potts", "potts.max", "potts.max.pos", "potts.count")) {
+                expect_potts_cache_agrees(
+                    fn, c(m, orients[[nm]], list(extend = TRUE, score.thresh = -1)),
+                    g$pad, iv,
+                    info = paste("tied", nm, g$nm, fn),
+                    it = g$it, check_varies = FALSE
+                )
+            }
+        }
+    }
+})
+
 # The 0-based position where the leading N run of `chrom` ends, or NA.
 potts_n_run_end <- function(chrom, limit = 3e5) {
     v <- strsplit(toupper(gseq.extract(gintervals(chrom, 0, limit))), "", fixed = TRUE)[[1L]]
@@ -595,8 +655,13 @@ potts_n_run_end <- function(chrom, limit = 3e5) {
 #   T >= bnd            - the batch brings in a scorable anchor,
 #   T - it < bnd        - the window held nothing scorable before the batch,
 #   T - it + 1 < bnd    - and the batch pushes -Inf before that anchor,
-# i.e. bnd <= T <= bnd + it - 2. That needs it >= 3 and the right phase, which
-# is why an iterator = 1 scan cannot reach it however far it runs.
+# i.e. bnd <= T <= bnd + it - 2. That needs it >= 2 - at it == 2 the range is
+# the single point T == bnd, where the batch is {bnd - 1, bnd}: an unscorable
+# push followed by a scorable one, which is the whole requirement - and the
+# right phase. An iterator = 1 scan cannot reach it however far it runs, because
+# its batch is one anchor and so cannot push -Inf before a real value. The
+# geometry below picks it = 7, which is stricter than necessary but leaves room
+# for the phase search to find a shift.
 potts_straddling_pad <- function(bnd, it, pads = 20:80) {
     for (pad in pads) {
         top <- seq(0L, 2L * bnd, by = it) - 1L + pad

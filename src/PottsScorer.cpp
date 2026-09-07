@@ -103,10 +103,8 @@ float PottsScorer::compute_position_result(size_t index, size_t target_length,
     return pos_result;
 }
 
-// Task 6's anchor loop, unchanged. Its MAX_LIKELIHOOD_POS answer is not the one
-// the potts vtracks report any more - see seed_sliding_window() - but it is left
-// here rather than stripped, so this stays a faithful uncached reference for the
-// other three modes and for anyone comparing the two paths.
+// Task 6's anchor loop, unchanged but for MAX_LIKELIHOOD_POS's tie-break, which
+// is described where it happens below.
 float PottsScorer::score_direct(size_t i_min, size_t i_max, size_t motif_len, size_t tlen,
                                 bool fill_window)
 {
@@ -114,10 +112,37 @@ float PottsScorer::score_direct(size_t i_min, size_t i_max, size_t motif_len, si
     double acc = -std::numeric_limits<double>::infinity();
     bool have_acc = false;
     double best = -std::numeric_limits<double>::infinity();
-    size_t best_i = 0;
-    int best_dir = 1;
     int count = 0;
     bool any = false;
+
+    // MAX_LIKELIHOOD_POS's argmax is tracked separately from `best`, and
+    // deliberately not the same way.
+    //
+    // `best` is a double, and its tie-break is "first anchor scanned wins",
+    // which is the lowest TARGET index - the lowest genomic start going forward
+    // and the HIGHEST in the reverse orientation, where the fetched target is
+    // reverse-complemented. RunningMaxDeque cannot reproduce either: it stores
+    // float, and its front is the earliest-pushed among equals, which is the
+    // lowest genomic start in both orientations.
+    //
+    // Two rules for one question is how a cache returns a plausible wrong
+    // answer, so this loop uses the deque's: maximise the FLOAT value, break a
+    // tie on the lowest window slot. Slot 0 is the lowest genomic start, so
+    // that is the deque's rule exactly, and the seeded, the slid and the
+    // un-populated paths then all name the same anchor. Measured before this
+    // was made single-valued: an all-tied model scanned with iterator = 10 and
+    // no iterator shift, on the reverse orientation, reported position 10 from
+    // the contiguous scan and 1 from the same intervals fetched one at a
+    // time - 19 of 20 bins.
+    //
+    // It costs one float and one size_t comparison per anchor, against ~110
+    // table lookups. The alternative - populating the window whatever the
+    // stride, so the deque always has the answer - reintroduces the ~17%
+    // overhead the un-populated path exists to avoid.
+    float pos_best = -std::numeric_limits<float>::infinity();
+    size_t pos_slot = 0;
+    size_t pos_i = 0;
+    int pos_dir = 1;
 
     if (fill_window) {
         const size_t W = i_max - i_min + 1;
@@ -142,12 +167,19 @@ float PottsScorer::score_direct(size_t i_min, size_t i_max, size_t motif_len, si
             continue;
         int dir = 1;
         const double u = anchor_value(&m_codes[i], union_max, dir);
-        any = true;
-        if (u > best) {
+        const size_t s = (m_strand == -1) ? (i_max - i) : (i - i_min);
+        if (u > best)
             best = u;
-            best_i = i;
-            best_dir = dir;
+        if (m_mode == MAX_LIKELIHOOD_POS) {
+            const float v = (float)u;
+            if (!any || v > pos_best || (v == pos_best && s < pos_slot)) {
+                pos_best = v;
+                pos_slot = s;
+                pos_i = i;
+                pos_dir = dir;
+            }
         }
+        any = true;
         if (m_mode == TOTAL_LIKELIHOOD) {
             // Seeded from the first scorable anchor rather than from -inf:
             // util.h's double log_sum_log() (util.h:57) has no isinf()
@@ -166,7 +198,6 @@ float PottsScorer::score_direct(size_t i_min, size_t i_max, size_t motif_len, si
             ++count;
         }
         if (fill_window) {
-            const size_t s = (m_strand == -1) ? (i_max - i) : (i - i_min);
             if (m_mode == MOTIF_COUNT) {
                 m_win_hit[s] = (u >= m_score_thresh) ? 1 : 0;
             } else {
@@ -188,7 +219,7 @@ float PottsScorer::score_direct(size_t i_min, size_t i_max, size_t motif_len, si
     case MAX_LIKELIHOOD:
         return any ? (float)best : std::numeric_limits<float>::quiet_NaN();
     case MAX_LIKELIHOOD_POS:
-        return any ? compute_position_result(best_i, tlen, motif_len, best_dir)
+        return any ? compute_position_result(pos_i, tlen, motif_len, pos_dir)
                    : std::numeric_limits<float>::quiet_NaN();
     }
     return std::numeric_limits<float>::quiet_NaN();
@@ -284,41 +315,24 @@ float PottsScorer::seed_sliding_window(const GInterval &original_interval,
         // direct reduction maximised as doubles, and float() is monotone, so
         // the two are the same number and the direct one is returned.
         //
-        // MAX_LIKELIHOOD_POS is the exception in this file: its answer comes
-        // out of the deque on the seed as well as on the slide, and
-        // score_direct()'s position is deliberately discarded.
+        // Both modes return score_direct()'s answer, and for both it is the
+        // same number the deque would give.
         //
-        // The two disagree about ties, and only about ties. The deque compares
-        // the float it stores and keeps the LOWEST GENOMIC START among equals;
-        // the direct loop compares doubles and keeps the lowest TARGET index,
-        // which is the lowest genomic start in the forward orientation and the
-        // HIGHEST in the reverse. Two things make them pick different anchors:
+        // MAX_LIKELIHOOD: the cached value is the maximum of the same floats
+        // the direct reduction maximised as doubles, and float() is monotone,
+        // so max-of-floats == float(max-of-doubles).
         //
-        //   - an exact tie, common in a repeat and universal under bidirect,
-        //     where the reverse orientation's target order reverses the choice;
-        //   - a pair whose doubles differ by an ULP or two but whose floats do
-        //     not. Under bidirect a window and its reverse complement are
-        //     mathematically tied and the kernel computes them ~1e-15 apart, so
-        //     this is the common case rather than a rare collision.
-        //
-        // Measured over 72,000 scanned positions in repeat-rich sequence at
-        // W = 4, 6, 8: 4,087 positions name a different anchor, and 0 report a
-        // different SCORE - every anchor either path names is a maximiser to
-        // within 1e-15. Task 6's own tests already treat the argmax index as
-        // undefined under a tie for exactly this reason.
-        //
-        // So the choice is not between a right answer and a wrong one, and it
-        // is made on two other grounds. First, a cache must not make the answer
-        // depend on whether a call slid or seeded: taking the deque's at both
-        // ends is what makes the slid and the re-seeded paths agree exactly,
-        // which is the invariant the cache tests assert. Second, "lowest
-        // genomic start wins" is one rule in both orientations, where "lowest
-        // target index wins" silently flips direction with the fetch - the
-        // artefact .potts_params() works around by clamping strand to 1
-        // whenever bidirect is set.
-        return (m_mode == MAX_LIKELIHOOD)
-                   ? direct
-                   : slid_answer(expanded_interval, motif_len, tlen);
+        // MAX_LIKELIHOOD_POS: score_direct() breaks its tie on the lowest
+        // window slot precisely so this holds - see the comment on `pos_best`
+        // there. Relative to Task 6 that means a tie names a different, equally
+        // maximal anchor: measured over 72,000 scanned positions in repeat-rich
+        // sequence at W = 4, 6, 8, 4,087 positions name a different anchor and
+        // 0 report a different SCORE. Task 6's own tests already treat the
+        // argmax index as undefined under a tie, and "lowest genomic start
+        // wins" is one rule in both orientations where "lowest target index
+        // wins" silently flips direction with the fetch - the artefact
+        // .potts_params() works around by clamping strand to 1 under bidirect.
+        return direct;
 
     case MOTIF_COUNT:
         m_slide.hits.assign(m_win_hit.begin(), m_win_hit.end());
