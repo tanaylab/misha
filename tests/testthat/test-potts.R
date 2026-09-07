@@ -283,3 +283,39 @@ test_that("gseq.potts pos and max may disagree on which anchor wins", {
         info = "no disagreement in 200 draws - the fixture no longer exercises the wart"
     )
 })
+
+test_that("gseq.potts mode = pos works on the reverse strand alone", {
+    m <- potts_ref_model(W = 6L, npair_mode = "full", seed = 149L)
+    set.seed(151L)
+    seqs <- vapply(1:30, function(i) {
+        paste(sample(POTTS_BASES, 30L, replace = TRUE), collapse = "")
+    }, character(1))
+
+    # bidirect = FALSE, strand = -1: the reported position is an unsigned
+    # 1-based anchor index into the FORWARD sequence, and the anchor it names
+    # must be a maximiser of the REVERSE-strand per-anchor scores. Asserting
+    # the score rather than the index, for the tie reason established earlier.
+    got <- gseq.potts(seqs, m, mode = "pos", bidirect = FALSE, strand = -1L)
+
+    differed <- FALSE
+    for (k in seq_along(seqs)) {
+        rev_a <- potts_ref_anchors(seqs[k], m, bidirect = FALSE, strand = -1L)
+        fwd_a <- potts_ref_anchors(seqs[k], m, bidirect = FALSE, strand = 1L)
+        p <- got[k]
+        expect_true(p >= 1 && p <= length(rev_a), info = seqs[k])
+        expect_equal(as.numeric(rev_a[p]), max(rev_a),
+            tolerance = 1e-6, ignore_attr = TRUE, info = seqs[k]
+        )
+        # The point of the test: a kernel that scored the forward strand here
+        # would name a forward maximiser instead. Record whether the two
+        # strands actually disagree about which anchor wins, so the assertion
+        # above is known to be discriminating rather than accidentally
+        # satisfied by a forward-scoring kernel.
+        if (max(fwd_a) - as.numeric(fwd_a[p]) > 1e-6) {
+            differed <- TRUE
+        }
+    }
+    expect_true(differed,
+        info = "the reverse-strand argmax never differed from the forward one - this fixture cannot distinguish the two strands"
+    )
+})
