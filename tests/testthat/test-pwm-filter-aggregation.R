@@ -105,6 +105,60 @@ test_that("pwm.max.pos aggregates across a filter's unmasked parts by score, not
     )
 })
 
+test_that("pwm.max.pos with spat_factor aggregates by score across a filter's parts", {
+    # The spatial scorer answers pwm.max.pos from its own code path
+    # (spat_answer_MAXPOS), separately from the non-spatial one, and each has
+    # to publish the part's max score for the aggregation to compare parts by
+    # score at all. Without spat_factor this file cannot reach that path, and
+    # the geometry of the tests above answers its two parts through different
+    # paths in an order that happens to give the right answer even when the
+    # spatial one publishes nothing - so it takes a separate geometry, with a
+    # winner the spatial path answers, to constrain that side.
+    #
+    # Verified to bite: with the max-score publication removed from
+    # spat_answer_MAXPOS, this returns 236 - part B's local argmax of 36
+    # offset by 200 - where 78, part A's, is correct.
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    pssm <- filter_agg_pssm()
+    iv <- gintervals(1, 3000, 3300)
+    mask <- gintervals(1, 3100, 3200)
+    parts <- list(gintervals(1, 3000, 3100), gintervals(1, 3200, 3300))
+
+    # unit weights, so the spatial factors leave the scores alone and the
+    # reference can use the same params - only the code path differs
+    params <- list(
+        pssm = pssm, bidirect = FALSE, strand = 1,
+        extend = TRUE, prior = 0.01,
+        spat_factor = rep(1.0, 5), spat_bin = 20L
+    )
+
+    gvtrack.create("t_pos", NULL, "pwm.max.pos", params = params)
+    gvtrack.filter("t_pos", filter = mask)
+    gvtrack.create("p_pos", NULL, "pwm.max.pos", params = params)
+    gvtrack.create("p_max", NULL, "pwm.max", params = params)
+
+    got <- gextract("t_pos", iv, iterator = iv)$t_pos
+    part_max <- vapply(parts, function(p) gextract("p_max", p, iterator = p)$p_max, numeric(1))
+    part_pos <- vapply(parts, function(p) gextract("p_pos", p, iterator = p)$p_pos, numeric(1))
+
+    # the winner must be part A, and by a clear margin: if part B won, or the
+    # two tied, an aggregation that silently falls back to "first part wins"
+    # would agree with the reference and this test would prove nothing
+    expect_gt(abs(diff(part_max)), 1e-3)
+    win <- which.max(part_max)
+    expect_equal(win, 1L)
+
+    expected <- part_pos[win] + (parts[[win]]$start - iv$start)
+    expect_equal(got, expected, info = "spatial pwm.max.pos across two parts")
+
+    genomic_anchor_start <- iv$start + got - 1L
+    expect_true(genomic_anchor_start < mask$start || genomic_anchor_start >= mask$end,
+        info = paste("anchor at", genomic_anchor_start)
+    )
+})
+
 test_that("a single unmasked pwm part is scored like the unfiltered survivor, offset when it is a position", {
     # A mask flush with one edge of the iterator interval leaves exactly one
     # unmasked part rather than two. pwm, pwm.max and pwm.count don't care: a

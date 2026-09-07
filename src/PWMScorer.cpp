@@ -474,6 +474,17 @@ float PWMScorer::try_slide_window(const std::string& target,
         // Plus strand: the new anchors sit at the high target indices (near
         // i_max). Minus strand: at the low ones (near i_min), and they must be
         // pushed high index first so genomic position still ascends.
+        //
+        // NOTE the spatial factor below is indexed by k, i.e. in the loop's own
+        // order, while the minus-strand incoming_i runs DOWNWARD. That pairs
+        // spatial slot `first_incoming_pos + k` with target index
+        // `i_min + stride-1-k`, which is only the right pairing because this
+        // whole function is reached exclusively when m_use_spat is false (the
+        // spatial modes go through can_use_spatial_sliding/spat_slide_once in
+        // score_interval), so get_spatial_log_factor() returns 0 here for every
+        // k. If that guard ever moves, this ordering has to be revisited: the
+        // TOTAL_LIKELIHOOD branch above walks k from stride down to 1 and uses
+        // `first_incoming_pos + (stride - k)` for exactly this reason.
         for (size_t k = 0; k < stride; ++k) {
             size_t incoming_i = (strand_mode == -1)
                 ? (i_min + (stride - 1 - k))
@@ -498,6 +509,15 @@ float PWMScorer::try_slide_window(const std::string& target,
         return m_slide.rmax.value();
     }
 
+    // CURRENTLY UNREACHABLE, kept deliberately. score_interval() routes this
+    // mode away from the non-spatial slide entirely - "if (!m_use_spat &&
+    // m_mode != MAX_LIKELIHOOD_POS)" - so pwm.max.pos without spatial params is
+    // answered by score_without_spatial() and with them by the spatial slide.
+    // Left in place, and kept correct, rather than deleted: it is the branch
+    // that would run if that routing ever changed, and PWMScorer is shared with
+    // pymisha, where the routing is not guaranteed to stay identical. The
+    // spatial-factor ordering note on the MAX_LIKELIHOOD branch above applies
+    // here too.
     if (m_mode == MAX_LIKELIHOOD_POS) {
         // Pop outgoing values - advance base by stride
         m_slide.rmax.pop_front(m_slide.rmax.base_genomic_pos + stride);
@@ -707,6 +727,8 @@ float PWMScorer::seed_sliding_window(const std::string& target,
         return m_slide.rmax.value();
     }
 
+    // Unreachable for the same reason as try_slide_window()'s MAX_LIKELIHOOD_POS
+    // branch (see the note there), and kept for the same reason.
     if (m_mode == MAX_LIKELIHOOD_POS) {
         seed_rmax();
 
@@ -1420,6 +1442,12 @@ float PWMScorer::spat_answer_MAXPOS(const std::string& target,
         }
     }
     if (best_idx < 0) return std::numeric_limits<float>::quiet_NaN();
+    // Publish the part's max score for the filter aggregation to compare parts
+    // by (see get_last_max_score()). Read-only side channel: no spatial cache
+    // state, control flow or answer depends on it. Removing this line makes a
+    // filtered pwm.max.pos with spat_factor report the wrong part - covered by
+    // "pwm.max.pos with spat_factor aggregates by score across a filter's
+    // parts" in tests/testthat/test-pwm-filter-aggregation.R.
     m_last_max_score = best_val;
 
     // Convert ring index to relative j, then to absolute target index
