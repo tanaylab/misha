@@ -402,6 +402,103 @@ gseq.pwm <- function(seqs,
     return(out)
 }
 
+#' Score sequences under a Potts (pairwise energy) model
+#'
+#' Scores each sequence under a pairwise energy model - the `potts` family's
+#' sequence-level entry point, the way \code{\link{gseq.pwm}} is the `pwm`
+#' family's. The score of one width-\code{W} window is
+#' \code{intercept + sum_i e[i, x_i] + sum_k J_k[x_i, x_j]}, and a sequence
+#' longer than \code{W} is reduced over every window by \code{mode}.
+#'
+#' A Potts carries energies, not probabilities, so there is no \code{prior} and
+#' no fallback for an ambiguous base: a window containing any non-ACGT base is
+#' not scored and is left out of the reduction. A sequence with no scorable
+#' window at all returns \code{NA} (\code{0} for \code{mode = "count"}).
+#'
+#' @param seqs character vector of sequences (case-insensitive).
+#' @param model the energy model: a list with \code{e} (a \code{W x 4} numeric
+#'   matrix, columns \code{A}, \code{C}, \code{G}, \code{T}), \code{J} (a list
+#'   of \code{4x4} matrices, or an \code{npair x 16} matrix), \code{pairs} (an
+#'   \code{npair x 2} matrix of 1-based position pairs, lower position first)
+#'   and \code{intercept}. Extra elements named \code{width},
+#'   \code{pair_strength}, \code{attr} or \code{link} are accepted and ignored,
+#'   so a fitted `motifmodel` `Potts` object can be passed verbatim.
+#' @param mode \code{"lse"} for the log-sum-exp over windows, \code{"max"} for
+#'   the best window, \code{"pos"} for the 1-based position of the best window
+#'   (signed by strand when \code{bidirect = TRUE}), \code{"count"} for the
+#'   number of windows scoring at least \code{score.thresh}.
+#' @param bidirect if \code{TRUE} (default) both strands are read. The two
+#'   strands are combined at each window by log-sum-exp for \code{"lse"},
+#'   \code{"max"} and \code{"count"}, and by the maximum for \code{"pos"},
+#'   which has to name a strand. This asymmetry matches
+#'   \code{\link{gseq.pwm}}.
+#' @param strand used only when \code{bidirect = FALSE}: \code{1} for the
+#'   forward strand, \code{-1} for the reverse.
+#' @param score.thresh required for \code{mode = "count"} and ignored
+#'   otherwise. A Potts score is an energy whose usable range depends entirely
+#'   on the model, so there is no default; read one off \code{mode = "max"}
+#'   over your own sequences.
+#' @param extend accepted for signature parity with \code{\link{gseq.pwm}} and
+#'   ignored - a bare sequence has no genome to extend into.
+#' @return a numeric vector, one value per sequence.
+#' @seealso \code{\link{gseq.pwm}}, \code{\link{gvtrack.create}} for the
+#'   \code{potts} virtual track functions.
+#' @examples
+#' e <- matrix(c(
+#'     1, 0, 0, 0,
+#'     0, 1, 0, 0
+#' ), ncol = 4, byrow = TRUE, dimnames = list(NULL, c("A", "C", "G", "T")))
+#' J <- list(matrix(0, 4, 4))
+#' pairs <- matrix(c(1L, 2L), ncol = 2)
+#' model <- list(e = e, J = J, pairs = pairs, intercept = 0)
+#' gseq.potts(c("AC", "CA", "AN"), model, mode = "max", bidirect = FALSE)
+#' gseq.potts("ACGTACAC", model, mode = "count", score.thresh = 1.5, bidirect = FALSE)
+#' @export
+gseq.potts <- function(seqs, model, mode = c("lse", "max", "pos", "count"),
+                       bidirect = TRUE, strand = 0L, score.thresh = NULL,
+                       extend = FALSE) {
+    mode <- match.arg(mode)
+
+    if (mode == "count") {
+        if (is.null(score.thresh)) {
+            stop("gseq.potts(mode = \"count\") requires a 'score.thresh' argument. A Potts score is an energy whose usable range depends entirely on the model, so there is no default that suits every one - read a threshold off mode = \"max\" over your own sequences.", call. = FALSE)
+        }
+        score.thresh <- .coerce_score_thresh(score.thresh)
+    } else if (is.null(score.thresh)) {
+        score.thresh <- 0
+    }
+
+    if (!is.logical(bidirect) || length(bidirect) != 1L || is.na(bidirect)) {
+        stop("bidirect must be TRUE or FALSE", call. = FALSE)
+    }
+    strand <- as.integer(strand)
+    if (!strand %in% c(-1L, 0L, 1L)) {
+        stop("strand must be -1, 0, or 1", call. = FALSE)
+    }
+    if (bidirect) {
+        strand <- 0L
+    }
+
+    # The same list .vtrack_params_potts() builds, parsed by the same C++, so
+    # gseq.potts() and a potts vtrack cannot disagree about what a model means.
+    # strand = 0 never reaches strand_mode: bidirect already implies both.
+    params <- .potts_params(model,
+        bidirect = bidirect,
+        extend = extend,
+        strand = if (strand == 0L) 1L else strand,
+        score.thresh = score.thresh,
+        what = "gseq.potts"
+    )
+
+    .Call(
+        "C_gseq_potts",
+        as.character(seqs),
+        params,
+        as.integer(match(mode, c("lse", "max", "pos", "count")) - 1L),
+        .misha_env()
+    )
+}
+
 #' Show optimal edits to reach a PWM score threshold
 #'
 #' For each input sequence (or genomic interval), finds the optimal motif window
