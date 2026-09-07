@@ -1,8 +1,9 @@
-# Regression tests for the low-severity 2026-06-28 audit fixes.
-# See dev/notes/2026-06-28_full-audit.md (L1-L12). L1/L3/L9/L10 have no runnable
-# trigger here (benign PROTECT, corrupt-file hardening, dead code, numeric-consistency
-# deferral); L4 (indexed 2D finalizer) is exercised by test-gintervals-2d-indexed.R;
-# L6 (directional dist==0) and L11 (already fixed with H6) are not retested here.
+# Regression tests for the low-severity findings of the 2026-06-28 full source
+# audit that have a runnable trigger: L5, L7 and L12, named in the test titles
+# below. L1/L3/L9/L10 have no runnable trigger here (benign PROTECT, corrupt-file
+# hardening, dead code, numeric-consistency deferral); L4 (indexed 2D finalizer)
+# is exercised by test-gintervals-2d-indexed.R; L6 (directional dist==0) and
+# L11 (already fixed with H6) are not retested here.
 
 create_isolated_test_db()
 
