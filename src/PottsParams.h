@@ -129,8 +129,10 @@ struct PottsParams {
             intercept = REAL(ri)[0];
         }
 
-        params.model = PottsModel(W, intercept, e_row.data(),
-                                  npair ? j_row.data() : NULL, p1, p2);
+        // PottsModel's constructor never dereferences j_rowmajor when p1 is
+        // empty, so j_row.data() is safe to pass unconditionally here even
+        // though an empty vector's data() is not guaranteed non-null.
+        params.model = PottsModel(W, intercept, e_row.data(), j_row.data(), p1, p2);
 
         const int ib = find_elt(rparams, "bidirect");
         if (ib >= 0 && VECTOR_ELT(rparams, ib) != R_NilValue)

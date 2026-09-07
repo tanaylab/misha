@@ -5,8 +5,6 @@
 #include <cstdint>
 #include <string>
 #include <vector>
-#include <algorithm>
-#include <numeric>
 
 // DnaPSSM.h uses bare vector/string/ostream and assumes "using namespace std"
 // is already active - normally supplied by port.h, which config.h (the header
@@ -46,7 +44,13 @@ public:
         : m_W(W), m_intercept(intercept), m_p1(p1), m_p2(p2)
     {
         m_e.assign(e_rowmajor, e_rowmajor + (std::size_t)W * 4);
-        m_J.assign(j_rowmajor, j_rowmajor + p1.size() * 16);
+        // An order-1 model (no pairs - fit_motif(order = 1) produces one, and
+        // test 1's npair_mode = "none" exercises it) passes p1.empty() and,
+        // from PottsParams.h, a null j_rowmajor. Forming a [ptr, ptr+0) range
+        // out of a null pointer is formally UB even though libstdc++ treats it
+        // as a benign no-op, so this is guarded rather than relied upon.
+        if (!p1.empty())
+            m_J.assign(j_rowmajor, j_rowmajor + p1.size() * 16);
     }
 
     int width() const { return m_W; }

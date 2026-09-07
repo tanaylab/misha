@@ -41,13 +41,25 @@ SEXP C_gseq_potts(SEXP r_seqs, SEXP r_params, SEXP r_mode, SEXP r_envir)
         const bool use_rev = pp.bidirect || pp.strand_mode == -1;
 
         const R_xlen_t n = Rf_xlength(r_seqs);
-        SEXP res = PROTECT(Rf_allocVector(REALSXP, n));
+        // RSaneAllocVector, not Rf_allocVector: a failed allocation must come
+        // back as a TGLException so ~RdbInitializer still runs. rprotect_ptr,
+        // not a bare PROTECT: check_interrupt() below can throw mid-loop, and
+        // only a tracked protect is unwound by ~RdbInitializer's
+        // runprotect(tracked) when that happens - a bare PROTECT would leave
+        // this slot stranded on R's protect stack for the rest of the session.
+        SEXP res = rprotect_ptr(RSaneAllocVector(REALSXP, n));
         double *out = REAL(res);
 
         vector<int8_t> codes;
         vector<int32_t> nbad;
 
         for (R_xlen_t r = 0; r < n; ++r) {
+            // Same granularity as C_gseq_pwm (GseqString.cpp): one check per
+            // sequence is unmeasurable against a whole-sequence Potts scan and
+            // the std::string copy below, and it is the only granularity at
+            // which a scan of millions of sequences can be interrupted at all.
+            check_interrupt();
+
             SEXP el = STRING_ELT(r_seqs, r);
             if (el == NA_STRING) {
                 out[r] = (mode == PM_COUNT) ? 0.0 : NA_REAL;
@@ -136,7 +148,7 @@ SEXP C_gseq_potts(SEXP r_seqs, SEXP r_params, SEXP r_mode, SEXP r_envir)
                 out[r] = (double)(best_i + 1) * (pp.bidirect ? best_dir : 1);
         }
 
-        UNPROTECT(1);
+        runprotect(1);
         return res;
     } catch (TGLException &e) {
         rerror("Error in C_gseq_potts: %s", e.msg());
