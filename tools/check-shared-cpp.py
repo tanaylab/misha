@@ -44,9 +44,24 @@ def digest(text):
     return hashlib.sha256(text.encode()).hexdigest()[:16]
 
 
+def sources(src):
+    """Source file names relative to src, recursively.
+
+    Recursive because the shared core is not all flat: src/utils/ holds
+    RunningLogSumExp.h and RunningMaxDeque.h, copied into pymisha like the rest
+    and, while this walked only the top level, never compared.
+    """
+    out = set()
+    for root, _dirs, files in os.walk(src):
+        for f in files:
+            if f.endswith((".cpp", ".h")):
+                out.add(os.path.relpath(os.path.join(root, f), src))
+    return out
+
+
 def collect(misha_src, pymisha_src):
-    r = {f for f in os.listdir(misha_src) if f.endswith((".cpp", ".h"))}
-    p = {f for f in os.listdir(pymisha_src) if f.endswith((".cpp", ".h"))}
+    r = sources(misha_src)
+    p = sources(pymisha_src)
     out = {}
     for name in sorted(r & p):
         a = normalize(os.path.join(misha_src, name))
