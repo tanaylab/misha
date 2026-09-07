@@ -5,6 +5,7 @@
 #include <memory>
 #include <vector>
 #include <deque>
+#include <limits>
 #include "GenomeSeqScorer.h"
 #include "DnaPSSM.h"
 #include "utils/RunningLogSumExp.h"
@@ -40,6 +41,17 @@ public:
 
     // Invalidate sliding window cache
     void invalidate_cache();
+
+    // Best per-anchor score seen by the LAST score_interval() call in
+    // MAX_LIKELIHOOD_POS mode, or -inf when that call found no scorable
+    // anchor (and so returned NaN). A position on its own cannot be compared
+    // between two intervals, so an aggregation over a gvtrack.filter's parts
+    // needs the score to decide which part's position to report - the same
+    // role PWMLseEditDistanceScorer::get_last_*() and
+    // PottsScorer::get_last_max_score() play for their families. Only
+    // MAX_LIKELIHOOD_POS maintains it; every other mode returns its score
+    // directly.
+    double get_last_max_score() const { return m_last_max_score; }
 
 private:
     // Sliding window cache for contiguous intervals
@@ -179,6 +191,9 @@ private:
     DnaPSSM m_pssm;
     ScoringMode m_mode;
     float m_score_thresh = 0.0f;
+
+    // See get_last_max_score(). Reset at the top of every score_interval().
+    double m_last_max_score = -std::numeric_limits<double>::infinity();
 
     // Spatial weighting
     bool m_use_spat = false;

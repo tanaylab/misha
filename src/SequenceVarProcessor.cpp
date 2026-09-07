@@ -16,7 +16,7 @@
 #include "PWMLseEditDistanceScorer.h"
 #include "MaskedBpCounter.h"
 #include "rdbutils.h"
-#include "util.h" // log_sum_log, for the potts TOTAL_LIKELIHOOD filter aggregation
+#include "util.h" // log_sum_log, for the potts and pwm TOTAL_LIKELIHOOD filter aggregations
 
 using namespace rdb;
 using namespace std;
@@ -118,13 +118,13 @@ double aggregate_edit_distance_parts(
 // Score a potts vtrack over seq_interval, honouring its filter (if any) by
 // scoring each of the filter's unmasked parts separately and aggregating.
 //
-// WRITTEN FROM THE AGGREGATION SPEC, NOT BY ANALOGY WITH THE PWM BRANCH a few
-// dozen lines above (process_individual_sequence_vars()'s pwm_vtracks loop).
-// That branch has two defects this must not reproduce: for PWM (total
-// likelihood) it sums the per-part scores, where the reduction is a
-// log-sum-exp, and for PWM_MAX_POS it assigns the max score to the output as
-// if it were a position. Both are pre-existing bugs in the pwm family and out
-// of scope here.
+// Written from the aggregation spec, not by analogy with the pwm branch a few
+// dozen lines above (process_individual_sequence_vars()'s pwm_vtracks loop) -
+// which at the time reduced PWM (total likelihood) by summing the per-part
+// scores rather than by log-sum-exp, and picked PWM_MAX_POS's part by
+// comparing part-relative positions and then reported one without its offset.
+// Both are fixed now and the two reductions agree, but keep them in step by
+// hand: they are separate functions.
 //
 // potts        -> log-sum-exp across parts
 // potts.max    -> maximum
@@ -622,38 +622,103 @@ void SequenceVarProcessor::process_individual_sequence_vars(
 			if (unmasked_parts.empty()) {
 				// Completely masked
 				ivar->var[idx] = numeric_limits<double>::quiet_NaN();
-			} else if (unmasked_parts.size() == 1) {
-				// Single unmasked part
-				ivar->var[idx] = ivar->pwm_scorer->score_interval(unmasked_parts[0], m_iu.get_chromkey());
 			} else {
-				// Multiple unmasked parts - score each and aggregate
-				// For PWM: sum scores (additive in log space), max, or count
-				double result = 0.0;
+				// Every part - one or many - goes through the same reduction.
+				// There is no one-part fast path: a lone part still needs its
+				// PWM_MAX_POS answer offset into seq_interval's frame whenever
+				// a mask clips the FRONT of the interval, and score_interval()
+				// reports a position in the PART's own frame. Routing one part
+				// and many through the same loop makes that offset
+				// unconditional instead of something a fast path can forget.
+				// For the other three funcs a one-element reduction is exactly
+				// what the fast path did.
+				double lse = -numeric_limits<double>::infinity();  // PWM
+				double best = 0.0;                                 // PWM_MAX
+				double total = 0.0;                                // PWM_COUNT
+				double best_pos = numeric_limits<double>::quiet_NaN();  // PWM_MAX_POS
+				double best_max = -numeric_limits<double>::infinity();
+				bool lse_seeded = false;
+				bool pos_seeded = false;
 				bool first = true;
 
 				for (const auto& part : unmasked_parts) {
 					double part_score = ivar->pwm_scorer->score_interval(part, m_iu.get_chromkey());
 
-					if (ivar->val_func == TrackExpressionVars::Track_var::PWM_MAX) {
-						if (first || part_score > result) {
-							result = part_score;
+					switch (ivar->val_func) {
+					case TrackExpressionVars::Track_var::PWM_MAX:
+						if (first || part_score > best)
+							best = part_score;
+						break;
+
+					case TrackExpressionVars::Track_var::PWM_MAX_POS: {
+						// The part to report is the one holding the highest
+						// MAX SCORE. Comparing the parts' positions instead
+						// picks whichever part happens to have the larger
+						// local index, which says nothing about where the best
+						// match is; and the winner's position is relative to
+						// its own part, so it has to be offset before it means
+						// anything relative to seq_interval.
+						if (std::isnan(part_score))
+							break;  // no scorable anchor in this part
+						const double part_max = ivar->pwm_scorer->get_last_max_score();
+						if (!pos_seeded || part_max > best_max) {
+							best_max = part_max;
+							const double offset = double(part.start - seq_interval.start);
+							// part_score is signed by strand under bidirect;
+							// the offset moves it further from zero in
+							// whichever direction it already points.
+							best_pos = (part_score > 0) ? part_score + offset :
+							           (part_score < 0) ? part_score - offset : part_score;
+							pos_seeded = true;
 						}
-					} else if (ivar->val_func == TrackExpressionVars::Track_var::PWM_MAX_POS) {
-						// For position, take the position with max score
-						if (first || part_score > result) {
-							result = part_score;
-						}
-					} else if (ivar->val_func == TrackExpressionVars::Track_var::PWM_COUNT) {
-						// Sum counts
-						result += part_score;
-					} else {
-						// PWM (total likelihood) - sum in log space
-						result += part_score;
+						break;
+					}
+
+					case TrackExpressionVars::Track_var::PWM_COUNT:
+						// Counts really are additive
+						total += part_score;
+						break;
+
+					default:
+						// PWM (total likelihood): the reduction is a
+						// log-sum-exp. Summing log-likelihoods multiplies
+						// probabilities, which is not "the score over this
+						// interval" - and is not what the unfiltered scorer
+						// computes across the anchors of one interval either.
+						//
+						// Seeded from the first part and guarded against a
+						// second -inf: util.h's double log_sum_log() has no
+						// isinf() check (its float overload does), so
+						// log_sum_log(-inf, -inf) computes exp(NaN) = NaN.
+						if (!lse_seeded) {
+							lse = part_score;
+							lse_seeded = true;
+						} else if (std::isnan(lse) || std::isnan(part_score)) {
+							lse = numeric_limits<double>::quiet_NaN();
+						} else if (!std::isfinite(lse)) {
+							lse = part_score;      // lse was -inf: contributes nothing
+						} else if (std::isfinite(part_score)) {
+							log_sum_log(lse, part_score);
+						}                          // else part_score is -inf: contributes nothing
+						break;
 					}
 					first = false;
 				}
 
-				ivar->var[idx] = result;
+				switch (ivar->val_func) {
+				case TrackExpressionVars::Track_var::PWM_MAX:
+					ivar->var[idx] = best;
+					break;
+				case TrackExpressionVars::Track_var::PWM_MAX_POS:
+					ivar->var[idx] = best_pos;
+					break;
+				case TrackExpressionVars::Track_var::PWM_COUNT:
+					ivar->var[idx] = total;
+					break;
+				default:
+					ivar->var[idx] = lse;
+					break;
+				}
 			}
 		} else {
 			// No filter

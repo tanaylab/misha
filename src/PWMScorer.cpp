@@ -336,6 +336,7 @@ float PWMScorer::get_max_likelihood_pos_with_spatial(const std::string& target, 
         }
     }
 
+    m_last_max_score = best_val;
     return compute_position_result(best_index, target.length(), motif_length, best_dir);
 }
 
@@ -363,6 +364,7 @@ float PWMScorer::score_without_spatial(const std::string& target, int64_t motif_
     }
     
     // MAX_LIKELIHOOD_POS
+    m_last_max_score = best_logp;
     size_t pos_idx = best_pos - target.begin();
     return compute_position_result(pos_idx, target.length(), motif_length, best_dir);
 }
@@ -528,6 +530,8 @@ float PWMScorer::try_slide_window(const std::string& target,
         // MAX_LIKELIHOOD_POS: Get genomic position directly from deque
         int64_t best_genomic_pos = m_slide.rmax.argmax_genomic_position();
         int best_dir = m_slide.rmax.argmax_direction();
+
+        m_last_max_score = m_slide.rmax.value();
 
         // Convert genomic position to index in target string
         size_t pos_in_target = anchor_target_index(expanded_interval, best_genomic_pos, motif_len, strand_mode);
@@ -710,6 +714,8 @@ float PWMScorer::seed_sliding_window(const std::string& target,
         int64_t best_genomic_pos = m_slide.rmax.argmax_genomic_position();
         int best_dir = m_slide.rmax.argmax_direction();
 
+        m_last_max_score = m_slide.rmax.value();
+
         // Convert genomic position to index in target string
         size_t pos_in_target = anchor_target_index(expanded_interval, best_genomic_pos, motif_len, strand_mode);
 
@@ -798,6 +804,10 @@ float PWMScorer::score_with_sliding_window(const std::string& target,
 float PWMScorer::score_interval(const GInterval& interval, const GenomeChromKey& chromkey)
 {
     // Calculate expanded interval to include full motif coverage
+    // Every early return below leaves this at -inf, which is what
+    // get_last_max_score() promises for a call that found no scorable anchor.
+    m_last_max_score = -std::numeric_limits<double>::infinity();
+
     int64_t motif_length = m_pssm.size();
     GInterval expanded_interval = calculate_expanded_interval(interval, chromkey, motif_length);
     expanded_interval.strand = m_strand;
@@ -1410,6 +1420,7 @@ float PWMScorer::spat_answer_MAXPOS(const std::string& target,
         }
     }
     if (best_idx < 0) return std::numeric_limits<float>::quiet_NaN();
+    m_last_max_score = best_val;
 
     // Convert ring index to relative j, then to absolute target index
     const size_t j = j_from_ring_idx((size_t)best_idx);
