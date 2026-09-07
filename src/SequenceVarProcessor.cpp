@@ -11,6 +11,7 @@
 #include "SequenceVarProcessor.h"
 #include "KmerCounter.h"
 #include "PWMScorer.h"
+#include "PottsScorer.h"
 #include "PWMEditDistanceScorer.h"
 #include "PWMLseEditDistanceScorer.h"
 #include "MaskedBpCounter.h"
@@ -120,6 +121,7 @@ void SequenceVarProcessor::classify_track_vars(
 {
 	m_kmer_vtracks.clear();
 	m_pwm_vtracks.clear();
+	m_potts_vtracks.clear();
 	m_masked_vtracks.clear();
 	m_pwm_edit_distance_vtracks.clear();
 	m_pwm_lse_edit_distance_vtracks.clear();
@@ -130,6 +132,8 @@ void SequenceVarProcessor::classify_track_vars(
 			m_pwm_lse_edit_distance_vtracks.push_back(&*ivar);
 		} else if (TrackExpressionVars::is_pwm_edit_distance_function(ivar->val_func)) {
 			m_pwm_edit_distance_vtracks.push_back(&*ivar);
+		} else if (TrackExpressionVars::is_potts_function(ivar->val_func)) {
+			m_potts_vtracks.push_back(&*ivar);
 		} else if (TrackExpressionVars::is_pwm_function(ivar->val_func)) {
 			m_pwm_vtracks.push_back(&*ivar);
 		} else if (TrackExpressionVars::is_kmer_function(ivar->val_func)) {
@@ -144,6 +148,14 @@ void SequenceVarProcessor::classify_track_vars(
 		if (ivar->filter) {
 			m_any_filtered = true;
 			break;
+		}
+	}
+	if (!m_any_filtered) {
+		for (TrackExpressionVars::Track_var* ivar : m_potts_vtracks) {
+			if (ivar->filter) {
+				m_any_filtered = true;
+				break;
+			}
 		}
 	}
 	if (!m_any_filtered) {
@@ -189,8 +201,19 @@ void SequenceVarProcessor::process_sequence_vars(
 
 	// Batch process if we have multiple sequence vtracks (threshold: 4+) AND no filters
 	// (batch processing with filters is complex due to variable-length segments)
-	if (!m_any_filtered && m_kmer_vtracks.size() + m_pwm_vtracks.size() + m_masked_vtracks.size() >= 4) {
+	if (!m_any_filtered && m_kmer_vtracks.size() + m_pwm_vtracks.size() + m_potts_vtracks.size() + m_masked_vtracks.size() >= 4) {
 		batch_process_sequence_vtracks(m_kmer_vtracks, m_pwm_vtracks, interval, idx);
+		// Score potts vtracks individually even in batch mode: there is nothing
+		// to batch, each one carries its own model.
+		for (TrackExpressionVars::Track_var* ivar : m_potts_vtracks) {
+			if (seq_var_out_of_range(ivar, idx))
+				continue;
+
+			const GInterval &seq_interval = ivar->seq_imdf1d ? ivar->seq_imdf1d->interval : interval;
+			ivar->var[idx] = ivar->potts_scorer
+				? ivar->potts_scorer->score_interval(seq_interval, m_iu.get_chromkey())
+				: numeric_limits<double>::quiet_NaN();
+		}
 		// Process masked vtracks individually even in batch mode (simpler than batching)
 		for (TrackExpressionVars::Track_var* ivar : m_masked_vtracks) {
 			if (seq_var_out_of_range(ivar, idx))
@@ -289,7 +312,7 @@ void SequenceVarProcessor::process_sequence_vars(
 		}
 	} else {
 		// Process individually if too few or has filters
-		process_individual_sequence_vars(m_kmer_vtracks, m_pwm_vtracks, m_masked_vtracks, m_pwm_edit_distance_vtracks, m_pwm_lse_edit_distance_vtracks, interval, idx);
+		process_individual_sequence_vars(m_kmer_vtracks, m_pwm_vtracks, m_potts_vtracks, m_masked_vtracks, m_pwm_edit_distance_vtracks, m_pwm_lse_edit_distance_vtracks, interval, idx);
 	}
 }
 
@@ -412,6 +435,7 @@ void SequenceVarProcessor::batch_process_sequence_vtracks(
 void SequenceVarProcessor::process_individual_sequence_vars(
 	vector<TrackExpressionVars::Track_var*> &kmer_vtracks,
 	vector<TrackExpressionVars::Track_var*> &pwm_vtracks,
+	vector<TrackExpressionVars::Track_var*> &potts_vtracks,
 	vector<TrackExpressionVars::Track_var*> &masked_vtracks,
 	vector<TrackExpressionVars::Track_var*> &pwm_edit_distance_vtracks,
 	vector<TrackExpressionVars::Track_var*> &pwm_lse_edit_distance_vtracks,
@@ -470,6 +494,23 @@ void SequenceVarProcessor::process_individual_sequence_vars(
 			// No filter
 			ivar->var[idx] = ivar->pwm_scorer->score_interval(seq_interval, m_iu.get_chromkey());
 		}
+	}
+
+	// Process potts vtracks
+	for (TrackExpressionVars::Track_var* ivar : potts_vtracks) {
+		if (seq_var_out_of_range(ivar, idx))
+			continue;
+
+		const GInterval &seq_interval = ivar->seq_imdf1d ? ivar->seq_imdf1d->interval : interval;
+
+		// Filter support lands with the rest of the family. A loud refusal is
+		// correct for now; a silently unfiltered score never is.
+		if (ivar->filter)
+			verror("gvtrack.filter is not yet supported for potts virtual tracks");
+
+		ivar->var[idx] = ivar->potts_scorer
+			? ivar->potts_scorer->score_interval(seq_interval, m_iu.get_chromkey())
+			: numeric_limits<double>::quiet_NaN();
 	}
 
 	// Process kmer vtracks

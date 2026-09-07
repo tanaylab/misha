@@ -27,6 +27,7 @@ private:
 	bool m_classification_done = false;
 	std::vector<TrackExpressionVars::Track_var*> m_kmer_vtracks;
 	std::vector<TrackExpressionVars::Track_var*> m_pwm_vtracks;
+	std::vector<TrackExpressionVars::Track_var*> m_potts_vtracks;
 	std::vector<TrackExpressionVars::Track_var*> m_masked_vtracks;
 	std::vector<TrackExpressionVars::Track_var*> m_pwm_edit_distance_vtracks;
 	std::vector<TrackExpressionVars::Track_var*> m_pwm_lse_edit_distance_vtracks;
@@ -44,6 +45,7 @@ private:
 	void process_individual_sequence_vars(
 		std::vector<TrackExpressionVars::Track_var*> &kmer_vtracks,
 		std::vector<TrackExpressionVars::Track_var*> &pwm_vtracks,
+		std::vector<TrackExpressionVars::Track_var*> &potts_vtracks,
 		std::vector<TrackExpressionVars::Track_var*> &masked_vtracks,
 		std::vector<TrackExpressionVars::Track_var*> &pwm_edit_distance_vtracks,
 		std::vector<TrackExpressionVars::Track_var*> &pwm_lse_edit_distance_vtracks,
