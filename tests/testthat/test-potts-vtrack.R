@@ -410,3 +410,283 @@ test_that("a bidirect potts vtrack ignores strand", {
         }
     }
 })
+
+# ---------------------------------------------------------------------------
+# The sliding-window cache.
+#
+# Every test below compares the SLID path against the RE-SEEDED path: the same
+# kernel with the same tie-breaking on both sides, so they must agree, and a
+# disagreement is a cache bug and never a rounding artefact. The re-seeded side
+# is one gextract() per position, each of which builds a fresh
+# TrackExpressionVars and therefore a fresh, cold PottsScorer.
+#
+# Note what potts.max.pos returns: a 1-based index into the FETCHED target, not
+# a genomic coordinate. A window whose argmax anchor does not move therefore
+# reports a position one lower at every step, which is why RunningMaxDeque keys
+# on absolute genomic positions and the cache has to map back through the
+# current expanded.start.
+# ---------------------------------------------------------------------------
+
+# Compare a contiguous scan of `iv` against the same intervals fetched one at a
+# time. `pad` is the gvtrack.iterator shift (NA for none) and `it` the iterator
+# width, which together set the window size and the stride. `check_varies` asks
+# that the column actually move, so a constant answer cannot satisfy the
+# comparison by accident.
+expect_potts_cache_agrees <- function(fn, params, pad, iv, info, it = 1,
+                                      check_varies = TRUE) {
+    remove_all_vtracks()
+    gvtrack.create("t", NULL, fn, params = params)
+    if (!is.na(pad)) {
+        gvtrack.iterator("t", sshift = -pad, eshift = pad)
+    }
+
+    slid <- gextract("t", iv, iterator = it)
+    # Fixed bins are aligned to absolute multiples of the bin size, so the span
+    # can open and close with a partial bin. Asserted rather than assumed: a
+    # scan that silently returned nothing would satisfy every comparison below.
+    testthat::expect_equal(
+        nrow(slid),
+        floor((iv$end - 1) / it) - floor(iv$start / it) + 1,
+        info = info
+    )
+
+    one_at_a_time <- vapply(rev(seq_len(nrow(slid))), function(k) {
+        gextract("t", slid[k, 1:3], iterator = slid[k, 1:3])$t
+    }, numeric(1))
+
+    testthat::expect_equal(slid$t, rev(one_at_a_time), tolerance = 1e-6, info = info)
+    if (check_varies) {
+        testthat::expect_gt(length(unique(slid$t)), 1L)
+    }
+    slid$t
+}
+
+# A mid-range threshold, so potts.count cannot agree by saturating at 0 or at
+# the window size.
+potts_cache_thresh <- function(m, iv, pad, bidirect, strand) {
+    W <- nrow(m$e)
+    seq_ext <- toupper(gseq.extract(
+        gintervals(iv$chrom, iv$start - pad, iv$end + pad + W - 1L)
+    ))
+    stats::median(potts_ref_anchors(seq_ext, m,
+        bidirect = bidirect, strand = strand, union = "lse"
+    ), na.rm = TRUE)
+}
+
+test_that("the sliding cache returns what the seeded path returns", {
+    m <- potts_ref_model(W = 8L, npair_mode = "full", seed = 131L)
+    iv <- gintervals(1, 5000, 5200)
+
+    # Both orientations. The cache is keyed on strand_mode, and when the target
+    # is reverse-complemented the anchor entering the window on a one-position
+    # step arrives at the LOW target index, so the forward orientation alone
+    # exercises only half of the slide arithmetic. bidirect = FALSE is the only
+    # way in: .potts_params() clamps strand to 1 whenever bidirect is TRUE.
+    orients <- list(
+        forward = list(bidirect = TRUE, strand = 1),
+        reverse = list(bidirect = FALSE, strand = -1)
+    )
+
+    # Four window/stride geometries:
+    #   pad 250, iterator 1 - the regime the cache exists for, a 501-anchor
+    #     window moving 1 bp. There the region's best anchor never leaves, so
+    #     potts.max is constant and only the other three modes' comparisons say
+    #     anything, hence the pass below.
+    #   pad  40, iterator 1 - narrow enough that every mode's answer moves.
+    #   pad  40, iterator 7 - stride 7 into an 81-anchor window, so the
+    #     multi-anchor push loop runs with a stride well inside the window.
+    #   pad  40, iterator 60 - stride 60 into a 141-anchor window, so most of
+    #     the window is evicted and refilled on every step.
+    #   no shift, iterator 10 - consecutive windows share no anchor at all, so
+    #     the cache declines to keep one and every call answers directly. The
+    #     comparison is trivially satisfied there; it is here to check that the
+    #     un-populated path still returns the right number.
+    geoms <- list(
+        list(nm = "pad250/it1", pad = 250L, it = 1L, varies = FALSE),
+        list(nm = "pad40/it1", pad = 40L, it = 1L, varies = TRUE),
+        list(nm = "pad40/it7", pad = 40L, it = 7L, varies = TRUE),
+        list(nm = "pad40/it60", pad = 40L, it = 60L, varies = TRUE),
+        list(nm = "noshift/it10", pad = NA_integer_, it = 10L, varies = TRUE)
+    )
+
+    for (nm in names(orients)) {
+        o <- orients[[nm]]
+        for (g in geoms) {
+            th <- potts_cache_thresh(
+                m, iv, if (is.na(g$pad)) 0L else g$pad, o$bidirect, as.integer(o$strand)
+            )
+            for (fn in c("potts", "potts.max", "potts.max.pos", "potts.count")) {
+                expect_potts_cache_agrees(
+                    fn, c(m, o, list(extend = TRUE, score.thresh = th)),
+                    g$pad, iv,
+                    info = paste(nm, g$nm, fn),
+                    it = g$it, check_varies = g$varies
+                )
+            }
+        }
+    }
+})
+
+test_that("the potts cache re-seeds where the chromosome end clips the fetch", {
+    m <- potts_ref_model(W = 12L, npair_mode = "full", seed = 149L)
+    pad <- 30L
+
+    # The end-only extension gets progressively clipped by the chromosome end,
+    # so the fetched target shortens and i_max moves while the interval keeps
+    # its width. The slide guard has to notice and re-seed; if it slid anyway,
+    # the reverse orientation would key its anchors off the wrong target length.
+    chr21_end <- gintervals.all()$end[gintervals.all()$chrom == "chr21"]
+    iv <- gintervals(21, chr21_end - 120, chr21_end)
+
+    for (o in list(
+        list(bidirect = TRUE, strand = 1),
+        list(bidirect = FALSE, strand = -1)
+    )) {
+        for (fn in c("potts", "potts.max", "potts.max.pos", "potts.count")) {
+            expect_potts_cache_agrees(
+                fn, c(m, o, list(extend = TRUE, score.thresh = 0)),
+                pad, iv,
+                info = paste("chr21 tail", "bidirect", o$bidirect, fn),
+                check_varies = FALSE
+            )
+        }
+    }
+})
+
+test_that("the potts cache is invalidated on a chromosome change", {
+    remove_all_vtracks()
+    m <- potts_ref_model(W = 8L, npair_mode = "full", seed = 137L)
+    gvtrack.create("t", NULL, "potts.max", params = c(m, list(extend = TRUE)))
+
+    chroms <- gintervals.all()
+    skip_if(nrow(chroms) < 2, "test database has one chromosome")
+
+    iv <- rbind(
+        gintervals(chroms$chrom[1], 3000, 3020),
+        gintervals(chroms$chrom[2], 3000, 3020)
+    )
+
+    # Interleaved across the boundary, versus one chromosome at a time. A cache
+    # that survives start_chrom() returns the first chromosome's window here.
+    both <- gextract("t", iv, iterator = 1)
+    sep <- rbind(
+        gextract("t", iv[1, ], iterator = 1),
+        gextract("t", iv[2, ], iterator = 1)
+    )
+    expect_equal(both$t, sep$t, tolerance = 1e-6)
+})
+
+# The 0-based position where the leading N run of `chrom` ends, or NA.
+potts_n_run_end <- function(chrom, limit = 3e5) {
+    v <- strsplit(toupper(gseq.extract(gintervals(chrom, 0, limit))), "", fixed = TRUE)[[1L]]
+    i <- which(v != "N")
+    if (!length(i) || i[1L] == 1L) NA_integer_ else as.integer(i[1L] - 1L)
+}
+
+# The window shift that puts an N -> sequence boundary INSIDE one incoming
+# batch, with an unscorable anchor pushed before a scorable one. NA if no shift
+# in `pads` does.
+#
+# Geometry: the anchors of iterator bin [s, s + it) are
+# [s - pad, s + it - 1 + pad]; misha aligns fixed bins to multiples of the bin
+# size; an anchor is scorable only if it starts at or after `bnd`; and a slide
+# pushes the window's top `it` anchors in ascending genomic order. So with T the
+# top anchor of the arriving bin the case needs
+#   T >= bnd            - the batch brings in a scorable anchor,
+#   T - it < bnd        - the window held nothing scorable before the batch,
+#   T - it + 1 < bnd    - and the batch pushes -Inf before that anchor,
+# i.e. bnd <= T <= bnd + it - 2. That needs it >= 3 and the right phase, which
+# is why an iterator = 1 scan cannot reach it however far it runs.
+potts_straddling_pad <- function(bnd, it, pads = 20:80) {
+    for (pad in pads) {
+        top <- seq(0L, 2L * bnd, by = it) - 1L + pad
+        if (any(top >= bnd & top <= bnd + it - 2L)) {
+            return(as.integer(pad))
+        }
+    }
+    NA_integer_
+}
+
+test_that("a warm potts cache slides into and out of an all-N stretch", {
+    m <- potts_ref_model(W = 8L, npair_mode = "full", seed = 139L)
+    funcs <- c("potts", "potts.max", "potts.max.pos", "potts.count")
+
+    # The one place the cached and the uncached paths can disagree SILENTLY. An
+    # unscorable anchor enters the running structures as -Inf, the identity for
+    # both a log-sum-exp and a maximum; when the window's last finite anchor is
+    # evicted the aggregator goes to -Inf while the cache stays valid, and -Inf
+    # is not the answer - NaN is, or 0 for potts.count. -Inf survives arithmetic
+    # instead of poisoning it, so it is the harder failure to notice.
+    #
+    # Both directions, because they fail differently: sliding IN evicts the
+    # window's last finite anchor, sliding OUT has to recover from a window that
+    # is entirely -Inf.
+    bnd20 <- potts_n_run_end(20)
+    skip_if(is.na(bnd20), "chr20 does not open with an N run in this fixture")
+    spans <- list(
+        into_N = gintervals(1, 167240, 167320), # chr1 sequence ends at 167280
+        out_of_N = gintervals(20, bnd20 - 40, bnd20 + 40)
+    )
+    for (nm in names(spans)) {
+        iv <- spans[[nm]]
+        sq <- toupper(gseq.extract(gintervals(
+            iv$chrom, iv$start - 20L, iv$end + 20L + nrow(m$e) - 1L
+        )))
+        skip_if(!grepl("N", sq, fixed = TRUE), paste("no N run near", nm))
+        skip_if(!grepl("[ACGT]", sq), paste("no clean sequence near", nm))
+
+        for (fn in funcs) {
+            v <- expect_potts_cache_agrees(
+                fn, c(m, list(extend = TRUE, score.thresh = 0)),
+                20L, iv,
+                info = paste(nm, fn), it = 1L
+            )
+            # The span really does cross the boundary, and the answer where no
+            # anchor is scorable is NaN - 0 for the count - never -Inf.
+            info <- paste(nm, fn)
+            if (fn == "potts.count") {
+                expect_true(any(v == 0), info = info)
+                expect_true(any(v > 0), info = info)
+            } else {
+                expect_true(any(is.na(v)), info = info)
+                expect_true(any(is.finite(v)), info = info)
+                expect_false(any(is.infinite(v)), info = info)
+            }
+        }
+    }
+})
+
+test_that("a potts cache batch that straddles the end of an N run agrees too", {
+    m <- potts_ref_model(W = 8L, npair_mode = "full", seed = 151L)
+    it <- 7L
+
+    # An iterator = 1 scan across the same boundary cannot reach this: the
+    # arriving batch is one anchor, so it never pushes -Inf and then a real
+    # value into the SAME batch while the window holds nothing scorable. That
+    # ordering is what reaches RunningLogSumExp::push(-INFINITY) with its
+    # running maximum already -inf, which computes exp(-inf + inf) = NaN into
+    # the accumulator - and the NaN then survives into the first finite push,
+    # so the interval reports NaN although it has scorable anchors. Measured at
+    # 34 of 58 scanned positions before this was guarded.
+    bnd <- potts_n_run_end(20)
+    skip_if(is.na(bnd), "chr20 does not open with an N run in this fixture")
+    pad <- potts_straddling_pad(bnd, it)
+    skip_if(is.na(pad), "no window shift straddles this fixture's N boundary")
+
+    iv <- gintervals(20, bnd - 4L * it - pad, bnd + 4L * it)
+    for (fn in c("potts", "potts.max", "potts.max.pos", "potts.count")) {
+        v <- expect_potts_cache_agrees(
+            fn, c(m, list(extend = TRUE, score.thresh = 0)),
+            pad, iv,
+            info = paste("straddle", fn), it = it, check_varies = FALSE
+        )
+        info <- paste("straddle", fn)
+        if (fn == "potts.count") {
+            expect_true(any(v == 0), info = info)
+            expect_true(any(v > 0), info = info)
+        } else {
+            expect_true(any(is.na(v)), info = info)
+            expect_true(any(is.finite(v)), info = info)
+        }
+    }
+})
