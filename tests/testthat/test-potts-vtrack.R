@@ -58,6 +58,44 @@ test_that("the potts params handler rejects what it should", {
     expect_error(misha:::.vtrack_params_potts("potts.count", m, list()), "score.thresh")
 })
 
+test_that("a potts model whose window score cannot fit a float is rejected", {
+    # Every entry is finite, so the per-entry checks pass; what overflows is
+    # the WINDOW. potts scores are reported in float, and the two scoring paths
+    # then answer differently. Measured on the first model below before the
+    # bound went in, over chr1:3000-3200 with a 20 bp iterator shift:
+    # potts.max read Inf from a freshly seeded interval and NaN from a slid
+    # one, and potts.max.pos 1 against NaN - RunningLogSumExp::value() and
+    # RunningMaxDeque::value() report a non-finite running maximum as -inf, and
+    # PottsScorer::slid_answer() maps that to NaN, which is exactly the
+    # "nothing was scorable" answer it is supposed to mean.
+    m <- potts_ref_model(W = 6L, npair_mode = "none", seed = 167L)
+
+    over <- m
+    over$e[] <- 1e38 # 6 * 1e38, past FLT_MAX
+    expect_error(misha:::.vtrack_params_potts("potts", over, list()), "single-precision")
+    # both entry points go through the one validator
+    expect_error(gseq.potts("ACGTACGTAC", over, mode = "max"), "single-precision")
+
+    # J and the intercept count towards the same bound
+    over <- potts_ref_model(W = 4L, npair_mode = "full", seed = 167L)
+    over$J <- lapply(over$J, function(Jk) {
+        Jk[] <- 1e38
+        Jk
+    })
+    expect_error(misha:::.vtrack_params_potts("potts", over, list()), "single-precision")
+
+    over <- m
+    over$intercept <- 1e39
+    expect_error(misha:::.vtrack_params_potts("potts", over, list()), "single-precision")
+
+    # A large model that does fit is left alone, so the bound is not merely
+    # "no big numbers": 6 * 1e37 is inside FLT_MAX, and both scoring paths were
+    # measured to agree on it over the same scan.
+    ok <- m
+    ok$e[] <- 1e37
+    expect_silent(misha:::.vtrack_params_potts("potts", ok, list()))
+})
+
 test_that("potts and potts.max vtracks equal gseq.potts on the same sequence", {
     remove_all_vtracks()
     m <- potts_ref_model(W = 6L, npair_mode = "full", seed = 103L)

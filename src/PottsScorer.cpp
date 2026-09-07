@@ -234,8 +234,11 @@ float PottsScorer::slid_answer(const GInterval &expanded_interval, size_t motif_
     // deque. An interval with no scorable anchor is NaN - 0 for potts.count -
     // which is what the direct path returns, so the mapping has to happen
     // here. An -Inf leaking out instead would survive arithmetic rather than
-    // poison it, which is the harder failure to notice; the model tables are
-    // validated finite, so -inf here can only mean "nothing scorable".
+    // poison it, which is the harder failure to notice. "-inf can only mean
+    // nothing scorable" is true by construction, not by assumption:
+    // .coerce_potts_model() rejects a model whose worst-case window magnitude
+    // does not fit in a float, so no anchor value can reach an infinity of its
+    // own.
     switch (m_mode) {
     case MOTIF_COUNT:
         // No running maximum in this mode, so m_last_max_score is left alone.

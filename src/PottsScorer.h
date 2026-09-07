@@ -70,7 +70,9 @@ private:
     // C_gseq_potts, on purpose.
     //
     // Always finite for a scorable anchor: .coerce_potts_model() rejects a
-    // non-finite e, J or intercept, so -inf out of the aggregators below can
+    // model whose worst-case window magnitude - W * max|e| + npair * max|J| +
+    // |intercept| - does not fit in a float, so no anchor can overflow the
+    // float this returns through and -inf out of the aggregators below can
     // only mean "no scorable anchor".
     double anchor_value(const int8_t *c, bool union_max, int &dir) const;
 
