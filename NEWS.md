@@ -1,8 +1,9 @@
 # misha 5.12.0
 
-* New `potts`, `potts.max`, `potts.max.pos` and `potts.count` virtual track functions, which score a pairwise (Potts) energy model across the genome, and a `gseq.potts()` to score sequences with one. A model fitted with `motifmodel::fit_motif(family = "potts")` can be passed to `gvtrack.create(params = )` as it is.
 * `pwm.max` returned wrong values with `strand = -1` over overlapping iterator intervals. Recompute anything derived from such a track.
 * A `gvtrack.filter` on a `pwm` virtual track now combines the unmasked parts by log-sum-exp instead of summing them, and one on `pwm.max.pos` now reports a position rather than an arbitrary number. Recompute anything derived from a filtered `pwm` or `pwm.max.pos` track.
+* A `gvtrack.filter` on a `pwm`, `pwm.max` or `pwm.count` track returned `NA` for the whole interval when the mask left a part narrower than the PSSM, which needs `extend = FALSE`. Recompute anything derived from such a track.
+* New `potts`, `potts.max`, `potts.max.pos` and `potts.count` virtual track functions, which score a pairwise (Potts) energy model across the genome, and a `gseq.potts()` to score sequences with one. A model fitted with `motifmodel::fit_motif(family = "potts")` can be passed to `gvtrack.create(params = )` as it is.
 
 # misha 5.11.27
 
