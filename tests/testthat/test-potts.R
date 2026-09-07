@@ -243,8 +243,13 @@ test_that("gseq.potts mode = count needs a threshold and counts anchors", {
         )
     }
 
-    # a sequence too short for one window counts nothing rather than NA
-    expect_equal(gseq.potts("ACG", m, mode = "count", score.thresh = 0), 0)
+    # "counted nothing" and "nothing to count" are different answers: a
+    # sequence with windows but none of them scorable counts 0, a sequence too
+    # short to hold one window - or NA - has nothing to count and is NA, for
+    # count as for every other mode
+    expect_equal(gseq.potts(strrep("N", 20L), m, mode = "count", score.thresh = 0), 0)
+    expect_true(is.na(gseq.potts("ACG", m, mode = "count", score.thresh = 0)))
+    expect_true(is.na(gseq.potts(NA_character_, m, mode = "count", score.thresh = 0)))
 })
 
 test_that("gseq.potts pos and max may disagree on which anchor wins", {

@@ -64,8 +64,7 @@ Filters are applied \emph{after} iterator modifiers (sshift/eshift/dim). The ord
 
 \strong{Completely Masked Intervals:}
 If an entire iterator interval is masked, the function returns \code{NA} (not 0) - except
-\code{potts.count}, which returns \code{0}: an empty count is a count of zero, the same
-exception \code{potts.count} makes for an interval with nothing to count at all.
+\code{potts.count}, which returns \code{0}: an empty count is a count of zero.
 }
 \examples{
 \dontshow{

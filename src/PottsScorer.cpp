@@ -529,9 +529,20 @@ float PottsScorer::score_interval(const GInterval &interval, const GenomeChromKe
         const size_t tlen = target.size();
         const size_t motif_len = (size_t)motif_length;
         if (tlen < motif_len) {
+            // No anchor of the model fits in what came back, so there is
+            // nothing to count - which is not the same answer as a count of
+            // zero. MOTIF_COUNT reports 0 for an interval whose anchors are
+            // all unscorable (an assembly gap): it counted, and found none.
+            // Here it could not count at all, and NaN says so, the same as the
+            // other three modes and the same as the extend = FALSE guard
+            // above.
+            //
+            // Reached with the DEFAULT extend = TRUE, not only through that
+            // guard: the end padding is clipped at the contig boundary, so
+            // every iterator interval within W - 1 bp of a chromosome end
+            // arrives here.
             invalidate_cache();
-            return (m_mode == MOTIF_COUNT) ? 0.0f
-                                           : std::numeric_limits<float>::quiet_NaN();
+            return std::numeric_limits<float>::quiet_NaN();
         }
 
         // Clamp to anchors whose STARTS fall inside the iterator interval.

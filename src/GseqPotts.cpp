@@ -60,14 +60,19 @@ SEXP C_gseq_potts(SEXP r_seqs, SEXP r_params, SEXP r_mode, SEXP r_envir)
             // which a scan of millions of sequences can be interrupted at all.
             check_interrupt();
 
+            // NA in, or a sequence too short to hold one window of the model:
+            // no anchor exists at all, so there is nothing to count. NA, not
+            // 0, for every mode including count - a count of zero is what an
+            // ambiguous-but-long-enough sequence gets below, where the scan
+            // ran and found nothing above the threshold.
             SEXP el = STRING_ELT(r_seqs, r);
             if (el == NA_STRING) {
-                out[r] = (mode == PM_COUNT) ? 0.0 : NA_REAL;
+                out[r] = NA_REAL;
                 continue;
             }
             const string target(CHAR(el));
             if ((int)target.size() < W) {
-                out[r] = (mode == PM_COUNT) ? 0.0 : NA_REAL;
+                out[r] = NA_REAL;
                 continue;
             }
             potts_encode(target, codes, nbad);

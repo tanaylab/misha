@@ -413,8 +413,11 @@ gseq.pwm <- function(seqs,
 #'
 #' A Potts carries energies, not probabilities, so there is no \code{prior} and
 #' no fallback for an ambiguous base: a window containing any non-ACGT base is
-#' not scored and is left out of the reduction. A sequence with no scorable
-#' window at all returns \code{NA} (\code{0} for \code{mode = "count"}).
+#' not scored and is left out of the reduction. A sequence that has windows but
+#' none of them scorable returns \code{NA}, and \code{0} for
+#' \code{mode = "count"}: it counted, and found none. A sequence shorter than
+#' the model, or \code{NA}, returns \code{NA} for every mode including
+#' \code{"count"} - there was no window to count.
 #'
 #' Under \code{bidirect = TRUE}, \code{mode = "max"} combines the two strands
 #' at each window by log-sum-exp, matching the \code{potts} and

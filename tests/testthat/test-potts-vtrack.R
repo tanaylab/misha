@@ -928,3 +928,66 @@ test_that("a single unmasked part is scored like the unfiltered survivor, offset
         ))
     }
 })
+
+test_that("a potts interval with no anchor at all is NaN, potts.count included", {
+    # Two situations that look alike and are not:
+    #
+    #   anchors exist, none of them scorable (an all-N assembly gap) - the scan
+    #     ran and found nothing, so potts.count is 0 and the other three NaN;
+    #   no anchor exists at all - nothing to count, so all four are NaN.
+    #
+    # The second row is reached at every chromosome end with the DEFAULT
+    # extend = TRUE, not only through the narrow-interval-with-extend = FALSE
+    # route the docs used to name: extend pads the fetch by W - 1, that padding
+    # is clipped at the contig boundary, and the target then comes back shorter
+    # than the model. potts.count answered 0 there, so every chromosome edge
+    # read as a real count of zero.
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    W <- 6L
+    m <- potts_ref_model(W = W, npair_mode = "full", seed = 163L)
+    funcs <- c("potts", "potts.max", "potts.max.pos", "potts.count")
+
+    chrom_end <- gintervals.all()
+    chrom_end <- chrom_end$end[chrom_end$chrom == "chr20"]
+
+    # 3 bp, so narrower than the model. At the chromosome end extend has
+    # nowhere to pad and the fetch is short; 1 kb inside, the same 3 bp gets
+    # its full W - 1 of padding and scores. The contrast is what shows the
+    # answer comes from the clipped fetch and not merely from a narrow
+    # interval.
+    edge <- gintervals(20, chrom_end - 3L, chrom_end)
+    inner <- gintervals(20, chrom_end - 1000L, chrom_end - 997L)
+    skip_if_not(
+        grepl("^[ACGT]+$", toupper(gseq.extract(gintervals(20, chrom_end - 1000L, chrom_end)))),
+        "chr20 does not end in clean sequence in this fixture"
+    )
+
+    # all-N: chr20 opens with an assembly gap
+    gap <- gintervals(20, 0, 200)
+    skip_if_not(
+        grepl("^N+$", toupper(gseq.extract(gap))),
+        "no all-N interval at the start of chr20 in this fixture"
+    )
+
+    for (fn in funcs) {
+        remove_all_vtracks()
+        gvtrack.create("t", NULL, fn, params = c(m, list(extend = TRUE, score.thresh = 0)))
+
+        # the 3 bp interval is scorable away from the boundary, so what makes
+        # the edge unscorable is the clipped fetch
+        expect_false(is.na(gextract("t", inner, iterator = inner)$t), info = paste("inner", fn))
+
+        # no anchor at all -> NaN for all four
+        expect_true(is.na(gextract("t", edge, iterator = edge)$t), info = paste("edge", fn))
+
+        # anchors exist, none scorable -> 0 for the count, NaN for the rest
+        got_gap <- gextract("t", gap, iterator = gap)$t
+        if (fn == "potts.count") {
+            expect_equal(got_gap, 0, info = paste("gap", fn))
+        } else {
+            expect_true(is.na(got_gap), info = paste("gap", fn))
+        }
+    }
+})
