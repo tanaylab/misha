@@ -289,6 +289,55 @@
     result
 }
 
+#' Validate and process potts function parameters
+#'
+#' The allowlist is deliberately wider than the parameters this family uses:
+#' `width`, `pair_strength`, `attr` and `link` are accepted and ignored so that
+#' a fitted motifmodel `Potts` - whose fields are exactly `e`, `J`, `pairs`,
+#' `pair_strength`, `width`, `intercept`, `attr`, `link` - can be handed over
+#' verbatim as `params`, with no motifmodel dependency here and no subsetting
+#' at the call site. `.coerce_potts_model()` cross-checks `width` against
+#' `nrow(e)` when it is present.
+#' @noRd
+.vtrack_params_potts <- function(func, params, dots) {
+    if (!is.null(params)) {
+        if (!is.list(params) || !("e" %in% names(params))) {
+            stop("potts functions require a list with at least an 'e' matrix parameter", call. = FALSE)
+        }
+        dots <- params
+    }
+
+    .vtrack_check_unknown_params(func, dots, c(
+        "e", "J", "pairs", "intercept", "bidirect", "extend", "strand",
+        "score.thresh", "width", "pair_strength", "attr", "link"
+    ))
+
+    if (!("e" %in% names(dots))) {
+        stop("potts functions require an 'e' matrix parameter", call. = FALSE)
+    }
+
+    # Same contract as pwm.count: a Potts score is an energy whose usable range
+    # depends entirely on the model, so no default suits every one.
+    if (identical(func, "potts.count") && is.null(dots$score.thresh)) {
+        stop("potts.count requires a 'score.thresh' parameter. A Potts score is an energy, so there is no default that suits every model - pick a threshold from the score distribution of your own model, e.g. with a 'potts' or 'potts.max' virtual track.", call. = FALSE)
+    }
+
+    score.thresh <- if (!is.null(dots$score.thresh)) dots$score.thresh else 0
+    if (identical(func, "potts.count")) {
+        score.thresh <- .coerce_score_thresh(score.thresh)
+    }
+
+    # .potts_params() is the same builder gseq.potts() uses, so the two entry
+    # points cannot drift on validation or on the list's shape.
+    .potts_params(dots,
+        bidirect = if (!is.null(dots$bidirect)) dots$bidirect else TRUE,
+        extend = if (!is.null(dots$extend)) dots$extend else TRUE,
+        strand = if (!is.null(dots$strand)) dots$strand else 1,
+        score.thresh = score.thresh,
+        what = sprintf("virtual track function '%s'", func)
+    )
+}
+
 #' Validate and process kmer function parameters
 #' @noRd
 .vtrack_params_kmer <- function(func, params, dots) {
@@ -662,6 +711,10 @@
     pwm.max = .vtrack_params_pwm,
     pwm.max.pos = .vtrack_params_pwm,
     pwm.count = .vtrack_params_pwm,
+    potts = .vtrack_params_potts,
+    potts.max = .vtrack_params_potts,
+    potts.max.pos = .vtrack_params_potts,
+    potts.count = .vtrack_params_potts,
     kmer.count = .vtrack_params_kmer,
     kmer.frac = .vtrack_params_kmer,
     masked.count = .vtrack_params_masked,
@@ -678,6 +731,7 @@
 # Functions that don't require a source track
 .VTRACK_SOURCELESS_FUNCS <- c(
     "pwm", "pwm.max", "pwm.max.pos", "pwm.count",
+    "potts", "potts.max", "potts.max.pos", "potts.count",
     "kmer.count", "kmer.frac",
     "masked.count", "masked.frac",
     "pwm.edit_distance", "pwm.edit_distance.pos", "pwm.max.edit_distance",
