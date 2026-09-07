@@ -171,12 +171,17 @@ test_that("potts.count counts the anchors at or above its threshold", {
     srt <- sort(a_lse)
     n <- length(srt)
 
-    # A threshold anywhere near an anchor's own score is not a testable
-    # quantity: under bidirect a window and its reverse complement share a
-    # score exactly, and the two implementations round that shared value
-    # independently, so an anchor sitting ON the threshold lands either side of
-    # it. Threshold in the widest gap of the upper tail instead, and assert the
-    # gap is wide enough that no rounding can cross it.
+    # DO NOT replace this with quantile(a_lse, 0.9): a threshold at or near an
+    # anchor's own score is not a testable quantity here. Under bidirect a
+    # window and its reverse complement produce the same two per-strand numbers
+    # swapped, so their unions are mathematically identical - and that holds for
+    # the LOG-SUM-EXP union too, not only the maximum. a_lse therefore contains
+    # exactly tied values, C++ and R round each tie independently, and an anchor
+    # sitting ON the threshold lands either side of it: measured with a
+    # quantile-derived threshold, R counted 21 of 200 anchors and C++ 19.
+    # Threshold in the widest gap of the upper tail instead, assert the gap is
+    # wide enough that no rounding can cross it, and pin both ends exactly
+    # below.
     idx <- seq.int(floor(0.8 * n), n - 1L)
     j <- idx[which.max(srt[idx + 1L] - srt[idx])]
     th <- (srt[j] + srt[j + 1L]) / 2
@@ -275,4 +280,70 @@ test_that("a potts vtrack honours gvtrack.iterator shifts", {
 
     expect_equal(shifted$s_lse, plain$p_lse, tolerance = 1e-6)
     expect_false(isTRUE(all.equal(shifted$s_lse, shifted$p_lse)))
+})
+
+test_that("a bidirect potts vtrack ignores strand", {
+    remove_all_vtracks()
+    W <- 6L
+    m <- potts_ref_model(W = W, npair_mode = "full", seed = 113L)
+
+    all_chroms <- gintervals.all()
+    chr21_end <- all_chroms$end[all_chroms$chrom == "chr21"]
+
+    # Both intervals sit exactly where the two scan orders diverge: chr1 opens
+    # with a TAACCC repeat, so many anchors tie to the last bit, and chr21's
+    # tail has the end-only extension fully clipped by the chromosome end.
+    #
+    # `strand` cannot change WHICH anchors a bidirect scan covers - the range is
+    # [0, tlen - W] in either orientation and maps onto the same genomic
+    # windows - so potts, potts.max and potts.count agreed even before
+    # .potts_params() clamped strand. potts.max.pos did not: strand = -1 fetches
+    # the reverse-complemented target, walks the same anchors in the opposite
+    # order, and first-wins tie-breaking then keeps a different, equally
+    # maximal, one. Measured before the clamp: 2 vs 56 here, 9 vs 21 on the
+    # chr21 tail, both pairs verified as exactly tied maximisers.
+    ivs <- list(
+        chr1_start = gintervals(1, 0, 60),
+        chr21_tail = gintervals(21, chr21_end - 30, chr21_end)
+    )
+    funcs <- c("potts", "potts.max", "potts.max.pos", "potts.count")
+
+    for (nm in names(ivs)) {
+        iv <- ivs[[nm]]
+        # A mid-range threshold, so potts.count cannot agree by saturating
+        th <- stats::median(
+            potts_ref_anchors(toupper(gseq.extract(iv)), m, bidirect = TRUE, union = "lse")
+        )
+
+        for (ext in c(TRUE, FALSE)) {
+            remove_all_vtracks()
+            base <- c(m, list(bidirect = TRUE, extend = ext, score.thresh = th))
+            for (f in funcs) {
+                gvtrack.create(paste0("p_", make.names(f)), NULL, f,
+                    params = c(base, list(strand = 1))
+                )
+                gvtrack.create(paste0("m_", make.names(f)), NULL, f,
+                    params = c(base, list(strand = -1))
+                )
+            }
+
+            got <- gextract(
+                c(paste0("p_", make.names(funcs)), paste0("m_", make.names(funcs))),
+                iv,
+                iterator = iv
+            )
+            for (f in funcs) {
+                info <- paste(nm, "extend", ext, f)
+                expect_identical(
+                    got[[paste0("p_", make.names(f))]],
+                    got[[paste0("m_", make.names(f))]],
+                    info = info
+                )
+            }
+            # not vacuous: a real count, and a real position
+            expect_gt(got$p_potts.count, 0)
+            expect_lt(got$p_potts.count, iv$end - iv$start)
+            expect_gt(abs(got$p_potts.max.pos), 0)
+        }
+    }
 })

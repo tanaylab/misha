@@ -154,6 +154,19 @@
         stop(sprintf("%s: score.thresh must be a single number", what), call. = FALSE)
     }
 
+    # Under bidirect both strands are scored at every anchor, so `strand` cannot
+    # change which anchors are scored or what any of them scores. All it changes
+    # is the orientation the scan target is fetched in, and hence the ORDER the
+    # anchors are visited in - and the *.pos functions break an exact tie by
+    # keeping the first anchor they see. So an unclamped strand = -1 reports a
+    # different, equally maximal, position for the same interval wherever two
+    # anchors tie, which a repeat region supplies readily. Clamped here rather
+    # than at either entry point so both get it: the pwm family clamps the same
+    # combination, for the same reason.
+    if (bidirect) {
+        strand <- 1L
+    }
+
     list(
         e = p$e,
         J = p$J,
