@@ -159,4 +159,63 @@ SEXP C_gseq_potts(SEXP r_seqs, SEXP r_params, SEXP r_mode, SEXP r_envir)
     return R_NilValue;
 }
 
+// Test-only entry point behind gseq.potts()'s equivalence test
+// (test-potts.R): scores every column of an integer W x N code matrix
+// (values 0..3, one window per column - R's column-major layout puts each
+// window's W codes contiguously) with BOTH PottsModel kernels and returns
+// them side by side, so the test can assert score_codes_naive() and
+// score_codes_blocked() agree without going through a DNA string at all.
+// Not reachable from any exported R function.
+SEXP C_potts_score_codes_cmp(SEXP r_params, SEXP r_codes)
+{
+    try {
+        RdbInitializer rdb_init;
+
+        const PottsParams pp = PottsParams::parse(r_params, "potts kernel equivalence check");
+        const PottsModel &model = pp.model;
+
+        if (!Rf_isMatrix(r_codes) || !Rf_isInteger(r_codes))
+            verror("codes must be an integer matrix");
+        SEXP dim = Rf_getAttrib(r_codes, R_DimSymbol);
+        const int W = INTEGER(dim)[0];
+        const int n = INTEGER(dim)[1];
+        if (W != model.width())
+            verror("codes matrix has %d rows but the model width is %d", W, model.width());
+
+        const int *codes = INTEGER(r_codes);
+
+        SEXP r_naive = rprotect_ptr(RSaneAllocVector(REALSXP, n));
+        SEXP r_blocked = rprotect_ptr(RSaneAllocVector(REALSXP, n));
+        double *naive = REAL(r_naive);
+        double *blocked = REAL(r_blocked);
+
+        vector<int8_t> win((size_t)W);
+        for (int i = 0; i < n; ++i) {
+            check_interrupt();
+            const int *col = codes + (size_t)i * W;
+            for (int j = 0; j < W; ++j)
+                win[j] = (int8_t)col[j];
+            naive[i] = model.score_codes_naive(win.data());
+            blocked[i] = model.score_codes_blocked(win.data());
+        }
+
+        SEXP res = rprotect_ptr(RSaneAllocVector(VECSXP, 2));
+        SET_VECTOR_ELT(res, 0, r_naive);
+        SET_VECTOR_ELT(res, 1, r_blocked);
+        SEXP names = rprotect_ptr(RSaneAllocVector(STRSXP, 2));
+        SET_STRING_ELT(names, 0, Rf_mkChar("naive"));
+        SET_STRING_ELT(names, 1, Rf_mkChar("blocked"));
+        Rf_setAttrib(res, R_NamesSymbol, names);
+
+        runprotect(4);
+        return res;
+    } catch (TGLException &e) {
+        rerror("Error in C_potts_score_codes_cmp: %s", e.msg());
+    } catch (const std::exception &e) {
+        rerror("Error in C_potts_score_codes_cmp: %s", e.what());
+    }
+    rerror("Unknown error in C_potts_score_codes_cmp");
+    return R_NilValue;
+}
+
 } // extern "C"
