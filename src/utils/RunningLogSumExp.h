@@ -10,6 +10,16 @@
 // Numerically stable via max-trick and single rescaling when max changes.
 // Includes periodic recomputation to prevent numerical drift over very long runs.
 struct RunningLogSumExp {
+    // exp(x - M), with the x == M == -inf case contributing nothing instead of
+    // exp(-inf + inf) == NaN. A NaN in sum_scaled is invisible while M stays
+    // -inf, because value() short-circuits on a non-finite maximum, and then
+    // surfaces on the first finite push - so a window that is entirely
+    // unscorable and then gains a real value reports NaN for the rest of its
+    // life. util.h's float log_sum_log() guards the same case.
+    static double scaled_contrib(float x, double M) {
+        return std::isfinite(M) ? std::exp(double(x) - M) : 0.0;
+    }
+
     double M = -std::numeric_limits<double>::infinity(); // current max
     double sum_scaled = 0.0;                              // sum exp(x - M)
     std::deque<float> window;                             // raw values (ℓ_i)
@@ -36,7 +46,7 @@ struct RunningLogSumExp {
         for (float v : vals) if (v > M) M = v;
         // Build sum_scaled and maxdq
         for (float v : vals) {
-            sum_scaled += std::exp(double(v) - M);
+            sum_scaled += scaled_contrib(v, M);
             while (!maxdq.empty() && maxdq.back() < v) maxdq.pop_back();
             maxdq.push_back(v);
             window.push_back(v);
@@ -57,7 +67,7 @@ struct RunningLogSumExp {
         // Recompute sum_scaled
         sum_scaled = 0.0;
         for (float v : window) {
-            sum_scaled += std::exp(double(v) - M);
+            sum_scaled += scaled_contrib(v, M);
         }
 
         // Rebuild maxdq
@@ -82,7 +92,7 @@ struct RunningLogSumExp {
             if (std::isfinite(M)) sum_scaled *= std::exp(M - double(x));
             M = x;
         }
-        sum_scaled += std::exp(double(x) - M);
+        sum_scaled += scaled_contrib(x, M);
         while (!maxdq.empty() && maxdq.back() < x) maxdq.pop_back();
         maxdq.push_back(x);
         window.push_back(x);
@@ -127,7 +137,7 @@ struct RunningLogSumExp {
                 }
                 sum_scaled = 0.0;
                 for (float v : window) {
-                    sum_scaled += std::exp(double(v) - M);
+                    sum_scaled += scaled_contrib(v, M);
                     while (!maxdq.empty() && maxdq.back() < v) maxdq.pop_back();
                     maxdq.push_back(v);
                 }
@@ -159,7 +169,7 @@ struct RunningLogSumExp {
             if (std::isfinite(M)) sum_scaled *= std::exp(M - double(x));
             M = x;
         }
-        sum_scaled += std::exp(double(x) - M);
+        sum_scaled += scaled_contrib(x, M);
 
         // Rebuild maxdq to maintain invariant
         // This is O(n) but necessary since we're adding at the front

@@ -1461,3 +1461,46 @@ test_that("misha PWM with sliding without spatial matches prego reference", {
     expect_false(any(is.na(misha_result$pwm_sliding_no_spatial)))
     expect_true(all(is.finite(misha_result$pwm_sliding_no_spatial)))
 })
+
+# RunningLogSumExp::push(-Inf) into a window whose running maximum is already
+# -inf used to evaluate exp(-inf + inf) into its scaled sum, and the resulting
+# NaN then surfaced on the first finite push. A zero prior gives a PSSM with
+# hard zeros a per-anchor score of -Inf, so a sliding window that steps over a
+# stretch with no scorable anchor and then reaches one hits exactly that.
+# misha's own callers never returned the NaN to the user - the pwm slide reads
+# NaN as "sliding failed" and re-seeds from scratch, so the numbers below were
+# already right, at the cost of silently losing the optimization - which is why
+# this locks the values rather than the mechanism.
+test_that("pwm with prior = 0 slides across an unscorable stretch without NaN", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    pssm <- create_test_pssm() # hard zeros: every non-"AC" window scores -Inf
+    motif_len <- nrow(pssm)
+
+    gvtrack.create("pwm_zero_prior_slide", NULL, "pwm",
+        pssm = pssm, bidirect = FALSE, strand = 1,
+        extend = TRUE, prior = 0
+    )
+
+    scope <- gintervals(1, 1000, 1300)
+    res <- gextract("pwm_zero_prior_slide", scope, iterator = 3)
+
+    manual <- vapply(seq_len(nrow(res)), function(idx) {
+        ext_iv <- res[idx, c("chrom", "start", "end")]
+        ext_iv$end <- ext_iv$end + motif_len - 1L
+        span_len <- res$end[idx] - res$start[idx]
+        scores <- manual_pwm_scores_single_strand(
+            toupper(gseq.extract(ext_iv)), pssm,
+            prior = 0
+        )
+        log_sum_exp(scores[seq_len(span_len)])
+    }, numeric(1))
+
+    # the geometry must actually contain both kinds of bin, or nothing is tested
+    expect_true(any(is.infinite(manual)))
+    expect_true(any(is.finite(manual)))
+
+    expect_false(any(is.nan(res$pwm_zero_prior_slide)))
+    expect_equal(res$pwm_zero_prior_slide, manual, tolerance = 1e-6)
+})
