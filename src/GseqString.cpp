@@ -305,14 +305,25 @@ static ScoreResult score_pwm_over_range(
                     total = log_sum_exp_add(total, this_score);
                 }
             } else if (pwm_mode == PWM_MAX) {
-                double this_max = std::max(fwd_score, rev_score);
-                if (this_max > best_score) {
-                    best_score = this_max;
+                // Under bidirect the two strands are two readings of the same
+                // anchor, so they are combined by log-sum-exp before the
+                // maximum over anchors - the union the pwm.max virtual track
+                // takes. PWM_POS below still maximises across the strands,
+                // because it has to name one; that asymmetry is the pwm
+                // family's own (pwm.max combines, pwm.max.pos does not).
+                double this_score = params.bidirect
+                                        ? log_sum_exp_add(fwd_score, rev_score)
+                                        : std::max(fwd_score, rev_score);
+                if (this_score > best_score) {
+                    best_score = this_score;
                 }
             } else if (pwm_mode == PWM_COUNT) {
                 if (params.bidirect) {
-                    if (fwd_score >= params.score_thresh) count++;
-                    if (rev_score >= params.score_thresh) count++;
+                    // One anchor is at most one hit: the strands are combined
+                    // before the threshold rather than thresholded apart, so a
+                    // window whose reverse complement also matches is not
+                    // counted twice. Same union as the pwm.count virtual track.
+                    if (log_sum_exp_add(fwd_score, rev_score) >= params.score_thresh) count++;
                 } else {
                     double one = (params.strand_mode >= 0) ? fwd_score : rev_score;
                     if (one >= params.score_thresh) count++;
@@ -428,14 +439,25 @@ static ScoreResult score_pwm_over_range(
                     total = log_sum_exp_add(total, this_score);
                 }
             } else if (pwm_mode == PWM_MAX) {
-                double this_max = std::max(fwd_score, rev_score);
-                if (this_max > best_score) {
-                    best_score = this_max;
+                // Under bidirect the two strands are two readings of the same
+                // anchor, so they are combined by log-sum-exp before the
+                // maximum over anchors - the union the pwm.max virtual track
+                // takes. PWM_POS below still maximises across the strands,
+                // because it has to name one; that asymmetry is the pwm
+                // family's own (pwm.max combines, pwm.max.pos does not).
+                double this_score = params.bidirect
+                                        ? log_sum_exp_add(fwd_score, rev_score)
+                                        : std::max(fwd_score, rev_score);
+                if (this_score > best_score) {
+                    best_score = this_score;
                 }
             } else if (pwm_mode == PWM_COUNT) {
                 if (params.bidirect) {
-                    if (fwd_score >= params.score_thresh) count++;
-                    if (rev_score >= params.score_thresh) count++;
+                    // One anchor is at most one hit: the strands are combined
+                    // before the threshold rather than thresholded apart, so a
+                    // window whose reverse complement also matches is not
+                    // counted twice. Same union as the pwm.count virtual track.
+                    if (log_sum_exp_add(fwd_score, rev_score) >= params.score_thresh) count++;
                 } else {
                     double one = (params.strand_mode >= 0) ? fwd_score : rev_score;
                     if (one >= params.score_thresh) count++;

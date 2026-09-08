@@ -33,8 +33,8 @@ number of windows scoring at least \code{score.thresh}.}
 \item{bidirect}{if \code{TRUE} (default) both strands are read. The two
 strands are combined at each window by log-sum-exp for \code{"lse"},
 \code{"max"} and \code{"count"}, and by the maximum for \code{"pos"},
-which has to name a strand - see above for how \code{"max"} compares to
-\code{\link{gseq.pwm}}.}
+which has to name a strand. \code{\link{gseq.pwm}} splits the two the
+same way.}
 
 \item{strand}{used only when \code{bidirect = FALSE}: \code{1} for the
 forward strand, \code{-1} for the reverse.}
@@ -68,10 +68,8 @@ the model, or \code{NA}, returns \code{NA} for every mode including
 
 Under \code{bidirect = TRUE}, \code{mode = "max"} combines the two strands
 at each window by log-sum-exp, matching the \code{potts} and
-\code{potts.max} virtual tracks. This differs from
-\code{\link{gseq.pwm}} with \code{mode = "max"}, which combines the two
-strands by taking the maximum instead - the two functions are not
-directly comparable on that mode.
+\code{potts.max} virtual tracks - and \code{\link{gseq.pwm}} with
+\code{mode = "max"}, which combines them the same way.
 }
 \examples{
 e <- matrix(c(

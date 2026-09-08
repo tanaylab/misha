@@ -189,11 +189,27 @@ gseq.comp <- function(seq) {
 #' Neutral characters (\code{neutral_chars}, default \code{c("N", "n", "*")}) are treated as
 #' unknown bases in both orientations. Each neutral contributes the mean log-probability of the
 #' corresponding PSSM column, yielding identical penalties on forward and reverse strands without
-#' hard-coded background scores. In \code{mode = "max"} the reported value is the single best
-#' strand score after applying any spatial weights; forward and reverse contributions are not
-#' aggregated. This matches the \code{pwm.max.pos} virtual track's strand handling, but differs
-#' from the \code{pwm.max} virtual track, which log-sum-exps the two strands at each anchor
-#' instead of taking their maximum - the two can differ by up to \code{log 2} on the same input.
+#' hard-coded background scores.
+#'
+#' Under \code{bidirect = TRUE} the forward and reverse-complement matches are
+#' two readings of the same window, and every mode but \code{"pos"} combines
+#' them at each window by log-sum-exp, after any spatial weights are applied:
+#' \code{"lse"} then log-sum-exps those unions across the windows, \code{"max"}
+#' takes the largest of them, and \code{"count"} thresholds each one once, so a
+#' window is at most a single hit however well its reverse complement matches it.
+#' That is the same union the \code{pwm}, \code{pwm.max} and \code{pwm.count}
+#' virtual tracks take, and over the same windows \code{gseq.pwm()} agrees with
+#' them to the precision the two share - the virtual tracks accumulate in single
+#' precision and \code{gseq.pwm()} in double, so expect agreement to about
+#' \code{1e-5} relative, not to the last bit. \code{mode = "pos"} instead takes
+#' the better of the two strands, because it has to name one - what the
+#' \code{pwm.max.pos} virtual track does - so \code{"max"} and \code{"pos"} can
+#' select different windows, and the value from \code{"max"} is not necessarily
+#' the score at the position from \code{"pos"}. The asymmetry is the \code{pwm} family's own
+#' (\code{pwm.max} combines the strands, \code{pwm.max.pos} does not) and is
+#' mirrored here rather than fixed on one side. With \code{bidirect = FALSE}
+#' only the strand named by \code{strand} is read and there is nothing to
+#' combine.
 #'
 #' @seealso \code{\link{gvtrack.create}} for detailed PWM parameter documentation
 #'
@@ -421,10 +437,8 @@ gseq.pwm <- function(seqs,
 #'
 #' Under \code{bidirect = TRUE}, \code{mode = "max"} combines the two strands
 #' at each window by log-sum-exp, matching the \code{potts} and
-#' \code{potts.max} virtual tracks. This differs from
-#' \code{\link{gseq.pwm}} with \code{mode = "max"}, which combines the two
-#' strands by taking the maximum instead - the two functions are not
-#' directly comparable on that mode.
+#' \code{potts.max} virtual tracks - and \code{\link{gseq.pwm}} with
+#' \code{mode = "max"}, which combines them the same way.
 #'
 #' @param seqs character vector of sequences (case-insensitive).
 #' @param model the energy model: a list with \code{e} (a \code{W x 4} numeric
@@ -441,8 +455,8 @@ gseq.pwm <- function(seqs,
 #' @param bidirect if \code{TRUE} (default) both strands are read. The two
 #'   strands are combined at each window by log-sum-exp for \code{"lse"},
 #'   \code{"max"} and \code{"count"}, and by the maximum for \code{"pos"},
-#'   which has to name a strand - see above for how \code{"max"} compares to
-#'   \code{\link{gseq.pwm}}.
+#'   which has to name a strand. \code{\link{gseq.pwm}} splits the two the
+#'   same way.
 #' @param strand used only when \code{bidirect = FALSE}: \code{1} for the
 #'   forward strand, \code{-1} for the reverse.
 #' @param score.thresh required for \code{mode = "count"} and ignored
