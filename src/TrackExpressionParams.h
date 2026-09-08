@@ -33,6 +33,7 @@
 #include "DnaPSSM.h"
 #include "PWMScorer.h"
 #include "PwmCoreParams.h"
+#include "PottsParams.h"   // the one SEXP -> PottsModel conversion
 #include "rdbutils.h"
 
 using namespace std;

@@ -1,5 +1,5 @@
-# Regression tests for the medium-severity 2026-06-28 audit fixes.
-# See dev/notes/2026-06-28_full-audit.md (M1-M11).
+# Regression tests for the medium-severity findings of the 2026-06-28 full
+# source audit, named in the test titles below.
 # M1/M3/M4 (C++ OOB/defensive) are exercised by the liftover/autocorr/gextract
 # suites. M5 (gtrack.convert registration) has no runnable trigger here - it
 # needs a genuinely old-format track, and every fixture reports "does not require

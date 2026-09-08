@@ -149,6 +149,7 @@ reference:
       - gseq.extract
       - gseq.pwm
       - gseq.pwm_edits
+      - gseq.potts
       - gseq.kmer
       - gseq.kmer.dist
       - gseq.revcomp

@@ -101,10 +101,27 @@ as 1-based indices on the original full sequence (including gaps). \code{start_p
 Neutral characters (\code{neutral_chars}, default \code{c("N", "n", "*")}) are treated as
 unknown bases in both orientations. Each neutral contributes the mean log-probability of the
 corresponding PSSM column, yielding identical penalties on forward and reverse strands without
-hard-coded background scores. In \code{mode = "max"} the reported value is the single best
-strand score after applying any spatial weights; forward and reverse contributions are not
-aggregated. This matches the default behavior of the PWM virtual tracks (\code{pwm.max},
-\code{pwm.max.pos}, etc.).
+hard-coded background scores.
+
+Under \code{bidirect = TRUE} the forward and reverse-complement matches are
+two readings of the same window, and every mode but \code{"pos"} combines
+them at each window by log-sum-exp, after any spatial weights are applied:
+\code{"lse"} then log-sum-exps those unions across the windows, \code{"max"}
+takes the largest of them, and \code{"count"} thresholds each one once, so a
+window is at most a single hit however well its reverse complement matches it.
+That is the same union the \code{pwm}, \code{pwm.max} and \code{pwm.count}
+virtual tracks take, and over the same windows \code{gseq.pwm()} agrees with
+them to the precision the two share - the virtual tracks accumulate in single
+precision and \code{gseq.pwm()} in double, so expect agreement to about
+\code{1e-5} relative, not to the last bit. \code{mode = "pos"} instead takes
+the better of the two strands, because it has to name one - what the
+\code{pwm.max.pos} virtual track does - so \code{"max"} and \code{"pos"} can
+select different windows, and the value from \code{"max"} is not necessarily
+the score at the position from \code{"pos"}. The asymmetry is the \code{pwm} family's own
+(\code{pwm.max} combines the strands, \code{pwm.max.pos} does not) and is
+mirrored here rather than fixed on one side. With \code{bidirect = FALSE}
+only the strand named by \code{strand} is read and there is nothing to
+combine.
 }
 \examples{
 \dontrun{

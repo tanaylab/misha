@@ -67,7 +67,10 @@ const char *TrackExpressionVars::Track_var::FUNC_NAMES[TrackExpressionVars::Trac
     "first", "first.pos.abs", "first.pos.relative", "last", "last.pos.abs", "last.pos.relative",
     "pwm.edit_distance", "pwm.edit_distance.pos", "pwm.max.edit_distance",
     "pwm.edit_distance.lse", "pwm.edit_distance.lse.pos",
-    "pwm.n_mutations"};
+    "pwm.n_mutations",
+    // Indexed by Track_var::Val_func, so these stay in enum order and stay
+    // LAST - see the note on the enum itself.
+    "potts", "potts.max", "potts.max.pos", "potts.count"};
 
 const char *TrackExpressionVars::Interv_var::FUNC_NAMES[TrackExpressionVars::Interv_var::NUM_FUNCS] = { "distance", "distance.center", "distance.edge", "coverage", "neighbor.count" };
 
@@ -876,6 +879,53 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
             );
 
             // Parse optional iterator modifier
+            Iterator_modifier1D imdf1d;
+            parse_imdf(rvtrack, vtrack, &imdf1d, NULL);
+            var.seq_imdf1d = add_imdf(imdf1d);
+
+            var.percentile = numeric_limits<double>::quiet_NaN();
+            var.requires_pv = false;
+
+            // Attach filter if present
+            attach_filter_to_var(rvtrack, vtrack, var);
+            return;
+        } else if (func == "potts" || func == "potts.max" ||
+                   func == "potts.max.pos" || func == "potts.count") {
+            // Create the Track_var without a Track_n_imdf
+            m_track_vars.push_back(Track_var());
+            Track_var &var = m_track_vars.back();
+            var.var_name = vtrack;
+            var.val_func = (func == "potts" ? Track_var::POTTS :
+                            func == "potts.max" ? Track_var::POTTS_MAX :
+                            func == "potts.max.pos" ? Track_var::POTTS_MAX_POS :
+                            Track_var::POTTS_COUNT);
+            // Load-bearing, not cosmetic: register_track_functions() and the
+            // iterator checks in init() dereference track_n_imdf and are only
+            // safe here because they filter sequence-based funcs out first.
+            var.track_n_imdf = nullptr;  // No track needed for potts
+            var.seq_imdf1d = nullptr;
+
+            SEXP rparams = get_rvector_col(rvtrack, "params", vtrack.c_str(), false);
+
+            // The same parser C_gseq_potts uses, so a potts vtrack and
+            // gseq.potts cannot disagree about what a model means.
+            PottsParams potts_params = PottsParams::parse(rparams, vtrack);
+
+            // Construct scorer with shared sequence fetcher for caching
+            var.potts_scorer = std::make_unique<PottsScorer>(
+                potts_params.model,
+                &m_shared_seqfetch,
+                potts_params.extend_flag,
+                func == "potts" ? PottsScorer::TOTAL_LIKELIHOOD :
+                func == "potts.max" ? PottsScorer::MAX_LIKELIHOOD :
+                func == "potts.max.pos" ? PottsScorer::MAX_LIKELIHOOD_POS :
+                PottsScorer::MOTIF_COUNT,
+                potts_params.bidirect,
+                potts_params.strand_mode,
+                potts_params.score_thresh
+            );
+
+            // Parse optional iterator modifier (sshift/eshift) for sequence-based vtracks
             Iterator_modifier1D imdf1d;
             parse_imdf(rvtrack, vtrack, &imdf1d, NULL);
             var.seq_imdf1d = add_imdf(imdf1d);
@@ -1983,6 +2033,13 @@ void TrackExpressionVars::start_chrom(const GInterval &interval)
 			ivar->pwm_scorer->invalidate_cache();
 		}
 	}
+
+	// Invalidate Potts scorer caches on chromosome change
+	for (Track_vars::iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ++ivar) {
+		if (ivar->potts_scorer) {
+			ivar->potts_scorer->invalidate_cache();
+		}
+	}
 }
 
 void TrackExpressionVars::start_chrom(const GInterval2D &interval)
@@ -2102,6 +2159,13 @@ void TrackExpressionVars::start_chrom(const GInterval2D &interval)
 	for (Track_vars::iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ++ivar) {
 		if (ivar->pwm_scorer) {
 			ivar->pwm_scorer->invalidate_cache();
+		}
+	}
+
+	// Invalidate Potts scorer caches on chromosome change
+	for (Track_vars::iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ++ivar) {
+		if (ivar->potts_scorer) {
+			ivar->potts_scorer->invalidate_cache();
 		}
 	}
 }

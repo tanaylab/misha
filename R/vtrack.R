@@ -289,6 +289,55 @@
     result
 }
 
+#' Validate and process potts function parameters
+#'
+#' The allowlist is deliberately wider than the parameters this family uses:
+#' `width`, `pair_strength`, `attr` and `link` are accepted and ignored so that
+#' a fitted Potts model - whose fields are exactly `e`, `J`, `pairs`,
+#' `pair_strength`, `width`, `intercept`, `attr`, `link` - can be handed over
+#' verbatim as `params`, with no extra dependency here and no subsetting
+#' at the call site. `.coerce_potts_model()` cross-checks `width` against
+#' `nrow(e)` when it is present.
+#' @noRd
+.vtrack_params_potts <- function(func, params, dots) {
+    if (!is.null(params)) {
+        if (!is.list(params) || !("e" %in% names(params))) {
+            stop("potts functions require a list with at least an 'e' matrix parameter", call. = FALSE)
+        }
+        dots <- params
+    }
+
+    .vtrack_check_unknown_params(func, dots, c(
+        "e", "J", "pairs", "intercept", "bidirect", "extend", "strand",
+        "score.thresh", "width", "pair_strength", "attr", "link"
+    ))
+
+    if (!("e" %in% names(dots))) {
+        stop("potts functions require an 'e' matrix parameter", call. = FALSE)
+    }
+
+    # Same contract as pwm.count: a Potts score is an energy whose usable range
+    # depends entirely on the model, so no default suits every one.
+    if (identical(func, "potts.count") && is.null(dots$score.thresh)) {
+        stop("potts.count requires a 'score.thresh' parameter. A Potts score is an energy, so there is no default that suits every model - pick a threshold from the score distribution of your own model, e.g. with a 'potts' or 'potts.max' virtual track.", call. = FALSE)
+    }
+
+    score.thresh <- if (!is.null(dots$score.thresh)) dots$score.thresh else 0
+    if (identical(func, "potts.count")) {
+        score.thresh <- .coerce_score_thresh(score.thresh)
+    }
+
+    # .potts_params() is the same builder gseq.potts() uses, so the two entry
+    # points cannot drift on validation or on the list's shape.
+    .potts_params(dots,
+        bidirect = if (!is.null(dots$bidirect)) dots$bidirect else TRUE,
+        extend = if (!is.null(dots$extend)) dots$extend else TRUE,
+        strand = if (!is.null(dots$strand)) dots$strand else 1,
+        score.thresh = score.thresh,
+        what = sprintf("virtual track function '%s'", func)
+    )
+}
+
 #' Validate and process kmer function parameters
 #' @noRd
 .vtrack_params_kmer <- function(func, params, dots) {
@@ -662,6 +711,10 @@
     pwm.max = .vtrack_params_pwm,
     pwm.max.pos = .vtrack_params_pwm,
     pwm.count = .vtrack_params_pwm,
+    potts = .vtrack_params_potts,
+    potts.max = .vtrack_params_potts,
+    potts.max.pos = .vtrack_params_potts,
+    potts.count = .vtrack_params_potts,
     kmer.count = .vtrack_params_kmer,
     kmer.frac = .vtrack_params_kmer,
     masked.count = .vtrack_params_masked,
@@ -678,6 +731,7 @@
 # Functions that don't require a source track
 .VTRACK_SOURCELESS_FUNCS <- c(
     "pwm", "pwm.max", "pwm.max.pos", "pwm.count",
+    "potts", "potts.max", "potts.max.pos", "potts.count",
     "kmer.count", "kmer.frac",
     "masked.count", "masked.frac",
     "pwm.edit_distance", "pwm.edit_distance.pos", "pwm.max.edit_distance",
@@ -776,6 +830,15 @@
 #'   NULL (sequence) \tab pwm.count \tab pssm, score.thresh (required), bidirect, prior, extend, strand, spat_* \tab Count of anchors scoring >= \code{score.thresh} (per-position union). \cr
 #' }
 #'
+#' \strong{Potts (pairwise energy) summarizers}
+#' \tabular{llll}{
+#'   Source \tab func \tab Key params \tab Description \cr
+#'   NULL (sequence) \tab potts \tab e, J, pairs, intercept, bidirect, extend, strand \tab Log-sum-exp of the pairwise-energy score over all anchors inside the iterator interval. \cr
+#'   NULL (sequence) \tab potts.max \tab e, J, pairs, intercept, bidirect, extend, strand \tab Highest-scoring anchor. \cr
+#'   NULL (sequence) \tab potts.max.pos \tab e, J, pairs, intercept, bidirect, extend, strand \tab 1-based position of the best anchor, signed by strand when \code{bidirect = TRUE}. \cr
+#'   NULL (sequence) \tab potts.count \tab e, J, pairs, intercept, score.thresh (required), bidirect, extend, strand \tab Number of anchors scoring at least \code{score.thresh}. \cr
+#' }
+#'
 #' \strong{Edit distance summarizers}
 #' \tabular{llll}{
 #'   Source \tab func \tab Key params \tab Description \cr
@@ -811,14 +874,14 @@
 #'   NULL (sequence) \tab masked.frac \tab NULL \tab Fraction of base pairs in the iterator interval that are masked (lowercase). \cr
 #' }
 #'
-#' The sections below provide additional notes for motif, interval, k-mer, and masked sequence functions.
+#' The sections below provide additional notes for motif, potts, interval, k-mer, and masked sequence functions.
 #'
 #' \strong{Motif (PWM) notes}
 #' \itemize{
 #'   \item \code{pssm}: Position-specific scoring matrix (matrix or data frame) with columns \code{A}, \code{C}, \code{G}, \code{T}; extra columns are ignored.
 #'   \item \code{bidirect}: When TRUE (default), both strands are scanned and combined per genomic start (per-position union). The \code{strand} argument is ignored. When FALSE, only the strand specified by \code{strand} is scanned.
 #'   \item \code{prior}: Pseudocount added to frequencies (default 0.01). Set to 0 to disable.
-#'   \item \code{extend}: Extends the fetched sequence so boundary-anchored motifs retain full context (default TRUE). The END coordinate is padded by motif_length - 1 for all strand modes; anchors must still start inside the iterator.
+#'   \item \code{extend}: Extends the fetched sequence so boundary-anchored motifs retain full context (default TRUE). The END coordinate is padded by motif_length - 1 for all strand modes; anchors must still start inside the iterator, so an iterator interval narrower than the model holds no anchor at all and every value comes back \code{NA}.
 #'   \item Neutral characters (\code{N}, \code{n}, \code{*}) contribute the mean log-probability of the corresponding PSSM column on both strands.
 #'   \item \code{strand}: Used only when \code{bidirect = FALSE}; 1 scans the forward strand, -1 scans the reverse strand. The \code{*.pos} funcs report the same thing for both strands: the 1-based position of the first base of the match in forward-strand orientation.
 #'   \item \code{score.thresh}: Threshold for \code{pwm.count}, and mandatory for it - there is no default, and it must be a single value.
@@ -828,6 +891,18 @@
 #'     choosing one. \code{pwm}, \code{pwm.max} and \code{pwm.max.pos} accept \code{score.thresh} but ignore it.
 #'   \item Spatial weighting (\code{spat_factor}, \code{spat_bin}, \code{spat_min}, \code{spat_max}): optional position-dependent weights applied in log-space. Provide a positive numeric vector \code{spat_factor}; \code{spat_bin} (integer > 0) defines bin width; \code{spat_min}/\code{spat_max} restrict the scanning window.
 #'   \item \code{pwm.max.pos}: Positions are reported 1-based relative to the final scan window (after iterator shifts and spatial trimming). Values are signed when \code{bidirect = TRUE} (positive for forward, negative for reverse). Ties are broken by scan order, which is strand-dependent: with \code{strand = 1} (and under \code{bidirect = TRUE}) the most 5' tied anchor wins and the forward strand wins a tie at the same coordinate, but \code{bidirect = FALSE, strand = -1} scans the reverse-complemented sequence and so keeps the most 3' tied anchor in forward coordinates.
+#' }
+#'
+#' \strong{Potts (pairwise energy) notes}
+#' \itemize{
+#'   \item The score of one window is \code{intercept + sum_i e[i, x_i] + sum_k J_k[x_i, x_j]}: \code{e} is a \code{W x 4} matrix of per-position energies (columns \code{A}, \code{C}, \code{G}, \code{T}), and each row of \code{pairs} names a coupled pair of positions (1-based, lower position first) whose \code{4 x 4} coupling table is the matching entry of \code{J}, indexed with the lower position on the rows.
+#'   \item \strong{No \code{prior} and no \code{spat_*}.} A Potts carries energies, not probabilities, so there is no pseudocount and no spatial weighting. A window containing any non-ACGT base is not scored and is left out of the reduction.
+#'   \item \strong{"Counted nothing" and "nothing to count" are different answers.} An interval that has anchors but none of them scorable (for example, all \code{N}) gives \code{NaN} for \code{potts}, \code{potts.max} and \code{potts.max.pos}, and \code{0} for \code{potts.count}: it counted, and found none. An interval with no anchor at all gives \code{NaN} for all four, \code{potts.count} included - there was nothing to count, and a \code{0} would be indistinguishable from the line above. That covers an interval narrower than the model with \code{extend = FALSE}; a chromosome end with the default \code{extend = TRUE}, where the end padding is clipped at the contig boundary and the fetched sequence comes back shorter than the model (\code{pwm.count} reports \code{0} rather than \code{NA} in this one case); and a \code{\link{gvtrack.filter}} that leaves no unmasked part, or only parts narrower than the model.
+#'   \item \code{strand}: Used only when \code{bidirect = FALSE}; it is clamped to 1 when \code{bidirect = TRUE}, as in the \code{pwm} family.
+#'   \item \strong{The strand union, and the wart.} \code{potts}, \code{potts.max} and \code{potts.count} combine the two strands at each anchor by log-sum-exp; \code{potts.max.pos} takes the maximum, because it has to name a strand. So \code{potts.max} and \code{potts.max.pos} can select \strong{different anchors}. This matches the \code{pwm} family exactly (\code{pwm.max} combines by log-sum-exp, \code{pwm.max.pos} does not) and is inherited on purpose rather than fixed on one side.
+#'   \item \strong{Reproducing a model fitted elsewhere.} Because the union is log-sum-exp, \code{bidirect = TRUE} does not reproduce a model whose own definition takes the \strong{maximum} over the two strands: the two differ by up to \code{log 2}, and by exactly \code{log 2} wherever the strands tie. For those, declare two virtual tracks over the same model with \code{bidirect = FALSE} and \code{strand = 1} / \code{strand = -1}, and combine them yourself with \code{pmax}. The same applies when several models have to share ONE strand decision - a core plus flanking windows, say. Give each window a strand-locked pair, place it with \code{\link{gvtrack.iterator}}, and settle the strand once with an \code{ifelse} on the pair that decides it; letting each window take its own maximum computes a different and strictly larger quantity.
+#'   \item \code{e}/\code{J}/\code{pairs}/\code{intercept} can be supplied as a whole fitted model: a fitted Potts model has exactly the fields this family needs plus \code{width}, \code{pair_strength}, \code{attr} and \code{link}; those four are accepted and ignored, so the model can be passed verbatim as \code{params}, and \code{width} is cross-checked against \code{nrow(e)} when present.
+#'   \item \code{score.thresh}: Mandatory for \code{potts.count} - there is no default, since a Potts score is an energy whose usable range depends on the model - and ignored by the rest of the family.
 #' }
 #'
 #' \strong{Edit distance notes}
@@ -1008,6 +1083,40 @@
 #'     gintervals(1, 0, 10000),
 #'     iterator = 500
 #' )
+#'
+#' # Potts (pairwise energy) examples - a small hand-written W=2 model whose
+#' # coupling does the work: the per-position energies prefer "AC", the pair
+#' # term prefers "GT". A zero J would make this a PWM.
+#' potts_e <- matrix(c(
+#'     1, 0, 0, 0,
+#'     0, 1, 0, 0
+#' ), ncol = 4, byrow = TRUE, dimnames = list(NULL, c("A", "C", "G", "T")))
+#' potts_J <- list(matrix(c(
+#'     0, -3, 0, 0,
+#'     0, 0, 0, 0,
+#'     0, 0, 0, 3,
+#'     0, 0, 0, 0
+#' ), 4, 4, byrow = TRUE))
+#' potts_pairs <- matrix(c(1L, 2L), ncol = 2)
+#' potts_model <- list(e = potts_e, J = potts_J, pairs = potts_pairs, intercept = 0)
+#'
+#' gvtrack.create("potts_max", NULL, "potts.max", params = potts_model)
+#' gextract("potts_max", gintervals(1, 0, 1000), iterator = 200)
+#'
+#' gvtrack.create("potts_count", NULL, "potts.count",
+#'     params = c(potts_model, list(score.thresh = 1.5))
+#' )
+#' gextract("potts_count", gintervals(1, 0, 1000), iterator = 200)
+#'
+#' # Reproducing a model that MAXIMISES over the two strands rather than
+#' # log-sum-exping them: declare each strand on its own and combine with pmax.
+#' gvtrack.create("potts_p", NULL, "potts.max",
+#'     params = c(potts_model, list(bidirect = FALSE, strand = 1))
+#' )
+#' gvtrack.create("potts_m", NULL, "potts.max",
+#'     params = c(potts_model, list(bidirect = FALSE, strand = -1))
+#' )
+#' gextract("pmax(potts_p, potts_m)", gintervals(1, 0, 1000), iterator = 200)
 #'
 #' # Kmer counting examples
 #' gvtrack.create("cg_count", NULL, "kmer.count", kmer = "CG", strand = 1)
@@ -1692,7 +1801,7 @@ gvtrack.array.slice <- function(vtrack = NULL, slice = NULL, func = "avg", param
 #'   \item \strong{Aggregations (avg/sum/min/max/stddev/quantile):} Length-weighted over unmasked regions
 #'   \item \strong{coverage:} Returns (covered length in unmasked region) / (total unmasked length)
 #'   \item \strong{distance/distance.center:} Unaffected by mask (pure geometry)
-#'   \item \strong{PWM/kmer:} Masked bases act as hard boundaries; matches cannot span masked regions.
+#'   \item \strong{PWM/kmer/potts:} Masked bases act as hard boundaries; matches cannot span masked regions.
 #'         \strong{Important:} When \code{extend=TRUE} (the default), motifs at the boundaries of unmasked
 #'         segments can use bases from the adjacent masked regions to complete the motif scoring.
 #'         For example, if a 4bp motif starts at position 1998 in an unmasked region that ends at 2000,
@@ -1700,10 +1809,20 @@ gvtrack.array.slice <- function(vtrack = NULL, slice = NULL, func = "avg", param
 #'         In other words, motif matches \emph{starting positions} must be in unmasked regions,
 #'         but the motif sequence itself can extend into masked regions when \code{extend=TRUE}.
 #'         Set \code{extend=FALSE} to prevent any use of masked bases in scoring.
+#'   \item \strong{potts family specifically:} each unmasked part of the iterator interval is scored on
+#'         its own and the parts are combined: log-sum-exp for \code{potts}, maximum for \code{potts.max},
+#'         sum for \code{potts.count}, and for \code{potts.max.pos} the position from whichever part
+#'         carried the highest score, reported in the iterator interval's own coordinates. A fully
+#'         masked interval, and one whose every unmasked part is narrower than the model, give
+#'         \code{NA} for all four - \code{potts.count} included, since neither held an anchor to
+#'         count. A part that holds anchors and merely has none of them scorable still counts
+#'         \code{0}.
 #' }
 #'
 #' \strong{Completely Masked Intervals:}
-#' If an entire iterator interval is masked, the function returns \code{NA} (not 0).
+#' If an entire iterator interval is masked, the function returns \code{NA} (not 0). The counting
+#' funcs are no exception: a masked-away interval held no anchor to count, and reporting \code{0}
+#' would be indistinguishable from a scan that ran and found nothing.
 #'
 #'
 #' @return None (invisibly).

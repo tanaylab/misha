@@ -27,6 +27,184 @@
     pssm[, c("A", "C", "G", "T"), drop = FALSE]
 }
 
+# One validator for both Potts entry points - gseq.potts() and
+# .vtrack_params_potts(). It returns the model in the exact shape C++ takes:
+# `e` a W x 4 double matrix, `J` an npair x 16 double matrix, `pairs` an
+# npair x 2 integer matrix (1-based), `intercept` a single double.
+#
+# It is deliberately tolerant of the extra elements a fitted Potts model carries
+# (`width`, `pair_strength`, `attr`, `link`) so that a fitted model can be
+# passed verbatim, and it CROSS-CHECKS `width` against nrow(e) when present,
+# which catches a hand-edited model.
+.coerce_potts_model <- function(model, what) {
+    if (!is.list(model)) {
+        stop(sprintf("%s: `model` must be a list with 'e', 'J', 'pairs' and 'intercept'; it is a %s", what, class(model)[1L]), call. = FALSE)
+    }
+    if (!("e" %in% names(model))) {
+        stop(sprintf("%s: `model` requires an 'e' matrix - one row per position, columns A, C, G, T", what), call. = FALSE)
+    }
+
+    e <- .coerce_pssm_matrix(
+        model$e,
+        numeric_msg = sprintf("%s: 'e' must be a numeric matrix or data frame with numeric columns", what),
+        ncol_msg = sprintf("%s: 'e' must have columns named A, C, G, T", what),
+        colnames_msg = sprintf("%s: 'e' must have columns named A, C, G, T", what)
+    )
+    if (nrow(e) < 1L) {
+        stop(sprintf("%s: 'e' has no rows, so the model covers no positions", what), call. = FALSE)
+    }
+    if (any(!is.finite(e))) {
+        stop(sprintf("%s: 'e' has %d non-finite entries", what, sum(!is.finite(e))), call. = FALSE)
+    }
+    W <- nrow(e)
+
+    if (!is.null(model$width)) {
+        if (!is.numeric(model$width) || length(model$width) != 1L || model$width != W) {
+            stop(sprintf("%s: 'width' says %s but 'e' has %d rows", what, paste(model$width, collapse = ", "), W), call. = FALSE)
+        }
+    }
+
+    pairs <- model$pairs
+    if (is.null(pairs)) {
+        pairs <- matrix(integer(0), 0L, 2L)
+    }
+    if (is.data.frame(pairs)) {
+        pairs <- as.matrix(pairs)
+    }
+    if (!is.matrix(pairs) || !is.numeric(pairs) || ncol(pairs) != 2L) {
+        stop(sprintf("%s: 'pairs' must be a numeric matrix with 2 columns, one row per coupling", what), call. = FALSE)
+    }
+    storage.mode(pairs) <- "integer"
+    dimnames(pairs) <- NULL
+    npair <- nrow(pairs)
+    if (npair) {
+        if (anyNA(pairs) || any(pairs < 1L) || any(pairs > W)) {
+            stop(sprintf("%s: every 'pairs' index must be in 1..%d", what, W), call. = FALSE)
+        }
+        if (any(pairs[, 1L] >= pairs[, 2L])) {
+            stop(sprintf("%s: every row of 'pairs' must have the lower position first (i < j); row %d does not", what, which(pairs[, 1L] >= pairs[, 2L])[1L]), call. = FALSE)
+        }
+        if (anyDuplicated(paste(pairs[, 1L], pairs[, 2L]))) {
+            stop(sprintf("%s: 'pairs' names the same pair of positions twice; a pair carries one coupling table", what), call. = FALSE)
+        }
+    }
+
+    J <- model$J
+    if (is.null(J)) {
+        J <- list()
+    }
+    if (is.list(J)) {
+        if (length(J) != npair) {
+            stop(sprintf("%s: 'J' holds %d tables and 'pairs' names %d", what, length(J), npair), call. = FALSE)
+        }
+        for (k in seq_along(J)) {
+            Jk <- J[[k]]
+            if (!is.matrix(Jk) || !is.numeric(Jk) || !identical(dim(Jk), c(4L, 4L))) {
+                stop(sprintf("%s: 'J' table %d must be a 4 x 4 numeric matrix", what, k), call. = FALSE)
+            }
+            if (any(!is.finite(Jk))) {
+                stop(sprintf("%s: 'J' table %d has non-finite entries", what, k), call. = FALSE)
+            }
+        }
+        # as.numeric() of a 4x4 is column-major, so element [a, b] lands at
+        # index (b - 1) * 4 + a - which is what the C++ kernel indexes.
+        Jflat <- if (npair) {
+            matrix(unlist(lapply(J, as.numeric), use.names = FALSE), nrow = npair, byrow = TRUE)
+        } else {
+            matrix(numeric(0), 0L, 16L)
+        }
+    } else {
+        if (!is.matrix(J) || !is.numeric(J) || nrow(J) != npair || (npair && ncol(J) != 16L)) {
+            stop(sprintf("%s: a flat 'J' must be an %d x 16 numeric matrix", what, npair), call. = FALSE)
+        }
+        if (any(!is.finite(J))) {
+            stop(sprintf("%s: 'J' has non-finite entries", what), call. = FALSE)
+        }
+        Jflat <- J
+    }
+    storage.mode(Jflat) <- "double"
+    dimnames(Jflat) <- NULL
+
+    intercept <- if (is.null(model$intercept)) 0 else model$intercept
+    if (!is.numeric(intercept) || length(intercept) != 1L || !is.finite(intercept)) {
+        stop(sprintf("%s: 'intercept' must be a single finite number", what), call. = FALSE)
+    }
+
+    # Per-entry finiteness is not enough. The scorer accumulates a window in
+    # double but reports in float - PottsScorer::score_interval() returns
+    # float, and its sliding aggregators hold float - so a model whose windows
+    # can leave the single-precision range makes its two scoring paths answer
+    # differently: the direct one returns an infinity, the sliding one maps a
+    # non-finite aggregate to NaN, and the whole point of having two paths is
+    # that they agree.
+    #
+    # Bounded here rather than checked per window in C++, so that
+    # PottsScorer::slid_answer() and anchor_value() can go on reading -inf as
+    # "no anchor was scorable" instead of "the arithmetic overflowed", and so
+    # that both entry points - gseq.potts() and the potts vtrack family - get
+    # it from the one validator they share.
+    #
+    # |score| <= |intercept| + sum_i max_b |e[i, b]| + sum_k max_ab |J_k[a, b]|,
+    # bounded above by the W * max|e| + npair * max|J| + |intercept| below. No
+    # fitted model comes near it; a hand-built or rescaled one can.
+    worst <- W * max(abs(e)) + abs(intercept)
+    if (npair) {
+        worst <- worst + npair * max(abs(Jflat))
+    }
+    # FLT_MAX, spelled out: R has no float type to read it off.
+    if (!is.finite(worst) || worst > 3.4028234663852886e38) {
+        stop(sprintf("%s: the model's largest possible window score is %.3g, which overflows the single-precision range potts scores are reported in (about 3.4e38) - a scored window would come back as Inf. Scale 'e', 'J' and 'intercept' down by a common factor, and 'score.thresh' with them, or drop the entries that make the bound this large.", what, worst), call. = FALSE)
+    }
+
+    storage.mode(e) <- "double"
+    list(e = e, J = Jflat, pairs = pairs, intercept = as.numeric(intercept))
+}
+
+# The C++-ready parameter list, built one way for both entry points. Its shape
+# is what PottsParams::parse() reads, so a field renamed here must be renamed
+# there; that is the price of having one parser instead of two.
+.potts_params <- function(model, bidirect = TRUE, extend = TRUE, strand = 1L,
+                          score.thresh = 0, what) {
+    p <- .coerce_potts_model(model, what)
+
+    if (!is.logical(bidirect) || length(bidirect) != 1L || is.na(bidirect)) {
+        stop(sprintf("%s: bidirect must be TRUE or FALSE", what), call. = FALSE)
+    }
+    if (!is.logical(extend) || length(extend) != 1L || is.na(extend)) {
+        stop(sprintf("%s: extend must be TRUE or FALSE", what), call. = FALSE)
+    }
+    if (!is.numeric(strand) || length(strand) != 1L || !(strand %in% c(1, -1))) {
+        stop(sprintf("%s: strand must be 1 or -1", what), call. = FALSE)
+    }
+    if (!is.numeric(score.thresh) || length(score.thresh) != 1L || is.na(score.thresh)) {
+        stop(sprintf("%s: score.thresh must be a single number", what), call. = FALSE)
+    }
+
+    # Under bidirect both strands are scored at every anchor, so `strand` cannot
+    # change which anchors are scored or what any of them scores. All it changes
+    # is the orientation the scan target is fetched in, and hence the ORDER the
+    # anchors are visited in - and the *.pos functions break an exact tie by
+    # keeping the first anchor they see. So an unclamped strand = -1 reports a
+    # different, equally maximal, position for the same interval wherever two
+    # anchors tie, which a repeat region supplies readily. Clamped here rather
+    # than at either entry point so both get it: the pwm family clamps the same
+    # combination, for the same reason.
+    if (bidirect) {
+        strand <- 1L
+    }
+
+    list(
+        e = p$e,
+        J = p$J,
+        pairs = p$pairs,
+        intercept = p$intercept,
+        bidirect = bidirect,
+        extend = extend,
+        strand = as.integer(strand),
+        score.thresh = as.numeric(score.thresh)
+    )
+}
+
 # Normalize a `score.thresh` to a single double, for every function that takes
 # one: pwm.count, gseq.pwm(mode = "count"), the pwm.edit_distance family,
 # pwm.n_mutations and gseq.pwm_edits.

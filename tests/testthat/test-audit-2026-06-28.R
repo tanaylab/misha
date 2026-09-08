@@ -1,6 +1,7 @@
-# Regression tests for the 2026-06-28 full-audit fixes. See
-# dev/notes/2026-06-28_full-audit.md. Uses the hg-scale isolated test DB
-# (real sequence symlinked) so large coordinates and PWM scoring are available.
+# Regression tests for the high-severity findings of the 2026-06-28 full source
+# audit that have a runnable trigger: H2, H4, H6, H7 and H8, named in the test
+# titles below. Uses the hg-scale isolated test DB (real sequence symlinked) so
+# large coordinates and PWM scoring are available.
 
 create_isolated_test_db()
 
