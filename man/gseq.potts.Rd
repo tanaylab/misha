@@ -72,15 +72,37 @@ at each window by log-sum-exp, matching the \code{potts} and
 \code{mode = "max"}, which combines them the same way.
 }
 \examples{
+# A W=2 model with a real coupling. On the per-position energies alone the
+# model prefers "AC" (1 + 1), but the pair term penalises A-then-C and
+# rewards G-then-T, so "GT" wins instead. Zero J out and the score collapses
+# to intercept + sum_i e[i, x_i], which is a PWM and not a Potts.
 e <- matrix(c(
     1, 0, 0, 0,
     0, 1, 0, 0
 ), ncol = 4, byrow = TRUE, dimnames = list(NULL, c("A", "C", "G", "T")))
-J <- list(matrix(0, 4, 4))
+J <- list(matrix(c(
+    0, -3, 0, 0,
+    0, 0, 0, 0,
+    0, 0, 0, 3,
+    0, 0, 0, 0
+), 4, 4, byrow = TRUE))
 pairs <- matrix(c(1L, 2L), ncol = 2)
 model <- list(e = e, J = J, pairs = pairs, intercept = 0)
-gseq.potts(c("AC", "CA", "AN"), model, mode = "max", bidirect = FALSE)
-gseq.potts("ACGTACAC", model, mode = "count", score.thresh = 1.5, bidirect = FALSE)
+
+# -1 and 3: the coupling picks the winner, not the per-position energies
+gseq.potts(c("AC", "GT"), model, mode = "max", bidirect = FALSE, strand = 1)
+
+# the reverse strand scores the reverse complement, so the two swap
+gseq.potts(c("AC", "GT"), model, mode = "max", bidirect = FALSE, strand = -1)
+
+# bidirect unions the strands by LOG-SUM-EXP, not by maximum. "CA" scores 0
+# on both strands, so it comes back as log(2) = 0.693 rather than 0 - and a
+# window with an N is left out of the reduction entirely.
+gseq.potts(c("AC", "GT", "CA", "AN"), model, mode = "max", bidirect = TRUE)
+
+gseq.potts("ACGTACAC", model,
+    mode = "count", score.thresh = 1.5, bidirect = FALSE, strand = 1
+)
 }
 \seealso{
 \code{\link{gseq.pwm}}, \code{\link{gvtrack.create}} for the
