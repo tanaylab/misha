@@ -20,8 +20,8 @@ using namespace std;
 //
 //   S(x) = intercept + sum_i e[i][x_i] + sum_k J_k[x_{p1k}][x_{p2k}]
 //
-// This is motifmodel's Potts, and score_codes() must agree with its
-// potts_score() kernel to float precision. Tables and accumulator are double:
+// score_codes() must agree with the tests' pure-R oracle implementation of
+// this scoring rule to float precision. Tables and accumulator are double:
 // at W = 20 the J table is 24 KB and still L2-resident, and 211 float adds at
 // magnitude ~20 would cost ~4e-4 of error for no measured speed gain.
 //
@@ -51,7 +51,7 @@ using namespace std;
 // 1 + W + npair exceeds ceil(W/2) + C(ceil(W/2), 2) - measured through
 // gseq.potts() on an idle host at W = 20: ~3.4x faster full pairwise (190
 // pairs), a real but smaller win at 64 pairs, and 4-6x SLOWER at 0 pairs
-// (an order-1 model, e.g. from fit_motif(order = 1)), where it would spend 55
+// (an order-1 model, i.e. one with no couplings at all), where it would spend 55
 // lookups computing what 21 could. score_codes() therefore picks whichever
 // kernel has the smaller lookup count for THIS model (m_use_blocked, set once
 // in build_blocked_tables()), not the blocked kernel unconditionally.
@@ -70,7 +70,8 @@ public:
 
     // e_rowmajor: W*4 doubles, row i = position i, columns A, C, G, T.
     // j_rowmajor: npair*16 doubles, row k = J_k with element [a][b] at b*4 + a
-    //             (motifmodel's column-major 4x4 flattening).
+    //             (column-major per 4x4 block, i.e. what as.numeric() of the
+    //             block gives in R).
     // p1, p2:     0-BASED position indices, p1[k] < p2[k]. A (p1, p2) pair may
     //             repeat - see build_blocked_tables() - and every kernel below
     //             treats a repeat as an ADDITIONAL coupling term, summed in,
@@ -81,7 +82,7 @@ public:
         : m_W(W), m_intercept(intercept), m_p1(p1), m_p2(p2)
     {
         m_e.assign(e_rowmajor, e_rowmajor + (std::size_t)W * 4);
-        // An order-1 model (no pairs - fit_motif(order = 1) produces one, and
+        // An order-1 model (no pairs - a per-position table with no couplings, and
         // test 1's npair_mode = "none" exercises it) passes p1.empty() and,
         // from PottsParams.h, a null j_rowmajor. Forming a [ptr, ptr+0) range
         // out of a null pointer is formally UB even though libstdc++ treats it

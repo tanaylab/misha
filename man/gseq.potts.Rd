@@ -23,7 +23,7 @@ of \code{4x4} matrices, or an \code{npair x 16} matrix), \code{pairs} (an
 \code{npair x 2} matrix of 1-based position pairs, lower position first)
 and \code{intercept}. Extra elements named \code{width},
 \code{pair_strength}, \code{attr} or \code{link} are accepted and ignored,
-so a fitted `motifmodel` `Potts` object can be passed verbatim.}
+so an object with exactly these fields can be passed verbatim.}
 
 \item{mode}{\code{"lse"} for the log-sum-exp over windows, \code{"max"} for
 the best window, \code{"pos"} for the 1-based position of the best window

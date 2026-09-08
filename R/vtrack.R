@@ -293,9 +293,9 @@
 #'
 #' The allowlist is deliberately wider than the parameters this family uses:
 #' `width`, `pair_strength`, `attr` and `link` are accepted and ignored so that
-#' a fitted motifmodel `Potts` - whose fields are exactly `e`, `J`, `pairs`,
+#' a fitted Potts model - whose fields are exactly `e`, `J`, `pairs`,
 #' `pair_strength`, `width`, `intercept`, `attr`, `link` - can be handed over
-#' verbatim as `params`, with no motifmodel dependency here and no subsetting
+#' verbatim as `params`, with no extra dependency here and no subsetting
 #' at the call site. `.coerce_potts_model()` cross-checks `width` against
 #' `nrow(e)` when it is present.
 #' @noRd
@@ -900,7 +900,7 @@
 #'   \item \strong{"Counted nothing" and "nothing to count" are different answers.} An interval that has anchors but none of them scorable (for example, all \code{N}) gives \code{NaN} for \code{potts}, \code{potts.max} and \code{potts.max.pos}, and \code{0} for \code{potts.count}: it counted, and found none. An interval with no anchor at all gives \code{NaN} for all four, \code{potts.count} included - there was nothing to count, and a \code{0} would be indistinguishable from the line above. That covers an interval narrower than the model with \code{extend = FALSE}; a chromosome end with the default \code{extend = TRUE}, where the end padding is clipped at the contig boundary and the fetched sequence comes back shorter than the model (\code{pwm.count} reports \code{0} rather than \code{NA} in this one case); and a \code{\link{gvtrack.filter}} that leaves no unmasked part, or only parts narrower than the model.
 #'   \item \code{strand}: Used only when \code{bidirect = FALSE}; it is clamped to 1 when \code{bidirect = TRUE}, as in the \code{pwm} family.
 #'   \item \strong{The strand union, and the wart.} \code{potts}, \code{potts.max} and \code{potts.count} combine the two strands at each anchor by log-sum-exp; \code{potts.max.pos} takes the maximum, because it has to name a strand. So \code{potts.max} and \code{potts.max.pos} can select \strong{different anchors}. This matches the \code{pwm} family exactly (\code{pwm.max} combines by log-sum-exp, \code{pwm.max.pos} does not) and is inherited on purpose rather than fixed on one side.
-#'   \item \code{e}/\code{J}/\code{pairs}/\code{intercept} can be supplied as a whole fitted model: a \code{motifmodel} \code{Potts} object has exactly the fields this family needs plus \code{width}, \code{pair_strength}, \code{attr} and \code{link}; those four are accepted and ignored, so the model can be passed verbatim as \code{params}, and \code{width} is cross-checked against \code{nrow(e)} when present.
+#'   \item \code{e}/\code{J}/\code{pairs}/\code{intercept} can be supplied as a whole fitted model: a fitted Potts model has exactly the fields this family needs plus \code{width}, \code{pair_strength}, \code{attr} and \code{link}; those four are accepted and ignored, so the model can be passed verbatim as \code{params}, and \code{width} is cross-checked against \code{nrow(e)} when present.
 #'   \item \code{score.thresh}: Mandatory for \code{potts.count} - there is no default, since a Potts score is an energy whose usable range depends on the model - and ignored by the rest of the family.
 #' }
 #'

@@ -32,7 +32,7 @@
 # `e` a W x 4 double matrix, `J` an npair x 16 double matrix, `pairs` an
 # npair x 2 integer matrix (1-based), `intercept` a single double.
 #
-# It is deliberately tolerant of the extra elements a motifmodel Potts carries
+# It is deliberately tolerant of the extra elements a fitted Potts model carries
 # (`width`, `pair_strength`, `attr`, `link`) so that a fitted model can be
 # passed verbatim, and it CROSS-CHECKS `width` against nrow(e) when present,
 # which catches a hand-edited model.

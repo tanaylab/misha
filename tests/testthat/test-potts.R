@@ -1,32 +1,5 @@
 create_isolated_test_db()
 
-test_that("the pure-R oracle agrees with motifmodel::motif_score()", {
-    skip_if_not(requireNamespace("motifmodel", quietly = TRUE) &&
-        is.function(getExportedValue("motifmodel", "motif_score")))
-
-    for (mode in c("full", "sparse", "none")) {
-        m <- potts_ref_model(W = 8L, npair_mode = mode, seed = 7L)
-        mm <- motifmodel::Potts(m$e, m$J, if (nrow(m$pairs)) m$pairs else NULL,
-            intercept = m$intercept
-        )
-        set.seed(11L)
-        seqs <- vapply(1:20, function(i) {
-            paste(sample(POTTS_BASES, 8L, replace = TRUE), collapse = "")
-        }, character(1))
-
-        ref <- vapply(seqs, potts_ref_window, numeric(1), model = m)
-        got <- motifmodel::motif_score(mm, seqs)
-
-        # motifmodel's Potts() projects into the zero-sum gauge, which changes
-        # the parameters but not the function, so the SCORES must match even
-        # though the tables do not. That is the invariant worth pinning.
-        expect_equal(as.numeric(got), as.numeric(ref),
-            tolerance = 1e-8,
-            info = paste("npair_mode =", mode)
-        )
-    }
-})
-
 test_that("the oracle's RC transform is self-consistent", {
     for (mode in c("full", "sparse", "none")) {
         m <- potts_ref_model(W = 6L, npair_mode = mode, seed = 3L)
@@ -161,25 +134,6 @@ test_that("gseq.potts refuses to score a window with a non-ACGT base", {
     )
     expect_equal(gseq.potts(s, m, mode = "lse", bidirect = FALSE, strand = 1L),
         log_sum_exp(ref[!is.na(ref)]),
-        tolerance = 1e-6
-    )
-})
-
-test_that("gseq.potts accepts a whole motifmodel Potts as the model", {
-    skip_if_not(requireNamespace("motifmodel", quietly = TRUE) &&
-        is.function(getExportedValue("motifmodel", "motif_score")))
-
-    m <- potts_ref_model(W = 8L, npair_mode = "full", seed = 53L)
-    mm <- motifmodel::Potts(m$e, m$J, m$pairs, intercept = m$intercept)
-    set.seed(59L)
-    seqs <- vapply(1:20, function(i) {
-        paste(sample(POTTS_BASES, 8L, replace = TRUE), collapse = "")
-    }, character(1))
-
-    # the object goes in verbatim - width, pair_strength, attr and link and all
-    expect_equal(
-        gseq.potts(seqs, mm, mode = "max", bidirect = FALSE, strand = 1L),
-        as.numeric(motifmodel::motif_score(mm, seqs)),
         tolerance = 1e-6
     )
 })

@@ -18,16 +18,6 @@ test_that("the potts params handler validates and normalises", {
     expect_equal(p$J[k, (3L - 1L) * 4L + 2L], m$J[[k]][2L, 3L])
 })
 
-test_that("the potts params handler tolerates a whole motifmodel Potts", {
-    skip_if_not(requireNamespace("motifmodel", quietly = TRUE))
-    m <- potts_ref_model(W = 5L, npair_mode = "full", seed = 97L)
-    mm <- motifmodel::Potts(m$e, m$J, m$pairs, intercept = m$intercept)
-
-    # width, pair_strength, attr and link ride along and are ignored
-    expect_silent(p <- misha:::.vtrack_params_potts("potts", mm, list()))
-    expect_equal(nrow(p$e), 5L)
-})
-
 test_that("the potts params handler rejects what it should", {
     m <- potts_ref_model(W = 5L, npair_mode = "full", seed = 101L)
 

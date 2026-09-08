@@ -3,8 +3,8 @@
 # with it. Do not "optimise" it and do not fix it to match the kernel.
 #
 # Base order is A, C, G, T everywhere. A model here is a plain list, which is
-# also the shape gvtrack.create() takes as `params` and the shape a motifmodel
-# Potts already has.
+# also the shape gvtrack.create() takes as `params` and the shape a fitted
+# Potts model already has.
 
 POTTS_BASES <- c("A", "C", "G", "T")
 
