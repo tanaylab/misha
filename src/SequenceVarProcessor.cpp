@@ -123,15 +123,12 @@ double aggregate_edit_distance_parts(
 // which at the time reduced PWM (total likelihood) by summing the per-part
 // scores rather than by log-sum-exp, and picked PWM_MAX_POS's part by
 // comparing part-relative positions and then reported one without its offset.
-// Both are fixed now. The two loops agree on the part-by-part reduction: each
-// drops a part whose score is NaN (a part the scorer cannot score at all) and
-// reduces over the rest, and each answers NaN when no part was scorable.
-//
-// They still differ in ONE place, deliberately: a filter that masks the
-// interval away entirely, so there is no part to score. potts.count answers 0
-// there and pwm.count answers NaN, because NaN is what released misha has
-// always answered for a fully masked pwm interval and changing it would move
-// numbers under existing users. Every other func answers NaN in both.
+// Both are fixed now, and the two reductions agree throughout: each drops a
+// part whose score is NaN - a part the scorer could not place a window in at
+// all - and reduces over the rest; each answers NaN when no part was scorable,
+// the count included; and each answers NaN for a fully masked interval, the
+// count included there too. A count of 0 comes back only from parts that DO
+// hold anchors and merely have no scorable one, which is an assembly gap.
 //
 // Keep them in step by hand: they are separate functions.
 //
@@ -167,11 +164,17 @@ static void score_potts_var(TrackExpressionVars::Track_var *ivar, const GInterva
 	ivar->filter->subtract(seq_interval, unmasked_parts);
 
 	if (unmasked_parts.empty()) {
-		// An empty count is a count of zero, not "no answer"; every other
-		// mode has no scorable anchor left to report and is NaN, exactly as a
-		// single fully-masked interval already is.
-		ivar->var[idx] = (ivar->val_func == TrackExpressionVars::Track_var::POTTS_COUNT)
-			? 0.0 : numeric_limits<double>::quiet_NaN();
+		// NaN for all four, potts.count included. A count answers "how many of
+		// this interval's anchors cleared the threshold", and 0 is the answer
+		// only when there was a set of anchors to test and none of them
+		// passed. A filter that removed the interval entirely left no anchor
+		// to test, so there is no denominator and no count - and a 0 here
+		// would be indistinguishable, in the column gextract() returns, from a
+		// bin where the scan really ran and found nothing. That folds
+		// "excluded" into "zero evidence" under any sum(), mean() or
+		// threshold applied downstream, and hides the excluded bins from
+		// is.na(). Same answer pwm.count has always given here.
+		ivar->var[idx] = numeric_limits<double>::quiet_NaN();
 		return;
 	}
 	// No one-part fast path: a lone unmasked part still needs its
@@ -272,7 +275,13 @@ static void score_potts_var(TrackExpressionVars::Track_var *ivar, const GInterva
 		ivar->var[idx] = any ? best_score : numeric_limits<double>::quiet_NaN();
 		break;
 	case TrackExpressionVars::Track_var::POTTS_COUNT:
-		ivar->var[idx] = total;
+		// `any` is false only when NO part held an anchor of the model - every
+		// part narrower than it, so score_interval() could not place a window
+		// in any of them. Nothing to count, so NaN rather than 0, for the same
+		// reason as the fully-masked case above. A part that holds anchors and
+		// merely has no scorable one - an assembly gap - reports its own 0 and
+		// sets `any`, so a genuine count of zero still comes back as 0.
+		ivar->var[idx] = any ? total : numeric_limits<double>::quiet_NaN();
 		break;
 	default:
 		ivar->var[idx] = best_pos;
@@ -733,7 +742,12 @@ void SequenceVarProcessor::process_individual_sequence_vars(
 					ivar->var[idx] = best_pos;
 					break;
 				case TrackExpressionVars::Track_var::PWM_COUNT:
-					ivar->var[idx] = total;
+					// NaN, not 0, when no part held an anchor at all - see
+					// score_potts_var()'s POTTS_COUNT case for why, and note
+					// that a part whose anchors are merely unscorable (an
+					// assembly gap) reports its own 0 and sets `any`, so a
+					// real count of zero is unaffected.
+					ivar->var[idx] = any ? total : numeric_limits<double>::quiet_NaN();
 					break;
 				default:
 					ivar->var[idx] = any ? lse : numeric_limits<double>::quiet_NaN();

@@ -836,17 +836,82 @@ test_that("potts vtracks aggregate across a filter's unmasked parts", {
         expect_equal(got, expected, tolerance = 1e-5, info = fn)
     }
 
-    # a fully masked interval scores nothing - NaN for the three log/max-based
-    # funcs, 0 (not NaN) for potts.count: an empty count is a count of zero.
+    # a fully masked interval scores nothing - NaN for all four, potts.count
+    # included. See the next test for why the count is not 0 here.
     for (fn in c("potts", "potts.max", "potts.max.pos", "potts.count")) {
         remove_all_vtracks()
         gvtrack.create("t", NULL, fn, params = c(m, list(extend = TRUE, score.thresh = th)))
         gvtrack.filter("t", filter = iv)
         got <- gextract("t", iv, iterator = iv)$t
+        expect_true(is.na(got), info = fn)
+    }
+})
+
+test_that("a filtered potts.count separates 'counted nothing' from 'nothing to count'", {
+    # The count has two answers that look alike in a gextract() column and are
+    # not the same claim:
+    #
+    #   the filter leaves parts, those parts hold anchors of the model, and
+    #     none of the anchors is scorable - an assembly gap. The scan ran over
+    #     a real set of candidates and none passed, so the count is 0.
+    #   the filter leaves no part at all, or leaves only parts narrower than
+    #     the model, so no window of it can be placed anywhere. There was no
+    #     candidate to pass or fail. 0 would be indistinguishable from the row
+    #     above, which folds "this bin was excluded" into "this bin had no
+    #     hits" under any sum(), mean() or threshold downstream, and hides the
+    #     excluded bins from is.na(). NA is the value R keeps for that, and it
+    #     is what the other three funcs already report in the same situation.
+    #
+    # The third block is what stops this test from being satisfied by "NA
+    # everywhere": it pins that a genuine count of zero is still 0.
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    W <- 6L
+    m <- potts_ref_model(W = W, npair_mode = "full", seed = 173L)
+    funcs <- c("potts", "potts.max", "potts.max.pos", "potts.count")
+
+    iv <- gintervals(1, 4000, 4300)
+    narrow_mask <- gintervals(1, 4003, 4297) # leaves 3 bp at each end, < W
+
+    # chr20 opens with an assembly gap, so both surviving parts here hold
+    # anchors and not one of them is scorable
+    gap <- gintervals(20, 0, 300)
+    skip_if_not(
+        grepl("^N+$", toupper(gseq.extract(gintervals(20, 0, 300L + W - 1L)))),
+        "no all-N interval at the start of chr20 in this fixture"
+    )
+    gap_mask <- gintervals(20, 100, 200)
+
+    for (fn in funcs) {
+        # no part at all
+        remove_all_vtracks()
+        gvtrack.create("t", NULL, fn, params = c(m, list(extend = TRUE, score.thresh = 0)))
+        gvtrack.filter("t", filter = iv)
+        expect_true(is.na(gextract("t", iv, iterator = iv)$t),
+            info = paste("fully masked", fn)
+        )
+
+        # parts exist, none of them wide enough to hold a window. extend =
+        # FALSE, or the fetch would be padded to the model's width and the
+        # parts would score.
+        remove_all_vtracks()
+        gvtrack.create("t", NULL, fn, params = c(m, list(extend = FALSE, score.thresh = 0)))
+        gvtrack.filter("t", filter = narrow_mask)
+        expect_true(is.na(gextract("t", iv, iterator = iv)$t),
+            info = paste("no anchor in any part", fn)
+        )
+
+        # parts exist and hold anchors, but the sequence is an assembly gap:
+        # a real count of zero, which must stay 0
+        remove_all_vtracks()
+        gvtrack.create("t", NULL, fn, params = c(m, list(extend = TRUE, score.thresh = 0)))
+        gvtrack.filter("t", filter = gap_mask)
+        got <- gextract("t", gap, iterator = gap)$t
         if (fn == "potts.count") {
-            expect_equal(got, 0, info = fn)
+            expect_equal(got, 0, info = paste("assembly gap", fn))
         } else {
-            expect_true(is.na(got), info = fn)
+            expect_true(is.na(got), info = paste("assembly gap", fn))
         }
     }
 })

@@ -58,13 +58,16 @@ Filters are applied \emph{after} iterator modifiers (sshift/eshift/dim). The ord
         its own and the parts are combined: log-sum-exp for \code{potts}, maximum for \code{potts.max},
         sum for \code{potts.count}, and for \code{potts.max.pos} the position from whichever part
         carried the highest score, reported in the iterator interval's own coordinates. A fully
-        masked interval gives \code{NA} for \code{potts}, \code{potts.max} and \code{potts.max.pos},
-        and \code{0} (not \code{NA}) for \code{potts.count}.
+        masked interval, and one whose every unmasked part is narrower than the model, give
+        \code{NA} for all four - \code{potts.count} included, since neither held an anchor to
+        count. A part that holds anchors and merely has none of them scorable still counts
+        \code{0}.
 }
 
 \strong{Completely Masked Intervals:}
-If an entire iterator interval is masked, the function returns \code{NA} (not 0) - except
-\code{potts.count}, which returns \code{0}: an empty count is a count of zero.
+If an entire iterator interval is masked, the function returns \code{NA} (not 0). The counting
+funcs are no exception: a masked-away interval held no anchor to count, and reporting \code{0}
+would be indistinguishable from a scan that ran and found nothing.
 }
 \examples{
 \dontshow{

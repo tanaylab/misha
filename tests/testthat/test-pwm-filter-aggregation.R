@@ -286,31 +286,58 @@ test_that("a pwm part the scorer cannot score is left out of the aggregation", {
     }
 })
 
-test_that("a pwm filter whose every part is unscorable reduces like potts", {
-    # Both parts narrower than the PSSM under extend = FALSE, so the reduction
-    # has nothing to reduce. Same answers score_potts_var() gives on the same
-    # geometry: NaN for the three log/max-based funcs, 0 for the count.
+test_that("a filtered pwm.count separates 'counted nothing' from 'nothing to count'", {
+    # The same two answers score_potts_var() has to keep apart, and the same
+    # rule:
+    #
+    #   every part narrower than the PSSM, so no anchor can be placed in any of
+    #     them - nothing to count, NA. A 0 would be indistinguishable in the
+    #     returned column from a bin that really was scanned and had no hits,
+    #     which folds "excluded" into "no evidence" under any sum(), mean() or
+    #     threshold downstream and hides the excluded bins from is.na().
+    #   parts that hold anchors none of which is a match - an assembly gap -
+    #     really did count, and found none, so 0.
+    #
+    # The second block is what stops this from being satisfied by "NA
+    # everywhere".
     remove_all_vtracks()
     withr::defer(remove_all_vtracks())
 
     pssm <- filter_agg_pssm() # 6 rows
     iv <- gintervals(1, 4000, 4300)
-    mask <- gintervals(1, 4003, 4297) # leaves 3bp at each end
+    narrow_mask <- gintervals(1, 4003, 4297) # leaves 3bp at each end
 
-    params <- list(
-        pssm = pssm, bidirect = FALSE, strand = 1,
-        extend = FALSE, prior = 0.01, score.thresh = -12
+    gap <- gintervals(20, 0, 300)
+    skip_if_not(
+        grepl("^N+$", toupper(gseq.extract(gintervals(20, 0, 300L + nrow(pssm) - 1L)))),
+        "no all-N interval at the start of chr20 in this fixture"
     )
+    gap_mask <- gintervals(20, 100, 200)
 
     for (fn in c("pwm", "pwm.max", "pwm.max.pos", "pwm.count")) {
         remove_all_vtracks()
-        gvtrack.create("t", NULL, fn, params = params)
-        gvtrack.filter("t", filter = mask)
-        got <- gextract("t", iv, iterator = iv)$t
+        gvtrack.create("t", NULL, fn, params = list(
+            pssm = pssm, bidirect = FALSE, strand = 1,
+            extend = FALSE, prior = 0.01, score.thresh = -12
+        ))
+        gvtrack.filter("t", filter = narrow_mask)
+        expect_true(is.na(gextract("t", iv, iterator = iv)$t),
+            info = paste("no anchor in any part", fn)
+        )
+
+        # An N part is scorable and merely hopeless - a PSSM charges an N the
+        # mean of its column - so this is a real count of zero and must stay 0.
+        remove_all_vtracks()
+        gvtrack.create("t", NULL, fn, params = list(
+            pssm = pssm, bidirect = FALSE, strand = 1,
+            extend = TRUE, prior = 0.01, score.thresh = -12
+        ))
+        gvtrack.filter("t", filter = gap_mask)
+        got <- gextract("t", gap, iterator = gap)$t
         if (fn == "pwm.count") {
-            expect_equal(got, 0, info = fn)
+            expect_equal(got, 0, info = paste("assembly gap", fn))
         } else {
-            expect_true(is.na(got), info = fn)
+            expect_false(is.na(got), info = paste("assembly gap", fn))
         }
     }
 })
