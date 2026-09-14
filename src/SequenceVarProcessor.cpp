@@ -228,11 +228,20 @@ static void score_potts_var(TrackExpressionVars::Track_var *ivar, const GInterva
 			// the float overload (util.h:16), so log_sum_log(-inf, -inf)
 			// computes exp(NaN) = NaN. Same guard as C_gseq_potts and as
 			// PottsScorer::score_direct()'s own accumulator.
+			//
+			// PottsScorer maps -inf to NaN before it gets here, so the
+			// isfinite arms are unreachable today. They are written anyway
+			// because this function and its pwm twin below are kept in step
+			// BY HAND (see the note at the top), and an asymmetry between
+			// them is exactly the drift that note warns about.
 			if (!std::isnan(s)) {
-				if (!any)
+				if (!any) {
 					lse = s;
-				else
+				} else if (!std::isfinite(lse)) {
+					lse = s; // lse was -inf: contributes nothing
+				} else if (std::isfinite(s)) {
 					log_sum_log(lse, s);
+				} // else s is -inf: contributes nothing
 				any = true;
 			}
 			break;

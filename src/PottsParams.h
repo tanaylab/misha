@@ -104,11 +104,17 @@ struct PottsParams {
         if (npair) {
             const int *pp = INTEGER(rp);
             for (int k = 0; k < npair; ++k) {
-                p1[k] = pp[k] - 1;                 // column 1, 1-based -> 0-based
-                p2[k] = pp[k + (size_t)npair] - 1; // column 2
-                if (p1[k] < 0 || p2[k] >= W || p1[k] >= p2[k])
+                // Tested on the 1-BASED values, before the decrement:
+                // NA_INTEGER is INT_MIN, so NA - 1 is signed overflow, which
+                // is undefined behaviour rather than a value the range test
+                // below could reject.
+                const int a = pp[k];                 // column 1
+                const int b = pp[k + (size_t)npair]; // column 2
+                if (a == NA_INTEGER || b == NA_INTEGER || a < 1 || b > W || a >= b)
                     rdb::verror("%s: 'pairs' row %d is out of 1..%d or not ascending",
                                 who.c_str(), k + 1, W);
+                p1[k] = a - 1; // 1-based -> 0-based
+                p2[k] = b - 1;
             }
         }
 
@@ -134,21 +140,45 @@ struct PottsParams {
         // though an empty vector's data() is not guaranteed non-null.
         params.model = PottsModel(W, intercept, e_row.data(), j_row.data(), p1, p2);
 
+        // A .Call is a trust boundary, so these are checked here rather than
+        // leaning on .potts_params(): LOGICAL() on a non-logical is a wild
+        // reinterpretation, LOGICAL() on logical(0) reads 4 bytes past the
+        // end, and Rf_error() out of a coercion would longjmp past
+        // ~RdbInitializer (CLAUDE.md rule C3).
         const int ib = find_elt(rparams, "bidirect");
-        if (ib >= 0 && VECTOR_ELT(rparams, ib) != R_NilValue)
-            params.bidirect = LOGICAL(VECTOR_ELT(rparams, ib))[0] == 1;
+        if (ib >= 0 && VECTOR_ELT(rparams, ib) != R_NilValue) {
+            SEXP rb = VECTOR_ELT(rparams, ib);
+            if (!Rf_isLogical(rb) || Rf_length(rb) != 1 || LOGICAL(rb)[0] == NA_LOGICAL)
+                rdb::verror("%s: 'bidirect' must be TRUE or FALSE", who.c_str());
+            params.bidirect = LOGICAL(rb)[0] == 1;
+        }
 
         const int ix = find_elt(rparams, "extend");
-        if (ix >= 0 && VECTOR_ELT(rparams, ix) != R_NilValue)
-            params.extend_flag = LOGICAL(VECTOR_ELT(rparams, ix))[0] == 1;
+        if (ix >= 0 && VECTOR_ELT(rparams, ix) != R_NilValue) {
+            SEXP rx = VECTOR_ELT(rparams, ix);
+            if (!Rf_isLogical(rx) || Rf_length(rx) != 1 || LOGICAL(rx)[0] == NA_LOGICAL)
+                rdb::verror("%s: 'extend' must be TRUE or FALSE", who.c_str());
+            params.extend_flag = LOGICAL(rx)[0] == 1;
+        }
 
         const int is = find_elt(rparams, "strand");
-        if (is >= 0 && VECTOR_ELT(rparams, is) != R_NilValue)
-            params.strand_mode = (char)Rf_asInteger(VECTOR_ELT(rparams, is));
+        if (is >= 0 && VECTOR_ELT(rparams, is) != R_NilValue) {
+            SEXP rs = VECTOR_ELT(rparams, is);
+            if ((!Rf_isInteger(rs) && !Rf_isReal(rs)) || Rf_length(rs) != 1)
+                rdb::verror("%s: 'strand' must be a single number", who.c_str());
+            const int sv = Rf_asInteger(rs);
+            if (sv != 1 && sv != -1)
+                rdb::verror("%s: 'strand' must be 1 or -1", who.c_str());
+            params.strand_mode = (char)sv;
+        }
 
         const int it = find_elt(rparams, "score.thresh");
-        if (it >= 0 && VECTOR_ELT(rparams, it) != R_NilValue)
-            params.score_thresh = Rf_asReal(VECTOR_ELT(rparams, it));
+        if (it >= 0 && VECTOR_ELT(rparams, it) != R_NilValue) {
+            SEXP rt = VECTOR_ELT(rparams, it);
+            if ((!Rf_isInteger(rt) && !Rf_isReal(rt)) || Rf_length(rt) != 1)
+                rdb::verror("%s: 'score.thresh' must be a single number", who.c_str());
+            params.score_thresh = Rf_asReal(rt);
+        }
 
         return params;
     }

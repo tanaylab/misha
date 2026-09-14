@@ -204,8 +204,17 @@ SEXP C_potts_score_codes_cmp(SEXP r_params, SEXP r_codes)
         for (int i = 0; i < n; ++i) {
             check_interrupt();
             const int *col = codes + (size_t)i * W;
-            for (int j = 0; j < W; ++j)
+            for (int j = 0; j < W; ++j) {
+                // Every other input to this function is checked, and a code
+                // outside 0..3 is not a wrong answer but an out-of-bounds
+                // read: score_codes_blocked() packs two of them into
+                // 4*c[p0] + c[p0+1], which for 100 wraps int8_t to -12 and
+                // indexes m_block_table at (size_t)(-12).
+                if (col[j] < 0 || col[j] > 3)
+                    rdb::verror("C_potts_score_codes_cmp: code at row %d of column %d is %d, outside 0..3",
+                                j + 1, i + 1, col[j]);
                 win[j] = (int8_t)col[j];
+            }
             naive[i] = model.score_codes_naive(win.data());
             blocked[i] = model.score_codes_blocked(win.data());
         }
@@ -214,8 +223,8 @@ SEXP C_potts_score_codes_cmp(SEXP r_params, SEXP r_codes)
         SET_VECTOR_ELT(res, 0, r_naive);
         SET_VECTOR_ELT(res, 1, r_blocked);
         SEXP names = rprotect_ptr(RSaneAllocVector(STRSXP, 2));
-        SET_STRING_ELT(names, 0, Rf_mkChar("naive"));
-        SET_STRING_ELT(names, 1, Rf_mkChar("blocked"));
+        SET_STRING_ELT(names, 0, RSaneMkChar("naive"));
+        SET_STRING_ELT(names, 1, RSaneMkChar("blocked"));
         Rf_setAttrib(res, R_NamesSymbol, names);
 
         runprotect(4);

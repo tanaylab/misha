@@ -1084,3 +1084,32 @@ test_that("a potts interval with no anchor at all is NaN, potts.count included",
         }
     }
 })
+
+test_that("a whole fitted model goes into params verbatim, but a typo in a named argument does not", {
+    # The docs promise a fitted Potts can be handed over as `params` with no
+    # subsetting. A fit carries far more fields than this family reads - and
+    # which ones is another package's business, not something to hardcode here
+    # - so unknown names are ignored when a whole object arrives via `params`.
+    remove_all_vtracks()
+    m <- potts_ref_model(W = 6L, npair_mode = "sparse", seed = 51L)
+
+    fitted <- c(m, list(
+        width = 6L, pair_strength = 0.5, attr = list(name = "x"), link = "logistic",
+        n_train = 1000L, edf = 12.5, edf_max = 40L, min_cell = 3L,
+        n_cells = 210L, convergence = TRUE, usable = TRUE
+    ))
+    expect_silent(gvtrack.create("pv_fitted", NULL, "potts.max", params = fitted))
+
+    gvtrack.create("pv_plain", NULL, "potts.max", params = m)
+    got <- gextract(c("pv_fitted", "pv_plain"), gintervals(1, 0, 2000), iterator = 500)
+    expect_equal(got$pv_fitted, got$pv_plain)
+
+    # A named argument is typed by hand, so an unknown one there is a typo -
+    # and a silently ignored `bidrect` would score one strand instead of two.
+    expect_error(
+        gvtrack.create("pv_typo", NULL, "potts.max",
+            e = m$e, J = m$J, pairs = m$pairs, intercept = m$intercept, bidrect = FALSE
+        ),
+        "bidrect"
+    )
+})

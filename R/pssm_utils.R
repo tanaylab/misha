@@ -27,6 +27,26 @@
     pssm[, c("A", "C", "G", "T"), drop = FALSE]
 }
 
+# A J block's rows are indexed by the lower position's base and its columns by
+# the higher position's, both in A, C, G, T order. `.coerce_pssm_matrix()`
+# reorders `e` by column NAME, so a labelled J block has to be reordered too:
+# reading a relabelled block positionally is a wrong score with no warning, and
+# a user who has just seen `e` accept labelled columns has every reason to
+# label J as well. An unlabelled block is positional, as before.
+.orient_potts_J <- function(Jk, k, what) {
+    dn <- dimnames(Jk)
+    if (is.null(dn) || (is.null(dn[[1L]]) && is.null(dn[[2L]]))) {
+        return(Jk)
+    }
+    acgt <- c("A", "C", "G", "T")
+    for (d in 1:2) {
+        if (is.null(dn[[d]]) || !setequal(dn[[d]], acgt)) {
+            stop(sprintf("%s: 'J' table %d is labelled, so both its rows and its columns must be named A, C, G, T in some order", what, k), call. = FALSE)
+        }
+    }
+    Jk[acgt, acgt, drop = FALSE]
+}
+
 # One validator for both Potts entry points - gseq.potts() and
 # .vtrack_params_potts(). It returns the model in the exact shape C++ takes:
 # `e` a W x 4 double matrix, `J` an npair x 16 double matrix, `pairs` an
@@ -74,6 +94,12 @@
     if (!is.matrix(pairs) || !is.numeric(pairs) || ncol(pairs) != 2L) {
         stop(sprintf("%s: 'pairs' must be a numeric matrix with 2 columns, one row per coupling", what), call. = FALSE)
     }
+    # Before storage.mode(), which truncates: 2.9 with W = 2 is both fractional
+    # AND out of range, and the range check below would validate the truncated
+    # 2 and pass it. Every other index in this validator is strict.
+    if (anyNA(pairs) || any(pairs != trunc(pairs))) {
+        stop(sprintf("%s: every 'pairs' index must be a whole number", what), call. = FALSE)
+    }
     storage.mode(pairs) <- "integer"
     dimnames(pairs) <- NULL
     npair <- nrow(pairs)
@@ -105,6 +131,7 @@
             if (any(!is.finite(Jk))) {
                 stop(sprintf("%s: 'J' table %d has non-finite entries", what, k), call. = FALSE)
             }
+            J[[k]] <- .orient_potts_J(Jk, k, what)
         }
         # as.numeric() of a 4x4 is column-major, so element [a, b] lands at
         # index (b - 1) * 4 + a - which is what the C++ kernel indexes.

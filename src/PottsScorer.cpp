@@ -208,7 +208,11 @@ float PottsScorer::score_direct(size_t i_min, size_t i_max, size_t motif_len, si
         }
     }
 
-    if (any)
+    // Not for MOTIF_COUNT: PottsScorer.h promises it is left at -inf there,
+    // and slid_answer() honours that. Setting it here made the value
+    // path-dependent - direct path a real maximum, slid path -inf - for the
+    // cross-part aggregation hook score_potts_var() reads it through.
+    if (any && m_mode != MOTIF_COUNT)
         m_last_max_score = best;
 
     switch (m_mode) {
@@ -371,6 +375,22 @@ float PottsScorer::try_slide_window(const GInterval &original_interval,
 
     switch (m_mode) {
     case TOTAL_LIKELIHOOD: {
+        // Decided BEFORE the first pop, so the guarantee stated above holds:
+        // a give-up leaves the aggregators exactly as it found them. Only
+        // m_nbad is read here, no anchor is scored, so the give-up path also
+        // stops paying for `stride` scores it was about to throw away.
+        // Correctness does not currently depend on this - can_slide forces
+        // stride < W, so seed_sliding_window() always re-inits the
+        // accumulator on the next call - but the invariant is what the
+        // comment claims, and the next relaxation of `populate` would need it.
+        if (!std::isfinite(m_slide.rlse.M)) {
+            for (size_t k = 0; k < stride; ++k) {
+                const size_t i = slot_index(W - stride + k, i_min, i_max);
+                if (m_nbad[i + motif_len] - m_nbad[i] == 0)
+                    return std::numeric_limits<float>::quiet_NaN(); // slid stays false
+            }
+        }
+
         for (size_t k = 0; k < stride; ++k)
             m_slide.rlse.pop_front();
 
@@ -391,19 +411,13 @@ float PottsScorer::try_slide_window(const GInterval &original_interval,
         // STAYS entirely unscorable is left alone - value() short-circuits on
         // the non-finite maximum and never reads sum_scaled - so a scan of an
         // assembly gap still slides.
-        const bool nothing_scorable = !std::isfinite(m_slide.rlse.M);
-        bool incoming_scorable = false;
         for (size_t k = 0; k < stride; ++k) {
             const size_t i = slot_index(W - stride + k, i_min, i_max);
             int dir = 1;
             const bool bad = (m_nbad[i + motif_len] - m_nbad[i] != 0);
-            if (!bad)
-                incoming_scorable = true;
             m_slide.rlse.push(bad ? -std::numeric_limits<float>::infinity()
                                   : (float)anchor_value(&m_codes[i], union_max, dir));
         }
-        if (nothing_scorable && incoming_scorable)
-            return std::numeric_limits<float>::quiet_NaN(); // slid stays false
         break;
     }
 

@@ -279,8 +279,27 @@ test_that("gseq.pwm(mode = 'pos') equals the pwm.max.pos vtrack under bidirect =
     )
 
     # The vtrack signs the position by strand; gseq.pwm returns the two apart.
-    expect_equal(g$pos, abs(v$p_pos), ignore_attr = TRUE)
-    expect_equal(g$strand, sign(v$p_pos), ignore_attr = TRUE)
+    #
+    # Asserted on the SCORE at each reported position, not on the index: the
+    # two paths cross the float/double boundary this file's header warns about,
+    # and nothing here makes the maximum unique, so a tie - which a repeat
+    # region supplies readily - lets them name different, equally maximal
+    # anchors. test-potts.R states the same rule for the potts family.
+    seqs <- toupper(gseq.extract(ivs))
+    w <- nrow(pssm)
+    score_at <- function(sq, pos) {
+        gseq.pwm(substr(sq, pos, pos + w - 1L), pssm,
+            mode = "max", bidirect = TRUE, extend = FALSE, prior = 0.01
+        )
+    }
+    expect_equal(
+        mapply(score_at, seqs, g$pos, USE.NAMES = FALSE),
+        mapply(score_at, seqs, abs(v$p_pos), USE.NAMES = FALSE),
+        tolerance = parity_tolerance
+    )
+    # and where they do agree on the anchor, they must agree on its strand
+    same <- g$pos == abs(v$p_pos)
+    expect_equal(g$strand[same], sign(v$p_pos)[same], ignore_attr = TRUE)
 })
 
 test_that("a palindromic window is one hit scored on both strands", {

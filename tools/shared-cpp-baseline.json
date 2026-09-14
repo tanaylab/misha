@@ -298,5 +298,15 @@
     "identical": false,
     "misha": "ed411595ce71c5fc",
     "pymisha": "e731f379d91f721d"
+  },
+  "utils/RunningLogSumExp.h": {
+    "identical": true,
+    "misha": "f576ec681ecaba8f",
+    "pymisha": "f576ec681ecaba8f"
+  },
+  "utils/RunningMaxDeque.h": {
+    "identical": true,
+    "misha": "7edcd8fedbff6664",
+    "pymisha": "7edcd8fedbff6664"
   }
 }

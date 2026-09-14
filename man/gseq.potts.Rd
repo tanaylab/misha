@@ -36,8 +36,10 @@ strands are combined at each window by log-sum-exp for \code{"lse"},
 which has to name a strand. \code{\link{gseq.pwm}} splits the two the
 same way.}
 
-\item{strand}{used only when \code{bidirect = FALSE}: \code{1} for the
-forward strand, \code{-1} for the reverse.}
+\item{strand}{used only when \code{bidirect = FALSE}, and required there:
+\code{1} for the forward strand, \code{-1} for the reverse. The default
+\code{0} is accepted only under \code{bidirect = TRUE}, where both
+strands are read and it is ignored.}
 
 \item{score.thresh}{required for \code{mode = "count"} and ignored
 otherwise. A Potts score is an energy whose usable range depends entirely
@@ -58,6 +60,12 @@ family's. The score of one width-\code{W} window is
 longer than \code{W} is reduced over every window by \code{mode}.
 }
 \details{
+The parameterisation is not unique: adding a constant to a position's four
+\code{e} entries, or a row or column shift to a \code{J} block, changes no
+score, so \code{e} is comparable across positions only in the zero-sum
+gauge, where \code{rowSums(e)} is 0 and every \code{J} block has zero row
+and column sums.
+
 A Potts carries energies, not probabilities, so there is no \code{prior} and
 no fallback for an ambiguous base: a window containing any non-ACGT base is
 not scored and is left out of the reduction. A sequence that has windows but

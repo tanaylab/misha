@@ -190,7 +190,13 @@ test_that("gseq.potts mode = count needs a threshold and counts anchors", {
     expect_error(gseq.potts(s, m, mode = "count"), "score.thresh")
 
     a <- potts_ref_anchors(s, m, bidirect = TRUE, strand = 1L, union = "lse")
-    for (th in stats::quantile(a, c(0.1, 0.5, 0.9), names = FALSE)) {
+    # NOT quantile(): at n = 195 a type-7 quantile lands exactly ON an anchor's
+    # own score, so `a >= th` turns on rounding across the float/double
+    # boundary - which is what test-potts-vtrack.R forbids by name. A midpoint
+    # between two distinct sorted scores cannot tie with either.
+    sa <- sort(unique(a))
+    idx <- pmin(pmax(round(c(0.1, 0.5, 0.9) * (length(sa) - 1L)) + 1L, 1L), length(sa) - 1L)
+    for (th in (sa[idx] + sa[idx + 1L]) / 2) {
         expect_equal(gseq.potts(s, m, mode = "count", score.thresh = th),
             sum(a >= th),
             info = paste("thresh", th)
@@ -335,3 +341,122 @@ for (.W in c(20L, 21L)) {
         })
     }
 }
+
+test_that("a repeated pair contributes BOTH couplings, in both kernels", {
+    # .coerce_potts_model() rejects a duplicate (p1, p2), so this cannot be
+    # reached through gseq.potts() or a vtrack. PottsParams::parse() is a
+    # .Call trust boundary all the same, and build_blocked_tables() SUMS a
+    # repeat rather than letting the last one win - which is what
+    # score_codes_naive()'s loop over k does naturally. Without this test the
+    # sum can be replaced by an overwrite and the whole suite still passes.
+    W <- 6L
+    m <- potts_ref_model(W = W, npair_mode = "sparse", seed = 11L)
+    single <- misha:::.potts_params(m,
+        bidirect = TRUE, extend = FALSE, strand = 1L, score.thresh = 0,
+        what = "duplicate pair test"
+    )
+
+    dup <- single
+    dup$pairs <- rbind(dup$pairs, dup$pairs[1L, , drop = FALSE])
+    dup$J <- rbind(dup$J, dup$J[1L, , drop = FALSE])
+
+    set.seed(12L)
+    n <- 2000L
+    codes <- matrix(sample(0:3, W * n, replace = TRUE), nrow = W, ncol = n)
+    storage.mode(codes) <- "integer"
+
+    r1 <- .Call("C_potts_score_codes_cmp", single, codes)
+    r2 <- .Call("C_potts_score_codes_cmp", dup, codes)
+
+    # The duplicated block is counted twice, so the difference is exactly that
+    # coupling's own contribution to each window - not zero, and not double the
+    # whole score.
+    J1 <- matrix(single$J[1L, ], 4L, 4L)
+    extra <- J1[cbind(codes[single$pairs[1L, 1L], ] + 1L, codes[single$pairs[1L, 2L], ] + 1L)]
+    expect_equal(r2$naive - r1$naive, extra)
+    expect_equal(r2$blocked, r2$naive, tolerance = 1e-9)
+    expect_false(isTRUE(all.equal(r2$naive, r1$naive)))
+})
+
+test_that("a labelled J block is reordered by name, like e's columns", {
+    # .coerce_pssm_matrix() reorders `e` by column NAME, so reading a labelled
+    # J block positionally would score a relabelled copy of the same model
+    # differently, with no warning.
+    m <- potts_ref_model(W = 4L, npair_mode = "sparse", seed = 21L)
+    s <- c("ACGT", "TGCA", "GGTA")
+    want <- gseq.potts(s, m, mode = "max", bidirect = FALSE, strand = 1L)
+
+    o <- c(4L, 3L, 2L, 1L) # T, G, C, A
+    relabelled <- m
+    relabelled$e <- m$e[, o, drop = FALSE]
+    relabelled$J <- lapply(m$J, function(Jk) {
+        out <- Jk[o, o, drop = FALSE]
+        dimnames(out) <- list(POTTS_BASES[o], POTTS_BASES[o])
+        out
+    })
+    expect_equal(
+        gseq.potts(s, relabelled, mode = "max", bidirect = FALSE, strand = 1L),
+        want
+    )
+
+    # An unlabelled block stays positional, as before.
+    bare <- m
+    bare$J <- lapply(m$J, function(Jk) {
+        dimnames(Jk) <- NULL
+        Jk
+    })
+    expect_equal(gseq.potts(s, bare, mode = "max", bidirect = FALSE, strand = 1L), want)
+
+    # Labelled with anything but the four bases is an error, not a guess.
+    bad <- m
+    bad$J <- lapply(m$J, function(Jk) {
+        dimnames(Jk) <- list(c("A", "C", "G", "X"), POTTS_BASES)
+        Jk
+    })
+    expect_error(
+        gseq.potts(s, bad, mode = "max", bidirect = FALSE, strand = 1L),
+        "named A, C, G, T"
+    )
+
+    # Half-labelled is too: it is as likely to be an accident as an intent.
+    half <- m
+    half$J <- lapply(m$J, function(Jk) {
+        dimnames(Jk) <- list(POTTS_BASES, NULL)
+        Jk
+    })
+    expect_error(
+        gseq.potts(s, half, mode = "max", bidirect = FALSE, strand = 1L),
+        "named A, C, G, T"
+    )
+})
+
+test_that("a fractional pairs index is rejected, not truncated", {
+    # storage.mode(pairs) <- "integer" truncates, and the range check that
+    # follows would then validate the truncated value: 2.9 with W = 2 is both
+    # fractional AND out of range, and used to be accepted as 2.
+    m <- potts_ref_model(W = 4L, npair_mode = "sparse", seed = 31L)
+    m$pairs <- matrix(c(1L, 2L), ncol = 2L)
+    m$J <- m$J[1L]
+
+    frac <- m
+    frac$pairs <- matrix(c(1, 2.9), ncol = 2L)
+    expect_error(
+        gseq.potts("ACGT", frac, mode = "max", bidirect = FALSE, strand = 1L),
+        "whole number"
+    )
+
+    # and the whole-number equivalent still passes
+    ok <- m
+    ok$pairs <- matrix(c(1, 2), ncol = 2L)
+    expect_silent(gseq.potts("ACGT", ok, mode = "max", bidirect = FALSE, strand = 1L))
+})
+
+test_that("gseq.potts(bidirect = FALSE) requires an explicit strand", {
+    # The signature default of 0 exists for parity with gseq.pwm(). Under
+    # bidirect = FALSE it used to mean the forward strand silently, which hands
+    # half an answer to anyone carrying gseq.pwm()'s "0 = both strands" over.
+    m <- potts_ref_model(W = 4L, npair_mode = "sparse", seed = 41L)
+    expect_error(gseq.potts("ACGT", m, mode = "max", bidirect = FALSE), "explicit strand")
+    expect_silent(gseq.potts("ACGT", m, mode = "max", bidirect = FALSE, strand = 1L))
+    expect_silent(gseq.potts("ACGT", m, mode = "max", bidirect = TRUE)) # 0 is fine here
+})

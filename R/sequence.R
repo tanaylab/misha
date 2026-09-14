@@ -427,6 +427,12 @@ gseq.pwm <- function(seqs,
 #' \code{intercept + sum_i e[i, x_i] + sum_k J_k[x_i, x_j]}, and a sequence
 #' longer than \code{W} is reduced over every window by \code{mode}.
 #'
+#' The parameterisation is not unique: adding a constant to a position's four
+#' \code{e} entries, or a row or column shift to a \code{J} block, changes no
+#' score, so \code{e} is comparable across positions only in the zero-sum
+#' gauge, where \code{rowSums(e)} is 0 and every \code{J} block has zero row
+#' and column sums.
+#'
 #' A Potts carries energies, not probabilities, so there is no \code{prior} and
 #' no fallback for an ambiguous base: a window containing any non-ACGT base is
 #' not scored and is left out of the reduction. A sequence that has windows but
@@ -457,8 +463,10 @@ gseq.pwm <- function(seqs,
 #'   \code{"max"} and \code{"count"}, and by the maximum for \code{"pos"},
 #'   which has to name a strand. \code{\link{gseq.pwm}} splits the two the
 #'   same way.
-#' @param strand used only when \code{bidirect = FALSE}: \code{1} for the
-#'   forward strand, \code{-1} for the reverse.
+#' @param strand used only when \code{bidirect = FALSE}, and required there:
+#'   \code{1} for the forward strand, \code{-1} for the reverse. The default
+#'   \code{0} is accepted only under \code{bidirect = TRUE}, where both
+#'   strands are read and it is ignored.
 #' @param score.thresh required for \code{mode = "count"} and ignored
 #'   otherwise. A Potts score is an energy whose usable range depends entirely
 #'   on the model, so there is no default; read one off \code{mode = "max"}
@@ -524,6 +532,12 @@ gseq.potts <- function(seqs, model, mode = c("lse", "max", "pos", "count"),
     }
     if (bidirect) {
         strand <- 0L
+    } else if (strand == 0L) {
+        # 0 is the signature default, kept for parity with gseq.pwm(). Under
+        # bidirect = FALSE it cannot mean anything: exactly one strand is read,
+        # and silently picking the forward one hands half an answer to a caller
+        # carrying gseq.pwm()'s "0 = both strands" reading over.
+        stop("gseq.potts(bidirect = FALSE) needs an explicit strand: 1 for the forward strand, -1 for the reverse.", call. = FALSE)
     }
 
     # The same list .vtrack_params_potts() builds, parsed by the same C++, so

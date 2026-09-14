@@ -291,26 +291,31 @@
 
 #' Validate and process potts function parameters
 #'
-#' The allowlist is deliberately wider than the parameters this family uses:
-#' `width`, `pair_strength`, `attr` and `link` are accepted and ignored so that
-#' a fitted Potts model - whose fields are exactly `e`, `J`, `pairs`,
-#' `pair_strength`, `width`, `intercept`, `attr`, `link` - can be handed over
-#' verbatim as `params`, with no extra dependency here and no subsetting
-#' at the call site. `.coerce_potts_model()` cross-checks `width` against
-#' `nrow(e)` when it is present.
+#' A whole model object handed over as `params` may carry any number of fields
+#' its fit happened to produce - far more than the eight this family reads - so
+#' unknown names are IGNORED there rather than rejected. That is what lets a
+#' fitted Potts model be passed verbatim, with no extra dependency here, no
+#' subsetting at the call site, and no list of another package's field names
+#' hardcoded here to go stale. Named arguments are typed by hand, where an
+#' unknown name is a typo worth catching - a misspelled `bidirect` would
+#' silently score one strand - so those stay checked against the allowlist.
+#' `.coerce_potts_model()` cross-checks `width` against `nrow(e)` when present.
 #' @noRd
 .vtrack_params_potts <- function(func, params, dots) {
-    if (!is.null(params)) {
+    from_params <- !is.null(params)
+    if (from_params) {
         if (!is.list(params) || !("e" %in% names(params))) {
             stop("potts functions require a list with at least an 'e' matrix parameter", call. = FALSE)
         }
         dots <- params
     }
 
-    .vtrack_check_unknown_params(func, dots, c(
-        "e", "J", "pairs", "intercept", "bidirect", "extend", "strand",
-        "score.thresh", "width", "pair_strength", "attr", "link"
-    ))
+    if (!from_params) {
+        .vtrack_check_unknown_params(func, dots, c(
+            "e", "J", "pairs", "intercept", "bidirect", "extend", "strand",
+            "score.thresh", "width", "pair_strength", "attr", "link"
+        ))
+    }
 
     if (!("e" %in% names(dots))) {
         stop("potts functions require an 'e' matrix parameter", call. = FALSE)
@@ -881,7 +886,7 @@
 #'   \item \code{pssm}: Position-specific scoring matrix (matrix or data frame) with columns \code{A}, \code{C}, \code{G}, \code{T}; extra columns are ignored.
 #'   \item \code{bidirect}: When TRUE (default), both strands are scanned and combined per genomic start (per-position union). The \code{strand} argument is ignored. When FALSE, only the strand specified by \code{strand} is scanned.
 #'   \item \code{prior}: Pseudocount added to frequencies (default 0.01). Set to 0 to disable.
-#'   \item \code{extend}: Extends the fetched sequence so boundary-anchored motifs retain full context (default TRUE). The END coordinate is padded by motif_length - 1 for all strand modes; anchors must still start inside the iterator, so an iterator interval narrower than the model holds no anchor at all and every value comes back \code{NA}.
+#'   \item \code{extend}: Extends the fetched sequence so boundary-anchored motifs retain full context (default TRUE). The END coordinate is padded by motif_length - 1 for all strand modes. Anchors must still start inside the iterator, so with \code{extend = FALSE} an iterator interval narrower than the model holds no anchor at all and every value comes back \code{NA}; under the default \code{extend = TRUE} the END padding supplies the missing context and such an interval is scored.
 #'   \item Neutral characters (\code{N}, \code{n}, \code{*}) contribute the mean log-probability of the corresponding PSSM column on both strands.
 #'   \item \code{strand}: Used only when \code{bidirect = FALSE}; 1 scans the forward strand, -1 scans the reverse strand. The \code{*.pos} funcs report the same thing for both strands: the 1-based position of the first base of the match in forward-strand orientation.
 #'   \item \code{score.thresh}: Threshold for \code{pwm.count}, and mandatory for it - there is no default, and it must be a single value.
@@ -895,7 +900,7 @@
 #'
 #' \strong{Potts (pairwise energy) notes}
 #' \itemize{
-#'   \item The score of one window is \code{intercept + sum_i e[i, x_i] + sum_k J_k[x_i, x_j]}: \code{e} is a \code{W x 4} matrix of per-position energies (columns \code{A}, \code{C}, \code{G}, \code{T}), and each row of \code{pairs} names a coupled pair of positions (1-based, lower position first) whose \code{4 x 4} coupling table is the matching entry of \code{J}, indexed with the lower position on the rows.
+#'   \item The score of one window is \code{intercept + sum_i e[i, x_i] + sum_k J_k[x_i, x_j]}: \code{e} is a \code{W x 4} matrix of per-position energies (columns \code{A}, \code{C}, \code{G}, \code{T}), and each row of \code{pairs} names a coupled pair of positions (1-based, lower position first) whose \code{4 x 4} coupling table is the matching entry of \code{J}, indexed with the lower position on the rows. The parameterisation is not unique: adding a constant to a position's four \code{e} entries, or a row or column shift to a \code{J} block, changes no score, so \code{e} is comparable across positions only in the zero-sum gauge, where \code{rowSums(e)} is 0 and every \code{J} block has zero row and column sums.
 #'   \item \strong{No \code{prior} and no \code{spat_*}.} A Potts carries energies, not probabilities, so there is no pseudocount and no spatial weighting. A window containing any non-ACGT base is not scored and is left out of the reduction.
 #'   \item \strong{"Counted nothing" and "nothing to count" are different answers.} An interval that has anchors but none of them scorable (for example, all \code{N}) gives \code{NaN} for \code{potts}, \code{potts.max} and \code{potts.max.pos}, and \code{0} for \code{potts.count}: it counted, and found none. An interval with no anchor at all gives \code{NaN} for all four, \code{potts.count} included - there was nothing to count, and a \code{0} would be indistinguishable from the line above. That covers an interval narrower than the model with \code{extend = FALSE}; a chromosome end with the default \code{extend = TRUE}, where the end padding is clipped at the contig boundary and the fetched sequence comes back shorter than the model (\code{pwm.count} reports \code{0} rather than \code{NA} in this one case); and a \code{\link{gvtrack.filter}} that leaves no unmasked part, or only parts narrower than the model.
 #'   \item \code{strand}: Used only when \code{bidirect = FALSE}; it is clamped to 1 when \code{bidirect = TRUE}, as in the \code{pwm} family.

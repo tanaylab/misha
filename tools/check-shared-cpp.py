@@ -76,14 +76,29 @@ def main():
     ap.add_argument("--misha", required=True)
     ap.add_argument("--pymisha", required=True)
     ap.add_argument("--update-baseline", action="store_true")
+    ap.add_argument("--clear-needs-port", action="append", default=[], metavar="FILE",
+                    help="drop FILE's needs_port marker when writing the baseline, "
+                         "i.e. record that pymisha has taken misha's change")
     ap.add_argument("--show-diff", action="store_true")
     args = ap.parse_args()
 
     current = collect(os.path.join(args.misha, "src"), os.path.join(args.pymisha, "src"))
 
     if args.update_baseline:
+        # `needs_port` is a human annotation, not something collect() can
+        # derive, so it is carried across an update rather than silently
+        # cleared: --update-baseline means "the hashes are reconciled", which
+        # is not the same as "the fix has been ported". Clear it deliberately,
+        # with --clear-needs-port, when pymisha has actually taken the change.
+        prior = {}
+        if os.path.exists(BASELINE):
+            with open(BASELINE) as fh:
+                prior = json.load(fh)
         payload = {n: {k: v for k, v in d.items() if not k.startswith("_")}
                    for n, d in current.items()}
+        for n, d in payload.items():
+            if prior.get(n, {}).get("needs_port") and n not in args.clear_needs_port:
+                d["needs_port"] = True
         with open(BASELINE, "w") as fh:
             json.dump(payload, fh, indent=2, sort_keys=True)
             fh.write("\n")
@@ -98,11 +113,16 @@ def main():
     with open(BASELINE) as fh:
         base = json.load(fh)
 
-    broke, unreviewed, added = [], [], []
+    broke, unreviewed, added, unported = [], [], [], []
     for name, cur in current.items():
         prev = base.get(name)
         if prev is None:
             added.append(name)
+        elif prev.get("needs_port") and cur["misha"] == prev["misha"]:
+            # misha's side still carries the un-ported change the marker was
+            # put there for. Reported on its own, because "add it to the
+            # baseline" is the wrong instruction: it is already in it.
+            unported.append(name)
         elif prev["identical"] and not cur["identical"]:
             broke.append(name)
         elif not prev["identical"] and cur["misha"] != prev["misha"]:
@@ -119,14 +139,17 @@ def main():
     for name in unreviewed:
         print(f"REVIEW  {name}: adapted in pymisha, and misha's side changed - "
               f"check whether the change needs porting")
+    for name in unported:
+        print(f"PORT    {name}: misha has a change pymisha has not taken; port it, "
+              f"then --update-baseline --clear-needs-port {name}")
     for name in added:
         print(f"NEW     {name}: newly shared; add it to the baseline")
     for name in removed:
         print(f"GONE    {name}: no longer shared; drop it from the baseline")
 
-    if broke or unreviewed or added or removed:
+    if broke or unreviewed or added or removed or unported:
         print(f"\n{len(broke)} broke parity, {len(unreviewed)} need review, "
-              f"{len(added)} new, {len(removed)} gone.")
+              f"{len(unported)} need porting, {len(added)} new, {len(removed)} gone.")
         print("If the change is intentional and pymisha has been updated to match, "
               "re-run with --update-baseline and commit the result.")
         return 1
