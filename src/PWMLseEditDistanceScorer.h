@@ -64,7 +64,7 @@ public:
     /**
      * Score a genomic interval - returns minimum edits or position
      */
-    float score_interval(const GInterval& interval, const GenomeChromKey& chromkey) override;
+    double score_interval(const GInterval& interval, const GenomeChromKey& chromkey) override;
 
     float get_last_min_edits() const { return m_last_min_edits; }
 

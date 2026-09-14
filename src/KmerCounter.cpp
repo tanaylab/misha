@@ -34,7 +34,7 @@ KmerCounter::KmerCounter(const std::string &kmer, GenomeSeqFetch* shared_seqfetc
                    [](unsigned char c) { return std::toupper(c); });
 }
 
-float KmerCounter::score_interval(const GInterval &interval, const GenomeChromKey &chromkey)
+double KmerCounter::score_interval(const GInterval &interval, const GenomeChromKey &chromkey)
 {
     // Safety check - shouldn't happen due to constructor validation
     if (m_kmer.empty())
