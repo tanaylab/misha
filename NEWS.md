@@ -1,5 +1,9 @@
 # misha 5.11.27
 
+## Bug fixes
+
+* `pwm.max` and `pwm.max.pos` silently scanned only the first 1,000,001 anchors of an interval, so a scan of anything longer than about 1 Mb answered from its first megabase and reported neither a warning nor an error. Recompute anything derived from either function over intervals larger than that - whole-chromosome iterators are the common case.
+
 * Four source files used `drand48()`, `getenv()` or `atof()` without including `<stdlib.h>`, relying on it arriving indirectly. Nothing changes for users; it removes a build failure that appears when a compiler toolchain stops providing that header for free.
 
 # misha 5.11.26

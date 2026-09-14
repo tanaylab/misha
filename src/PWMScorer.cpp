@@ -275,7 +275,7 @@ float PWMScorer::get_max_likelihood_pos_with_spatial(const std::string& target, 
     size_t best_index = 0;
     int best_dir = 1;
 
-    size_t max_i_idx = std::min<size_t>(m_pssm.get_max_range(), target.size() - motif_length);
+    size_t max_i_idx = m_pssm.max_offset(target.size());
     size_t min_i_idx = std::min<size_t>(std::max(0, m_pssm.get_min_range()), max_i_idx);
 
     // For bidirectional PSSMs, always check both strands (matching max_like_match behavior)
@@ -773,7 +773,7 @@ float PWMScorer::score_interval(const GInterval& interval, const GenomeChromKey&
         if (tlen >= motif_len) {
             // Calculate allowed start range
             size_t i_min = std::max(0, m_pssm.get_min_range());
-            size_t i_max = std::min<size_t>(m_pssm.get_max_range(), tlen - motif_len);
+            size_t i_max = m_pssm.max_offset(tlen);
 
             // Clamp the scanning window to anchors whose starts fall inside the iterator
             const int64_t interval_len = interval.end - interval.start;
