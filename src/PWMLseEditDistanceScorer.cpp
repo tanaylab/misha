@@ -58,7 +58,7 @@ void PWMLseEditDistanceScorer::precompute_tables()
     }
 }
 
-float PWMLseEditDistanceScorer::score_interval(const GInterval& interval,
+double PWMLseEditDistanceScorer::score_interval(const GInterval& interval,
                                                 const GenomeChromKey& chromkey)
 {
     m_last_min_edits = std::numeric_limits<float>::quiet_NaN();

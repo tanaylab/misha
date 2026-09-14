@@ -151,6 +151,10 @@ public:
 	static const float CONSENSUS_SINGLE_THRESH;
 	static const float CONSENSUS_DOUBLE_THRESH;
 
+	// "no spatial cap". Anything at or above a target's length scans all of
+	// it; INT_MAX says so without pretending to be a real distance.
+	static const int NO_RANGE_CAP = 2147483647;
+
 protected:
 
 	vector<DnaProbVec> m_chars;
@@ -182,9 +186,32 @@ public:
 		return(m_max_range);
 	}
 
+	// The largest 0-based start offset a scan may use on a target of this
+	// length.
+	//
+	// m_max_range is a SPATIAL bound and set_range() is called only when the
+	// caller asked for one, so with no spatial range it must not cap the scan
+	// at all. It used to default to 1000000, which is not "no cap" but a cap
+	// of a million: pwm.max and pwm.max.pos silently reported the best of the
+	// FIRST 1000001 anchors of any interval, so a whole-chromosome scan
+	// answered from its first megabase and said nothing.
+	//
+	// Returned as an offset rather than left to `target.begin() + m_max_range`
+	// because that formed an iterator up to the cap past the end before the
+	// old code clamped it, which is undefined behaviour in its own right.
+	size_t max_offset(size_t target_len) const {
+		if (target_len < m_chars.size())
+			return(0);
+		size_t last = target_len - m_chars.size();
+		if (m_max_range < 0)
+			return(0);
+		size_t cap = (size_t)m_max_range;
+		return(cap < last ? cap : last);
+	}
+
 	DnaPSSM() :
 		m_min_range(0),
-		m_max_range(1000000),
+		m_max_range(NO_RANGE_CAP),
 		m_bidirect(false)
 	{}
 
