@@ -47,6 +47,12 @@
     Jk[acgt, acgt, drop = FALSE]
 }
 
+# Every field is read with `[[`, never `$`: `$` partial-matches on a list, so a
+# model carrying `Jcoupling` and no `J` had the decoy spliced in as the real
+# coupling table and scored - 52 where 2 was right, with no warning. Omitting
+# `J` errors; MISTYPING it must not silently score. gvtrack.create() is shielded
+# by its parameter allowlist, but gseq.potts() takes the list as given, and the
+# docs invite passing a whole fitted model verbatim.
 # One validator for both Potts entry points - gseq.potts() and
 # .vtrack_params_potts(). It returns the model in the exact shape C++ takes:
 # `e` a W x 4 double matrix, `J` an npair x 16 double matrix, `pairs` an
@@ -65,7 +71,7 @@
     }
 
     e <- .coerce_pssm_matrix(
-        model$e,
+        model[["e"]],
         numeric_msg = sprintf("%s: 'e' must be a numeric matrix or data frame with numeric columns", what),
         ncol_msg = sprintf("%s: 'e' must have columns named A, C, G, T", what),
         colnames_msg = sprintf("%s: 'e' must have columns named A, C, G, T", what)
@@ -78,13 +84,14 @@
     }
     W <- nrow(e)
 
-    if (!is.null(model$width)) {
-        if (!is.numeric(model$width) || length(model$width) != 1L || model$width != W) {
-            stop(sprintf("%s: 'width' says %s but 'e' has %d rows", what, paste(model$width, collapse = ", "), W), call. = FALSE)
+    mwidth <- model[["width"]]
+    if (!is.null(mwidth)) {
+        if (!is.numeric(mwidth) || length(mwidth) != 1L || mwidth != W) {
+            stop(sprintf("%s: 'width' says %s but 'e' has %d rows", what, paste(mwidth, collapse = ", "), W), call. = FALSE)
         }
     }
 
-    pairs <- model$pairs
+    pairs <- model[["pairs"]]
     if (is.null(pairs)) {
         pairs <- matrix(integer(0), 0L, 2L)
     }
@@ -115,7 +122,7 @@
         }
     }
 
-    J <- model$J
+    J <- model[["J"]]
     if (is.null(J)) {
         J <- list()
     }
@@ -141,7 +148,7 @@
             matrix(numeric(0), 0L, 16L)
         }
     } else {
-        if (!is.matrix(J) || !is.numeric(J) || nrow(J) != npair || (npair && ncol(J) != 16L)) {
+        if (!is.matrix(J) || !is.numeric(J) || nrow(J) != npair || ncol(J) != 16L) {
             stop(sprintf("%s: a flat 'J' must be an %d x 16 numeric matrix", what, npair), call. = FALSE)
         }
         if (any(!is.finite(J))) {
@@ -152,7 +159,7 @@
     storage.mode(Jflat) <- "double"
     dimnames(Jflat) <- NULL
 
-    intercept <- if (is.null(model$intercept)) 0 else model$intercept
+    intercept <- if (is.null(model[["intercept"]])) 0 else model[["intercept"]]
     if (!is.numeric(intercept) || length(intercept) != 1L || !is.finite(intercept)) {
         stop(sprintf("%s: 'intercept' must be a single finite number", what), call. = FALSE)
     }
@@ -174,9 +181,14 @@
     # |score| <= |intercept| + sum_i max_b |e[i, b]| + sum_k max_ab |J_k[a, b]|,
     # bounded above by the W * max|e| + npair * max|J| + |intercept| below. No
     # fitted model comes near it; a hand-built or rescaled one can.
-    worst <- W * max(abs(e)) + abs(intercept)
+    # The tight bound its own comment states: the largest |e| a window can pick
+    # is one per POSITION and the largest |J| one per PAIR, so summing the
+    # per-row maxima is exact. W * max|e| + npair * max|J| over-states it by
+    # orders of magnitude and rejected models that score nowhere near the
+    # single-precision limit.
+    worst <- sum(apply(abs(e), 1L, max)) + abs(intercept)
     if (npair) {
-        worst <- worst + npair * max(abs(Jflat))
+        worst <- worst + sum(apply(abs(Jflat), 1L, max))
     }
     # FLT_MAX, spelled out: R has no float type to read it off.
     if (!is.finite(worst) || worst > 3.4028234663852886e38) {

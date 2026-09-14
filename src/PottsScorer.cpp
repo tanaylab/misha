@@ -80,21 +80,26 @@ double PottsScorer::anchor_value(const int8_t *c, bool union_max, int &dir) cons
     return r;
 }
 
-float PottsScorer::compute_position_result(size_t index, size_t target_length,
+double PottsScorer::compute_position_result(size_t index, size_t target_length,
                                            size_t motif_length, int direction) const
 {
     if (target_length < motif_length)
         return std::numeric_limits<float>::quiet_NaN();
 
-    float pos_result = float(index) + 1.0f; // 1-based
+    // double, not float: a position is an exact integer only up to 2^24 in
+    // binary32, so on an interval longer than ~16.7 Mb a reported position was
+    // rounded to an even neighbour - 16777216 where 16777218 was right. Scores
+    // are still accumulated in float, so widening the return type alone leaves
+    // every score bit-identical.
+    double pos_result = double(index) + 1.0; // 1-based
 
     if (m_strand == -1) {
         // The target is reverse-complemented: a window at target index `index`
         // covers forward-strand 0-based [target_length - index - motif_length, ...),
         // so the 1-based forward offset is that plus one. Signed arithmetic
         // because an unsigned underflow here would read as a huge position.
-        pos_result = float(std::ptrdiff_t(target_length) - std::ptrdiff_t(index) -
-                           std::ptrdiff_t(motif_length)) + 1.0f;
+        pos_result = double(std::ptrdiff_t(target_length) - std::ptrdiff_t(index) -
+                           std::ptrdiff_t(motif_length)) + 1.0;
     }
 
     if (m_bidirect)
@@ -105,7 +110,7 @@ float PottsScorer::compute_position_result(size_t index, size_t target_length,
 
 // Task 6's anchor loop, unchanged but for MAX_LIKELIHOOD_POS's tie-break, which
 // is described where it happens below.
-float PottsScorer::score_direct(size_t i_min, size_t i_max, size_t motif_len, size_t tlen,
+double PottsScorer::score_direct(size_t i_min, size_t i_max, size_t motif_len, size_t tlen,
                                 bool fill_window)
 {
     const bool union_max = (m_mode == MAX_LIKELIHOOD_POS);
@@ -229,7 +234,7 @@ float PottsScorer::score_direct(size_t i_min, size_t i_max, size_t motif_len, si
     return std::numeric_limits<float>::quiet_NaN();
 }
 
-float PottsScorer::slid_answer(const GInterval &expanded_interval, size_t motif_len,
+double PottsScorer::slid_answer(const GInterval &expanded_interval, size_t motif_len,
                                size_t tlen)
 {
     // BOTH aggregators report -inf, not NaN, for a window whose every anchor
@@ -279,7 +284,7 @@ float PottsScorer::slid_answer(const GInterval &expanded_interval, size_t motif_
     return std::numeric_limits<float>::quiet_NaN();
 }
 
-float PottsScorer::seed_sliding_window(const GInterval &original_interval,
+double PottsScorer::seed_sliding_window(const GInterval &original_interval,
                                        const GInterval &expanded_interval,
                                        size_t i_min, size_t i_max, size_t motif_len,
                                        size_t tlen, bool populate)
@@ -351,7 +356,7 @@ float PottsScorer::seed_sliding_window(const GInterval &original_interval,
     return std::numeric_limits<float>::quiet_NaN();
 }
 
-float PottsScorer::try_slide_window(const GInterval &original_interval,
+double PottsScorer::try_slide_window(const GInterval &original_interval,
                                     const GInterval &expanded_interval,
                                     size_t i_min, size_t i_max, size_t motif_len,
                                     size_t tlen, size_t stride, bool &slid)
@@ -522,7 +527,7 @@ float PottsScorer::score_with_sliding_window(const GInterval &original_interval,
                                motif_len, tlen, populate);
 }
 
-float PottsScorer::score_interval(const GInterval &interval, const GenomeChromKey &chromkey)
+double PottsScorer::score_interval(const GInterval &interval, const GenomeChromKey &chromkey)
 {
     m_last_max_score = -std::numeric_limits<double>::infinity();
 

@@ -42,7 +42,7 @@ public:
                 bool extend, ScoringMode mode, bool bidirect, char strand,
                 double score_thresh);
 
-    float score_interval(const GInterval &interval, const GenomeChromKey &chromkey) override;
+    double score_interval(const GInterval &interval, const GenomeChromKey &chromkey) override;
 
     void invalidate_cache();
 
@@ -79,14 +79,14 @@ private:
     // 1-based position of `index`, in forward-strand orientation, signed by
     // `direction` when bidirect. Transliterated from
     // PWMScorer::compute_position_result().
-    float compute_position_result(size_t index, size_t target_length,
+    double compute_position_result(size_t index, size_t target_length,
                                   size_t motif_length, int direction) const;
 
     // Task 6's anchor loop, extracted unchanged. With `fill_window` it also
     // stashes each anchor into the seed scratch below, indexed by window slot,
     // so seeding evaluates every anchor exactly once instead of once for the
     // answer and once for the aggregator.
-    float score_direct(size_t i_min, size_t i_max, size_t motif_len, size_t tlen,
+    double score_direct(size_t i_min, size_t i_max, size_t motif_len, size_t tlen,
                        bool fill_window);
 
     // Sliding-window cache for contiguous intervals. Mirrors PWMScorer's
@@ -145,7 +145,7 @@ private:
     // With `populate` false it records the geometry and answers from
     // score_direct() without touching the aggregators, so the next call cannot
     // slide but also paid nothing for the option.
-    float seed_sliding_window(const GInterval &original_interval,
+    double seed_sliding_window(const GInterval &original_interval,
                               const GInterval &expanded_interval,
                               size_t i_min, size_t i_max, size_t motif_len,
                               size_t tlen, bool populate);
@@ -154,12 +154,12 @@ private:
     // PWMScorer: NaN is a legitimate potts answer - the window whose every
     // anchor is unscorable - so overloading it would re-seed the whole window
     // at every step of an assembly gap.
-    float try_slide_window(const GInterval &original_interval,
+    double try_slide_window(const GInterval &original_interval,
                            const GInterval &expanded_interval,
                            size_t i_min, size_t i_max, size_t motif_len,
                            size_t tlen, size_t stride, bool &slid);
     // The current window's answer, read out of the aggregators.
-    float slid_answer(const GInterval &expanded_interval, size_t motif_len, size_t tlen);
+    double slid_answer(const GInterval &expanded_interval, size_t motif_len, size_t tlen);
 
     // Target index of window slot `s` (slot 0 is the lowest genomic start), and
     // the genomic start of the anchor at target index `i`. Both fold in the
