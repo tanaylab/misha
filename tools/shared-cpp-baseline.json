@@ -31,13 +31,13 @@
   },
   "DnaPSSM.cpp": {
     "identical": false,
-    "misha": "76a422a2d5d62de1",
-    "pymisha": "c57affae802c80bd"
+    "misha": "7c83699cb7b47612",
+    "pymisha": "d68cd0bc71fee1c3"
   },
   "DnaPSSM.h": {
     "identical": false,
-    "misha": "642824504b146294",
-    "pymisha": "838ec7b773c3c465"
+    "misha": "3bf5cf48208e2382",
+    "pymisha": "604e9195776a215e"
   },
   "GInterval.cpp": {
     "identical": false,
@@ -86,13 +86,13 @@
   },
   "GenomeSeqScorer.h": {
     "identical": false,
-    "misha": "833f9acc9daa1c26",
-    "pymisha": "9919ed51a3cdd4d6"
+    "misha": "6983018b6b40cc83",
+    "pymisha": "867fc7011e6ceea7"
   },
   "GenomeTrack.cpp": {
     "identical": false,
-    "misha": "1a61f79d471e7222",
-    "pymisha": "b2043bf4e113b0ea"
+    "misha": "0d1d7a76607aa780",
+    "pymisha": "6cb7e73081bbaba2"
   },
   "GenomeTrack.h": {
     "identical": false,
@@ -151,13 +151,13 @@
   },
   "KmerCounter.cpp": {
     "identical": false,
-    "misha": "226f53b85a6aa3c2",
-    "pymisha": "3b8470a0083d31d7"
+    "misha": "0ddc731bc8614cbc",
+    "pymisha": "a9fdeb5504529d22"
   },
   "KmerCounter.h": {
     "identical": false,
-    "misha": "4e33046f72154a8c",
-    "pymisha": "c61f5552fc7f4b79"
+    "misha": "4b0fc32b82706485",
+    "pymisha": "9e1b05153367d08b"
   },
   "MaskUtils.h": {
     "identical": true,
@@ -166,13 +166,13 @@
   },
   "MaskedBpCounter.cpp": {
     "identical": true,
-    "misha": "a933bf958b8116d1",
-    "pymisha": "a933bf958b8116d1"
+    "misha": "737efc6b0c7e694d",
+    "pymisha": "737efc6b0c7e694d"
   },
   "MaskedBpCounter.h": {
     "identical": true,
-    "misha": "bc285b43a96e413f",
-    "pymisha": "bc285b43a96e413f"
+    "misha": "2fd0e9a0eb9d1000",
+    "pymisha": "2fd0e9a0eb9d1000"
   },
   "MmapFile.h": {
     "identical": true,
@@ -181,33 +181,48 @@
   },
   "PWMEditDistanceScorer.cpp": {
     "identical": true,
-    "misha": "bf6433c50dd51ec3",
-    "pymisha": "bf6433c50dd51ec3"
+    "misha": "fec8ecdb336bfff0",
+    "pymisha": "fec8ecdb336bfff0"
   },
   "PWMEditDistanceScorer.h": {
     "identical": true,
-    "misha": "76494c4309f4ec48",
-    "pymisha": "76494c4309f4ec48"
+    "misha": "e536619510cd5260",
+    "pymisha": "e536619510cd5260"
   },
   "PWMLseEditDistanceScorer.cpp": {
     "identical": true,
-    "misha": "03ddc76baa2e1266",
-    "pymisha": "03ddc76baa2e1266"
+    "misha": "c7399bd3358f1b57",
+    "pymisha": "c7399bd3358f1b57"
   },
   "PWMLseEditDistanceScorer.h": {
     "identical": true,
-    "misha": "416633338e08524c",
-    "pymisha": "416633338e08524c"
+    "misha": "603a44355c0bc961",
+    "pymisha": "603a44355c0bc961"
   },
   "PWMScorer.cpp": {
     "identical": false,
-    "misha": "652e13229ba08d72",
-    "pymisha": "3dda88d53280d2b9"
+    "misha": "567aefcb7cfca53f",
+    "pymisha": "2dbbb7ce08863f35"
   },
   "PWMScorer.h": {
     "identical": false,
-    "misha": "5ed62bf51c1d727c",
-    "pymisha": "f6138b7fc1621abd"
+    "misha": "f4871d2239d0cdfe",
+    "pymisha": "0ce38b73e13aae3a"
+  },
+  "PottsModel.h": {
+    "identical": true,
+    "misha": "d99119ed7a9d9333",
+    "pymisha": "d99119ed7a9d9333"
+  },
+  "PottsScorer.cpp": {
+    "identical": false,
+    "misha": "cdcc7fab4695a544",
+    "pymisha": "e856fbd92b245f3b"
+  },
+  "PottsScorer.h": {
+    "identical": false,
+    "misha": "f93e3f332c09969c",
+    "pymisha": "9e4552533f0b25fa"
   },
   "RaList.h": {
     "identical": true,
@@ -215,8 +230,8 @@
     "pymisha": "eb760180486638aa"
   },
   "Random.h": {
-    "identical": false,
-    "misha": "194022c733a5709c",
+    "identical": true,
+    "misha": "1d47264d1ee3aebe",
     "pymisha": "1d47264d1ee3aebe"
   },
   "RandomShuffle.h": {
@@ -296,13 +311,13 @@
   },
   "util.h": {
     "identical": false,
-    "misha": "ed411595ce71c5fc",
+    "misha": "b765e894e489245d",
     "pymisha": "e731f379d91f721d"
   },
   "utils/RunningLogSumExp.h": {
     "identical": true,
-    "misha": "f576ec681ecaba8f",
-    "pymisha": "f576ec681ecaba8f"
+    "misha": "4166298df88b019a",
+    "pymisha": "4166298df88b019a"
   },
   "utils/RunningMaxDeque.h": {
     "identical": true,
