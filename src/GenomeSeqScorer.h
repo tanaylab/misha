@@ -20,7 +20,7 @@ public:
     virtual ~GenomeSeqScorer() = default;
 
     // Pure virtual function to be implemented by derived classes
-    virtual float score_interval(const GInterval& interval, const GenomeChromKey& chromkey) = 0;
+    virtual double score_interval(const GInterval& interval, const GenomeChromKey& chromkey) = 0;
 
 protected:
     // Helper method to calculate appropriate interval based on extension setting

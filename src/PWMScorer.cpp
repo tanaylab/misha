@@ -167,7 +167,7 @@ inline float PWMScorer::get_spatial_log_factor(size_t pos_index) const
 }
 
 // Compute position result with strand and direction adjustments
-float PWMScorer::compute_position_result(size_t index, size_t target_length, 
+double PWMScorer::compute_position_result(size_t index, size_t target_length, 
                                          size_t motif_length, int direction) const
 {
     // A target shorter than the motif has no window at all; max_like_match()
@@ -177,7 +177,11 @@ float PWMScorer::compute_position_result(size_t index, size_t target_length,
         return std::numeric_limits<float>::quiet_NaN();
     }
 
-    float pos_result = float(index) + 1.0f; // 1-based
+    // double, not float: a position is an exact integer only up to 2^24 in
+    // binary32, so on an interval longer than ~16.7 Mb a reported position was
+    // rounded to an even neighbour. Scores are still accumulated in float, so
+    // widening the return type alone leaves every score bit-identical.
+    double pos_result = double(index) + 1.0; // 1-based
 
     if (m_strand == -1) {
         // target is reverse-complemented: a window at target index `index` covers
@@ -185,7 +189,7 @@ float PWMScorer::compute_position_result(size_t index, size_t target_length,
         // 1-based forward offset is target_length - index - motif_length + 1.
         // signed arithmetic: index + motif_length <= target_length holds at every
         // call site, but an unsigned underflow here would read as a huge position.
-        pos_result = float(std::ptrdiff_t(target_length) - std::ptrdiff_t(index) - std::ptrdiff_t(motif_length)) + 1.0f;
+        pos_result = double(std::ptrdiff_t(target_length) - std::ptrdiff_t(index) - std::ptrdiff_t(motif_length)) + 1.0;
     }
     
     if (m_pssm.is_bidirect()) {
@@ -196,7 +200,7 @@ float PWMScorer::compute_position_result(size_t index, size_t target_length,
 }
 
 // Count motif hits without spatial weighting
-float PWMScorer::count_motif_hits_no_spatial(const std::string& target, size_t motif_length)
+double PWMScorer::count_motif_hits_no_spatial(const std::string& target, size_t motif_length)
 {
     if (motif_length <= 0 || target.empty() || target.length() < motif_length) {
         return 0.0f;
@@ -231,7 +235,7 @@ float PWMScorer::count_motif_hits_no_spatial(const std::string& target, size_t m
 }
 
 // Count motif hits with spatial weighting
-float PWMScorer::count_motif_hits_with_spatial(const std::string& target, size_t motif_length)
+double PWMScorer::count_motif_hits_with_spatial(const std::string& target, size_t motif_length)
 {
     if (target.length() < motif_length) {
         return 0.0f;
@@ -265,7 +269,7 @@ float PWMScorer::count_motif_hits_with_spatial(const std::string& target, size_t
 }
 
 // Get max likelihood position with spatial weighting
-float PWMScorer::get_max_likelihood_pos_with_spatial(const std::string& target, size_t motif_length)
+double PWMScorer::get_max_likelihood_pos_with_spatial(const std::string& target, size_t motif_length)
 {
     if (target.length() < motif_length) {
         return std::numeric_limits<float>::quiet_NaN();
@@ -275,7 +279,7 @@ float PWMScorer::get_max_likelihood_pos_with_spatial(const std::string& target, 
     size_t best_index = 0;
     int best_dir = 1;
 
-    size_t max_i_idx = std::min<size_t>(m_pssm.get_max_range(), target.size() - motif_length);
+    size_t max_i_idx = m_pssm.max_offset(target.size());
     size_t min_i_idx = std::min<size_t>(std::max(0, m_pssm.get_min_range()), max_i_idx);
 
     // For bidirectional PSSMs, always check both strands (matching max_like_match behavior)
@@ -320,7 +324,7 @@ float PWMScorer::get_max_likelihood_pos_with_spatial(const std::string& target, 
 }
 
 // Score without spatial weighting
-float PWMScorer::score_without_spatial(const std::string& target, int64_t motif_length)
+double PWMScorer::score_without_spatial(const std::string& target, int64_t motif_length)
 {
     if (m_mode == TOTAL_LIKELIHOOD) {
         float energy;
@@ -348,7 +352,7 @@ float PWMScorer::score_without_spatial(const std::string& target, int64_t motif_
 }
 
 // Score with spatial weighting
-float PWMScorer::score_with_spatial(const std::string& target, int64_t motif_length)
+double PWMScorer::score_with_spatial(const std::string& target, int64_t motif_length)
 {
     if (m_spat_log_factors.empty()) {
         return std::numeric_limits<float>::quiet_NaN();
@@ -375,7 +379,7 @@ float PWMScorer::score_with_spatial(const std::string& target, int64_t motif_len
 }
 
 // Try to advance the sliding window by stride positions
-float PWMScorer::try_slide_window(const std::string& target,
+double PWMScorer::try_slide_window(const std::string& target,
                                   const GInterval& original_interval,
                                   const GInterval& expanded_interval,
                                   size_t i_min, size_t i_max, size_t motif_len, size_t stride)
@@ -589,7 +593,7 @@ float PWMScorer::try_slide_window(const std::string& target,
 }
 
 // Initialize/seed the sliding window
-float PWMScorer::seed_sliding_window(const std::string& target,
+double PWMScorer::seed_sliding_window(const std::string& target,
                                      const GInterval& original_interval,
                                      const GInterval& expanded_interval,
                                      size_t i_min, size_t i_max, size_t motif_len)
@@ -705,7 +709,7 @@ float PWMScorer::seed_sliding_window(const std::string& target,
 }
 
 // Try to use sliding window optimization
-float PWMScorer::score_with_sliding_window(const std::string& target,
+double PWMScorer::score_with_sliding_window(const std::string& target,
                                            const GInterval& original_interval,
                                            const GInterval& expanded_interval,
                                            size_t i_min, size_t i_max, size_t motif_len)
@@ -749,7 +753,7 @@ float PWMScorer::score_with_sliding_window(const std::string& target,
     return seed_sliding_window(target, original_interval, expanded_interval, i_min, i_max, motif_len);
 }
 
-float PWMScorer::score_interval(const GInterval& interval, const GenomeChromKey& chromkey)
+double PWMScorer::score_interval(const GInterval& interval, const GenomeChromKey& chromkey)
 {
     // Calculate expanded interval to include full motif coverage
     int64_t motif_length = m_pssm.size();
@@ -773,7 +777,7 @@ float PWMScorer::score_interval(const GInterval& interval, const GenomeChromKey&
         if (tlen >= motif_len) {
             // Calculate allowed start range
             size_t i_min = std::max(0, m_pssm.get_min_range());
-            size_t i_max = std::min<size_t>(m_pssm.get_max_range(), tlen - motif_len);
+            size_t i_max = m_pssm.max_offset(tlen);
 
             // Clamp the scanning window to anchors whose starts fall inside the iterator
             const int64_t interval_len = interval.end - interval.start;
@@ -1310,7 +1314,7 @@ void PWMScorer::spat_slide_once(const std::string& target, const GInterval& expd
 }
 
 // Answer functions
-float PWMScorer::spat_answer_TOTAL() {
+double PWMScorer::spat_answer_TOTAL() {
     SpatSlideCache& S = m_spat_slide;
 
     // Recompute dirty bins (rare)
@@ -1337,7 +1341,7 @@ float PWMScorer::spat_answer_TOTAL() {
     return (float)(A + std::log(Ssum));
 }
 
-float PWMScorer::spat_answer_MAX() {
+double PWMScorer::spat_answer_MAX() {
     SpatSlideCache& S = m_spat_slide;
     float best = -std::numeric_limits<float>::infinity();
     for (size_t b = 0; b < S.bins; ++b) {
@@ -1347,7 +1351,7 @@ float PWMScorer::spat_answer_MAX() {
     return best;
 }
 
-float PWMScorer::spat_answer_MAXPOS(const std::string& target,
+double PWMScorer::spat_answer_MAXPOS(const std::string& target,
                                     const GInterval& expd, size_t motif_len, size_t i_min) {
     SpatSlideCache& S = m_spat_slide;
 
@@ -1373,7 +1377,7 @@ float PWMScorer::spat_answer_MAXPOS(const std::string& target,
     return compute_position_result(target_idx, target.length(), motif_len, best_dir);
 }
 
-float PWMScorer::spat_answer_COUNT() const {
+double PWMScorer::spat_answer_COUNT() const {
     const SpatSlideCache& S = m_spat_slide;
     int total = 0;
     for (size_t b = 0; b < S.bins; ++b) {

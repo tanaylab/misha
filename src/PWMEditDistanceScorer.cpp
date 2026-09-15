@@ -289,7 +289,7 @@ void PWMEditDistanceScorer::precompute_tables()
     }
 }
 
-float PWMEditDistanceScorer::score_interval(const GInterval& interval,
+double PWMEditDistanceScorer::score_interval(const GInterval& interval,
                                             const GenomeChromKey& chromkey)
 {
     m_last_metrics = ScanMetrics();

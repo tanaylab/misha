@@ -16,7 +16,7 @@ MaskedBpCounter::MaskedBpCounter(GenomeSeqFetch* shared_seqfetch, CountMode mode
     // Note: extend=false, strand=0 passed to base class
 }
 
-float MaskedBpCounter::score_interval(const GInterval &interval, const GenomeChromKey &chromkey)
+double MaskedBpCounter::score_interval(const GInterval &interval, const GenomeChromKey &chromkey)
 {
     // Read sequence for the exact interval (no extension)
     std::vector<char> seq;

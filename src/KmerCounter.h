@@ -23,7 +23,7 @@ public:
                 CountMode mode = SUM, bool extend = true, char strand = 0);
 
     // Implement the virtual function from the base class
-    float score_interval(const GInterval &interval, const GenomeChromKey &chromkey) override;
+    double score_interval(const GInterval &interval, const GenomeChromKey &chromkey) override;
 
     // Batch processing accessors
     const std::string &get_kmer() const { return m_kmer; }

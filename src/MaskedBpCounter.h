@@ -19,7 +19,7 @@ public:
     MaskedBpCounter(GenomeSeqFetch* shared_seqfetch, CountMode mode = COUNT);
 
     // Implement the virtual function from the base class
-    float score_interval(const GInterval &interval, const GenomeChromKey &chromkey) override;
+    double score_interval(const GInterval &interval, const GenomeChromKey &chromkey) override;
 
     CountMode get_mode() const { return m_mode; }
 
