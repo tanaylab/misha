@@ -2,7 +2,7 @@
 
 ## Bug fixes
 
-* `pwm.max.pos` reported a position rounded to an even neighbour once it exceeded 16,777,216, because positions were carried as single-precision floats. Positions are exact now; scores are unchanged.
+* `pwm.max.pos` reported a position rounded to an even neighbour once it exceeded 16,777,216, because positions were carried as single-precision floats. Positions are exact now; scores are unchanged. (The first form of this fix, in 5.11.27, missed a `float` local on the path a fresh interval takes and so did not change the reported position.)
 
 * The sliding log-sum-exp lost the window's sum whenever the departing value was its maximum and the rest sat more than about 37 nats below it, so `pwm` (and any other running log-sum-exp over a sliding window) returned a silently wrong value, or a spurious `-Inf` that reads as "nothing was scorable". Recompute anything derived from a `pwm` track scored over overlapping windows with a wide-dynamic-range PSSM.
 

@@ -742,7 +742,10 @@ double PWMScorer::score_with_sliding_window(const std::string& target,
 
     // Try to slide if possible
     if (can_slide) {
-        float result = try_slide_window(target, original_interval, expanded_interval, i_min, i_max, motif_len, stride);
+        // double, not float: try_slide_window() returns the reported value,
+        // which for MAX_LIKELIHOOD_POS is a position. Catching it in a float
+        // re-narrows what compute_position_result() widened.
+        double result = try_slide_window(target, original_interval, expanded_interval, i_min, i_max, motif_len, stride);
         if (!std::isnan(result)) {
             return result;
         }
