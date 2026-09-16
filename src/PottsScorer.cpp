@@ -290,7 +290,11 @@ double PottsScorer::seed_sliding_window(const GInterval &original_interval,
                                        size_t tlen, bool populate)
 {
     const size_t W = i_max - i_min + 1;
-    const float direct = score_direct(i_min, i_max, motif_len, tlen, populate);
+    // double, not float: score_direct() returns the reported value, which for
+    // MAX_LIKELIHOOD_POS is a position. Catching it in a float re-narrows what
+    // compute_position_result() widened, and an odd position past 2^24 rounds
+    // to its even neighbour on the way out.
+    const double direct = score_direct(i_min, i_max, motif_len, tlen, populate);
 
     m_slide.valid = true;
     m_slide.populated = populate;
@@ -469,7 +473,7 @@ double PottsScorer::try_slide_window(const GInterval &original_interval,
     return slid_answer(expanded_interval, motif_len, tlen);
 }
 
-float PottsScorer::score_with_sliding_window(const GInterval &original_interval,
+double PottsScorer::score_with_sliding_window(const GInterval &original_interval,
                                              const GInterval &expanded_interval,
                                              size_t i_min, size_t i_max, size_t motif_len,
                                              size_t tlen)
@@ -508,7 +512,7 @@ float PottsScorer::score_with_sliding_window(const GInterval &original_interval,
 
     if (can_slide) {
         bool slid = false;
-        const float result = try_slide_window(original_interval, expanded_interval, i_min,
+        const double result = try_slide_window(original_interval, expanded_interval, i_min,
                                               i_max, motif_len, tlen, stride, slid);
         if (slid)
             return result;

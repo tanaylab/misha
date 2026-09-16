@@ -460,3 +460,149 @@ test_that("gseq.potts(bidirect = FALSE) requires an explicit strand", {
     expect_silent(gseq.potts("ACGT", m, mode = "max", bidirect = FALSE, strand = 1L))
     expect_silent(gseq.potts("ACGT", m, mode = "max", bidirect = TRUE)) # 0 is fine here
 })
+
+test_that("a mistyped J field is not partial-matched into the model", {
+    # R's `$` partial-matches on a list, so a model carrying `Jcoupling` and no
+    # `J` had the decoy spliced in AS the coupling table and scored: 52 where 2
+    # was right, with no warning. Omitting `J` errors, so mistyping it must not
+    # score instead. The docs invite passing a whole fitted model verbatim,
+    # where a `Jscale` or `Jmat` beside the real `J` is ordinary.
+    m <- potts_ref_model(W = 2L, npair_mode = "full", seed = 11L)
+    decoy <- list(e = m$e, Jcoupling = m$J, pairs = m$pairs, intercept = m$intercept)
+    expect_error(
+        gseq.potts("AC", decoy, mode = "max", bidirect = FALSE, strand = 1L),
+        "'J' holds 0 tables"
+    )
+    # an exact `J` still wins over a partial match sitting beside it
+    beside <- c(m[c("e", "J", "pairs", "intercept")], list(Jscale = 99))
+    expect_equal(
+        gseq.potts("AC", beside, mode = "max", bidirect = FALSE, strand = 1L),
+        gseq.potts("AC", m, mode = "max", bidirect = FALSE, strand = 1L),
+        ignore_attr = TRUE
+    )
+})
+
+test_that("a flat J is shape-checked even when the model has no pairs", {
+    # The ncol test short-circuited on `npair &&`, so any-shaped J passed when
+    # there were no pairs. Inert - nothing reads it - but it was the one index
+    # in this validator that went unchecked.
+    m <- potts_ref_model(W = 2L, npair_mode = "none", seed = 3L)
+    bad <- m
+    bad$J <- matrix(0, 0L, 3L)
+    expect_error(
+        gseq.potts("AC", bad, mode = "max", bidirect = FALSE, strand = 1L),
+        "16"
+    )
+})
+
+test_that("the float bound is the tight per-position sum, not W * max|e|", {
+    # A window picks one energy per POSITION and one coupling per PAIR, so the
+    # per-row sum is the exact worst case. The old `W * max|e|` form overstated
+    # it by orders of magnitude: this model's true worst is 1e38, comfortably
+    # inside FLT_MAX, and it used to be refused as 2e+39.
+    m <- potts_ref_model(W = 20L, npair_mode = "none", seed = 17L)
+    m$e[] <- 0
+    m$e[1L, "A"] <- 1e38
+    expect_silent(misha:::.coerce_potts_model(m, "potts"))
+    s <- paste(rep("A", 20L), collapse = "")
+    expect_equal(
+        gseq.potts(s, m, mode = "max", bidirect = FALSE, strand = 1L),
+        1e38,
+        ignore_attr = TRUE
+    )
+    # and a model that genuinely overflows is still refused
+    over <- m
+    over$e[2L, "A"] <- 3.4e38
+    expect_error(
+        gseq.potts(s, over, mode = "max", bidirect = FALSE, strand = 1L),
+        "single-precision"
+    )
+})
+
+test_that("a vtrack position past 2^24 is exact", {
+    # Positions were built as `float(index) + 1.0f`, and binary32 represents
+    # consecutive integers only to 2^24: an anchor at 0-based 16777217 came
+    # back as 16777216 rather than 16777218.
+    #
+    # This is the VTRACK path specifically. gseq.potts() computes its position
+    # as `(double)(best_i + 1)` in C_gseq_potts and never reached the defect,
+    # so scoring a long bare string tests nothing - an earlier version of this
+    # test did exactly that and passed against the unfixed build.
+    #
+    # Reaching index 2^24 needs an iterator interval longer than 16.7 Mb, so it
+    # needs a chromosome longer than that. The test fixture's largest is 500 kb
+    # and materialising a 17 Mb one would cost every CI job on every platform
+    # for a two-base error, so this runs only where a real assembly is at hand.
+    big <- Sys.getenv("MISHA_LARGE_GENOME", "")
+    skip_if(
+        big == "" || !dir.exists(big),
+        "set MISHA_LARGE_GENOME to a groot with a chromosome over 16.7 Mb"
+    )
+    old <- .misha$GROOT
+    on.exit(gsetroot(old), add = TRUE)
+    gsetroot(big)
+    ci <- gintervals.all()
+    ci <- ci[ci$end > 16777217L + 64L, , drop = FALSE]
+    skip_if(nrow(ci) == 0L, "no chromosome over 16.7 Mb in this genome")
+    chrom <- as.character(ci$chrom[1L])
+
+    W <- 24L
+    at <- 16777217L # odd, and past 2^24
+    mk <- function(word) {
+        b <- strsplit(word, "")[[1]]
+        e <- matrix(0, W, 4L, dimnames = list(NULL, POTTS_BASES))
+        for (i in seq_len(W)) e[i, b[i]] <- 1 # max = W, only on an exact match
+        list(e = e, J = list(), pairs = matrix(integer(0), 0L, 2L), intercept = 0)
+    }
+    # The planted anchor has to be the UNIQUE maximum, or the scan reports the
+    # first exact match instead - which in a repeat lands below 2^24 and tests
+    # nothing. A first attempt at this asserted only that the maximum was
+    # reached and passed while reporting position 3042193.
+    m <- NULL
+    for (off in at + c(0L, 101L, 211L, 307L, 401L, 503L)) {
+        word <- toupper(gseq.extract(gintervals(chrom, off, off + W)))
+        if (grepl("[^ACGT]", word)) next
+        cand <- mk(word)
+        gvtrack.create("potts_big_cnt", NULL, "potts.count",
+            params = c(cand, list(bidirect = FALSE, strand = 1L, score.thresh = W - 0.5))
+        )
+        n <- gextract("potts_big_cnt", gintervals(chrom, 0, off + W),
+            iterator = gintervals(chrom, 0, off + W)
+        )[[4L]]
+        gvtrack.rm("potts_big_cnt")
+        if (isTRUE(n == 1)) {
+            m <- cand
+            at <- off
+            break
+        }
+    }
+    skip_if(is.null(m), "no uniquely-occurring anchor past 2^24 in this genome")
+
+    gvtrack.create("potts_big_pos", NULL, "potts.max.pos",
+        params = c(m, list(bidirect = FALSE, strand = 1L))
+    )
+    gvtrack.create("potts_big_val", NULL, "potts.max",
+        params = c(m, list(bidirect = FALSE, strand = 1L))
+    )
+    # after = FALSE so these run BEFORE the gsetroot restore above: a vtrack
+    # belongs to the genome it was defined in, and removing it after switching
+    # back errors with "does not exist".
+    on.exit(gvtrack.rm("potts_big_pos"), add = TRUE, after = FALSE)
+    on.exit(gvtrack.rm("potts_big_val"), add = TRUE, after = FALSE)
+    iv <- gintervals(chrom, 0, at + W)
+    got <- gextract(c("potts_big_val", "potts_big_pos"), iv, iterator = iv)
+    expect_equal(got$potts_big_val, W, tolerance = 1e-5, ignore_attr = TRUE)
+    expect_equal(got$potts_big_pos, at + 1L, ignore_attr = TRUE)
+})
+
+test_that("the implicit-iterator error names the sequence family, not pwm", {
+    # It said "contains a pwm virtual track" for any sequence-based vtrack, so
+    # a potts track was reported as a pwm one.
+    m <- potts_ref_model(W = 2L, npair_mode = "full", seed = 5L)
+    gvtrack.create("potts_iter_msg", NULL, "potts.max", params = m[c("e", "J", "pairs", "intercept")])
+    on.exit(gvtrack.rm("potts_iter_msg"), add = TRUE)
+    expect_error(
+        gextract("potts_iter_msg", gintervals(1, 0, 1000)),
+        "sequence-based virtual track"
+    )
+})

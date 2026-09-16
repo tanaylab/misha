@@ -816,7 +816,7 @@ double PWMScorer::score_with_sliding_window(const std::string& target,
 
     // Try to slide if possible
     if (can_slide) {
-        float result = try_slide_window(target, original_interval, expanded_interval, i_min, i_max, motif_len, stride);
+        double result = try_slide_window(target, original_interval, expanded_interval, i_min, i_max, motif_len, stride);
         if (!std::isnan(result)) {
             return result;
         }
