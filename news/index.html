@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">misha</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.11.27</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.12.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -40,10 +40,20 @@
     </div>
 
     <div class="section level2">
+<h2 class="pkg-version" data-toc-text="5.12.0" id="misha-5120">misha 5.12.0<a class="anchor" aria-label="anchor" href="#misha-5120"></a></h2>
+<ul><li>
+<code>pwm.max</code> returned wrong values with <code>strand = -1</code> over overlapping iterator intervals. Recompute anything derived from such a track.</li>
+<li>A <code>gvtrack.filter</code> on a <code>pwm</code> virtual track now combines the unmasked parts by log-sum-exp instead of summing them, and one on <code>pwm.max.pos</code> now reports a position rather than an arbitrary number. Recompute anything derived from a filtered <code>pwm</code> or <code>pwm.max.pos</code> track.</li>
+<li>A <code>gvtrack.filter</code> on a <code>pwm</code>, <code>pwm.max</code>, <code>pwm.max.pos</code> or <code>pwm.count</code> track returned <code>NA</code> for the whole interval when the mask left a part narrower than the PSSM, which needs <code>extend = FALSE</code>. Recompute anything derived from such a track.</li>
+<li>
+<code><a href="../reference/gseq.pwm.html">gseq.pwm()</a></code> now combines the two strands the way the <code>pwm</code> virtual tracks do under <code>bidirect = TRUE</code>. <code>mode = "max"</code> log-sum-exps them instead of taking the larger, so a score can only rise, by at most <code>log 2</code>. <code>mode = "count"</code> thresholds the combined score once per window instead of once per strand, so counts move both ways: usually up, because the combined score clears a threshold that neither strand cleared on its own, and down wherever a window whose reverse complement also matched used to be counted twice. Recompute anything derived from either mode.</li>
+<li>New <code>potts</code>, <code>potts.max</code>, <code>potts.max.pos</code> and <code>potts.count</code> virtual track functions, which score a pairwise (Potts) energy model across the genome, and a <code><a href="../reference/gseq.potts.html">gseq.potts()</a></code> to score sequences with one. A list with <code>e</code> (a <code>W x 4</code> matrix), <code>J</code>, <code>pairs</code> and <code>intercept</code> can be passed to <code>gvtrack.create(params = )</code> as it is; any other elements it carries are ignored, so a whole fitted model needs no subsetting.</li>
+</ul></div>
+    <div class="section level2">
 <h2 class="pkg-version" data-toc-text="5.11.27" id="misha-51127">misha 5.11.27<a class="anchor" aria-label="anchor" href="#misha-51127"></a></h2>
 <div class="section level3">
 <h3 id="bug-fixes-5-11-27">Bug fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-5-11-27"></a></h3>
-<ul><li><p><code>pwm.max.pos</code> reported a position rounded to an even neighbour once it exceeded 16,777,216, because positions were carried as single-precision floats. Positions are exact now; scores are unchanged. (The first form of this fix, in 5.11.27, missed a <code>float</code> local on the path a fresh interval takes and so did not change the reported position.)</p></li>
+<ul><li><p><code>pwm.max.pos</code> reported a position rounded to an even neighbour once it exceeded 16,777,216, because positions were carried as single-precision floats. Positions are exact now; scores are unchanged.</p></li>
 <li><p>The sliding log-sum-exp lost the window’s sum whenever the departing value was its maximum and the rest sat more than about 37 nats below it, so <code>pwm</code> (and any other running log-sum-exp over a sliding window) returned a silently wrong value, or a spurious <code>-Inf</code> that reads as “nothing was scorable”. Recompute anything derived from a <code>pwm</code> track scored over overlapping windows with a wide-dynamic-range PSSM.</p></li>
 <li><p><code>pwm.max</code> and <code>pwm.max.pos</code> silently scanned only the first 1,000,001 anchors of an interval, so a scan of anything longer than about 1 Mb answered from its first megabase and reported neither a warning nor an error. Recompute anything derived from either function over intervals larger than that - whole-chromosome iterators are the common case.</p></li>
 <li><p>Four source files used <code>drand48()</code>, <code>getenv()</code> or <code>atof()</code> without including <code>&lt;stdlib.h&gt;</code>, relying on it arriving indirectly. Nothing changes for users; it removes a build failure that appears when a compiler toolchain stops providing that header for free.</p></li>

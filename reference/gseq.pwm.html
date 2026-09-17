@@ -13,7 +13,7 @@ All reported positions are on the full input sequence."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">misha</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.11.27</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.12.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -187,10 +187,26 @@ as 1-based indices on the original full sequence (including gaps). <code>start_p
 <p>Neutral characters (<code>neutral_chars</code>, default <code>c("N", "n", "*")</code>) are treated as
 unknown bases in both orientations. Each neutral contributes the mean log-probability of the
 corresponding PSSM column, yielding identical penalties on forward and reverse strands without
-hard-coded background scores. In <code>mode = "max"</code> the reported value is the single best
-strand score after applying any spatial weights; forward and reverse contributions are not
-aggregated. This matches the default behavior of the PWM virtual tracks (<code>pwm.max</code>,
-<code>pwm.max.pos</code>, etc.).</p>
+hard-coded background scores.</p>
+<p>Under <code>bidirect = TRUE</code> the forward and reverse-complement matches are
+two readings of the same window, and every mode but <code>"pos"</code> combines
+them at each window by log-sum-exp, after any spatial weights are applied:
+<code>"lse"</code> then log-sum-exps those unions across the windows, <code>"max"</code>
+takes the largest of them, and <code>"count"</code> thresholds each one once, so a
+window is at most a single hit however well its reverse complement matches it.
+That is the same union the <code>pwm</code>, <code>pwm.max</code> and <code>pwm.count</code>
+virtual tracks take, and over the same windows <code>gseq.pwm()</code> agrees with
+them to the precision the two share - the virtual tracks accumulate in single
+precision and <code>gseq.pwm()</code> in double, so expect agreement to about
+<code>1e-5</code> relative, not to the last bit. <code>mode = "pos"</code> instead takes
+the better of the two strands, because it has to name one - what the
+<code>pwm.max.pos</code> virtual track does - so <code>"max"</code> and <code>"pos"</code> can
+select different windows, and the value from <code>"max"</code> is not necessarily
+the score at the position from <code>"pos"</code>. The asymmetry is the <code>pwm</code> family's own
+(<code>pwm.max</code> combines the strands, <code>pwm.max.pos</code> does not) and is
+mirrored here rather than fixed on one side. With <code>bidirect = FALSE</code>
+only the strand named by <code>strand</code> is read and there is nothing to
+combine.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>

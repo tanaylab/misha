@@ -409,6 +409,8 @@ Sequence functions
   : Score DNA sequences with a PWM over a region of interest
 - [`gseq.pwm_edits()`](https://tanaylab.github.io/misha/reference/gseq.pwm_edits.md)
   : Show optimal edits to reach a PWM score threshold
+- [`gseq.potts()`](https://tanaylab.github.io/misha/reference/gseq.potts.md)
+  : Score sequences under a Potts (pairwise energy) model
 - [`gseq.kmer()`](https://tanaylab.github.io/misha/reference/gseq.kmer.md)
   : Score DNA sequences with a k-mer over a region of interest
 - [`gseq.kmer.dist()`](https://tanaylab.github.io/misha/reference/gseq.kmer.dist.md)

@@ -182,6 +182,16 @@ the start of the iterator interval after all modifier adjustments.
 | NULL (sequence) | pwm.max.pos | pssm, bidirect, prior, extend, spat\_\* | 1-based position of the best-scoring anchor (signed by strand when `bidirect = TRUE`); coordinates are always relative to the iterator interval after any [`gvtrack.iterator()`](https://tanaylab.github.io/misha/reference/gvtrack.iterator.md) shifts/extensions. |
 | NULL (sequence) | pwm.count | pssm, score.thresh (required), bidirect, prior, extend, strand, spat\_\* | Count of anchors scoring \>= `score.thresh` (per-position union). |
 
+**Potts (pairwise energy) summarizers**
+
+|  |  |  |  |
+|----|----|----|----|
+| Source | func | Key params | Description |
+| NULL (sequence) | potts | e, J, pairs, intercept, bidirect, extend, strand | Log-sum-exp of the pairwise-energy score over all anchors inside the iterator interval. |
+| NULL (sequence) | potts.max | e, J, pairs, intercept, bidirect, extend, strand | Highest-scoring anchor. |
+| NULL (sequence) | potts.max.pos | e, J, pairs, intercept, bidirect, extend, strand | 1-based position of the best anchor, signed by strand when `bidirect = TRUE`. |
+| NULL (sequence) | potts.count | e, J, pairs, intercept, score.thresh (required), bidirect, extend, strand | Number of anchors scoring at least `score.thresh`. |
+
 **Edit distance summarizers**
 
 |  |  |  |  |
@@ -222,8 +232,8 @@ the start of the iterator interval after all modifier adjustments.
 | NULL (sequence) | masked.count | NULL | Number of masked (lowercase) base pairs in the iterator interval. |
 | NULL (sequence) | masked.frac | NULL | Fraction of base pairs in the iterator interval that are masked (lowercase). |
 
-The sections below provide additional notes for motif, interval, k-mer,
-and masked sequence functions.
+The sections below provide additional notes for motif, potts, interval,
+k-mer, and masked sequence functions.
 
 **Motif (PWM) notes**
 
@@ -239,8 +249,11 @@ and masked sequence functions.
 
 - `extend`: Extends the fetched sequence so boundary-anchored motifs
   retain full context (default TRUE). The END coordinate is padded by
-  motif_length - 1 for all strand modes; anchors must still start inside
-  the iterator.
+  motif_length - 1 for all strand modes. Anchors must still start inside
+  the iterator, so with `extend = FALSE` an iterator interval narrower
+  than the model holds no anchor at all and every value comes back `NA`;
+  under the default `extend = TRUE` the END padding supplies the missing
+  context and such an interval is scored.
 
 - Neutral characters (`N`, `n`, `*`) contribute the mean log-probability
   of the corresponding PSSM column on both strands.
@@ -272,6 +285,73 @@ and masked sequence functions.
   anchor wins and the forward strand wins a tie at the same coordinate,
   but `bidirect = FALSE, strand = -1` scans the reverse-complemented
   sequence and so keeps the most 3' tied anchor in forward coordinates.
+
+**Potts (pairwise energy) notes**
+
+- The score of one window is
+  `intercept + sum_i e[i, x_i] + sum_k J_k[x_i, x_j]`: `e` is a `W x 4`
+  matrix of per-position energies (columns `A`, `C`, `G`, `T`), and each
+  row of `pairs` names a coupled pair of positions (1-based, lower
+  position first) whose `4 x 4` coupling table is the matching entry of
+  `J`, indexed with the lower position on the rows. The parameterisation
+  is not unique: adding a constant to a position's four `e` entries, or
+  a row or column shift to a `J` block, changes no score, so `e` is
+  comparable across positions only in the zero-sum gauge, where
+  `rowSums(e)` is 0 and every `J` block has zero row and column sums.
+
+- **No `prior` and no `spat_*`.** A Potts carries energies, not
+  probabilities, so there is no pseudocount and no spatial weighting. A
+  window containing any non-ACGT base is not scored and is left out of
+  the reduction.
+
+- **"Counted nothing" and "nothing to count" are different answers.** An
+  interval that has anchors but none of them scorable (for example, all
+  `N`) gives `NaN` for `potts`, `potts.max` and `potts.max.pos`, and `0`
+  for `potts.count`: it counted, and found none. An interval with no
+  anchor at all gives `NaN` for all four, `potts.count` included - there
+  was nothing to count, and a `0` would be indistinguishable from the
+  line above. That covers an interval narrower than the model with
+  `extend = FALSE`; a chromosome end with the default `extend = TRUE`,
+  where the end padding is clipped at the contig boundary and the
+  fetched sequence comes back shorter than the model (`pwm.count`
+  reports `0` rather than `NA` in this one case); and a
+  [`gvtrack.filter`](https://tanaylab.github.io/misha/reference/gvtrack.filter.md)
+  that leaves no unmasked part, or only parts narrower than the model.
+
+- `strand`: Used only when `bidirect = FALSE`; it is clamped to 1 when
+  `bidirect = TRUE`, as in the `pwm` family.
+
+- **The strand union, and the wart.** `potts`, `potts.max` and
+  `potts.count` combine the two strands at each anchor by log-sum-exp;
+  `potts.max.pos` takes the maximum, because it has to name a strand. So
+  `potts.max` and `potts.max.pos` can select **different anchors**. This
+  matches the `pwm` family exactly (`pwm.max` combines by log-sum-exp,
+  `pwm.max.pos` does not) and is inherited on purpose rather than fixed
+  on one side.
+
+- **Reproducing a model fitted elsewhere.** Because the union is
+  log-sum-exp, `bidirect = TRUE` does not reproduce a model whose own
+  definition takes the **maximum** over the two strands: the two differ
+  by up to `log 2`, and by exactly `log 2` wherever the strands tie. For
+  those, declare two virtual tracks over the same model with
+  `bidirect = FALSE` and `strand = 1` / `strand = -1`, and combine them
+  yourself with `pmax`. The same applies when several models have to
+  share ONE strand decision - a core plus flanking windows, say. Give
+  each window a strand-locked pair, place it with
+  [`gvtrack.iterator`](https://tanaylab.github.io/misha/reference/gvtrack.iterator.md),
+  and settle the strand once with an `ifelse` on the pair that decides
+  it; letting each window take its own maximum computes a different and
+  strictly larger quantity.
+
+- `e`/`J`/`pairs`/`intercept` can be supplied as a whole fitted model: a
+  fitted Potts model has exactly the fields this family needs plus
+  `width`, `pair_strength`, `attr` and `link`; those four are accepted
+  and ignored, so the model can be passed verbatim as `params`, and
+  `width` is cross-checked against `nrow(e)` when present.
+
+- `score.thresh`: Mandatory for `potts.count` - there is no default,
+  since a Potts score is an energy whose usable range depends on the
+  model - and ignored by the rest of the family.
 
 **Edit distance notes**
 
@@ -576,6 +656,58 @@ gextract(
 #> 18          1
 #> 19          1
 #> 20          1
+
+# Potts (pairwise energy) examples - a small hand-written W=2 model whose
+# coupling does the work: the per-position energies prefer "AC", the pair
+# term prefers "GT". A zero J would make this a PWM.
+potts_e <- matrix(c(
+    1, 0, 0, 0,
+    0, 1, 0, 0
+), ncol = 4, byrow = TRUE, dimnames = list(NULL, c("A", "C", "G", "T")))
+potts_J <- list(matrix(c(
+    0, -3, 0, 0,
+    0, 0, 0, 0,
+    0, 0, 0, 3,
+    0, 0, 0, 0
+), 4, 4, byrow = TRUE))
+potts_pairs <- matrix(c(1L, 2L), ncol = 2)
+potts_model <- list(e = potts_e, J = potts_J, pairs = potts_pairs, intercept = 0)
+
+gvtrack.create("potts_max", NULL, "potts.max", params = potts_model)
+gextract("potts_max", gintervals(1, 0, 1000), iterator = 200)
+#>   chrom start  end potts_max intervalID
+#> 1  chr1     0  200   3.01815          1
+#> 2  chr1   200  400   3.01815          1
+#> 3  chr1   400  600   3.01815          1
+#> 4  chr1   600  800   3.01815          1
+#> 5  chr1   800 1000   3.01815          1
+
+gvtrack.create("potts_count", NULL, "potts.count",
+    params = c(potts_model, list(score.thresh = 1.5))
+)
+gextract("potts_count", gintervals(1, 0, 1000), iterator = 200)
+#>   chrom start  end potts_count intervalID
+#> 1  chr1     0  200          34          1
+#> 2  chr1   200  400          32          1
+#> 3  chr1   400  600          41          1
+#> 4  chr1   600  800          60          1
+#> 5  chr1   800 1000          56          1
+
+# Reproducing a model that MAXIMISES over the two strands rather than
+# log-sum-exping them: declare each strand on its own and combine with pmax.
+gvtrack.create("potts_p", NULL, "potts.max",
+    params = c(potts_model, list(bidirect = FALSE, strand = 1))
+)
+gvtrack.create("potts_m", NULL, "potts.max",
+    params = c(potts_model, list(bidirect = FALSE, strand = -1))
+)
+gextract("pmax(potts_p, potts_m)", gintervals(1, 0, 1000), iterator = 200)
+#>   chrom start  end pmax(potts_p, potts_m) intervalID
+#> 1  chr1     0  200                      3          1
+#> 2  chr1   200  400                      3          1
+#> 3  chr1   400  600                      3          1
+#> 4  chr1   600  800                      3          1
+#> 5  chr1   800 1000                      3          1
 
 # Kmer counting examples
 gvtrack.create("cg_count", NULL, "kmer.count", kmer = "CG", strand = 1)

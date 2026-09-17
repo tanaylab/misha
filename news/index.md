@@ -1,5 +1,35 @@
 # Changelog
 
+## misha 5.12.0
+
+- `pwm.max` returned wrong values with `strand = -1` over overlapping
+  iterator intervals. Recompute anything derived from such a track.
+- A `gvtrack.filter` on a `pwm` virtual track now combines the unmasked
+  parts by log-sum-exp instead of summing them, and one on `pwm.max.pos`
+  now reports a position rather than an arbitrary number. Recompute
+  anything derived from a filtered `pwm` or `pwm.max.pos` track.
+- A `gvtrack.filter` on a `pwm`, `pwm.max`, `pwm.max.pos` or `pwm.count`
+  track returned `NA` for the whole interval when the mask left a part
+  narrower than the PSSM, which needs `extend = FALSE`. Recompute
+  anything derived from such a track.
+- [`gseq.pwm()`](https://tanaylab.github.io/misha/reference/gseq.pwm.md)
+  now combines the two strands the way the `pwm` virtual tracks do under
+  `bidirect = TRUE`. `mode = "max"` log-sum-exps them instead of taking
+  the larger, so a score can only rise, by at most `log 2`.
+  `mode = "count"` thresholds the combined score once per window instead
+  of once per strand, so counts move both ways: usually up, because the
+  combined score clears a threshold that neither strand cleared on its
+  own, and down wherever a window whose reverse complement also matched
+  used to be counted twice. Recompute anything derived from either mode.
+- New `potts`, `potts.max`, `potts.max.pos` and `potts.count` virtual
+  track functions, which score a pairwise (Potts) energy model across
+  the genome, and a
+  [`gseq.potts()`](https://tanaylab.github.io/misha/reference/gseq.potts.md)
+  to score sequences with one. A list with `e` (a `W x 4` matrix), `J`,
+  `pairs` and `intercept` can be passed to `gvtrack.create(params = )`
+  as it is; any other elements it carries are ignored, so a whole fitted
+  model needs no subsetting.
+
 ## misha 5.11.27
 
 ### Bug fixes
@@ -7,9 +37,7 @@
 - `pwm.max.pos` reported a position rounded to an even neighbour once it
   exceeded 16,777,216, because positions were carried as
   single-precision floats. Positions are exact now; scores are
-  unchanged. (The first form of this fix, in 5.11.27, missed a `float`
-  local on the path a fresh interval takes and so did not change the
-  reported position.)
+  unchanged.
 
 - The sliding log-sum-exp lost the window’s sum whenever the departing
   value was its maximum and the rest sat more than about 37 nats below

@@ -65,19 +65,31 @@ order is:
 
 - **distance/distance.center:** Unaffected by mask (pure geometry)
 
-- **PWM/kmer:** Masked bases act as hard boundaries; matches cannot span
-  masked regions. **Important:** When `extend=TRUE` (the default),
-  motifs at the boundaries of unmasked segments can use bases from the
-  adjacent masked regions to complete the motif scoring. For example, if
-  a 4bp motif starts at position 1998 in an unmasked region that ends at
-  2000, and positions 2000-2002 are masked, the motif will still be
-  scored using the masked bases. In other words, motif matches *starting
-  positions* must be in unmasked regions, but the motif sequence itself
-  can extend into masked regions when `extend=TRUE`. Set `extend=FALSE`
-  to prevent any use of masked bases in scoring.
+- **PWM/kmer/potts:** Masked bases act as hard boundaries; matches
+  cannot span masked regions. **Important:** When `extend=TRUE` (the
+  default), motifs at the boundaries of unmasked segments can use bases
+  from the adjacent masked regions to complete the motif scoring. For
+  example, if a 4bp motif starts at position 1998 in an unmasked region
+  that ends at 2000, and positions 2000-2002 are masked, the motif will
+  still be scored using the masked bases. In other words, motif matches
+  *starting positions* must be in unmasked regions, but the motif
+  sequence itself can extend into masked regions when `extend=TRUE`. Set
+  `extend=FALSE` to prevent any use of masked bases in scoring.
+
+- **potts family specifically:** each unmasked part of the iterator
+  interval is scored on its own and the parts are combined: log-sum-exp
+  for `potts`, maximum for `potts.max`, sum for `potts.count`, and for
+  `potts.max.pos` the position from whichever part carried the highest
+  score, reported in the iterator interval's own coordinates. A fully
+  masked interval, and one whose every unmasked part is narrower than
+  the model, give `NA` for all four - `potts.count` included, since
+  neither held an anchor to count. A part that holds anchors and merely
+  has none of them scorable still counts `0`.
 
 **Completely Masked Intervals:** If an entire iterator interval is
-masked, the function returns `NA` (not 0).
+masked, the function returns `NA` (not 0). The counting funcs are no
+exception: a masked-away interval held no anchor to count, and reporting
+`0` would be indistinguishable from a scan that ran and found nothing.
 
 ## See also
 
@@ -112,7 +124,7 @@ gvtrack.info("vtrack1")
 #> [1] "avg"
 #> 
 #> $filter
-#> [1] "filter__tmp_RtmpoG7Dul_trackdb_test_tracks_2_7d54e8370e6eb979"
+#> [1] "filter__tmp_RtmpXsbvr3_trackdb_test_tracks_2_7d54e8370e6eb979"
 #> 
 #> $filter_stats
 #> $filter_stats$num_chroms

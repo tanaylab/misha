@@ -11,7 +11,7 @@ not covered by the filter intervals)."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">misha</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.11.27</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.12.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -89,7 +89,7 @@ of that virtual track until explicitly cleared with <code>filter = NULL</code>.<
 </ol><p><strong>Semantics by function type:</strong></p><ul><li><p><strong>Aggregations (avg/sum/min/max/stddev/quantile):</strong> Length-weighted over unmasked regions</p></li>
 <li><p><strong>coverage:</strong> Returns (covered length in unmasked region) / (total unmasked length)</p></li>
 <li><p><strong>distance/distance.center:</strong> Unaffected by mask (pure geometry)</p></li>
-<li><p><strong>PWM/kmer:</strong> Masked bases act as hard boundaries; matches cannot span masked regions.
+<li><p><strong>PWM/kmer/potts:</strong> Masked bases act as hard boundaries; matches cannot span masked regions.
         <strong>Important:</strong> When <code>extend=TRUE</code> (the default), motifs at the boundaries of unmasked
         segments can use bases from the adjacent masked regions to complete the motif scoring.
         For example, if a 4bp motif starts at position 1998 in an unmasked region that ends at 2000,
@@ -97,8 +97,18 @@ of that virtual track until explicitly cleared with <code>filter = NULL</code>.<
         In other words, motif matches <em>starting positions</em> must be in unmasked regions,
         but the motif sequence itself can extend into masked regions when <code>extend=TRUE</code>.
         Set <code>extend=FALSE</code> to prevent any use of masked bases in scoring.</p></li>
+<li><p><strong>potts family specifically:</strong> each unmasked part of the iterator interval is scored on
+        its own and the parts are combined: log-sum-exp for <code>potts</code>, maximum for <code>potts.max</code>,
+        sum for <code>potts.count</code>, and for <code>potts.max.pos</code> the position from whichever part
+        carried the highest score, reported in the iterator interval's own coordinates. A fully
+        masked interval, and one whose every unmasked part is narrower than the model, give
+        <code>NA</code> for all four - <code>potts.count</code> included, since neither held an anchor to
+        count. A part that holds anchors and merely has none of them scorable still counts
+        <code>0</code>.</p></li>
 </ul><p><strong>Completely Masked Intervals:</strong>
-If an entire iterator interval is masked, the function returns <code>NA</code> (not 0).</p>
+If an entire iterator interval is masked, the function returns <code>NA</code> (not 0). The counting
+funcs are no exception: a masked-away interval held no anchor to count, and reporting <code>0</code>
+would be indistinguishable from a scan that ran and found nothing.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
@@ -131,7 +141,7 @@ If an entire iterator interval is masked, the function returns <code>NA</code> (
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] "avg"</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> $filter</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> [1] "filter__tmp_RtmpoG7Dul_trackdb_test_tracks_2_7d54e8370e6eb979"</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] "filter__tmp_RtmpXsbvr3_trackdb_test_tracks_2_7d54e8370e6eb979"</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> $filter_stats</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> $filter_stats$num_chroms</span>

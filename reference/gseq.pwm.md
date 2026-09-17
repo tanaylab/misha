@@ -152,10 +152,27 @@ Neutral characters (`neutral_chars`, default `c("N", "n", "*")`) are
 treated as unknown bases in both orientations. Each neutral contributes
 the mean log-probability of the corresponding PSSM column, yielding
 identical penalties on forward and reverse strands without hard-coded
-background scores. In `mode = "max"` the reported value is the single
-best strand score after applying any spatial weights; forward and
-reverse contributions are not aggregated. This matches the default
-behavior of the PWM virtual tracks (`pwm.max`, `pwm.max.pos`, etc.).
+background scores.
+
+Under `bidirect = TRUE` the forward and reverse-complement matches are
+two readings of the same window, and every mode but `"pos"` combines
+them at each window by log-sum-exp, after any spatial weights are
+applied: `"lse"` then log-sum-exps those unions across the windows,
+`"max"` takes the largest of them, and `"count"` thresholds each one
+once, so a window is at most a single hit however well its reverse
+complement matches it. That is the same union the `pwm`, `pwm.max` and
+`pwm.count` virtual tracks take, and over the same windows `gseq.pwm()`
+agrees with them to the precision the two share - the virtual tracks
+accumulate in single precision and `gseq.pwm()` in double, so expect
+agreement to about `1e-5` relative, not to the last bit. `mode = "pos"`
+instead takes the better of the two strands, because it has to name
+one - what the `pwm.max.pos` virtual track does - so `"max"` and `"pos"`
+can select different windows, and the value from `"max"` is not
+necessarily the score at the position from `"pos"`. The asymmetry is the
+`pwm` family's own (`pwm.max` combines the strands, `pwm.max.pos` does
+not) and is mirrored here rather than fixed on one side. With
+`bidirect = FALSE` only the strand named by `strand` is read and there
+is nothing to combine.
 
 ## See also
 
