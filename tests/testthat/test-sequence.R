@@ -2165,20 +2165,34 @@ test_that("gseq.pwm(mode='count') coerces character/factor score.thresh, rejects
     )
 })
 
+# gseq_count_pssm() is exactly reverse-complement palindromic: reverse its rows
+# and complement its columns and you get the same matrix back, to the bit. So
+# every window's reverse score equals its forward score exactly, which makes the
+# bidirectional numbers below hand-computable from the forward scores alone:
+#
+#   mode = "max"   the per-anchor union is log(e^f + e^f) = f + log 2, so the
+#                  bidirectional maximum is the forward maximum plus log 2.
+#   mode = "count" an anchor is one hit, counted when f + log 2 >= score.thresh.
+#
+# The three distinct forward window scores under the default prior = 0.01 are
+# -1.526844 (the ACGT consensus), -7.121198 (one base matching) and -8.985983
+# (none), i.e. -0.833697, -6.428051 and -8.292836 after the strand union.
 test_that("gseq.pwm modes other than 'count' do not need score.thresh", {
     seqs <- c("ACGTACGTACGT", "GGGGACGTCCCC", "TTTTTTTTTTT")
     pssm <- gseq_count_pssm()
 
+    # Best forward window is the consensus (-1.526844) in the first two
+    # sequences and a single T match (-7.121198) in the third; + log 2 each.
     expect_equal(
         gseq.pwm(seqs, pssm, mode = "max"),
-        c(-1.526844, -1.526844, -7.121198),
+        c(-0.833697, -0.833697, -6.428051),
         tolerance = 1e-5
     )
     expect_false(any(is.na(gseq.pwm(seqs, pssm, mode = "lse"))))
     expect_equal(gseq.pwm(seqs, pssm, mode = "pos")[1], 1L)
 })
 
-test_that("gseq.pwm(mode='count') with a workable score.thresh is unchanged", {
+test_that("gseq.pwm(mode='count') discriminates with a workable score.thresh", {
     seqs <- c("ACGTACGTACGT", "GGGGACGTCCCC", "TTTTTTTTTTT")
     pssm <- gseq_count_pssm()
 
@@ -2188,10 +2202,15 @@ test_that("gseq.pwm(mode='count') with a workable score.thresh is unchanged", {
 
     # A threshold in the middle of the score range discriminates: the counts
     # must vary across the three sequences, otherwise this asserts nothing.
+    # Only the consensus anchors clear -3 (-0.833697 does, -6.428051 does not):
+    # three of them in "ACGTACGTACGT", one in "GGGGACGTCCCC", none in the poly-T.
     counts <- gseq.pwm(seqs, pssm, mode = "count", score.thresh = -3)
     expect_gt(length(unique(counts)), 1)
-    expect_equal(counts, c(6, 2, 0))
+    expect_equal(counts, c(3, 1, 0))
 
-    # Lowering it further admits more windows in every sequence.
-    expect_equal(gseq.pwm(seqs, pssm, mode = "count", score.thresh = -8), c(6, 10, 16))
+    # Lowering it further admits more windows. -8 additionally admits the
+    # single-match anchors at -6.428051 but still not the no-match ones at
+    # -8.292836: "ACGTACGTACGT" has only consensus and no-match windows so it
+    # stays at 3, "GGGGACGTCCCC" gains four, and all eight poly-T anchors pass.
+    expect_equal(gseq.pwm(seqs, pssm, mode = "count", score.thresh = -8), c(3, 5, 8))
 })

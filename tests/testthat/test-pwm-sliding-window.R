@@ -1057,6 +1057,154 @@ test_that("pwm (TOTAL_LIKELIHOOD): minus-strand non-spatial sliding matches manu
     expect_equal(slide_res$pwm_minus_slide_manual, manual_totals, tolerance = 1e-6)
 })
 
+# The three tests below take their reference from R, computed off the extracted
+# sequence, not from a second vtrack. Comparing one vtrack against another
+# cannot see a defect that both paths share, which is how a wrong minus-strand
+# MAX_LIKELIHOOD slide survived.
+#
+# Geometry notes: a 10bp span with a 6bp motif leaves 10 anchors per interval,
+# few enough that the maximum genuinely varies from interval to interval; the
+# graded PSSM makes the argmax unique so an exact position can be asserted.
+test_that("pwm.max (MAX_LIKELIHOOD): minus-strand non-spatial sliding matches manual baseline", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    pssm <- create_graded_test_pssm()
+    motif_len <- nrow(pssm)
+
+    n <- 40
+    span <- 10L
+    starts <- 12000 + 0:(n - 1)
+    ivs <- gintervals(rep(1L, n), starts, starts + span)
+
+    gvtrack.create("pwmmax_minus_slide_manual", NULL, "pwm.max",
+        pssm = pssm, bidirect = FALSE, strand = -1,
+        extend = TRUE, prior = 0.01
+    )
+
+    slide_res <- gextract("pwmmax_minus_slide_manual", ivs, iterator = ivs)
+
+    manual_max <- vapply(seq_len(nrow(ivs)), function(idx) {
+        ext_iv <- ivs[idx, , drop = FALSE]
+        ext_iv$end <- ext_iv$end + motif_len - 1L
+        ext_iv$strand <- -1L
+        seq_rev_ext <- toupper(gseq.extract(ext_iv))
+        scores <- manual_pwm_scores_single_strand(seq_rev_ext, pssm, prior = 0.01)
+        max(scores[seq_len(span)])
+    }, numeric(1))
+
+    # The reference must actually discriminate: a saturated maximum (the same
+    # value at every interval) would agree with a broken slide as well.
+    expect_gt(length(unique(round(manual_max, 6))), 3)
+    expect_equal(slide_res$pwmmax_minus_slide_manual, manual_max, tolerance = 1e-5)
+})
+
+test_that("pwm.max (MAX_LIKELIHOOD): plus-strand non-spatial sliding matches manual baseline", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    pssm <- create_graded_test_pssm()
+    motif_len <- nrow(pssm)
+
+    n <- 40
+    span <- 10L
+    starts <- 12000 + 0:(n - 1)
+    ivs <- gintervals(rep(1L, n), starts, starts + span)
+
+    gvtrack.create("pwmmax_plus_slide_manual", NULL, "pwm.max",
+        pssm = pssm, bidirect = FALSE, strand = 1,
+        extend = TRUE, prior = 0.01
+    )
+
+    slide_res <- gextract("pwmmax_plus_slide_manual", ivs, iterator = ivs)
+
+    manual_max <- vapply(seq_len(nrow(ivs)), function(idx) {
+        ext_iv <- ivs[idx, , drop = FALSE]
+        ext_iv$end <- ext_iv$end + motif_len - 1L
+        ext_iv$strand <- 1L
+        seq_ext <- toupper(gseq.extract(ext_iv))
+        scores <- manual_pwm_scores_single_strand(seq_ext, pssm, prior = 0.01)
+        max(scores[seq_len(span)])
+    }, numeric(1))
+
+    expect_gt(length(unique(round(manual_max, 6))), 3)
+    expect_equal(slide_res$pwmmax_plus_slide_manual, manual_max, tolerance = 1e-5)
+})
+
+test_that("pwm.count (MOTIF_COUNT): minus-strand non-spatial sliding matches manual baseline", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    pssm <- create_graded_test_pssm()
+    motif_len <- nrow(pssm)
+    thresh <- -12
+
+    n <- 40
+    span <- 10L
+    starts <- 12000 + 0:(n - 1)
+    ivs <- gintervals(rep(1L, n), starts, starts + span)
+
+    gvtrack.create("pwmcount_minus_slide_manual", NULL, "pwm.count",
+        pssm = pssm, bidirect = FALSE, strand = -1,
+        extend = TRUE, prior = 0.01, score.thresh = thresh
+    )
+
+    slide_res <- gextract("pwmcount_minus_slide_manual", ivs, iterator = ivs)
+
+    manual_count <- vapply(seq_len(nrow(ivs)), function(idx) {
+        ext_iv <- ivs[idx, , drop = FALSE]
+        ext_iv$end <- ext_iv$end + motif_len - 1L
+        ext_iv$strand <- -1L
+        seq_rev_ext <- toupper(gseq.extract(ext_iv))
+        scores <- manual_pwm_scores_single_strand(seq_rev_ext, pssm, prior = 0.01)
+        sum(scores[seq_len(span)] >= thresh)
+    }, numeric(1))
+
+    expect_gt(length(unique(manual_count)), 3)
+    expect_equal(slide_res$pwmcount_minus_slide_manual, manual_count, tolerance = 1e-6)
+})
+
+test_that("pwm.max.pos (MAX_LIKELIHOOD_POS): minus strand over an overlapping iterator matches manual baseline", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    pssm <- create_graded_test_pssm()
+    motif_len <- nrow(pssm)
+
+    n <- 40
+    span <- 10L
+    starts <- 12000 + 0:(n - 1)
+    ivs <- gintervals(rep(1L, n), starts, starts + span)
+
+    gvtrack.create("pwmmaxpos_minus_manual", NULL, "pwm.max.pos",
+        pssm = pssm, bidirect = FALSE, strand = -1,
+        extend = TRUE, prior = 0.01
+    )
+
+    res <- gextract("pwmmaxpos_minus_manual", ivs, iterator = ivs)
+
+    manual <- t(vapply(seq_len(nrow(ivs)), function(idx) {
+        ext_iv <- ivs[idx, , drop = FALSE]
+        ext_iv$end <- ext_iv$end + motif_len - 1L
+        ext_iv$strand <- -1L
+        seq_rev_ext <- toupper(gseq.extract(ext_iv))
+        scores <- manual_pwm_scores_single_strand(seq_rev_ext, pssm, prior = 0.01)[seq_len(span)]
+        best_i0 <- which.max(scores) - 1L
+        top2 <- sort(scores, decreasing = TRUE)[1:2]
+        # a window at reverse-complement index i covers forward 0-based
+        # [tlen - i - motif_len, ...), so its 1-based forward offset is
+        # tlen - i - motif_len + 1
+        c(nchar(seq_rev_ext) - best_i0 - motif_len + 1L, top2[1] - top2[2])
+    }, numeric(2)))
+    manual_pos <- manual[, 1]
+
+    # every argmax must be unique, or the assertion below would compare two
+    # arbitrary picks among equals
+    expect_gt(min(manual[, 2]), 1e-6)
+    expect_gt(length(unique(manual_pos)), 3)
+    expect_equal(res$pwmmaxpos_minus_manual, manual_pos, tolerance = 1e-6)
+})
+
 test_that("pwm spatial sliding with stride>1 reuses each incoming position exactly once", {
     remove_all_vtracks()
     withr::defer(remove_all_vtracks())
@@ -1119,6 +1267,11 @@ test_that("pwm.max (MAX_LIKELIHOOD): plus-strand sliding equals spatial (no-slid
     expect_equal(res$pwmmax_plus_slide, res$pwmmax_plus_spatial_ref, tolerance = 1e-6)
 })
 
+# Cross-path check only. The two-base PSSM below matches somewhere in every
+# 60bp span, so the maximum is the same at every interval and this comparison
+# cannot tell a correct slide from a consistently wrong one - it agreed with
+# both before and after the minus-strand MAX_LIKELIHOOD fix. The first-
+# principles tests further down are the ones that constrain the value.
 test_that("pwm.max (MAX_LIKELIHOOD): minus-strand sliding equals spatial (no-sliding) baseline", {
     remove_all_vtracks()
     withr::defer(remove_all_vtracks())
@@ -1307,4 +1460,47 @@ test_that("misha PWM with sliding without spatial matches prego reference", {
     expect_true(nrow(misha_result) > 0)
     expect_false(any(is.na(misha_result$pwm_sliding_no_spatial)))
     expect_true(all(is.finite(misha_result$pwm_sliding_no_spatial)))
+})
+
+# RunningLogSumExp::push(-Inf) into a window whose running maximum is already
+# -inf used to evaluate exp(-inf + inf) into its scaled sum, and the resulting
+# NaN then surfaced on the first finite push. A zero prior gives a PSSM with
+# hard zeros a per-anchor score of -Inf, so a sliding window that steps over a
+# stretch with no scorable anchor and then reaches one hits exactly that.
+# misha's own callers never returned the NaN to the user - the pwm slide reads
+# NaN as "sliding failed" and re-seeds from scratch, so the numbers below were
+# already right, at the cost of silently losing the optimization - which is why
+# this locks the values rather than the mechanism.
+test_that("pwm with prior = 0 slides across an unscorable stretch without NaN", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    pssm <- create_test_pssm() # hard zeros: every non-"AC" window scores -Inf
+    motif_len <- nrow(pssm)
+
+    gvtrack.create("pwm_zero_prior_slide", NULL, "pwm",
+        pssm = pssm, bidirect = FALSE, strand = 1,
+        extend = TRUE, prior = 0
+    )
+
+    scope <- gintervals(1, 1000, 1300)
+    res <- gextract("pwm_zero_prior_slide", scope, iterator = 3)
+
+    manual <- vapply(seq_len(nrow(res)), function(idx) {
+        ext_iv <- res[idx, c("chrom", "start", "end")]
+        ext_iv$end <- ext_iv$end + motif_len - 1L
+        span_len <- res$end[idx] - res$start[idx]
+        scores <- manual_pwm_scores_single_strand(
+            toupper(gseq.extract(ext_iv)), pssm,
+            prior = 0
+        )
+        log_sum_exp(scores[seq_len(span_len)])
+    }, numeric(1))
+
+    # the geometry must actually contain both kinds of bin, or nothing is tested
+    expect_true(any(is.infinite(manual)))
+    expect_true(any(is.finite(manual)))
+
+    expect_false(any(is.nan(res$pwm_zero_prior_slide)))
+    expect_equal(res$pwm_zero_prior_slide, manual, tolerance = 1e-6)
 })

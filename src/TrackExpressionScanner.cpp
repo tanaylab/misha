@@ -1281,7 +1281,7 @@ for (unsigned ivar = 0; ivar < vars.get_num_track_vars(); ++ivar) {
 		if (common_track_type < 0) {
 			if (num_tracks) {
 				if (track_exprs.size() == 1)
-					verror("Cannot implicitly determine iterator policy:\ntrack expression \"%s\" contains a pwm virtual track or tracks in different formats.\n", track_exprs.front().c_str());
+					verror("Cannot implicitly determine iterator policy:\ntrack expression \"%s\" contains a sequence-based virtual track (pwm, potts, kmer or masked) or tracks in different formats.\n", track_exprs.front().c_str());
 				verror("Cannot implicitly determine iterator policy: track expressions contain tracks in different formats.\n");
 			}
 			if (track_exprs.size() == 1)

@@ -43,6 +43,7 @@
 #include "SegmentFinder.h"
 #include "TrackExpressionIteratorBase.h"
 #include "PWMScorer.h"
+#include "PottsScorer.h"
 #include "PWMEditDistanceScorer.h"
 #include "PWMLseEditDistanceScorer.h"
 #include "KmerCounter.h"
@@ -159,6 +160,13 @@ public:
             PWM_EDIT_DISTANCE_LSE,
             PWM_EDIT_DISTANCE_LSE_POS,
             PWM_N_MUTATIONS,
+            // FUNC_NAMES below is indexed by this enum, so new values are
+            // APPENDED here and their names appended there. Inserting one
+            // mid-enum silently renames every later function.
+            POTTS,
+            POTTS_MAX,
+            POTTS_MAX_POS,
+            POTTS_COUNT,
             NUM_FUNCS
         };
 
@@ -173,6 +181,7 @@ public:
         Binned_pv           pv_binned;
         Track_n_imdf       *track_n_imdf;
         std::unique_ptr<PWMScorer> pwm_scorer;
+        std::unique_ptr<PottsScorer> potts_scorer;
         std::unique_ptr<PWMEditDistanceScorer> pwm_edit_distance_scorer;
         std::unique_ptr<PWMLseEditDistanceScorer> pwm_lse_edit_distance_scorer;
         std::unique_ptr<KmerCounter> kmer_counter;
@@ -268,6 +277,7 @@ public:
     // Helper methods to check variable function types
     static bool is_sequence_based_function(Track_var::Val_func func);
     static bool is_pwm_function(Track_var::Val_func func);
+    static bool is_potts_function(Track_var::Val_func func);
     static bool is_kmer_function(Track_var::Val_func func);
     static bool is_masked_function(Track_var::Val_func func);
     static bool is_pwm_edit_distance_function(Track_var::Val_func func);
@@ -446,7 +456,11 @@ inline bool TrackExpressionVars::is_seq_variable(unsigned ivar) const {
            m_track_vars[ivar].val_func == Track_var::PWM_MAX_EDIT_DISTANCE ||
            m_track_vars[ivar].val_func == Track_var::PWM_EDIT_DISTANCE_LSE ||
            m_track_vars[ivar].val_func == Track_var::PWM_EDIT_DISTANCE_LSE_POS ||
-           m_track_vars[ivar].val_func == Track_var::PWM_N_MUTATIONS;
+           m_track_vars[ivar].val_func == Track_var::PWM_N_MUTATIONS ||
+           m_track_vars[ivar].val_func == Track_var::POTTS ||
+           m_track_vars[ivar].val_func == Track_var::POTTS_MAX ||
+           m_track_vars[ivar].val_func == Track_var::POTTS_MAX_POS ||
+           m_track_vars[ivar].val_func == Track_var::POTTS_COUNT;
 }
 
 // Helper methods to check variable function types
@@ -460,12 +474,19 @@ inline bool TrackExpressionVars::is_sequence_based_function(Track_var::Val_func 
            func == Track_var::PWM_MAX_EDIT_DISTANCE ||
            func == Track_var::PWM_EDIT_DISTANCE_LSE ||
            func == Track_var::PWM_EDIT_DISTANCE_LSE_POS ||
-           func == Track_var::PWM_N_MUTATIONS;
+           func == Track_var::PWM_N_MUTATIONS ||
+           func == Track_var::POTTS || func == Track_var::POTTS_MAX ||
+           func == Track_var::POTTS_MAX_POS || func == Track_var::POTTS_COUNT;
 }
 
 inline bool TrackExpressionVars::is_pwm_function(Track_var::Val_func func) {
     return func == Track_var::PWM || func == Track_var::PWM_MAX ||
            func == Track_var::PWM_MAX_POS || func == Track_var::PWM_COUNT;
+}
+
+inline bool TrackExpressionVars::is_potts_function(Track_var::Val_func func) {
+    return func == Track_var::POTTS || func == Track_var::POTTS_MAX ||
+           func == Track_var::POTTS_MAX_POS || func == Track_var::POTTS_COUNT;
 }
 
 inline bool TrackExpressionVars::is_pwm_edit_distance_function(Track_var::Val_func func) {

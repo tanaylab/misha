@@ -293,3 +293,20 @@ manual_pwm_edit_distance_below <- function(seq, pssm, threshold, max_edits = NUL
     }
     best
 }
+
+# A PSSM whose consensus weight differs from row to row. Two windows with the
+# same number of mismatches therefore score differently, so the maximum over a
+# window has a unique argmax - which a max/argmax test needs in order to assert
+# an exact value instead of an arbitrary pick between exact ties.
+create_graded_test_pssm <- function() {
+    pssm <- matrix(c(
+        0.90, 0.04, 0.03, 0.03,
+        0.03, 0.85, 0.06, 0.06,
+        0.05, 0.05, 0.80, 0.10,
+        0.08, 0.08, 0.09, 0.75,
+        0.70, 0.10, 0.10, 0.10,
+        0.12, 0.65, 0.12, 0.11
+    ), ncol = 4, byrow = TRUE)
+    colnames(pssm) <- c("A", "C", "G", "T")
+    pssm
+}

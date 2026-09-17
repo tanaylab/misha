@@ -1,6 +1,15 @@
 #ifndef base_util_h
 #define base_util_h 1
 
+// This header used to include nothing and compile only because every
+// translation unit that reached it happened to have included these first.
+// math.h and float.h rather than <cmath>/<cfloat>: the calls below are
+// unqualified, and only the C headers are required to put these names in the
+// global namespace.
+#include <math.h>   // isinf, log, exp, fabs
+#include <float.h>  // FLT_MAX, behind config.h's _REAL(MAX)
+#include "config.h" // _REAL
+
 inline double max(double f1, double f2) { return(f1 > f2 ? f1 : f2); }
 inline float max(float f1, float f2) { return(f1 > f2 ? f1 : f2); }
 inline int max(int f1, int f2) { return(f1 > f2 ? f1 : f2); }
