@@ -559,7 +559,11 @@ test_that("a vtrack position past 2^24 is exact", {
     # nothing. A first attempt at this asserted only that the maximum was
     # reached and passed while reporting position 3042193.
     m <- NULL
-    for (off in at + c(0L, 101L, 211L, 307L, 401L, 503L)) {
+    # Every candidate's 1-based position (off + 1) must be ODD: an even one is
+    # exactly representable in binary32, so a test that landed on it would pass
+    # against the very defect this checks. `at` itself is excluded for that
+    # reason - at + 1 is even.
+    for (off in at + c(101L, 211L, 307L, 401L, 503L)) {
         word <- toupper(gseq.extract(gintervals(chrom, off, off + W)))
         if (grepl("[^ACGT]", word)) next
         cand <- mk(word)
@@ -592,7 +596,7 @@ test_that("a vtrack position past 2^24 is exact", {
     iv <- gintervals(chrom, 0, at + W)
     got <- gextract(c("potts_big_val", "potts_big_pos"), iv, iterator = iv)
     expect_equal(got$potts_big_val, W, tolerance = 1e-5, ignore_attr = TRUE)
-    expect_equal(got$potts_big_pos, at + 1L, ignore_attr = TRUE)
+    expect_equal(got$potts_big_pos, at + 1L, tolerance = 0, ignore_attr = TRUE)
 })
 
 test_that("the implicit-iterator error names the sequence family, not pwm", {

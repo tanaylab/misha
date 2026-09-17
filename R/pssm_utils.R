@@ -165,12 +165,13 @@
     }
 
     # Per-entry finiteness is not enough. The scorer accumulates a window in
-    # double but reports in float - PottsScorer::score_interval() returns
-    # float, and its sliding aggregators hold float - so a model whose windows
+    # double and its sliding aggregators hold float, so a model whose windows
     # can leave the single-precision range makes its two scoring paths answer
     # differently: the direct one returns an infinity, the sliding one maps a
     # non-finite aggregate to NaN, and the whole point of having two paths is
-    # that they agree.
+    # that they agree. (score_interval() itself returns double - it has to, so
+    # that *.max.pos can report a position past 2^24 exactly - but that does
+    # not widen what the aggregators store.)
     #
     # Bounded here rather than checked per window in C++, so that
     # PottsScorer::slid_answer() and anchor_value() can go on reading -inf as
@@ -179,13 +180,11 @@
     # it from the one validator they share.
     #
     # |score| <= |intercept| + sum_i max_b |e[i, b]| + sum_k max_ab |J_k[a, b]|,
-    # bounded above by the W * max|e| + npair * max|J| + |intercept| below. No
-    # fitted model comes near it; a hand-built or rescaled one can.
-    # The tight bound its own comment states: the largest |e| a window can pick
-    # is one per POSITION and the largest |J| one per PAIR, so summing the
-    # per-row maxima is exact. W * max|e| + npair * max|J| over-states it by
-    # orders of magnitude and rejected models that score nowhere near the
-    # single-precision limit.
+    # which is exact: a window picks one energy per POSITION and one coupling
+    # per PAIR, so summing the per-row maxima is the true worst case. No fitted
+    # model comes near it; a hand-built or rescaled one can. The looser
+    # W * max|e| + npair * max|J| this used to compute over-states it by orders
+    # of magnitude and refused models scoring nowhere near the limit.
     worst <- sum(apply(abs(e), 1L, max)) + abs(intercept)
     if (npair) {
         worst <- worst + sum(apply(abs(Jflat), 1L, max))

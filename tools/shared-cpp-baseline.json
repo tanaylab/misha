@@ -201,8 +201,8 @@
   },
   "PWMScorer.cpp": {
     "identical": false,
-    "misha": "567aefcb7cfca53f",
-    "pymisha": "2dbbb7ce08863f35"
+    "misha": "e62805ce128cba75",
+    "pymisha": "ae4ba80f3043099d"
   },
   "PWMScorer.h": {
     "identical": false,
@@ -215,13 +215,13 @@
     "pymisha": "d99119ed7a9d9333"
   },
   "PottsScorer.cpp": {
-    "identical": false,
-    "misha": "cdcc7fab4695a544",
-    "pymisha": "e856fbd92b245f3b"
+    "identical": true,
+    "misha": "45a15e7c53d6cc20",
+    "pymisha": "45a15e7c53d6cc20"
   },
   "PottsScorer.h": {
-    "identical": false,
-    "misha": "f93e3f332c09969c",
+    "identical": true,
+    "misha": "9e4552533f0b25fa",
     "pymisha": "9e4552533f0b25fa"
   },
   "RaList.h": {

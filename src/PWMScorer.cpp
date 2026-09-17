@@ -816,6 +816,14 @@ double PWMScorer::score_with_sliding_window(const std::string& target,
 
     // Try to slide if possible
     if (can_slide) {
+        // double for the same reason the signatures are, though NOT because a
+        // position flows through here: score_interval() routes MAX_LIKELIHOOD_POS
+        // away from this path entirely ("!m_use_spat && m_mode !=
+        // MAX_LIKELIHOOD_POS"), so the value is always a score. Widened to keep
+        // the local from being the one narrowing left in a chain that is
+        // otherwise double, if that routing ever changes - the sibling in
+        // PottsScorer::seed_sliding_window() IS on the position path and was
+        // load-bearing.
         double result = try_slide_window(target, original_interval, expanded_interval, i_min, i_max, motif_len, stride);
         if (!std::isnan(result)) {
             return result;
