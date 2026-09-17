@@ -1,5 +1,13 @@
 # misha 5.12.0
 
+## Bug fixes
+
+* `pwm.max.pos` reported a garbage position - around 1.8e19, and a different value on each run - when no anchor in the interval was scorable, for example a PSSM with `prior = 0` over an assembly gap. `DnaPSSM::max_like_match()` derived it from an uninitialised iterator. It reports `NaN` now, which is what the rest of the family answers when nothing was scorable.
+
+* A `spat_min` given without a `spat_max` silently reinstated the 1,000,001-anchor scan cap removed in 5.11.27, because `spat_max` still defaulted to that number: `pwm.count` with `spat_min = 1` froze at 5107 hits whether the interval was 1, 2 or 4 Mb. Recompute anything derived from a spatially-bounded scan over an interval larger than about 1 Mb.
+
+* A Potts model handed to `gvtrack.create(params = )` had a field whose name merely *starts* with a parameter's name read as that parameter, because the reader used `$`, which partial-matches: a model carrying `bidirectional` or `strand_prior` was scored with `bidirect` or `strand` set from it. Fields are read by exact name now.
+
 * `pwm.max` returned wrong values with `strand = -1` over overlapping iterator intervals. Recompute anything derived from such a track.
 * A `gvtrack.filter` on a `pwm` virtual track now combines the unmasked parts by log-sum-exp instead of summing them, and one on `pwm.max.pos` now reports a position rather than an arbitrary number. Recompute anything derived from a filtered `pwm` or `pwm.max.pos` track.
 * A `gvtrack.filter` on a `pwm`, `pwm.max`, `pwm.max.pos` or `pwm.count` track returned `NA` for the whole interval when the mask left a part narrower than the PSSM, which needs `extend = FALSE`. Recompute anything derived from such a track.

@@ -302,6 +302,12 @@
 #' `.coerce_potts_model()` cross-checks `width` against `nrow(e)` when present.
 #' @noRd
 .vtrack_params_potts <- function(func, params, dots) {
+    # Every field is read with `[[`, never `$`. A model handed over as `params`
+    # bypasses the allowlist below - that is the point, so a whole fitted model
+    # needs no subsetting - and `$` partial-matches, so a model carrying
+    # `bidirectional` or `strand_prior` had it silently read as `bidirect` or
+    # `strand` and scored something the caller never asked for. The same class
+    # of defect as the `J` reader in .coerce_potts_model().
     from_params <- !is.null(params)
     if (from_params) {
         if (!is.list(params) || !("e" %in% names(params))) {
@@ -323,11 +329,11 @@
 
     # Same contract as pwm.count: a Potts score is an energy whose usable range
     # depends entirely on the model, so no default suits every one.
-    if (identical(func, "potts.count") && is.null(dots$score.thresh)) {
+    if (identical(func, "potts.count") && is.null(dots[["score.thresh"]])) {
         stop("potts.count requires a 'score.thresh' parameter. A Potts score is an energy, so there is no default that suits every model - pick a threshold from the score distribution of your own model, e.g. with a 'potts' or 'potts.max' virtual track.", call. = FALSE)
     }
 
-    score.thresh <- if (!is.null(dots$score.thresh)) dots$score.thresh else 0
+    score.thresh <- if (!is.null(dots[["score.thresh"]])) dots$score.thresh else 0
     if (identical(func, "potts.count")) {
         score.thresh <- .coerce_score_thresh(score.thresh)
     }
@@ -335,9 +341,9 @@
     # .potts_params() is the same builder gseq.potts() uses, so the two entry
     # points cannot drift on validation or on the list's shape.
     .potts_params(dots,
-        bidirect = if (!is.null(dots$bidirect)) dots$bidirect else TRUE,
-        extend = if (!is.null(dots$extend)) dots$extend else TRUE,
-        strand = if (!is.null(dots$strand)) dots$strand else 1,
+        bidirect = if (!is.null(dots[["bidirect"]])) dots[["bidirect"]] else TRUE,
+        extend = if (!is.null(dots[["extend"]])) dots[["extend"]] else TRUE,
+        strand = if (!is.null(dots[["strand"]])) dots[["strand"]] else 1,
         score.thresh = score.thresh,
         what = sprintf("virtual track function '%s'", func)
     )

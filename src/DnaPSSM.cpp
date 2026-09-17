@@ -291,7 +291,14 @@ string::const_iterator DnaPSSM::max_like_match(const string &target,
 	}
 
 	string::const_iterator max_i = target.begin() + max_offset(target.length());
-	string::const_iterator best_pos;
+	// Initialised, because nothing assigns it when no anchor scores: every
+	// candidate compares `logp > best_logp` against a best that starts at
+	// -inf, so an all-unscorable target (a `prior` of 0 over an assembly gap,
+	// say) left it holding whatever was on the stack and the caller derived a
+	// position from it - pwm.max.pos reported 1.8e19, and a different 1.8e19
+	// on each run, which is what undefined behaviour looks like from R.
+	// best_logp stays -inf in that case, which is how the caller tells.
+	string::const_iterator best_pos = target.begin();
 	best_logp = R_NegInf;
 	for(string::const_iterator i = target.begin() + m_min_range;
 	    i <= max_i;
