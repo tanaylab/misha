@@ -138,6 +138,12 @@ private:
         int hit_count = 0;
     };
 
+    // The largest window the sliding cache will materialise, in anchors.
+    // PWMScorer carries the same constant for the same reason; see the note
+    // there. Kept per-class rather than shared so neither scorer's tuning is
+    // hostage to the other's.
+    static const size_t MAX_CACHED_WINDOW_ANCHORS = 1000000;
+
     double score_with_sliding_window(const GInterval &original_interval,
                                     const GInterval &expanded_interval,
                                     size_t i_min, size_t i_max, size_t motif_len,

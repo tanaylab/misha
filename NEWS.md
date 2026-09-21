@@ -2,6 +2,8 @@
 
 ## Bug fixes
 
+* A `pwm` or `potts` scan over one large interval no longer materialises a sliding-window cache it cannot reuse. Removing the 1,000,001-anchor scan cap in 5.11.27 also removed the bound it happened to put on that cache, so a whole-chromosome iterator allocated about 21 bytes per base: `pwm` over mm10 chr1 peaked at 4.2 GB, and every multitasking process paid it again. It peaks at 0.5 GB now, and an overlapping-window scan is faster too. Values are unchanged except `pwm`'s log-sum-exp, which moves by under one float ulp.
+
 * `pwm.max.pos` reported a garbage position - around 1.8e19, and a different value on each run - when no anchor in the interval was scorable, for example a PSSM with `prior = 0` over an assembly gap. `DnaPSSM::max_like_match()` derived it from an uninitialised iterator. It reports `NaN` now, which is what the rest of the family answers when nothing was scorable.
 
 * A `spat_min` given without a `spat_max` silently reinstated the 1,000,001-anchor scan cap removed in 5.11.27, because `spat_max` still defaulted to that number: `pwm.count` with `spat_min = 1` froze at 5107 hits whether the interval was 1, 2 or 4 Mb. Recompute anything derived from a spatially-bounded scan over an interval larger than about 1 Mb.

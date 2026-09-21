@@ -655,12 +655,98 @@ double PWMScorer::try_slide_window(const std::string& target,
 }
 
 // Initialize/seed the sliding window
+// The window's answer without materialising the window.
+//
+// Every loop below is the corresponding loop in seed_sliding_window(), with the
+// push_back replaced by a scalar update, so the two agree by construction
+// rather than by a second derivation. Used where the cache would not be reused
+// (see MAX_CACHED_WINDOW_ANCHORS), which is exactly where building it is pure
+// cost - at ~21 bytes per anchor, 4.2 GB on a whole mm10 chr1.
+double PWMScorer::reduce_window(const std::string& target,
+                                const GInterval& expanded_interval,
+                                size_t i_min, size_t i_max, size_t motif_len)
+{
+    const char strand_mode = m_strand;
+
+    if (m_mode == TOTAL_LIKELIHOOD || m_mode == MAX_LIKELIHOOD) {
+        // A streaming log-sum-exp with the same max shift RunningLogSumExp::init()
+        // applies, and a running maximum, taken over the same per-anchor value.
+        double M = -std::numeric_limits<double>::infinity();
+        double sum = 0.0;
+        float best = -std::numeric_limits<float>::infinity();
+        for (size_t i = i_min; i <= i_max; ++i) {
+            const float v = pos_value_with_spat(m_pssm, target, i, strand_mode,
+                                                get_spatial_log_factor(i - i_min));
+            if (v > best) best = v;
+            if (!std::isfinite(v)) continue;   // -inf contributes nothing
+            if (double(v) > M) {
+                if (std::isfinite(M)) sum *= std::exp(M - double(v));
+                else sum = 0.0;
+                M = v;
+            }
+            sum += std::exp(double(v) - M);
+        }
+        if (m_mode == MAX_LIKELIHOOD) return best;
+        return std::isfinite(M) ? M + std::log(sum)
+                                : -std::numeric_limits<double>::infinity();
+    }
+
+    if (m_mode == MAX_LIKELIHOOD_POS) {
+        float best = -std::numeric_limits<float>::infinity();
+        int best_dir = 1;
+        size_t best_i = i_min;
+        bool any = false;
+        for (size_t i = i_min; i <= i_max; ++i) {
+            int dir = 1;
+            const float v = pos_value_with_dir(m_pssm, target, i, strand_mode,
+                                               get_spatial_log_factor(i - i_min), dir);
+            // `>` keeps the FIRST of equal values, which is what the deque does.
+            if (!any || v > best) { best = v; best_dir = dir; best_i = i; any = true; }
+        }
+        m_last_max_score = best;
+        if (!std::isfinite(best))
+            return std::numeric_limits<double>::quiet_NaN();
+        return compute_position_result(best_i, target.length(), motif_len, best_dir);
+    }
+
+    if (m_mode == MOTIF_COUNT) {
+        const bool scan_both = m_pssm.is_bidirect();
+        const bool scan_fwd  = scan_both || (strand_mode == 1);
+        const bool scan_rev  = scan_both || (strand_mode == -1);
+        size_t count = 0, pos0_local = 0;
+        for (size_t i = i_min; i <= i_max; ++i, ++pos0_local) {
+            const float spat_log = get_spatial_log_factor(pos0_local);
+            float comb = -std::numeric_limits<float>::infinity();
+            bool have = false;
+            if (scan_fwd) { comb = score_forward_original(m_pssm, target, i, strand_mode); have = true; }
+            if (scan_rev) {
+                const float rc = score_reverse_original(m_pssm, target, i, strand_mode);
+                if (have) log_sum_log(comb, rc); else { comb = rc; have = true; }
+            }
+            if ((comb + spat_log) >= m_score_thresh) ++count;
+        }
+        return (double)count;
+    }
+
+    return std::numeric_limits<double>::quiet_NaN();
+}
+
 double PWMScorer::seed_sliding_window(const std::string& target,
                                      const GInterval& original_interval,
                                      const GInterval& expanded_interval,
-                                     size_t i_min, size_t i_max, size_t motif_len)
+                                     size_t i_min, size_t i_max, size_t motif_len,
+                                     bool populate)
 {
     char strand_mode = m_strand;
+
+    if (!populate) {
+        // The same scan, reduced into scalars instead of into three vectors and
+        // two aggregators. Nothing here is kept, so the cache is left invalid
+        // and the next interval re-seeds; that costs a re-scan only where a
+        // slide was never possible anyway.
+        invalidate_cache();
+        return reduce_window(target, expanded_interval, i_min, i_max, motif_len);
+    }
 
     // Compute all values for the window
     std::vector<float> vals;
@@ -838,8 +924,20 @@ double PWMScorer::score_with_sliding_window(const std::string& target,
         // If sliding failed, fall through to re-seeding
     }
 
-    // Seed or re-seed the window
-    return seed_sliding_window(target, original_interval, expanded_interval, i_min, i_max, motif_len);
+    // Seed or re-seed the window.
+    //
+    // Populate the aggregators only where a later slide could reuse an anchor,
+    // and only where keeping the window is affordable. A stride at or beyond
+    // the window size shares nothing with its predecessor; a window past
+    // MAX_CACHED_WINDOW_ANCHORS cannot be reused by any iterator that would
+    // also fit in memory. stride == 0 means "no usable history yet" - the
+    // first call of a scan - where there is nothing to predict from, so the
+    // size bound is what decides. PottsScorer::score_with_sliding_window()
+    // makes the same decision, minus the size bound, which it needs too.
+    const size_t window = i_max - i_min + 1;
+    const bool populate = (stride == 0 || stride < window) &&
+                          window <= MAX_CACHED_WINDOW_ANCHORS;
+    return seed_sliding_window(target, original_interval, expanded_interval, i_min, i_max, motif_len, populate);
 }
 
 double PWMScorer::score_interval(const GInterval& interval, const GenomeChromKey& chromkey)
