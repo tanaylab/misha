@@ -2,7 +2,7 @@
 
 ## Bug fixes
 
-* A `pwm` or `potts` scan over one large interval no longer materialises a sliding-window cache it cannot reuse. Removing the 1,000,001-anchor scan cap in 5.11.27 also removed the bound it happened to put on that cache, so a whole-chromosome iterator allocated about 21 bytes per base: `pwm` over mm10 chr1 peaked at 4.2 GB, and every multitasking process paid it again. It peaks at 0.5 GB now, and an overlapping-window scan is faster too. Values are unchanged except `pwm`'s log-sum-exp, which moves by under one float ulp.
+* A `pwm` or `potts` scan no longer materialises a sliding-window cache it cannot reuse. Removing the 1,000,001-anchor scan cap in 5.11.27 also removed the bound it happened to put on that cache, so a whole-chromosome iterator allocated about 21 bytes per base: `pwm` over mm10 chr1 peaked at 4.2 GB, and every multitasking process paid it again. It peaks at 0.5 GB now, and an overlapping-window scan is faster too. Values are unchanged except `pwm`'s log-sum-exp, which moves by under one float ulp - for any iterator that declines the cache, not only a single large interval. Separately, `pwm.count` now reports counts above 16,777,216 exactly, where the float it was accumulated in had begun rounding them: a whole mm10 chr1 count reads 191,908,855 against the 191,908,848 of 5.12.0.
 
 * `pwm.max.pos` reported a garbage position - around 1.8e19, and a different value on each run - when no anchor in the interval was scorable, for example a PSSM with `prior = 0` over an assembly gap. `DnaPSSM::max_like_match()` derived it from an uninitialised iterator. It reports `NaN` now, which is what the rest of the family answers when nothing was scorable.
 

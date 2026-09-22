@@ -333,7 +333,7 @@
         stop("potts.count requires a 'score.thresh' parameter. A Potts score is an energy, so there is no default that suits every model - pick a threshold from the score distribution of your own model, e.g. with a 'potts' or 'potts.max' virtual track.", call. = FALSE)
     }
 
-    score.thresh <- if (!is.null(dots[["score.thresh"]])) dots$score.thresh else 0
+    score.thresh <- if (!is.null(dots[["score.thresh"]])) dots[["score.thresh"]] else 0
     if (identical(func, "potts.count")) {
         score.thresh <- .coerce_score_thresh(score.thresh)
     }

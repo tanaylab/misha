@@ -59,6 +59,12 @@ private:
         int chromid = -1;
         char strand_mode = 0;     // 1=plus, -1=minus, 0=both
         bool valid = false;
+        // Geometry is recorded even when the aggregators are not built, so the
+        // NEXT call can measure a stride and decide to build them. Without the
+        // split, declining once left the cache invalid, the following call saw
+        // stride == 0 again, and an overlapping-window scan never bootstrapped
+        // - 1.1 Mb windows stepping 1 kb ran 24x slower than master.
+        bool populated = false;
         int64_t last_interval_start = -1;
         int64_t last_interval_end = -1;
         size_t last_i_min = 0;

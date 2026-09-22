@@ -167,6 +167,7 @@ PWMScorer::PWMScorer(const DnaPSSM& pssm, GenomeSeqFetch* shared_seqfetch, bool 
 void PWMScorer::invalidate_cache()
 {
     m_slide.valid = false;
+    m_slide.populated = false;
     m_slide.stride = 0;
     m_spat_slide.valid = false;
 }
@@ -687,7 +688,11 @@ double PWMScorer::reduce_window(const std::string& target,
             sum += std::exp(double(v) - M);
         }
         if (m_mode == MAX_LIKELIHOOD) return best;
-        return std::isfinite(M) ? M + std::log(sum)
+        // (float), because the populating path returns RunningLogSumExp's
+        // value through the same cast. Without it `pwm` became path-dependent
+        // by ~2e-07 - under an ulp, but master answered the same number
+        // whichever path ran, and that is worth keeping.
+        return std::isfinite(M) ? (float)(M + std::log(sum))
                                 : -std::numeric_limits<double>::infinity();
     }
 
@@ -700,8 +705,17 @@ double PWMScorer::reduce_window(const std::string& target,
             int dir = 1;
             const float v = pos_value_with_dir(m_pssm, target, i, strand_mode,
                                                get_spatial_log_factor(i - i_min), dir);
-            // `>` keeps the FIRST of equal values, which is what the deque does.
-            if (!any || v > best) { best = v; best_dir = dir; best_i = i; any = true; }
+            // On a tie this keeps the FIRST anchor in ASCENDING TARGET INDEX.
+            // RunningMaxDeque, seeded in ascending GENOMIC order, keeps the
+            // first in that order - the same anchor on the plus strand and the
+            // opposite one on the minus, where the target is reverse
+            // complemented. Unreachable in misha (MAX_LIKELIHOOD_POS never
+            // takes this path) but PWMScorer is shared with pymisha, so the
+            // minus-strand case is matched explicitly rather than left to
+            // differ if the routing ever changes.
+            const bool takes = !any || v > best ||
+                               (v == best && m_strand == -1);
+            if (takes) { best = v; best_dir = dir; best_i = i; any = true; }
         }
         m_last_max_score = best;
         if (!std::isfinite(best))
@@ -741,10 +755,20 @@ double PWMScorer::seed_sliding_window(const std::string& target,
 
     if (!populate) {
         // The same scan, reduced into scalars instead of into three vectors and
-        // two aggregators. Nothing here is kept, so the cache is left invalid
-        // and the next interval re-seeds; that costs a re-scan only where a
-        // slide was never possible anyway.
-        invalidate_cache();
+        // two aggregators. The GEOMETRY is still recorded - only the
+        // aggregators are skipped - so the next call can measure a stride
+        // against it and populate if a slide turns out to be possible.
+        m_slide.valid = true;
+        m_slide.populated = false;
+        m_slide.chromid = original_interval.chromid;
+        m_slide.strand_mode = strand_mode;
+        m_slide.last_interval_start = original_interval.start;
+        m_slide.last_interval_end = original_interval.end;
+        m_slide.last_i_min = i_min;
+        m_slide.last_i_max = i_max;
+        m_slide.window_size = i_max - i_min + 1;
+        m_slide.pos0 = 0;
+        m_slide.stride = 0;
         return reduce_window(target, expanded_interval, i_min, i_max, motif_len);
     }
 
@@ -797,6 +821,7 @@ double PWMScorer::seed_sliding_window(const std::string& target,
     m_slide.window_size = W;
     m_slide.pos0 = 0;
     m_slide.stride = 0;
+    m_slide.populated = true;
 
     // RunningMaxDeque must be seeded in ascending genomic order, which on the
     // minus strand is descending target index (the target is reverse-
@@ -900,7 +925,7 @@ double PWMScorer::score_with_sliding_window(const std::string& target,
                      (m_slide.stride == 0 || stride == m_slide.stride);
 
     bool can_slide =
-        m_slide.valid &&
+        m_slide.valid && m_slide.populated &&
         m_slide.chromid == original_interval.chromid &&
         m_slide.strand_mode == strand_mode &&
         stride_ok &&
@@ -934,9 +959,24 @@ double PWMScorer::score_with_sliding_window(const std::string& target,
     // first call of a scan - where there is nothing to predict from, so the
     // size bound is what decides. PottsScorer::score_with_sliding_window()
     // makes the same decision, minus the size bound, which it needs too.
+    // With a known stride the window demonstrably WILL be reused - `stride <
+    // window` says the next interval starts inside it - so it is kept whatever
+    // its size: refusing there costs a full re-scan per interval, and 1.1 Mb
+    // windows stepping 1 kb ran 12.8x slower for the sake of 5-37 MB.
+    //
+    // `stride == 0` is the first call of a scan, which has no history to
+    // predict from - and it cannot simply decline on size, because declining
+    // leaves the cache invalid, so the NEXT call sees stride == 0 too and the
+    // window never bootstraps. What distinguishes the two cases is the
+    // iterator interval's own width: a gvtrack.iterator shift that makes the
+    // window far wider than the interval guarantees consecutive windows
+    // overlap, which is the whole reason to keep one. A whole-chromosome
+    // iterator has no shift, so its window is as wide as its interval and
+    // nothing can slide onto it - that is the gigabyte case the size bound
+    // exists for.
     const size_t window = i_max - i_min + 1;
-    const bool populate = (stride == 0 || stride < window) &&
-                          window <= MAX_CACHED_WINDOW_ANCHORS;
+    const bool populate = (stride == 0) ? (window <= MAX_CACHED_WINDOW_ANCHORS)
+                                        : (stride < window);
     return seed_sliding_window(target, original_interval, expanded_interval, i_min, i_max, motif_len, populate);
 }
 
