@@ -282,6 +282,13 @@ static ScoreResult score_pwm_over_range(
             fwd_eval = true;
         }
 
+        // NOTE: with !bidirect and strand_mode == 0 this evaluates the reverse
+        // strand, and PWM_MAX/PWM_POS below then use it while PWM_LSE/PWM_COUNT
+        // re-gate on `strand_mode >= 0` and do not - one call answering -15.8050
+        // under lse and -0.2377 under max. That combination is refused by
+        // gseq.pwm(), gseq.potts() and the virtual tracks, so it is unreachable;
+        // if a caller is ever allowed to pass it again, fix this gate (and its
+        // twin in the spatial branch below) rather than inherit the asymmetry.
         if ((params.bidirect || params.strand_mode <= 0) && params.strand_mode != 1) {
             rev_score = window_log_prob_ptr(window_start, true);
             rev_eval = true;

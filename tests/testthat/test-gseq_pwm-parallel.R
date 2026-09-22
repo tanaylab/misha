@@ -187,16 +187,23 @@ test_that("gseq.pwm multitask works with all strand modes", {
     result_par_rev <- gseq.pwm(seqs, pssm, mode = "max", strand = -1)
     expect_equal(result_par_rev, result_seq_rev, tolerance = 1e-10)
 
-    # Test strand = 0 (both strands, non-bidirectional)
+    # Both strands: that is bidirect = TRUE, where strand is ignored. It used
+    # to be spelled `strand = 0, bidirect = FALSE`, which is refused now - one
+    # strand is read there and 0 cannot name it.
     withr::local_options(list(gmultitasking = FALSE))
-    result_seq_both <- gseq.pwm(seqs, pssm, mode = "max", strand = 0, bidirect = FALSE)
+    result_seq_both <- gseq.pwm(seqs, pssm, mode = "max", bidirect = TRUE)
     withr::local_options(list(
         gmultitasking = TRUE,
         gmax.processes = 4,
         gmin.seqs.work4process = 100
     ))
-    result_par_both <- gseq.pwm(seqs, pssm, mode = "max", strand = 0, bidirect = FALSE)
+    result_par_both <- gseq.pwm(seqs, pssm, mode = "max", bidirect = TRUE)
     expect_equal(result_par_both, result_seq_both, tolerance = 1e-10)
+
+    expect_error(
+        gseq.pwm(seqs, pssm, mode = "max", strand = 0, bidirect = FALSE),
+        "needs an explicit strand"
+    )
 })
 
 test_that("gseq.pwm multitask works with different prior values", {

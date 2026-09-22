@@ -525,8 +525,20 @@ double PottsScorer::score_with_sliding_window(const GInterval &original_interval
     // added. stride == 0 means "no usable history yet" (the first call of a
     // scan, or a non-monotone step), where there is nothing to predict from and
     // the window has to be built to have a chance of paying.
+    // The size bound is PWMScorer::MAX_CACHED_WINDOW_ANCHORS's twin, and it is
+    // the `stride == 0` arm that needs it: the first call of a scan has no
+    // history to predict from, so without it a whole-chromosome iterator
+    // populates a window of one anchor per base before discovering that
+    // nothing will ever slide onto it. Measured at +276 MB for a 40 Mb
+    // interval. Past this size no iterator that also fits in memory can start
+    // its next interval inside the window, so the cache cannot pay.
+    // Same rule as PWMScorer::score_with_sliding_window(); see the note there.
+    // The size bound gates only the no-history arm, and even there an iterator
+    // interval narrower than its window means a shift is in play and the next
+    // window will overlap this one.
     const size_t W = i_max - i_min + 1;
-    const bool populate = (stride == 0) || (stride < W);
+    const bool populate = (stride == 0) ? (W <= MAX_CACHED_WINDOW_ANCHORS)
+                                        : (stride < W);
     return seed_sliding_window(original_interval, expanded_interval, i_min, i_max,
                                motif_len, tlen, populate);
 }

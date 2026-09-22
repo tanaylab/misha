@@ -1,5 +1,17 @@
 # misha 5.12.0
 
+* `gseq.pwm()` refuses `strand = 0` when `bidirect = FALSE`, and its `strand` default is now `1`. Under `bidirect = FALSE` exactly one strand is read, so `0` cannot name it - and it was honoured three different ways: `"lse"`, `"pos"` and `"count"` read the forward strand, `"max"` read both and took their maximum, and the documentation promised `0 = both strands`. The pwm and potts virtual tracks, and `gseq.potts()`, have always refused the combination. An ordinary `gseq.pwm(bidirect = FALSE)` call is unaffected by the new default; a call that passed `strand = 0` explicitly alongside `bidirect = FALSE` now errors, and anything derived from it under `mode = "max"` should be recomputed - that was the mode reading a strand it was not asked for.
+
+## Bug fixes
+
+* A `pwm` or `potts` scan no longer materialises a sliding-window cache it cannot reuse. Removing the 1,000,001-anchor scan cap in 5.11.27 also removed the bound it happened to put on that cache, so a whole-chromosome iterator allocated about 21 bytes per base: `pwm` over mm10 chr1 peaked at 4.2 GB, and every multitasking process paid it again. It peaks at 0.5 GB now, and an overlapping-window scan is faster too. Values are unchanged except `pwm`'s log-sum-exp, which moves by under one float ulp - for any iterator that declines the cache, not only a single large interval. Separately, `pwm.count` now reports counts above 16,777,216 exactly, where the float it was accumulated in had begun rounding them: a whole mm10 chr1 count reads 191,908,855 against the 191,908,848 of 5.12.0.
+
+* `pwm.max.pos` reported a garbage position - around 1.8e19, and a different value on each run - when no anchor in the interval was scorable, for example a PSSM with `prior = 0` over an assembly gap. `DnaPSSM::max_like_match()` derived it from an uninitialised iterator. It reports `NaN` now, which is what the rest of the family answers when nothing was scorable.
+
+* A `spat_min` given without a `spat_max` silently reinstated the 1,000,001-anchor scan cap removed in 5.11.27, because `spat_max` still defaulted to that number: `pwm.count` with `spat_min = 1` froze at 5107 hits whether the interval was 1, 2 or 4 Mb. Recompute anything derived from a spatially-bounded scan over an interval larger than about 1 Mb.
+
+* A Potts model handed to `gvtrack.create(params = )` had a field whose name merely *starts* with a parameter's name read as that parameter, because the reader used `$`, which partial-matches: a model carrying `bidirectional` or `strand_prior` was scored with `bidirect` or `strand` set from it. Fields are read by exact name now.
+
 * `pwm.max` returned wrong values with `strand = -1` over overlapping iterator intervals. Recompute anything derived from such a track.
 * A `gvtrack.filter` on a `pwm` virtual track now combines the unmasked parts by log-sum-exp instead of summing them, and one on `pwm.max.pos` now reports a position rather than an arbitrary number. Recompute anything derived from a filtered `pwm` or `pwm.max.pos` track.
 * A `gvtrack.filter` on a `pwm`, `pwm.max`, `pwm.max.pos` or `pwm.count` track returned `NA` for the whole interval when the mask left a part narrower than the PSSM, which needs `extend = FALSE`. Recompute anything derived from such a track.

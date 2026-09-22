@@ -63,7 +63,7 @@ struct PWMParams {
     bool has_range;
 
     PWMParams()
-        : extend_flag(true), spat_min(0), spat_max(1000000),
+        : extend_flag(true), spat_min(0), spat_max(DnaPSSM::NO_RANGE_CAP),
           has_range(false) {
         core.bidirect = true;
         core.strand_mode = 1;

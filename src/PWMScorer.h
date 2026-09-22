@@ -59,6 +59,12 @@ private:
         int chromid = -1;
         char strand_mode = 0;     // 1=plus, -1=minus, 0=both
         bool valid = false;
+        // Geometry is recorded even when the aggregators are not built, so the
+        // NEXT call can measure a stride and decide to build them. Without the
+        // split, declining once left the cache invalid, the following call saw
+        // stride == 0 again, and an overlapping-window scan never bootstrapped
+        // - 1.1 Mb windows stepping 1 kb ran 24x slower than master.
+        bool populated = false;
         int64_t last_interval_start = -1;
         int64_t last_interval_end = -1;
         size_t last_i_min = 0;
@@ -116,12 +122,27 @@ private:
     };
 
     // Sliding window methods
+    // The largest window the sliding cache will materialise, in anchors.
+    //
+    // Seeding costs ~21 bytes per anchor (three vectors plus the two
+    // aggregators), which used to be bounded because the scan itself stopped
+    // after a million anchors. Removing that cap in 5.11.27 made the scan
+    // correct and the allocation unbounded: a whole-chromosome iterator on
+    // mm10 chr1 took `pwm` from 0.49 GB to 4.24 GB, and every forked process
+    // pays it again. A window this large can only be reused by an iterator
+    // whose next interval starts inside it, which no whole-chromosome or
+    // tiling scan does - so past this size the cache is pure cost and the
+    // answer is computed without it. The scan still covers every anchor.
+    static const size_t MAX_CACHED_WINDOW_ANCHORS = 1000000;
+
     double score_with_sliding_window(const std::string& target, const GInterval& original_interval,
                                      const GInterval& expanded_interval,
                                      size_t i_min, size_t i_max, size_t motif_len);
+    double reduce_window(const std::string& target, const GInterval& expanded_interval,
+                         size_t i_min, size_t i_max, size_t motif_len);
     double seed_sliding_window(const std::string& target, const GInterval& original_interval,
                               const GInterval& expanded_interval,
-                              size_t i_min, size_t i_max, size_t motif_len);
+                              size_t i_min, size_t i_max, size_t motif_len, bool populate);
     double try_slide_window(const std::string& target, const GInterval& original_interval,
                            const GInterval& expanded_interval,
                            size_t i_min, size_t i_max, size_t motif_len, size_t stride);

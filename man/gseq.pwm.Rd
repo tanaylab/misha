@@ -9,7 +9,7 @@ gseq.pwm(
   pssm,
   mode = c("lse", "max", "pos", "count"),
   bidirect = TRUE,
-  strand = 0L,
+  strand = 1L,
   score.thresh = NULL,
   start_pos = NULL,
   end_pos = NULL,
@@ -35,7 +35,11 @@ gseq.pwm(
 
 \item{bidirect}{logical; if TRUE, scans both strands (default: TRUE)}
 
-\item{strand}{integer; 1=forward, -1=reverse, 0=both strands (default: 0)}
+\item{strand}{integer; \code{1} for the forward strand, \code{-1} for the
+reverse (default: \code{1}). Used only when \code{bidirect = FALSE}, and
+required there - \code{0} is refused, since exactly one strand is read and
+\code{0} cannot name it. Under \code{bidirect = TRUE} both strands are
+read and this is ignored.}
 
 \item{score.thresh}{single number; windows scoring at or above this value are counted.
 Required when \code{mode="count"} and ignored otherwise. PWM scores are
