@@ -36,8 +36,8 @@ names.
 
 gdb.init_examples()
 gtrack.path("dense_track")
-#> [1] "/tmp/Rtmpw3gJzo/trackdb/test/tracks/dense_track.track"
+#> [1] "/tmp/RtmpqxyNlU/trackdb/test/tracks/dense_track.track"
 gtrack.path(c("dense_track", "sparse_track"))
-#> [1] "/tmp/Rtmpw3gJzo/trackdb/test/tracks/dense_track.track" 
-#> [2] "/tmp/Rtmpw3gJzo/trackdb/test/tracks/sparse_track.track"
+#> [1] "/tmp/RtmpqxyNlU/trackdb/test/tracks/dense_track.track" 
+#> [2] "/tmp/RtmpqxyNlU/trackdb/test/tracks/sparse_track.track"
 ```

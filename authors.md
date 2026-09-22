@@ -15,7 +15,7 @@
 ## Citation
 
 Source:
-[`DESCRIPTION`](https://github.com/tanaylab/misha/blob/master/DESCRIPTION)
+[`DESCRIPTION`](https://github.com/tanaylab/misha/blob/v5.12.0/DESCRIPTION)
 
 Hoichman M, Lifshitz A, Yaffe E, Tanay A (2026). *misha: Toolkit for
 Analysis of Genomic Data*. R package version 5.12.0,
