@@ -13,7 +13,7 @@ gseq.pwm(
   pssm,
   mode = c("lse", "max", "pos", "count"),
   bidirect = TRUE,
-  strand = 0L,
+  strand = 1L,
   score.thresh = NULL,
   start_pos = NULL,
   end_pos = NULL,
@@ -52,7 +52,10 @@ gseq.pwm(
 
 - strand:
 
-  integer; 1=forward, -1=reverse, 0=both strands (default: 0)
+  integer; `1` for the forward strand, `-1` for the reverse (default:
+  `1`). Used only when `bidirect = FALSE`, and required there - `0` is
+  refused, since exactly one strand is read and `0` cannot name it.
+  Under `bidirect = TRUE` both strands are read and this is ignored.
 
 - score.thresh:
 
