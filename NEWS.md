@@ -1,22 +1,26 @@
 # misha 5.12.0
 
-* `gseq.pwm()` refuses `strand = 0` when `bidirect = FALSE`, and its `strand` default is now `1`. Under `bidirect = FALSE` exactly one strand is read, so `0` cannot name it - and it was honoured three different ways: `"lse"`, `"pos"` and `"count"` read the forward strand, `"max"` read both and took their maximum, and the documentation promised `0 = both strands`. The pwm and potts virtual tracks, and `gseq.potts()`, have always refused the combination. An ordinary `gseq.pwm(bidirect = FALSE)` call is unaffected by the new default; a call that passed `strand = 0` explicitly alongside `bidirect = FALSE` now errors, and anything derived from it under `mode = "max"` should be recomputed - that was the mode reading a strand it was not asked for.
+* New `potts`, `potts.max`, `potts.max.pos` and `potts.count` virtual track functions, which score a pairwise (Potts) energy model across the genome, and `gseq.potts()` to score sequences with one. A fitted model's `e`, `J`, `pairs` and `intercept` can be passed to `gvtrack.create(params = )` as they are.
 
-## Bug fixes
+* **Breaking:** `gseq.pwm()` refuses `strand = 0` when `bidirect = FALSE`, where exactly one strand is read and `0` cannot name it. The `strand` default is now `1`, so an ordinary `gseq.pwm(bidirect = FALSE)` call is unaffected. It had been honoured three ways: forward for `"lse"`, `"pos"` and `"count"`, both strands for `"max"`, and "both" in the documentation.
 
-* A `pwm` or `potts` scan no longer materialises a sliding-window cache it cannot reuse. Removing the 1,000,001-anchor scan cap in 5.11.27 also removed the bound it happened to put on that cache, so a whole-chromosome iterator allocated about 21 bytes per base: `pwm` over mm10 chr1 peaked at 4.2 GB, and every multitasking process paid it again. It peaks at 0.5 GB now, and an overlapping-window scan is faster too. Values are unchanged except `pwm`'s log-sum-exp, which moves by under one float ulp - for any iterator that declines the cache, not only a single large interval. Separately, `pwm.count` now reports counts above 16,777,216 exactly, where the float it was accumulated in had begun rounding them: a whole mm10 chr1 count reads 191,908,855 against the 191,908,848 of 5.12.0.
+* **Behavior fix:** `pwm.max` returned wrong values with `strand = -1` over overlapping iterator intervals. Recompute anything derived from such a track.
 
-* `pwm.max.pos` reported a garbage position - around 1.8e19, and a different value on each run - when no anchor in the interval was scorable, for example a PSSM with `prior = 0` over an assembly gap. `DnaPSSM::max_like_match()` derived it from an uninitialised iterator. It reports `NaN` now, which is what the rest of the family answers when nothing was scorable.
+* **Behavior fix:** `pwm.max.pos` reported an uninitialised position - around 1.8e19, differing run to run - when no anchor in the interval was scorable. It reports `NaN`.
 
-* A `spat_min` given without a `spat_max` silently reinstated the 1,000,001-anchor scan cap removed in 5.11.27, because `spat_max` still defaulted to that number: `pwm.count` with `spat_min = 1` froze at 5107 hits whether the interval was 1, 2 or 4 Mb. Recompute anything derived from a spatially-bounded scan over an interval larger than about 1 Mb.
+* **Behavior fix:** a `spat_min` given without a `spat_max` silently reinstated the 1,000,001-anchor scan cap removed in 5.11.27. Recompute anything derived from a spatially-bounded scan over an interval larger than about 1 Mb.
 
-* A Potts model handed to `gvtrack.create(params = )` had a field whose name merely *starts* with a parameter's name read as that parameter, because the reader used `$`, which partial-matches: a model carrying `bidirectional` or `strand_prior` was scored with `bidirect` or `strand` set from it. Fields are read by exact name now.
+* **Behavior fix:** `pwm.count` reports counts above 16,777,216 exactly; they had been accumulated in a float. A whole mm10 chr1 count reads 191,908,855 rather than 191,908,848.
 
-* `pwm.max` returned wrong values with `strand = -1` over overlapping iterator intervals. Recompute anything derived from such a track.
-* A `gvtrack.filter` on a `pwm` virtual track now combines the unmasked parts by log-sum-exp instead of summing them, and one on `pwm.max.pos` now reports a position rather than an arbitrary number. Recompute anything derived from a filtered `pwm` or `pwm.max.pos` track.
-* A `gvtrack.filter` on a `pwm`, `pwm.max`, `pwm.max.pos` or `pwm.count` track returned `NA` for the whole interval when the mask left a part narrower than the PSSM, which needs `extend = FALSE`. Recompute anything derived from such a track.
-* `gseq.pwm()` now combines the two strands the way the `pwm` virtual tracks do under `bidirect = TRUE`. `mode = "max"` log-sum-exps them instead of taking the larger, so a score can only rise, by at most `log 2`. `mode = "count"` thresholds the combined score once per window instead of once per strand, so counts move both ways: usually up, because the combined score clears a threshold that neither strand cleared on its own, and down wherever a window whose reverse complement also matched used to be counted twice. Recompute anything derived from either mode.
-* New `potts`, `potts.max`, `potts.max.pos` and `potts.count` virtual track functions, which score a pairwise (Potts) energy model across the genome, and a `gseq.potts()` to score sequences with one. A list with `e` (a `W x 4` matrix), `J`, `pairs` and `intercept` can be passed to `gvtrack.create(params = )` as it is; any other elements it carries are ignored, so a whole fitted model needs no subsetting.
+* **Behavior fix:** a Potts model passed to `gvtrack.create(params = )` had a field whose name merely *starts* with a parameter's name read as that parameter - `bidirectional` as `bidirect`, say. Fields are read by exact name.
+
+* **Behavior fix:** a `gvtrack.filter` on a `pwm` track combines the unmasked parts by log-sum-exp instead of summing them, and one on `pwm.max.pos` reports the position from the part with the highest single-strand score. Recompute anything derived from a filtered pwm track.
+
+* **Behavior fix:** a `gvtrack.filter` on a `pwm`, `pwm.max`, `pwm.max.pos` or `pwm.count` track returned `NA` for the whole interval when the mask left a part narrower than the PSSM.
+
+* **Behavior fix:** `gseq.pwm()` combines the two strands the way the `pwm` virtual tracks do under `bidirect = TRUE`: `mode = "max"` log-sum-exps them rather than taking the larger.
+
+* A `pwm` or `potts` scan no longer materialises a sliding-window cache it cannot reuse. A whole-chromosome iterator took `pwm` on mm10 chr1 from 4.2 GB to 0.5 GB, and every multitasking process paid it separately. Values are unchanged.
 
 # misha 5.11.27
 
