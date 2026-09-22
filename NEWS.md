@@ -1,5 +1,7 @@
 # misha 5.12.0
 
+* `gseq.pwm()` refuses `strand = 0` when `bidirect = FALSE`, and its `strand` default is now `1`. Under `bidirect = FALSE` exactly one strand is read, so `0` cannot name it - and it was honoured three different ways: `"lse"`, `"pos"` and `"count"` read the forward strand, `"max"` read both and took their maximum, and the documentation promised `0 = both strands`. The pwm and potts virtual tracks, and `gseq.potts()`, have always refused the combination. An ordinary `gseq.pwm(bidirect = FALSE)` call is unaffected by the new default; a call that passed `strand = 0` explicitly alongside `bidirect = FALSE` now errors, and anything derived from it under `mode = "max"` should be recomputed - that was the mode reading a strand it was not asked for.
+
 ## Bug fixes
 
 * A `pwm` or `potts` scan no longer materialises a sliding-window cache it cannot reuse. Removing the 1,000,001-anchor scan cap in 5.11.27 also removed the bound it happened to put on that cache, so a whole-chromosome iterator allocated about 21 bytes per base: `pwm` over mm10 chr1 peaked at 4.2 GB, and every multitasking process paid it again. It peaks at 0.5 GB now, and an overlapping-window scan is faster too. Values are unchanged except `pwm`'s log-sum-exp, which moves by under one float ulp - for any iterator that declines the cache, not only a single large interval. Separately, `pwm.count` now reports counts above 16,777,216 exactly, where the float it was accumulated in had begun rounding them: a whole mm10 chr1 count reads 191,908,855 against the 191,908,848 of 5.12.0.

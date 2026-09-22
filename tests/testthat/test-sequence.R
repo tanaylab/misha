@@ -2214,3 +2214,59 @@ test_that("gseq.pwm(mode='count') discriminates with a workable score.thresh", {
     # stays at 3, "GGGGACGTCCCC" gains four, and all eight poly-T anchors pass.
     expect_equal(gseq.pwm(seqs, pssm, mode = "count", score.thresh = -8), c(3, 5, 8))
 })
+
+test_that("gseq.pwm refuses strand = 0 when bidirect is FALSE", {
+    # Under bidirect = FALSE exactly one strand is read, so 0 cannot name it.
+    # It used to be the default and was honoured three different ways: "lse",
+    # "pos" and "count" read forward, "max" read BOTH and took their maximum,
+    # and the docs promised "0 = both strands". The virtual tracks and
+    # gseq.potts() have always refused it.
+    p <- matrix(
+        c(
+            0.97, 0.01, 0.01, 0.01,
+            0.97, 0.01, 0.01, 0.01,
+            0.01, 0.97, 0.01, 0.01,
+            0.01, 0.01, 0.97, 0.01
+        ),
+        ncol = 4, byrow = TRUE, dimnames = list(NULL, c("A", "C", "G", "T"))
+    )
+    seqs <- c("GGGG", "AACG", "CGTT") # CGTT is the reverse complement of AACG
+
+    expect_error(
+        gseq.pwm(seqs, p, mode = "max", bidirect = FALSE, strand = 0),
+        "needs an explicit strand"
+    )
+
+    # the default is 1, so an ordinary call still works and reads forward
+    expect_equal(
+        gseq.pwm(seqs, p, mode = "max", bidirect = FALSE),
+        gseq.pwm(seqs, p, mode = "max", bidirect = FALSE, strand = 1),
+        ignore_attr = TRUE
+    )
+
+    # and every mode now honours that strand - the inconsistency this refusal
+    # exists to remove was `max` reading BOTH where the others read one. The
+    # sequences are long enough for the position to discriminate: the motif
+    # sits near the start of one and its reverse complement near the end of
+    # the other, so a mode that read both strands could not tell them apart.
+    long <- c("AACGTTTTTT", "TTTTTTCGTT")
+    for (md in c("lse", "max", "pos", "count")) {
+        thr <- if (md == "count") -5 else NULL
+        fwd <- gseq.pwm(long, p,
+            mode = md, bidirect = FALSE, strand = 1,
+            prior = 0.01, score.thresh = thr
+        )
+        rev <- gseq.pwm(long, p,
+            mode = md, bidirect = FALSE, strand = -1,
+            prior = 0.01, score.thresh = thr
+        )
+        expect_false(isTRUE(all.equal(fwd, rev)), info = md)
+    }
+
+    # bidirect = TRUE still ignores strand entirely
+    expect_equal(
+        gseq.pwm(seqs, p, mode = "max", bidirect = TRUE),
+        gseq.pwm(seqs, p, mode = "max", bidirect = TRUE, strand = -1),
+        ignore_attr = TRUE
+    )
+})
