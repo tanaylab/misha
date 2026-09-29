@@ -8,11 +8,11 @@ $R  --silent --vanilla --slave <<EOF
 
 retv <- try({        
 	library("misha")	
-    load(paste("${dirname}", "misha", sep="/"))
     load(paste("${dirname}", "opts", sep="/"))
     options(opts)
 	options(echo = FALSE)
     remove(opts)
+    misha:::.gcluster.restore_db(paste("${dirname}", "misha", sep="/"))
     load(paste("${dirname}", "envir", sep="/"))
     load(paste("${dirname}", "commands", sep="/"))
     eval(.GSGECMD[[${commandidx}]])

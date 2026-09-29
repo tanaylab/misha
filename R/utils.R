@@ -538,6 +538,22 @@ gcluster.run <- function(..., opt.flags = "", max.jobs = 400, debug = FALSE, R =
 }
 
 
+# Called by exec/sgjob.sh to root a job where the caller was. `file` is the
+# copy of .misha that gcluster.run saved; loading it only yields a detached
+# environment that misha never reads, so it has to be replayed through the API.
+.gcluster.restore_db <- function(file) {
+    saved <- new.env()
+    load(file, envir = saved)
+    state <- saved$.misha
+    gsetroot(state$GROOT, dir = state$GWD)
+    for (dataset in state$GDATASETS) {
+        gdataset.load(dataset, force = TRUE)
+    }
+    if (!is.null(state$GVTRACKS)) {
+        assign("GVTRACKS", state$GVTRACKS, envir = .misha)
+    }
+}
+
 .gcluster.running.jobs <- function(jobids) {
     str <- system("qstat | sed 's/^[ ]*//' | cut -f 1 -d\" \"", intern = TRUE)
     if (length(str) > 2) {
