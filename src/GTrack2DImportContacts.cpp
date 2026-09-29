@@ -3,8 +3,10 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fstream>
+#include <numeric>
 #include <unordered_map>
 
+#include "ConfigurationDefaults.h"
 #include "HashFunc.h"
 #include "rdbinterval.h"
 #include "rdbprogress.h"
@@ -13,6 +15,7 @@
 
 #include "GenomeTrackRects.h"
 #include "GenomeTrackSparse.h"
+#include "GTrack2DImport.h"
 
 using namespace std;
 using namespace rdb;
@@ -25,10 +28,21 @@ public:
 	Contact_chrom_files() : unordered_map<Chrom_pair, BufferedFile *>() {}
 
 	~Contact_chrom_files() {
-		for (iterator ifile = begin(); ifile != end(); ++ifile) 
+		for (iterator ifile = begin(); ifile != end(); ++ifile)
 			delete ifile->second;
 	}
+
+	// Closes the files and checks: a kid ends without unwinding, and the last buffered writes can still fail.
+	// It also keeps the number of open files low for the next stage.
+	void close() {
+		for (iterator ifile = begin(); ifile != end(); ++ifile) {
+			if (ifile->second->close())
+				verror("Writing an intermediate file %s: %s\n", ifile->second->file_name().c_str(), strerror(errno));
+		}
+	}
 };
+
+static const int64_t CONTACT_RECORD_SIZE = 2 * sizeof(int64_t) + sizeof(float);
 
 static unsigned read_header(BufferedFile &file, const char *fname, const char *ftype, const char *colnames[], int num_cols, vector<int> &fcol_idx)
 {
@@ -72,133 +86,177 @@ static void write_contact(BufferedFile &file, int64_t coord1, int64_t coord2, fl
 		verror("Writing file %s: %s\n", file.file_name().c_str(), strerror(errno));
 }
 
-static void process_contacts_as_intervals(IntervUtils &iu, SEXP _files, Contact_chrom_files &contact_chrom_files, const char *dirname)
+// Calls f on every contact of the intermediate files, in order, and deletes each file once it is read
+template <typename F>
+static void for_each_contact(const vector<string> &files, F f)
 {
-	Progress_reporter progress;
-	int64_t start1, start2, end1, end2;
-	float val;
+	int64_t coord1, coord2;
+	float value;
 
-	REprintf("Reading input file(s)...\n");
+	for (const string &fname : files) {
+		BufferedFile file;
 
-	int64_t infiles_size_sum = 0;
+		if (file.open(fname.c_str(), "r"))
+			verror("Opening an intermediate file %s: %s\n", fname.c_str(), strerror(errno));
+
+		while (1) {
+			file.read(&coord1, sizeof(coord1));
+			file.read(&coord2, sizeof(coord2));
+			file.read(&value, sizeof(value));
+
+			if (file.eof())
+				break;
+
+			if (file.error())
+				verror("Reading file %s: %s\n", file.file_name().c_str(), strerror(errno));
+
+			f(coord1, coord2, value);
+			check_interrupt();
+		}
+		file.close();
+		unlink(fname.c_str());
+	}
+}
+
+static vector<int64_t> get_files_sizes(SEXP _files)
+{
+	vector<int64_t> sizes;
+
 	for (int ifile = 0; ifile < Rf_length(_files); ++ifile) {
 		const char *fname = CHAR(STRING_ELT(_files, ifile));
 		struct stat st;
 
 		if (stat(fname, &st))
 			verror("Accessing file %s: %s", fname, strerror(errno));
-		infiles_size_sum += st.st_size;
+		sizes.push_back(st.st_size);
 	}
+	return sizes;
+}
+
+static void process_contacts_as_intervals(IntervUtils &iu, SEXP _files, const string &dirname)
+{
+	REprintf("Reading input file(s)...\n");
+
+	vector<int64_t> sizes = get_files_sizes(_files);
 
 	// STEP 1: Read the input files and split them into binary files each holding the intervals of specific chromosomes pair.
-	progress.init(infiles_size_sum, 10000000);
-	for (int ifile = 0; ifile < Rf_length(_files); ++ifile) {
-		vector<string> fields;
-		long lineno = 0;
-		BufferedFile infile;
-		infile.open(CHAR(STRING_ELT(_files, ifile)), "r");
+	// Each kid reads a contiguous block of the files.
+	vector<int> bounds = split_files(sizes, import_num_kids(iu, sizes.size()));
 
-		lineno += split_line(infile, fields, '\t');
+	run_kids(iu, bounds.size() - 1, [&](int kid) {
+		Progress_reporter progress;
+		Contact_chrom_files contact_chrom_files;
+		int64_t start1, start2, end1, end2;
+		float val;
 
-		if (fields.empty())
-			continue;
+		progress.init(accumulate(sizes.begin() + bounds[kid], sizes.begin() + bounds[kid + 1], (int64_t)0), 10000000);
+		for (int ifile = bounds[kid]; ifile < bounds[kid + 1]; ++ifile) {
+			vector<string> fields;
+			long lineno = 0;
+			BufferedFile infile;
+			infile.open(CHAR(STRING_ELT(_files, ifile)), "r");
 
-		if (fields.size() < GInterval2D::NUM_COLS + 1)
-			verror("File %s, line %ld: invalid format", infile.file_name().c_str(), lineno);
-
-		for (int i = 0; i < GInterval2D::NUM_COLS; ++i) {
-			if (fields[i] != GInterval2D::COL_NAMES[i]) 
-				verror("File %s, line %ld: invalid format", infile.file_name().c_str(), lineno);
-		}
-
-		while (1) {
-			int64_t fpos = infile.tell();
-			int chromid1, chromid2;
-			char *endptr;
-
-			// read the interval from tab-delimited file
 			lineno += split_line(infile, fields, '\t');
 
-			progress.report(infile.tell() - fpos);
-			check_interrupt();
-
 			if (fields.empty())
-				break;
+				continue;
 
 			if (fields.size() < GInterval2D::NUM_COLS + 1)
 				verror("File %s, line %ld: invalid format", infile.file_name().c_str(), lineno);
 
-			try {
-				chromid1 = iu.chrom2id(fields[GInterval2D::CHROM1]);
-				chromid2 = iu.chrom2id(fields[GInterval2D::CHROM2]);
-			} catch (TGLException &) {
-				// there might be unrecognized chromosomes, ignore them
-				continue;
+			for (int i = 0; i < GInterval2D::NUM_COLS; ++i) {
+				if (fields[i] != GInterval2D::COL_NAMES[i])
+					verror("File %s, line %ld: invalid format", infile.file_name().c_str(), lineno);
 			}
 
-			start1 = strtoll(fields[GInterval2D::START1].c_str(), &endptr, 10);
-			if (*endptr || start1 < 0) 
-				verror("File %s, line %ld: invalid format of start1 coordinate", infile.file_name().c_str(), lineno);
+			while (1) {
+				int64_t fpos = infile.tell();
+				int chromid1, chromid2;
+				char *endptr;
 
-			end1 = strtoll(fields[GInterval2D::END1].c_str(), &endptr, 10);
-			if (*endptr || end1 < 0) 
-				verror("File %s, line %ld: invalid format of end1 coordinate", infile.file_name().c_str(), lineno);
+				// read the interval from tab-delimited file
+				lineno += split_line(infile, fields, '\t');
 
-			if (start1 >= end1) 
-				verror("File %s, line %ld: start1 coordinate exceeds or equals the end1 coordinate", infile.file_name().c_str(), lineno);
+				progress.report(infile.tell() - fpos);
+				check_interrupt();
 
-			if ((uint64_t)end1 > iu.get_chromkey().get_chrom_size(chromid1)) 
-				verror("File %s, line %ld: end1 coordinate exceeds chromosome's size", infile.file_name().c_str(), lineno);
+				if (fields.empty())
+					break;
 
-			start2 = strtoll(fields[GInterval2D::START2].c_str(), &endptr, 10);
-			if (*endptr || start1 < 0) 
-				verror("File %s, line %ld: invalid format of start2 coordinate", infile.file_name().c_str(), lineno);
+				if (fields.size() < GInterval2D::NUM_COLS + 1)
+					verror("File %s, line %ld: invalid format", infile.file_name().c_str(), lineno);
 
-			end2 = strtoll(fields[GInterval2D::END2].c_str(), &endptr, 10);
-			if (*endptr || end2 < 0) 
-				verror("File %s, line %ld: invalid format of end2 coordinate", infile.file_name().c_str(), lineno);
+				try {
+					chromid1 = iu.chrom2id(fields[GInterval2D::CHROM1]);
+					chromid2 = iu.chrom2id(fields[GInterval2D::CHROM2]);
+				} catch (TGLException &) {
+					// there might be unrecognized chromosomes, ignore them
+					continue;
+				}
 
-			if (start2 >= end2) 
-				verror("File %s, line %ld: start2 coordinate exceeds or equals the end1 coordinate", infile.file_name().c_str(), lineno);
+				start1 = strtoll(fields[GInterval2D::START1].c_str(), &endptr, 10);
+				if (*endptr || start1 < 0)
+					verror("File %s, line %ld: invalid format of start1 coordinate", infile.file_name().c_str(), lineno);
 
-			if ((uint64_t)end2 > iu.get_chromkey().get_chrom_size(chromid2)) 
-				verror("File %s, line %ld: end2 coordinate exceeds chromosome's size", infile.file_name().c_str(), lineno);
+				end1 = strtoll(fields[GInterval2D::END1].c_str(), &endptr, 10);
+				if (*endptr || end1 < 0)
+					verror("File %s, line %ld: invalid format of end1 coordinate", infile.file_name().c_str(), lineno);
 
-			val = strtod(fields[GInterval2D::NUM_COLS].c_str(), &endptr);
-			if (*endptr) 
-				verror("File %s, line %ld: invalid value", infile.file_name().c_str(), lineno);
+				if (start1 >= end1)
+					verror("File %s, line %ld: start1 coordinate exceeds or equals the end1 coordinate", infile.file_name().c_str(), lineno);
 
-			int64_t coord1 = (start1 + end1) / 2;
-			int64_t coord2 = (start2 + end2) / 2;
+				if ((uint64_t)end1 > iu.get_chromkey().get_chrom_size(chromid1))
+					verror("File %s, line %ld: end1 coordinate exceeds chromosome's size", infile.file_name().c_str(), lineno);
 
-			if (chromid1 > chromid2 || (chromid1 == chromid2 && coord1 > coord2)) {
-				swap(chromid1, chromid2);
-				swap(coord1, coord2);
+				start2 = strtoll(fields[GInterval2D::START2].c_str(), &endptr, 10);
+				if (*endptr || start1 < 0)
+					verror("File %s, line %ld: invalid format of start2 coordinate", infile.file_name().c_str(), lineno);
+
+				end2 = strtoll(fields[GInterval2D::END2].c_str(), &endptr, 10);
+				if (*endptr || end2 < 0)
+					verror("File %s, line %ld: invalid format of end2 coordinate", infile.file_name().c_str(), lineno);
+
+				if (start2 >= end2)
+					verror("File %s, line %ld: start2 coordinate exceeds or equals the end1 coordinate", infile.file_name().c_str(), lineno);
+
+				if ((uint64_t)end2 > iu.get_chromkey().get_chrom_size(chromid2))
+					verror("File %s, line %ld: end2 coordinate exceeds chromosome's size", infile.file_name().c_str(), lineno);
+
+				val = strtod(fields[GInterval2D::NUM_COLS].c_str(), &endptr);
+				if (*endptr)
+					verror("File %s, line %ld: invalid value", infile.file_name().c_str(), lineno);
+
+				int64_t coord1 = (start1 + end1) / 2;
+				int64_t coord2 = (start2 + end2) / 2;
+
+				if (chromid1 > chromid2 || (chromid1 == chromid2 && coord1 > coord2)) {
+					swap(chromid1, chromid2);
+					swap(coord1, coord2);
+				}
+
+
+				// Write down the interval + value in binary format
+				Chrom_pair chrom_pair(chromid1, chromid2);
+				Contact_chrom_files::iterator icontact_chrom_file = contact_chrom_files.find(chrom_pair);
+
+				if (icontact_chrom_file == contact_chrom_files.end()) {
+					string filename = pair_file_name(dirname, chromid1, chromid2, kid);
+
+					icontact_chrom_file = contact_chrom_files.insert(make_pair(chrom_pair, new BufferedFile())).first;
+					if (icontact_chrom_file->second->open(filename.c_str(), "wb"))
+						verror("Writing an intermediate file %s: %s\n", filename.c_str(), strerror(errno));
+				}
+
+				write_contact(*icontact_chrom_file->second, coord1, coord2, val);
 			}
-
-
-			// Write down the interval + value in binary format
-			Chrom_pair chrom_pair(chromid1, chromid2);
-			Contact_chrom_files::iterator icontact_chrom_file = contact_chrom_files.find(chrom_pair);
-
-			if (icontact_chrom_file == contact_chrom_files.end()) {
-				char filename[FILENAME_MAX];
-
-				snprintf(filename, sizeof(filename), "%s/.%s", dirname, GenomeTrack::get_2d_filename(iu.get_chromkey(), chromid1, chromid2).c_str());
-				icontact_chrom_file = contact_chrom_files.insert(make_pair(chrom_pair, new BufferedFile())).first;
-				if (icontact_chrom_file->second->open(filename, "wb"))
-					verror("Writing an intermediate file %s: %s\n", filename, strerror(errno));
-			}
-
-			write_contact(*icontact_chrom_file->second, coord1, coord2, val);
-//if ((start1 + end1) / 2 == 183256 && (start2 + end2) / 2 == 214179)
-//REprintf("writing %g to %s\n", val, GenomeTrack::get_2d_filename(iu.get_chromkey(), chromid1, chromid2).c_str());
 		}
-	}
-	progress.report_last();
+		progress.report_last();
+		contact_chrom_files.close();
+		return (char)0;
+	});
 }
 
-static void process_contacts_as_fends(IntervUtils &iu, SEXP _contacts, SEXP _fends, Contact_chrom_files &contact_chrom_files, const char *dirname)
+static void process_contacts_as_fends(IntervUtils &iu, SEXP _contacts, SEXP _fends, const string &dirname)
 {
 	enum { COL_FEND, COL_CHR, COL_COORD, NUM_FENDS_COLS };
 	const char *FENDS_COLS[] = { "fend", "chr", "coord" };
@@ -210,15 +268,7 @@ static void process_contacts_as_fends(IntervUtils &iu, SEXP _contacts, SEXP _fen
 	const char *CONTACTS_COLS[] = { "fend1", "fend2", "count" };
 
 	vector<string> fields;
-	int64_t contacts_files_size_sum = 0;
-	for (int icontact_file = 0; icontact_file < Rf_length(_contacts); ++icontact_file) {
-		const char *contacts_fname = CHAR(STRING_ELT(_contacts, icontact_file));
-		struct stat st;
-
-		if (stat(contacts_fname, &st))
-			verror("Accessing file %s: %s", contacts_fname, strerror(errno));
-		contacts_files_size_sum += st.st_size;
-	}
+	vector<int64_t> sizes = get_files_sizes(_contacts);
 
 	Progress_reporter progress;
 	BufferedFile fends_file;
@@ -276,83 +326,216 @@ static void process_contacts_as_fends(IntervUtils &iu, SEXP _contacts, SEXP _fen
 		check_interrupt();
 	}
 	progress.report_last();
+	fends_file.close();
 
 	// STEP 1: Read the contacts and split them into binary files each holding the contacts of specific pair of chromosomes.
+	// Each kid reads a contiguous block of the contacts files.
 	REprintf("Reading contacts...\n");
 
-	progress.init(contacts_files_size_sum, 10000000);
+	vector<int> bounds = split_files(sizes, import_num_kids(iu, sizes.size()));
 
-	float value;
+	run_kids(iu, bounds.size() - 1, [&](int kid) {
+		Progress_reporter progress;
+		Contact_chrom_files contact_chrom_files;
+		vector<string> fields;
+		int64_t lineno;
+		char *endptr;
+		float value;
 
-	for (int icontact_file = 0; icontact_file < Rf_length(_contacts); ++icontact_file) {
-		int64_t fend1, fend2;
-		GIntervals2D intervs;
-		const char *contacts_fname = CHAR(STRING_ELT(_contacts, icontact_file));
-		vector<int> contacts_col_idx;
-		unsigned contacts_cols_total;
-		BufferedFile contacts_file;
+		progress.init(accumulate(sizes.begin() + bounds[kid], sizes.begin() + bounds[kid + 1], (int64_t)0), 10000000);
 
-		contacts_cols_total = read_header(contacts_file, contacts_fname, "contacts", CONTACTS_COLS, NUM_CONTACTS_COLS, contacts_col_idx);
+		for (int icontact_file = bounds[kid]; icontact_file < bounds[kid + 1]; ++icontact_file) {
+			int64_t fend1, fend2;
+			const char *contacts_fname = CHAR(STRING_ELT(_contacts, icontact_file));
+			vector<int> contacts_col_idx;
+			unsigned contacts_cols_total;
+			BufferedFile contacts_file;
 
-		lineno = 1;
-		while (1) {
-			int64_t fpos = contacts_file.tell();
+			contacts_cols_total = read_header(contacts_file, contacts_fname, "contacts", CONTACTS_COLS, NUM_CONTACTS_COLS, contacts_col_idx);
 
-			lineno++;
-			split_line(contacts_file, fields, '\t');
-			if (fields.empty())
-				break;
+			lineno = 1;
+			while (1) {
+				int64_t fpos = contacts_file.tell();
 
-			if (fields.size() != contacts_cols_total)
-				verror("Error reading contacts ends file %s, line %ld: invalid file format", contacts_fname, lineno);
+				lineno++;
+				split_line(contacts_file, fields, '\t');
+				if (fields.empty())
+					break;
 
-			const char *fend1_str = fields[contacts_col_idx[COL_FEND1]].c_str();
-			const char *fend2_str = fields[contacts_col_idx[COL_FEND2]].c_str();
-			const char *value_str = fields[contacts_col_idx[COL_COUNT]].c_str();
+				if (fields.size() != contacts_cols_total)
+					verror("Error reading contacts ends file %s, line %ld: invalid file format", contacts_fname, lineno);
 
-			fend1 = strtoll(fend1_str, &endptr, 10);
-			if (*endptr)
-				verror("Error reading contacts file %s, line %ld: invalid %s", contacts_fname, lineno, CONTACTS_COLS[COL_FEND1]);
-			if (fend1 < 0 || fend1 >= (int64_t)defined.size() || !defined[fend1])
-				continue;
+				const char *fend1_str = fields[contacts_col_idx[COL_FEND1]].c_str();
+				const char *fend2_str = fields[contacts_col_idx[COL_FEND2]].c_str();
+				const char *value_str = fields[contacts_col_idx[COL_COUNT]].c_str();
 
-			fend2 = strtoll(fend2_str, &endptr, 10);
-			if (*endptr)
-				verror("Error reading contacts file %s, line %ld: invalid %s", contacts_fname, lineno, CONTACTS_COLS[COL_FEND2]);
-			if (fend2 < 0 || fend2 >= (int64_t)defined.size() || !defined[fend2])
-				continue;
+				fend1 = strtoll(fend1_str, &endptr, 10);
+				if (*endptr)
+					verror("Error reading contacts file %s, line %ld: invalid %s", contacts_fname, lineno, CONTACTS_COLS[COL_FEND1]);
+				if (fend1 < 0 || fend1 >= (int64_t)defined.size() || !defined[fend1])
+					continue;
 
-			value = strtod(value_str, &endptr);
-			if (*endptr)
-				verror("Error reading contacts file %s, line %ld: invalid %s", contacts_fname, lineno, CONTACTS_COLS[COL_COUNT]);
+				fend2 = strtoll(fend2_str, &endptr, 10);
+				if (*endptr)
+					verror("Error reading contacts file %s, line %ld: invalid %s", contacts_fname, lineno, CONTACTS_COLS[COL_FEND2]);
+				if (fend2 < 0 || fend2 >= (int64_t)defined.size() || !defined[fend2])
+					continue;
 
-			if (chromids[fend1] > chromids[fend2] || (chromids[fend1] == chromids[fend2] && coords[fend1] > coords[fend2]))
-				swap(fend1, fend2);
+				value = strtod(value_str, &endptr);
+				if (*endptr)
+					verror("Error reading contacts file %s, line %ld: invalid %s", contacts_fname, lineno, CONTACTS_COLS[COL_COUNT]);
 
-			Chrom_pair chrom_pair(chromids[fend1], chromids[fend2]);
-			Contact_chrom_files::iterator icontact_chrom_file = contact_chrom_files.find(chrom_pair);
+				if (chromids[fend1] > chromids[fend2] || (chromids[fend1] == chromids[fend2] && coords[fend1] > coords[fend2]))
+					swap(fend1, fend2);
 
-			if (icontact_chrom_file == contact_chrom_files.end()) {
-				char filename[FILENAME_MAX];
+				Chrom_pair chrom_pair(chromids[fend1], chromids[fend2]);
+				Contact_chrom_files::iterator icontact_chrom_file = contact_chrom_files.find(chrom_pair);
 
-				snprintf(filename, sizeof(filename), "%s/.%s", dirname, GenomeTrack::get_2d_filename(iu.get_chromkey(), chromids[fend1], chromids[fend2]).c_str());
-				icontact_chrom_file = contact_chrom_files.insert(make_pair(chrom_pair, new BufferedFile())).first;
-				if (icontact_chrom_file->second->open(filename, "wb"))
-					verror("Writing an intermediate file %s: %s\n", filename, strerror(errno));
+				if (icontact_chrom_file == contact_chrom_files.end()) {
+					string filename = pair_file_name(dirname, chromids[fend1], chromids[fend2], kid);
+
+					icontact_chrom_file = contact_chrom_files.insert(make_pair(chrom_pair, new BufferedFile())).first;
+					if (icontact_chrom_file->second->open(filename.c_str(), "wb"))
+						verror("Writing an intermediate file %s: %s\n", filename.c_str(), strerror(errno));
+				}
+
+				write_contact(*icontact_chrom_file->second, coords[fend1], coords[fend2], value);
+				progress.report(contacts_file.tell() - fpos);
+				check_interrupt();
+			}
+		}
+		progress.report_last();
+		contact_chrom_files.close();
+		return (char)0;
+	});
+}
+
+// STAGES 2 - 4 for one chromosome pair
+static void write_pair(IntervUtils &iu, const string &dirname, const PairFiles &pair_files, bool allow_duplicates)
+{
+	uint64_t chromid1 = pair_files.chromid1;
+	uint64_t chromid2 = pair_files.chromid2;
+
+	// STAGE 2: Check what is the number of contacts in a chromosome pair and based on that number decide how many subtrees would be needed in StatQuadTreeCachedSerializer.
+	//          (Creating a quad tree through seriaizer would be the only feasible method considering the enormous number of contacts.)
+	int64_t num_contacts = pair_files.size / CONTACT_RECORD_SIZE;
+
+	if (chromid1 == chromid2)
+		num_contacts *= 2;   // we are going to mirror the coordinates around the diagonal
+
+	int64_t num_subtrees = max(num_contacts / (int64_t)iu.get_max_data_size(), (int64_t)1);
+	num_subtrees = 1 << (2 * (int)(log2(num_subtrees) / 2));  // round the number of subtrees to the lowest power of 4
+
+	GenomeTrackRectsPoints gtrack1(iu.get_track_chunk_size(), iu.get_track_num_chunks());
+	GenomeTrackRectsPoints gtrack2(iu.get_track_chunk_size(), iu.get_track_num_chunks());
+	PointsQuadTreeCachedSerializer qtree_serializer1, qtree_serializer2;
+	string filename = dirname + "/" + GenomeTrack::get_2d_filename(iu.get_chromkey(), chromid1, chromid2);
+
+	gtrack1.init_write(filename.c_str(), chromid1, chromid2);
+	gtrack1.init_serializer(qtree_serializer1, 0, 0, iu.get_chromkey().get_chrom_size(chromid1), iu.get_chromkey().get_chrom_size(chromid2), num_subtrees, false);
+
+	if (chromid1 != chromid2) {
+		filename = dirname + "/" + GenomeTrack::get_2d_filename(iu.get_chromkey(), chromid2, chromid1);
+		gtrack2.init_write(filename.c_str(), chromid2, chromid1);
+		gtrack2.init_serializer(qtree_serializer2, 0, 0, iu.get_chromkey().get_chrom_size(chromid2), iu.get_chromkey().get_chrom_size(chromid1), num_subtrees, false);
+	}
+
+	// the files to read for each subtree
+	vector<vector<string>> subtree_srcs(1, pair_files.files);
+
+	// 3. STAGE 3: Split contacts of a chromosome pair to binary files (if needed) - each holding contacts of a subtree.
+	if (num_subtrees > 1) {
+		const Rectangles &subarenas = qtree_serializer1.get_subarenas();
+		BufferedFiles subtrees_files(num_subtrees);
+
+		subtree_srcs.resize(num_subtrees);
+		for (uint64_t i = 0; i < subtrees_files.size(); ++i) {
+			char buf[FILENAME_MAX];
+
+			snprintf(buf, sizeof(buf), "%s/.%d-%d.s%ld", dirname.c_str(), (int)chromid1, (int)chromid2, (long)i);
+			subtree_srcs[i].assign(1, buf);
+			subtrees_files[i] = new BufferedFile();
+			if (subtrees_files[i]->open(buf, "w"))
+				verror("Opening an intermediate file %s: %s\n", buf, strerror(errno));
+		}
+
+		for_each_contact(pair_files.files, [&](int64_t coord1, int64_t coord2, float value) {
+			Point point(coord1, coord2);
+			for (Rectangles::const_iterator isubarena = subarenas.begin(); isubarena != subarenas.end(); ++isubarena) {
+				if (point.do_intersect(*isubarena)) {
+					write_contact(*subtrees_files[isubarena - subarenas.begin()], coord1, coord2, value);
+					break;
+				}
 			}
 
-			write_contact(*icontact_chrom_file->second, coords[fend1], coords[fend2], value);
-			progress.report(contacts_file.tell() - fpos);
-			check_interrupt();
+			if (chromid1 == chromid2 && point.x != point.y) {
+				// if it's a pair of identical chromosomes, mirror the contact around the diagonal
+				Point point(coord2, coord1);
+				for (Rectangles::const_iterator isubarena = subarenas.begin(); isubarena != subarenas.end(); ++isubarena) {
+					if (point.do_intersect(*isubarena)) {
+						write_contact(*subtrees_files[isubarena - subarenas.begin()], coord2, coord1, value);
+						break;
+					}
+				}
+			}
+		});
+
+		for (uint64_t i = 0; i < subtrees_files.size(); ++i) {
+			if (subtrees_files[i]->close())
+				verror("Writing an intermediate file %s: %s\n", subtrees_files[i]->file_name().c_str(), strerror(errno));
 		}
 	}
-	progress.report_last();
+
+	// 4. Read the contacts of a subtree, sum up the duplicates and insert them to StatQuadTreeCachedSerializer.
+	for (const vector<string> &srcs : subtree_srcs) {
+		Contacts contacts;
+
+		for_each_contact(srcs, [&](int64_t coord1, int64_t coord2, float value) {
+			pair<uint64_t, uint64_t> key(coord1, coord2);
+			Contacts::iterator icontact = contacts.find(key);
+
+			if (icontact == contacts.end())
+				contacts[key] = value;
+			else {
+				if (!allow_duplicates)
+					verror("Duplicated contact (%s, %ld)-(%s, %ld)", iu.id2chrom(chromid1).c_str(), coord1, iu.id2chrom(chromid2).c_str(), coord2);
+				icontact->second += value;
+			}
+		});
+
+		for (Contacts::const_iterator icontact = contacts.begin(); icontact != contacts.end(); ++icontact) {
+			int64_t coord1 = icontact->first.first;
+			int64_t coord2 = icontact->first.second;
+			float value = icontact->second;
+
+			qtree_serializer1.insert(PointsQuadTree::ValueType(coord1, coord2, value));
+
+			if (chromid1 != chromid2)
+				qtree_serializer2.insert(PointsQuadTree::ValueType(coord2, coord1, value));
+			else if (num_subtrees == 1 && coord1 != coord2)
+				qtree_serializer1.insert(PointsQuadTree::ValueType(coord2, coord1, value));
+
+			check_interrupt();
+		}
+
+		check_interrupt();
+	}
+
+	qtree_serializer1.end();
+
+	if (chromid1 != chromid2)
+		qtree_serializer2.end();
 }
 
 extern "C" {
 
 SEXP gtrack_import_contacts(SEXP _track, SEXP _contacts, SEXP _fends, SEXP _allow_duplicates, SEXP _envir)
 {
+	// Each stage has its own RdbInitializer: the multitasking state (shared memory, kid bookkeeping)
+	// is set up once per RdbInitializer, so the kids of the second stage need a fresh one.
+	string dirname;
+	vector<PairFiles> pairs;
+
 	try {
 		RdbInitializer rdb_init;
 
@@ -370,11 +553,7 @@ SEXP gtrack_import_contacts(SEXP _track, SEXP _contacts, SEXP _fends, SEXP _allo
 
 		IntervUtils iu(_envir);
 		const char *track = CHAR(STRING_ELT(_track, 0));
-		string dirname = create_track_dir(_envir, track);
-		Contact_chrom_files contact_chrom_files;
-		int64_t coord1, coord2;
-		float value;
-		Progress_reporter progress;
+		dirname = create_track_dir(_envir, track);
 
 		// The number of contacts might be huge. We might not be even able to hold the contacts of one chromosome in the memory and to build the quad tree with it.
 		// Our strategy is therefore that:
@@ -383,163 +562,46 @@ SEXP gtrack_import_contacts(SEXP _track, SEXP _contacts, SEXP _fends, SEXP _allo
 		//    (Creating a quad tree through seriaizer would be the only feasible method considering the enormous number of contacts.)
 		// 3. Split contacts of a chromosome pair to binary files - each holding contacts of a subtree. We assume that we will be able to hold in the memory the contacts of one subtree.
 		// 4. Read the contacts of a subtree, sum up the duplicates and insert them to StatQuadTreeCachedSerializer.
+		// Step 1 runs in parallel over the input files, steps 2 - 4 over the chromosome pairs (see GTrack2DImport.h).
 
 		// STAGE 1: Read the contacts and split them into binary files each holding the contacts of specific pair of chromosomes.
 		if (Rf_isNull(_fends))
-			process_contacts_as_intervals(iu, _contacts, contact_chrom_files, dirname.c_str());
+			process_contacts_as_intervals(iu, _contacts, dirname);
 		else
-			process_contacts_as_fends(iu, _contacts, _fends, contact_chrom_files, dirname.c_str());
+			process_contacts_as_fends(iu, _contacts, _fends, dirname);
 
-		// We might open in the next stage many new files to write the subtrees. Close the old files otherwise the user might exceed
-		// the limit of maximal number of open files.
-		for (Contact_chrom_files::iterator ifile = contact_chrom_files.begin(); ifile != contact_chrom_files.end(); ++ifile)
-			ifile->second->close();
+		pairs = list_pair_files(dirname);
+	} catch (TGLException &e) {
+		rerror("%s", e.msg());
+	} catch (const bad_alloc &e) {
+		rerror("Out of memory");
+	}
+
+	try {
+		RdbInitializer rdb_init;
+		IntervUtils iu(_envir);
+		bool allow_duplicates = LOGICAL(_allow_duplicates)[0];
+		uint64_t num_records = 0;
+
+		for (const PairFiles &pair_files : pairs)
+			num_records += pair_files.size / CONTACT_RECORD_SIZE;
 
 		REprintf("Writing the track...\n");
-		progress.init(contact_chrom_files.size(), 1);
 
-		for (Contact_chrom_files::iterator icontact_chrom_file = contact_chrom_files.begin(); icontact_chrom_file != contact_chrom_files.end(); ++icontact_chrom_file) {
-			uint64_t chromid1 = icontact_chrom_file->first.first;
-			uint64_t chromid2 = icontact_chrom_file->first.second;
-			BufferedFile &infile = *icontact_chrom_file->second;
+		int num_kids = import_num_kids(iu, min((uint64_t)pairs.size(), num_records / misha::config::MIN_RECORDS_PER_PROCESS));
+		vector<vector<int>> kid_pairs = assign_pairs(pairs, num_kids);
 
-			// STAGE 2: Check what is the number of contacts in a chromosome pair and based on that number decide how many subtrees would be needed in StatQuadTreeCachedSerializer.
-			//          (Creating a quad tree through seriaizer would be the only feasible method considering the enormous number of contacts.)
-			if (infile.open(infile.file_name().c_str(), "r")) 
-				verror("Opening an intermediate file %s: %s\n", infile.file_name().c_str(), strerror(errno));
+		run_kids(iu, num_kids, [&](int kid) {
+				Progress_reporter progress;
 
-			int64_t num_contacts = infile.file_size() / (sizeof(coord1) + sizeof(coord2) + sizeof(value));
-
-			if (chromid1 == chromid2) 
-				num_contacts *= 2;   // we are going to mirror the coordinates around the diagonal
-
-			int64_t num_subtrees = max(num_contacts / (int64_t)iu.get_max_data_size(), (int64_t)1);
-			num_subtrees = 1 << (2 * (int)(log2(num_subtrees) / 2));  // round the number of subtrees to the lowest power of 4
-
-			char filename[FILENAME_MAX];
-			GenomeTrackRectsPoints gtrack1(iu.get_track_chunk_size(), iu.get_track_num_chunks());
-			GenomeTrackRectsPoints gtrack2(iu.get_track_chunk_size(), iu.get_track_num_chunks());
-			PointsQuadTreeCachedSerializer qtree_serializer1, qtree_serializer2;
-			BufferedFiles subtrees_files(num_subtrees);
-
-			snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_2d_filename(iu.get_chromkey(), chromid1, chromid2).c_str());
-			gtrack1.init_write(filename, chromid1, chromid2);
-			gtrack1.init_serializer(qtree_serializer1, 0, 0, iu.get_chromkey().get_chrom_size(chromid1), iu.get_chromkey().get_chrom_size(chromid2), num_subtrees, false);
-
-			if (chromid1 != chromid2) {
-				snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_2d_filename(iu.get_chromkey(), chromid2, chromid1).c_str());
-				gtrack2.init_write(filename, chromid2, chromid1);
-				gtrack2.init_serializer(qtree_serializer2, 0, 0, iu.get_chromkey().get_chrom_size(chromid2), iu.get_chromkey().get_chrom_size(chromid1), num_subtrees, false);
-			}
-
-			// 3. STAGE 3: Split contacts of a chromosome pair to binary files (if needed) - each holding contacts of a subtree.
-			if (num_subtrees > 1) {
-				const Rectangles &subarenas = qtree_serializer1.get_subarenas();
-
-				for (uint64_t i = 0; i < subtrees_files.size(); ++i) {
-					snprintf(filename, sizeof(filename), "%s/.%ld", dirname.c_str(), (long)i);
-					subtrees_files[i] = new BufferedFile();
-					if (subtrees_files[i]->open(filename, "w+")) 
-						verror("Opening an intermediate file %s: %s\n", filename, strerror(errno));
+				progress.init(kid_pairs[kid].size(), 1);
+				for (int ipair : kid_pairs[kid]) {
+					write_pair(iu, dirname, pairs[ipair], allow_duplicates);
+					progress.report(1);
 				}
-
-				while (1) {
-					infile.read(&coord1, sizeof(coord1));
-					infile.read(&coord2, sizeof(coord2));
-					infile.read(&value, sizeof(value));
-
-					if (infile.eof()) 
-						break;
-
-					if (infile.error()) 
-						verror("Reading file %s: %s\n", infile.file_name().c_str(), strerror(errno));
-
-					Point point(coord1, coord2);
-					for (Rectangles::const_iterator isubarena = subarenas.begin(); isubarena != subarenas.end(); ++isubarena) {
-						if (point.do_intersect(*isubarena)) {
-							write_contact(*subtrees_files[isubarena - subarenas.begin()], coord1, coord2, value);
-							break;
-						}
-					}
-
-					if (chromid1 == chromid2 && point.x != point.y) {
-						// if it's a pair of identical chromosomes, mirror the contact around the diagonal
-						Point point(coord2, coord1);
-						for (Rectangles::const_iterator isubarena = subarenas.begin(); isubarena != subarenas.end(); ++isubarena) {
-							if (point.do_intersect(*isubarena)) {
-								write_contact(*subtrees_files[isubarena - subarenas.begin()], coord2, coord1, value);
-								break;
-							}
-						}
-					}
-					check_interrupt();
-				}
-
-				for (uint64_t i = 0; i < subtrees_files.size(); ++i)
-					subtrees_files[i]->seek(0, SEEK_SET);
-
-				infile.close();
-				unlink(infile.file_name().c_str());
-			}
-
-			for (uint64_t i = 0; i < (uint64_t)num_subtrees; ++i) {
-				BufferedFile &subtree_file = num_subtrees == 1 ? infile : *subtrees_files[i];
-				Contacts contacts;
-
-				while (1) {
-					subtree_file.read(&coord1, sizeof(coord1));
-					subtree_file.read(&coord2, sizeof(coord2));
-					subtree_file.read(&value, sizeof(value));
-
-					if (subtree_file.eof()) 
-						break;
-
-					if (subtree_file.error()) 
-						verror("Reading file %s: %s\n", subtree_file.file_name().c_str(), strerror(errno));
-
-					pair<uint64_t, uint64_t> key(coord1, coord2);
-					Contacts::iterator icontact = contacts.find(key);
-
-					if (icontact == contacts.end())
-						contacts[key] = value;
-					else {
-						if (!LOGICAL(_allow_duplicates)[0]) 
-							verror("Duplicated contact (%s, %ld)-(%s, %ld)", iu.id2chrom(chromid1).c_str(), coord1, iu.id2chrom(chromid2).c_str(), coord2);
-						icontact->second += value;
-					}
-					check_interrupt();
-				}
-
-				for (Contacts::const_iterator icontact = contacts.begin(); icontact != contacts.end(); ++icontact) {
-					coord1 = icontact->first.first;
-					coord2 = icontact->first.second;
-					value = icontact->second;
-
-					qtree_serializer1.insert(PointsQuadTree::ValueType(coord1, coord2, value));
-
-					if (chromid1 != chromid2) 
-						qtree_serializer2.insert(PointsQuadTree::ValueType(coord2, coord1, value));
-					else if (num_subtrees == 1 && coord1 != coord2)
-						qtree_serializer1.insert(PointsQuadTree::ValueType(coord2, coord1, value));
-
-					check_interrupt();
-				}
-
-				subtree_file.close();
-				unlink(subtree_file.file_name().c_str());
-
-				check_interrupt();
-			}
-
-			qtree_serializer1.end();
-
-			if (chromid1 != chromid2) 
-				qtree_serializer2.end();
-
-			progress.report(1);
-		}
-
-		progress.report_last();
+				progress.report_last();
+				return (char)0;
+			});
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
     } catch (const bad_alloc &e) {

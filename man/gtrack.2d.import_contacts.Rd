@@ -40,6 +40,12 @@ doubled to include also '(coord2, coord1)' unless 'coord1' equals to
 
 Contacts may come in one or more files.
 
+If 'gmultitasking' is on, the input files are read by several processes
+in parallel, each process reading a contiguous subset of the files, and
+the chromosome pairs are then written in parallel, one pair per process at
+a time. The number of processes is bounded by 'gmax.processes'. The
+resulting track is identical to the one created with 'gmultitasking' off.
+
 If 'fends' is 'NULL' contacts file is expected to be in "intervals-value"
 tab-separated format. The file starts with a header defining the column
 names. The first 6 columns must have the following names: 'chrom1',

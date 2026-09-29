@@ -152,6 +152,12 @@ gtrack.2d.create <- function(track = NULL, description = NULL, intervals = NULL,
 #' If all the imported intervals represent a point (i.e. end == start + 1) a
 #' 'Points' track is created otherwise it is a 'Rectangles' track.
 #'
+#' If 'gmultitasking' is on, the input files are read by several processes
+#' in parallel, each process reading a contiguous subset of the files, and
+#' the chromosome pairs are then written in parallel, one pair per process at
+#' a time. The number of processes is bounded by 'gmax.processes'. The
+#' resulting track is identical to the one created with 'gmultitasking' off.
+#'
 #' 'description' is added as a track attribute.
 #'
 #' Note: temporary files are created in the directory of the track during the
@@ -237,6 +243,12 @@ gtrack.2d.import <- function(track = NULL, description = NULL, file = NULL) {
 #' 'coord2'.
 #'
 #' Contacts may come in one or more files.
+#'
+#' If 'gmultitasking' is on, the input files are read by several processes
+#' in parallel, each process reading a contiguous subset of the files, and
+#' the chromosome pairs are then written in parallel, one pair per process at
+#' a time. The number of processes is bounded by 'gmax.processes'. The
+#' resulting track is identical to the one created with 'gmultitasking' off.
 #'
 #' If 'fends' is 'NULL' contacts file is expected to be in "intervals-value"
 #' tab-separated format. The file starts with a header defining the column
