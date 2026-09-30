@@ -11,6 +11,13 @@
 #' function. The name of the newly created track is specified by 'track'
 #' argument and 'description' is added as a track attribute.
 #'
+#' For a 2D track both ends of every object are lifted, and an object with an
+#' end outside the chain is dropped. A points track (e.g. Hi-C contacts) gives a
+#' points track; points that land on the same target point are merged by
+#' 'multi_target_agg' (e.g. "sum" for counts). As in
+#' 'gtrack.2d.import_contacts', a chromosome pair with more points than
+#' 'gmax.data.size' is written in parts, which lowers the memory used.
+#'
 #' Note: When passing a pre-loaded chain (data frame), overlap policies cannot
 #' be specified - they are taken from the chain's attributes that were set
 #' during loading. When passing a chain file path, policies can be specified

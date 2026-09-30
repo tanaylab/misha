@@ -173,6 +173,8 @@ public:
 
 	bool opened() const { return m_bfile.opened(); }
 
+	BufferedFile &bfile() { return m_bfile; }
+
 	int chromid1() const { return m_last_interval.chromid1(); }
 	int chromid2() const { return m_last_interval.chromid2(); }
 
@@ -309,7 +311,7 @@ struct GIntervalVal {
 // Cells are emitted one rect each (no run merging).
 //
 // ponytail: per-cell cost is O(active rects per x-slab); for grid-aligned data
-// (Hi-C points / uniform bins, each rect == one cell) that is ~O(N), but it is O(N^2)
+// (uniform bins, each rect == one cell) that is ~O(N), but it is O(N^2)
 // worst case for pathological nested/offset rectangles, and a non-grid-aligned disjoint
 // rect gets split at a neighbour's boundary (more rects, identical values). Upgrade path
 // if it ever bites: decompose per overlap-cluster and merge equal-value runs.
@@ -370,6 +372,141 @@ static void aggregate_2d_rects(vector<RectVal2D> &rects, const AggregationConfig
 		}
 		check_interrupt();
 	}
+}
+
+// Lifted points of a POINTS track are buffered as (x, y, val) records. In memory a point
+// also carries seq, its position in the buffer, which is its contribution id: it orders
+// first / last / nth like the encounter id above and keeps aggregate_values from merging
+// distinct points.
+struct PointVal2D { int64_t x, y; float v; uint32_t seq; };
+
+static const int POINT_RECORD_SIZE = 2 * sizeof(int64_t) + sizeof(float);
+
+static void write_point(BufferedFile &file, int64_t x, int64_t y, float v)
+{
+	char buf[POINT_RECORD_SIZE];
+	memcpy(buf, &x, sizeof(x));
+	memcpy(buf + sizeof(x), &y, sizeof(y));
+	memcpy(buf + sizeof(x) + sizeof(y), &v, sizeof(v));
+	if (file.write(buf, POINT_RECORD_SIZE) != POINT_RECORD_SIZE) {
+		if (file.error())
+			TGLError("Failed to write points to file %s: %s", file.file_name().c_str(), strerror(errno));
+		TGLError("Failed to write points to file %s", file.file_name().c_str());
+	}
+}
+
+static bool read_point(BufferedFile &file, int64_t &x, int64_t &y, float &v)
+{
+	char buf[POINT_RECORD_SIZE];
+	uint64_t size = file.read(buf, POINT_RECORD_SIZE);
+	if (size != POINT_RECORD_SIZE) {
+		if (!size && file.eof())
+			return false;
+		if (file.error())
+			TGLError("Failed to read a file %s: %s", file.file_name().c_str(), strerror(errno));
+		TGLError("Invalid format of a file %s", file.file_name().c_str());
+	}
+	memcpy(&x, buf, sizeof(x));
+	memcpy(&y, buf + sizeof(x), sizeof(y));
+	memcpy(&v, buf + sizeof(x) + sizeof(y), sizeof(v));
+	return true;
+}
+
+// Writes the points lifted into one target chromosome pair (buffered in infile) as a POINTS
+// track file. Points that landed on the same target point are merged by agg_cfg. As in
+// gtrack.2d.import_contacts the pair is split into subtrees by gmax.data.size, and only one
+// subtree is held in memory at a time.
+static void write_2d_points(BufferedFile &infile, const char *filename, const string &dirname, int chromid1, int chromid2,
+                            IntervUtils &iu, const AggregationConfig &agg_cfg)
+{
+	int64_t num_points = infile.file_size() / POINT_RECORD_SIZE;
+	int64_t num_subtrees = max(num_points / (int64_t)iu.get_max_data_size(), (int64_t)1);
+	num_subtrees = 1 << (2 * (int)(log2(num_subtrees) / 2));  // round down to a power of 4
+
+	GenomeTrackRectsPoints gtrack(iu.get_track_chunk_size(), iu.get_track_num_chunks());
+	PointsQuadTreeCachedSerializer serializer;
+	gtrack.init_write(filename, chromid1, chromid2);
+	gtrack.init_serializer(serializer, 0, 0, iu.get_chromkey().get_chrom_size(chromid1), iu.get_chromkey().get_chrom_size(chromid2), num_subtrees, false);
+
+	BufferedFiles subtree_files(num_subtrees > 1 ? num_subtrees : 0);
+	int64_t x, y;
+	float v;
+
+	if (num_subtrees > 1) {
+		const Rectangles &subarenas = serializer.get_subarenas();
+		char subtree_filename[FILENAME_MAX];
+
+		for (int64_t i = 0; i < num_subtrees; ++i) {
+			snprintf(subtree_filename, sizeof(subtree_filename), "%s/_subtree%ld", dirname.c_str(), (long)i);
+			subtree_files[i] = new BufferedFile();
+			if (subtree_files[i]->open(subtree_filename, "w+"))
+				TGLError("Opening file %s: %s", subtree_filename, strerror(errno));
+		}
+
+		while (read_point(infile, x, y, v)) {
+			Point point(x, y);
+			for (Rectangles::const_iterator isubarena = subarenas.begin(); isubarena != subarenas.end(); ++isubarena) {
+				if (point.do_intersect(*isubarena)) {
+					write_point(*subtree_files[isubarena - subarenas.begin()], x, y, v);
+					break;
+				}
+			}
+			check_interrupt();
+		}
+
+		for (int64_t i = 0; i < num_subtrees; ++i) {
+			if (subtree_files[i]->flush())
+				TGLError("Failed to write points to file %s: %s", subtree_files[i]->file_name().c_str(), strerror(errno));
+			subtree_files[i]->seek(0, SEEK_SET);
+		}
+	}
+
+	vector<PointVal2D> points;
+	AggregationState agg_state;
+
+	for (int64_t i = 0; i < num_subtrees; ++i) {
+		BufferedFile &file = num_subtrees > 1 ? *subtree_files[i] : infile;
+
+		points.clear();
+		points.reserve(file.file_size() / POINT_RECORD_SIZE);
+		while (read_point(file, x, y, v)) {
+			if (points.size() > numeric_limits<uint32_t>::max())
+				TGLError("Too many points lifted into chromosome pair (%s, %s); lower gmax.data.size",
+						 iu.id2chrom(chromid1).c_str(), iu.id2chrom(chromid2).c_str());
+			PointVal2D p = { x, y, v, (uint32_t)points.size() };
+			points.push_back(p);
+			check_interrupt();
+		}
+
+		sort(points.begin(), points.end(), [](const PointVal2D &a, const PointVal2D &b) {
+			if (a.x != b.x)
+				return a.x < b.x;
+			if (a.y != b.y)
+				return a.y < b.y;
+			return a.seq < b.seq;
+		});
+
+		for (size_t first = 0, last; first < points.size(); first = last) {
+			agg_state.reset();
+			for (last = first; last < points.size() && points[last].x == points[first].x && points[last].y == points[first].y; ++last)
+				aggregation_state_add(agg_state, (double)points[last].v, 1.0, 1.0, points[last].seq, points[last].seq, points[last].seq);
+
+			double aggregated = aggregate_values(agg_cfg, agg_state);
+			float out_val = numeric_limits<float>::quiet_NaN();
+			if (!std::isnan(aggregated))
+				out_val = (float)aggregated;
+			serializer.insert(PointsQuadTree::ValueType(points[first].x, points[first].y, out_val));
+			check_interrupt();
+		}
+
+		if (num_subtrees > 1) {
+			string subtree_filename = file.file_name();
+			file.close();
+			unlink(subtree_filename.c_str());
+		}
+	}
+
+	serializer.end();
 }
 
 extern "C" {
@@ -950,11 +1087,19 @@ SEXP gtrack_liftover(SEXP _track,
 			Progress_reporter progress;
 			progress.init(src_id2chrom.size() * src_id2chrom.size(), 1);
 
+			// The source is read in one pass, so it needs only the chunks on the iterator's stack.
+			// gtrack.num.chunks = 0 (the default) caches every chunk it reads, i.e. the whole
+			// chromosome-pair file (tens of GB for a Hi-C pair); bound the cache instead.
+			int64_t src_num_chunks = iu.get_track_num_chunks() ? iu.get_track_num_chunks() : 100;
+
+			struct stat idx_st;
+			bool src_indexed = stat((string(src_track_dir) + "/track.idx").c_str(), &idx_st) == 0;
+
 			// convert source intervals and write them to files
 			for (vector<string>::const_iterator ichrom1 = src_id2chrom.begin(); ichrom1 != src_id2chrom.end(); ++ichrom1) {
 				for (vector<string>::const_iterator ichrom2 = src_id2chrom.begin(); ichrom2 != src_id2chrom.end(); ++ichrom2) {
-					GenomeTrackRectsRects src_track_rects(iu.get_track_chunk_size(), iu.get_track_num_chunks());
-					GenomeTrackRectsPoints src_track_points(iu.get_track_chunk_size(), iu.get_track_num_chunks());
+					GenomeTrackRectsRects src_track_rects(iu.get_track_chunk_size(), src_num_chunks);
+					GenomeTrackRectsPoints src_track_points(iu.get_track_chunk_size(), src_num_chunks);
 					GenomeTrack2D *src_track;
 
 					if (src_track_type == GenomeTrack::RECTS)
@@ -965,9 +1110,22 @@ SEXP gtrack_liftover(SEXP _track,
 					int chromid1 = ichrom1 - src_id2chrom.begin();
 					int chromid2 = ichrom2 - src_id2chrom.begin();
 
+					// An indexed source is looked up by the source genome's chrom ids, not the
+					// chain's (as in the 1D path); with the chain's ids it read another pair.
+					int read_chromid1 = chromid1;
+					int read_chromid2 = chromid2;
+					if (src_indexed) {
+						read_chromid1 = src_chainid2genomeid[chromid1];
+						read_chromid2 = src_chainid2genomeid[chromid2];
+						if (read_chromid1 < 0 || read_chromid2 < 0) {
+							progress.report(1);
+							continue;
+						}
+					}
+
 					try {
 						snprintf(filename, sizeof(filename), "%s/%s-%s", src_track_dir, ichrom1->c_str(), ichrom2->c_str());
-						src_track->init_read(filename, chromid1, chromid2);
+						src_track->init_read(filename, read_chromid1, read_chromid2);
 						if (!src_track->has_data_for_pair()) {
 							progress.report(1);
 							continue;
@@ -1033,7 +1191,7 @@ SEXP gtrack_liftover(SEXP _track,
 										snprintf(filename, sizeof(filename), "%s/_%s-%s", dirname.c_str(), iu.get_chromkey().id2chrom(iinterv1->chromid).c_str(), iu.get_chromkey().id2chrom(iinterv2->chromid).c_str());
 										buffered_interv.open(filename, "w+", iinterv1->chromid, iinterv2->chromid);
 									}
-									buffered_interv.write_interval(*iinterv1, *iinterv2, iqtree->v);
+									write_point(buffered_interv.bfile(), iinterv1->start, iinterv2->start, iqtree->v);
 								}
 							}
 							check_interrupt();
@@ -1052,12 +1210,26 @@ SEXP gtrack_liftover(SEXP _track,
 				if (ibuffered_interv->second.opened()) {
 					int chromid1 = ibuffered_interv->second.chromid1();
 					int chromid2 = ibuffered_interv->second.chromid2();
+
+					if (ibuffered_interv->second.bfile().flush())
+						TGLError("Failed to write intervals to file %s: %s", ibuffered_interv->second.file_name().c_str(), strerror(errno));
+					ibuffered_interv->second.seek(0, SEEK_SET);
+
+					// A POINTS source gives a POINTS track. Its buffer file is removed right away:
+					// on a Hi-C track these are the size of the track.
+					if (src_track_type == GenomeTrack::POINTS) {
+						snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_2d_filename(iu.get_chromkey(), chromid1, chromid2).c_str());
+						write_2d_points(ibuffered_interv->second.bfile(), filename, dirname, chromid1, chromid2, iu, agg_cfg);
+						string buffer_filename = ibuffered_interv->second.file_name();
+						ibuffered_interv->second.close();
+						unlink(buffer_filename.c_str());
+						progress.report(1);
+						continue;
+					}
+
 					RectsQuadTree qtree;
 
 					qtree.reset(0, 0, iu.get_chromkey().get_chrom_size(chromid1), iu.get_chromkey().get_chrom_size(chromid2));
-
-					ibuffered_interv->second.flush();
-					ibuffered_interv->second.seek(0, SEEK_SET);
 
 					// Collect the mapped rects, then aggregate overlaps into disjoint
 					// rects before inserting (the quadtree forbids overlapping objects).
