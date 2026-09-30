@@ -1,3 +1,9 @@
+# misha 5.12.1
+
+* **Behavior fix:** `gcluster.run()` jobs run against the caller's database, working directory, loaded datasets and virtual tracks. They had used the bundled example database unless the job called `gsetroot()` itself.
+
+* `gtrack.2d.import()` and `gtrack.2d.import_contacts()` run in parallel when `gmultitasking` is on. The tracks are identical to serial runs.
+
 # misha 5.12.0
 
 * New `potts`, `potts.max`, `potts.max.pos` and `potts.count` virtual track functions, which score a pairwise (Potts) energy model across the genome, and `gseq.potts()` to score sequences with one. A fitted model's `e`, `J`, `pairs` and `intercept` can be passed to `gvtrack.create(params = )` as they are.
