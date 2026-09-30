@@ -39,6 +39,8 @@ in parallel, each process reading a contiguous subset of the files, and
 the chromosome pairs are then written in parallel, one pair per process at
 a time. The number of processes is bounded by 'gmax.processes'. The
 resulting track is identical to the one created with 'gmultitasking' off.
+Memory use grows with the number of processes, since each one holds the
+chromosome pair it writes; lower 'gmax.processes' to reduce it.
 
 'description' is added as a track attribute.
 

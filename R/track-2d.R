@@ -157,6 +157,8 @@ gtrack.2d.create <- function(track = NULL, description = NULL, intervals = NULL,
 #' the chromosome pairs are then written in parallel, one pair per process at
 #' a time. The number of processes is bounded by 'gmax.processes'. The
 #' resulting track is identical to the one created with 'gmultitasking' off.
+#' Memory use grows with the number of processes, since each one holds the
+#' chromosome pair it writes; lower 'gmax.processes' to reduce it.
 #'
 #' 'description' is added as a track attribute.
 #'
@@ -249,6 +251,8 @@ gtrack.2d.import <- function(track = NULL, description = NULL, file = NULL) {
 #' the chromosome pairs are then written in parallel, one pair per process at
 #' a time. The number of processes is bounded by 'gmax.processes'. The
 #' resulting track is identical to the one created with 'gmultitasking' off.
+#' Memory use grows with the number of processes, since each one holds the
+#' chromosome pair it writes; lower 'gmax.processes' to reduce it.
 #'
 #' If 'fends' is 'NULL' contacts file is expected to be in "intervals-value"
 #' tab-separated format. The file starts with a header defining the column
