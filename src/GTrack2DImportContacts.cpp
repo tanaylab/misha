@@ -151,7 +151,7 @@ static void process_contacts_as_intervals(IntervUtils &iu, SEXP _files, Contact_
 				verror("File %s, line %ld: end1 coordinate exceeds chromosome's size", infile.file_name().c_str(), lineno);
 
 			start2 = strtoll(fields[GInterval2D::START2].c_str(), &endptr, 10);
-			if (*endptr || start1 < 0) 
+			if (*endptr || start2 < 0) 
 				verror("File %s, line %ld: invalid format of start2 coordinate", infile.file_name().c_str(), lineno);
 
 			end2 = strtoll(fields[GInterval2D::END2].c_str(), &endptr, 10);
