@@ -40,3 +40,16 @@ test_that("a gcluster.run job restores the caller's root, working dir, datasets 
         expect_equal(state(), expected)
     })
 })
+
+test_that("a gcluster.run job keeps its own example db when the caller's is not reachable", {
+    local_db_state()
+    withr::with_tempdir({
+        gdb.init_examples(file.path(getwd(), "caller"))
+        save(.misha, file = "misha")
+        unlink("caller", recursive = TRUE) # the caller's tempdir, as seen from another host
+        gdb.init_examples(file.path(getwd(), "job"))
+        job_root <- .misha$GROOT
+        .gcluster.restore_db("misha")
+        expect_equal(.misha$GROOT, job_root)
+    })
+})
