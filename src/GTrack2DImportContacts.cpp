@@ -531,82 +531,80 @@ extern "C" {
 
 SEXP gtrack_import_contacts(SEXP _track, SEXP _contacts, SEXP _fends, SEXP _allow_duplicates, SEXP _envir)
 {
-	// Each stage has its own RdbInitializer: the multitasking state (shared memory, kid bookkeeping)
-	// is set up once per RdbInitializer, so the kids of the second stage need a fresh one.
-	string dirname;
-	vector<PairFiles> pairs;
-
 	try {
-		RdbInitializer rdb_init;
+		string dirname;
+		vector<PairFiles> pairs;
 
-		if (!Rf_isString(_track) || Rf_length(_track) != 1)
-			verror("Track argument is not a string");
+		// Each stage has its own RdbInitializer: the multitasking state (shared memory, kid bookkeeping)
+		// is set up once per RdbInitializer, so the kids of the second stage need a fresh one.
+		{
+			RdbInitializer rdb_init;
 
-		if (!Rf_isNull(_fends) && (!Rf_isString(_fends) || Rf_length(_fends) != 1))
-			verror("Fends argument is not a string");
+			if (!Rf_isString(_track) || Rf_length(_track) != 1)
+				verror("Track argument is not a string");
 
-		if (!Rf_isString(_contacts) || Rf_length(_contacts) < 1)
-			verror("Contacts argument is not a string");
+			if (!Rf_isNull(_fends) && (!Rf_isString(_fends) || Rf_length(_fends) != 1))
+				verror("Fends argument is not a string");
 
-		if (!Rf_isLogical(_allow_duplicates) || Rf_length(_allow_duplicates) != 1)
-			verror("Allow duplicates argument is not a boolean");
+			if (!Rf_isString(_contacts) || Rf_length(_contacts) < 1)
+				verror("Contacts argument is not a string");
 
-		IntervUtils iu(_envir);
-		const char *track = CHAR(STRING_ELT(_track, 0));
-		dirname = create_track_dir(_envir, track);
+			if (!Rf_isLogical(_allow_duplicates) || Rf_length(_allow_duplicates) != 1)
+				verror("Allow duplicates argument is not a boolean");
 
-		// The number of contacts might be huge. We might not be even able to hold the contacts of one chromosome in the memory and to build the quad tree with it.
-		// Our strategy is therefore that:
-		// 1. Read the contacts and split them into binary files each holding the contacts of specific pair of chromosomes.
-		// 2. Check what is the number of contacts in a chromosome pair and based on that number decide how many subtrees would be needed in StatQuadTreeCachedSerializer.
-		//    (Creating a quad tree through seriaizer would be the only feasible method considering the enormous number of contacts.)
-		// 3. Split contacts of a chromosome pair to binary files - each holding contacts of a subtree. We assume that we will be able to hold in the memory the contacts of one subtree.
-		// 4. Read the contacts of a subtree, sum up the duplicates and insert them to StatQuadTreeCachedSerializer.
-		// Step 1 runs in parallel over the input files, steps 2 - 4 over the chromosome pairs (see GTrack2DImport.h).
+			IntervUtils iu(_envir);
+			const char *track = CHAR(STRING_ELT(_track, 0));
+			dirname = create_track_dir(_envir, track);
 
-		// STAGE 1: Read the contacts and split them into binary files each holding the contacts of specific pair of chromosomes.
-		if (Rf_isNull(_fends))
-			process_contacts_as_intervals(iu, _contacts, dirname);
-		else
-			process_contacts_as_fends(iu, _contacts, _fends, dirname);
+			// The number of contacts might be huge. We might not be even able to hold the contacts of one chromosome in the memory and to build the quad tree with it.
+			// Our strategy is therefore that:
+			// 1. Read the contacts and split them into binary files each holding the contacts of specific pair of chromosomes.
+			// 2. Check what is the number of contacts in a chromosome pair and based on that number decide how many subtrees would be needed in StatQuadTreeCachedSerializer.
+			//    (Creating a quad tree through seriaizer would be the only feasible method considering the enormous number of contacts.)
+			// 3. Split contacts of a chromosome pair to binary files - each holding contacts of a subtree. We assume that we will be able to hold in the memory the contacts of one subtree.
+			// 4. Read the contacts of a subtree, sum up the duplicates and insert them to StatQuadTreeCachedSerializer.
+			// Step 1 runs in parallel over the input files, steps 2 - 4 over the chromosome pairs (see GTrack2DImport.h).
 
-		pairs = list_pair_files(dirname);
+			// STAGE 1: Read the contacts and split them into binary files each holding the contacts of specific pair of chromosomes.
+			if (Rf_isNull(_fends))
+				process_contacts_as_intervals(iu, _contacts, dirname);
+			else
+				process_contacts_as_fends(iu, _contacts, _fends, dirname);
+
+			pairs = list_pair_files(dirname);
+		}
+
+		{
+			RdbInitializer rdb_init;
+			IntervUtils iu(_envir);
+			bool allow_duplicates = LOGICAL(_allow_duplicates)[0];
+			uint64_t num_records = 0;
+
+			for (const PairFiles &pair_files : pairs)
+				num_records += pair_files.size / CONTACT_RECORD_SIZE;
+
+			REprintf("Writing the track...\n");
+
+			int num_kids = import_num_kids(iu, min((uint64_t)pairs.size(), num_records / misha::config::MIN_RECORDS_PER_PROCESS));
+			vector<vector<int>> kid_pairs = assign_pairs(pairs, num_kids);
+
+			run_kids(iu, num_kids, [&](int kid) {
+					Progress_reporter progress;
+
+					progress.init(kid_pairs[kid].size(), 1);
+					for (int ipair : kid_pairs[kid]) {
+						write_pair(iu, dirname, pairs[ipair], allow_duplicates);
+						progress.report(1);
+					}
+					progress.report_last();
+					return (char)0;
+				});
+		}
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
 	} catch (const bad_alloc &e) {
 		rerror("Out of memory");
 	}
-
-	try {
-		RdbInitializer rdb_init;
-		IntervUtils iu(_envir);
-		bool allow_duplicates = LOGICAL(_allow_duplicates)[0];
-		uint64_t num_records = 0;
-
-		for (const PairFiles &pair_files : pairs)
-			num_records += pair_files.size / CONTACT_RECORD_SIZE;
-
-		REprintf("Writing the track...\n");
-
-		int num_kids = import_num_kids(iu, min((uint64_t)pairs.size(), num_records / misha::config::MIN_RECORDS_PER_PROCESS));
-		vector<vector<int>> kid_pairs = assign_pairs(pairs, num_kids);
-
-		run_kids(iu, num_kids, [&](int kid) {
-				Progress_reporter progress;
-
-				progress.init(kid_pairs[kid].size(), 1);
-				for (int ipair : kid_pairs[kid]) {
-					write_pair(iu, dirname, pairs[ipair], allow_duplicates);
-					progress.report(1);
-				}
-				progress.report_last();
-				return (char)0;
-			});
-	} catch (TGLException &e) {
-		rerror("%s", e.msg());
-    } catch (const bad_alloc &e) {
-        rerror("Out of memory");
-    }
 
 	return R_NilValue;
 }

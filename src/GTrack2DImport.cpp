@@ -407,91 +407,89 @@ extern "C" {
 
 SEXP gtrack_2d_import(SEXP _track, SEXP _files, SEXP _envir)
 {
-	// Each stage has its own RdbInitializer: the multitasking state (shared memory, kid bookkeeping)
-	// is set up once per RdbInitializer, so the kids of the second stage need a fresh one.
-	string dirname;
-	vector<PairFiles> pairs;
-	bool are_all_points = true;
-
 	try {
-		RdbInitializer rdb_init;
+		string dirname;
+		vector<PairFiles> pairs;
+		bool are_all_points = true;
 
-		if (!Rf_isString(_track) || Rf_length(_track) != 1)
-			verror("Track argument is not a string");
+		// Each stage has its own RdbInitializer: the multitasking state (shared memory, kid bookkeeping)
+		// is set up once per RdbInitializer, so the kids of the second stage need a fresh one.
+		{
+			RdbInitializer rdb_init;
 
-		if (!Rf_isString(_files) || Rf_length(_files) < 1)
-			verror("Files argument is not a vector of strings");
+			if (!Rf_isString(_track) || Rf_length(_track) != 1)
+				verror("Track argument is not a string");
 
-		IntervUtils iu(_envir);
-		const char *track = CHAR(STRING_ELT(_track, 0));
-		dirname = create_track_dir(_envir, track);
+			if (!Rf_isString(_files) || Rf_length(_files) < 1)
+				verror("Files argument is not a vector of strings");
 
-		// The number of 2D intervals might be huge. We might not be even able to hold all the intervals of one chromosome pair in memory and to build the quad tree with it.
-		// Our strategy is therefore that:
-		// 1. Read the input files and split them into binary files each holding the intervals of specific chromosomes pair.
-		// 2. Check what is the number of contacts in a chromosome pair and based on that number decide how many subtrees would be needed in StatQuadTreeCachedSerializer.
-		//    (Creating a quad tree through seriaizer would be the only feasible method when only part of the intervals of a chromosome pair can be loaded into RAM.)
-		// 3. Split the intervals of a chromosome pair to binary files - each holding contacts of a subtree. We assume that we will be able to hold in the memory the contacts of one subtree.
-		// 4. Read the contacts of a subtree and insert them to StatQuadTreeCachedSerializer.
-		// Step 1 runs in parallel over the input files, steps 2 - 4 over the chromosome pairs (see GTrack2DImport.h).
+			IntervUtils iu(_envir);
+			const char *track = CHAR(STRING_ELT(_track, 0));
+			dirname = create_track_dir(_envir, track);
 
-		REprintf("Reading input file(s)...\n");
+			// The number of 2D intervals might be huge. We might not be even able to hold all the intervals of one chromosome pair in memory and to build the quad tree with it.
+			// Our strategy is therefore that:
+			// 1. Read the input files and split them into binary files each holding the intervals of specific chromosomes pair.
+			// 2. Check what is the number of contacts in a chromosome pair and based on that number decide how many subtrees would be needed in StatQuadTreeCachedSerializer.
+			//    (Creating a quad tree through seriaizer would be the only feasible method when only part of the intervals of a chromosome pair can be loaded into RAM.)
+			// 3. Split the intervals of a chromosome pair to binary files - each holding contacts of a subtree. We assume that we will be able to hold in the memory the contacts of one subtree.
+			// 4. Read the contacts of a subtree and insert them to StatQuadTreeCachedSerializer.
+			// Step 1 runs in parallel over the input files, steps 2 - 4 over the chromosome pairs (see GTrack2DImport.h).
 
-		vector<int64_t> sizes;
-		for (int ifile = 0; ifile < Rf_length(_files); ++ifile) {
-			const char *fname = CHAR(STRING_ELT(_files, ifile));
-			struct stat st;
+			REprintf("Reading input file(s)...\n");
 
-			if (stat(fname, &st))
-				verror("Accessing file %s: %s", fname, strerror(errno));
-			sizes.push_back(st.st_size);
+			vector<int64_t> sizes;
+			for (int ifile = 0; ifile < Rf_length(_files); ++ifile) {
+				const char *fname = CHAR(STRING_ELT(_files, ifile));
+				struct stat st;
+
+				if (stat(fname, &st))
+					verror("Accessing file %s: %s", fname, strerror(errno));
+				sizes.push_back(st.st_size);
+			}
+
+			// STEP 1: Read the input files and split them into binary files each holding the intervals of specific chromosomes pair.
+			vector<int> bounds = split_files(sizes, import_num_kids(iu, sizes.size()));
+			vector<char> kids_all_points = run_kids(iu, bounds.size() - 1, [&](int kid) {
+					return (char)read_input_files(iu, _files, sizes, bounds[kid], bounds[kid + 1], dirname, kid);
+				});
+
+			for (char kid_all_points : kids_all_points)
+				are_all_points &= (bool)kid_all_points;
+
+			pairs = list_pair_files(dirname);
 		}
 
-		// STEP 1: Read the input files and split them into binary files each holding the intervals of specific chromosomes pair.
-		vector<int> bounds = split_files(sizes, import_num_kids(iu, sizes.size()));
-		vector<char> kids_all_points = run_kids(iu, bounds.size() - 1, [&](int kid) {
-				return (char)read_input_files(iu, _files, sizes, bounds[kid], bounds[kid + 1], dirname, kid);
-			});
+		{
+			RdbInitializer rdb_init;
+			IntervUtils iu(_envir);
+			uint64_t num_records = 0;
 
-		for (char kid_all_points : kids_all_points)
-			are_all_points &= (bool)kid_all_points;
+			for (const PairFiles &pair_files : pairs)
+				num_records += pair_files.size / INTERVAL_RECORD_SIZE;
 
-		pairs = list_pair_files(dirname);
+			REprintf("Writing the track...\n");
+
+			int num_kids = import_num_kids(iu, min((uint64_t)pairs.size(), num_records / misha::config::MIN_RECORDS_PER_PROCESS));
+			vector<vector<int>> kid_pairs = assign_pairs(pairs, num_kids);
+
+			run_kids(iu, num_kids, [&](int kid) {
+					Progress_reporter progress;
+
+					progress.init(kid_pairs[kid].size(), 1);
+					for (int ipair : kid_pairs[kid]) {
+						write_pair(iu, dirname, pairs[ipair], are_all_points);
+						progress.report(1);
+					}
+					progress.report_last();
+					return (char)0;
+				});
+		}
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
 	} catch (const bad_alloc &e) {
 		rerror("Out of memory");
 	}
-
-	try {
-		RdbInitializer rdb_init;
-		IntervUtils iu(_envir);
-		uint64_t num_records = 0;
-
-		for (const PairFiles &pair_files : pairs)
-			num_records += pair_files.size / INTERVAL_RECORD_SIZE;
-
-		REprintf("Writing the track...\n");
-
-		int num_kids = import_num_kids(iu, min((uint64_t)pairs.size(), num_records / misha::config::MIN_RECORDS_PER_PROCESS));
-		vector<vector<int>> kid_pairs = assign_pairs(pairs, num_kids);
-
-		run_kids(iu, num_kids, [&](int kid) {
-				Progress_reporter progress;
-
-				progress.init(kid_pairs[kid].size(), 1);
-				for (int ipair : kid_pairs[kid]) {
-					write_pair(iu, dirname, pairs[ipair], are_all_points);
-					progress.report(1);
-				}
-				progress.report_last();
-				return (char)0;
-			});
-	} catch (TGLException &e) {
-		rerror("%s", e.msg());
-    } catch (const bad_alloc &e) {
-        rerror("Out of memory");
-    }
 
 	return R_NilValue;
 }
