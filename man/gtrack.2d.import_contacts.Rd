@@ -45,8 +45,10 @@ in parallel, each process reading a contiguous subset of the files, and
 the chromosome pairs are then written in parallel, one pair per process at
 a time. The number of processes is bounded by 'gmax.processes'. The
 resulting track is identical to the one created with 'gmultitasking' off.
-Memory use grows with the number of processes, since each one holds the
-chromosome pair it writes; lower 'gmax.processes' to reduce it.
+The pairs are written largest first, and a pair is started only when its
+estimated memory, added to that of the pairs being written, stays within
+'gmax.mem.usage'. A pair estimated above 'gmax.mem.usage' is written
+alone. Lower 'gmax.mem.usage' to use less memory.
 
 If 'fends' is 'NULL' contacts file is expected to be in "intervals-value"
 tab-separated format. The file starts with a header defining the column

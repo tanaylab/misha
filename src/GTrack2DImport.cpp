@@ -3,7 +3,10 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/mman.h>
+#include <sched.h>
 #include <algorithm>
+#include <functional>
 #include <fstream>
 #include <map>
 #include <numeric>
@@ -35,6 +38,13 @@ public:
 };
 
 static const int64_t INTERVAL_RECORD_SIZE = 4 * sizeof(int64_t) + sizeof(float);
+
+// Peak memory of building a chromosome pair, in bytes per record (see pair_mem): the quad tree's objects
+// (24 bytes a point, 40 a rectangle), object pointers and nodes, as the vectors holding them grow. Measured as
+// the peak RSS of a serial import of one pair of 2M - 40M Hi-C-like records: at most 74.8 bytes a point and
+// 98.4 a rectangle. Rounded up to a multiple of 8.
+static const uint64_t POINT_MEM = 80;
+static const uint64_t RECT_MEM = 104;
 
 static bool read_interval(BufferedFile &f, int64_t &start1, int64_t &end1, int64_t &start2, int64_t &end2, float &val)
 {
@@ -165,25 +175,7 @@ vector<PairFiles> list_pair_files(const string &dirname)
 	return pairs;
 }
 
-vector<vector<int>> assign_pairs(const vector<PairFiles> &pairs, int num_kids)
-{
-	vector<int> order(pairs.size());
-	vector<uint64_t> loads(num_kids, 0);
-	vector<vector<int>> kid_pairs(num_kids);
-
-	iota(order.begin(), order.end(), 0);
-	stable_sort(order.begin(), order.end(), [&](int a, int b) { return pairs[a].size > pairs[b].size; });
-
-	for (int ipair : order) {
-		int kid = min_element(loads.begin(), loads.end()) - loads.begin();
-
-		kid_pairs[kid].push_back(ipair);
-		loads[kid] += pairs[ipair].size + 1;
-	}
-	return kid_pairs;
-}
-
-vector<char> run_kids(IntervUtils &iu, int num_kids, const function<char(int)> &work)
+vector<char> run_kids(IntervUtils &iu, int num_kids, const function<char(int)> &work, bool throttle)
 {
 	vector<char> res(num_kids);
 
@@ -192,7 +184,7 @@ vector<char> run_kids(IntervUtils &iu, int num_kids, const function<char(int)> &
 		return res;
 	}
 
-	prepare4multitasking(sizeof(char), 0, num_kids * sizeof(char), iu.get_max_mem_usage(), num_kids);
+	prepare4multitasking(sizeof(char), 0, num_kids * sizeof(char), throttle ? iu.get_max_mem_usage() : misha::config::UNLIMITED, num_kids);
 
 	for (int kid = 0; kid < num_kids; ++kid) {
 		if (!launch_process()) {
@@ -209,6 +201,133 @@ vector<char> run_kids(IntervUtils &iu, int num_kids, const function<char(int)> &
 	for (int kid = 0; kid < num_kids; ++kid)
 		res[kid] = *(char *)get_kid_res(kid);
 	return res;
+}
+
+// Memory of building a pair beyond its records: file buffers and the serializer (measured at 3.1 - 3.4 MB)
+static const uint64_t PAIR_MEM_OVERHEAD = 4 << 20;
+
+// How long a stage 2 kid waits before it looks again for a pair that fits into the memory budget
+static const int64_t PAIR_WAIT_MSEC = 20;
+
+uint64_t pair_mem(uint64_t num_records, uint64_t bytes_per_record)
+{
+	return PAIR_MEM_OVERHEAD + num_records * bytes_per_record;
+}
+
+// Stage 2 state that the kids share, in shared memory, read and written under lock.
+// Pairs are numbered in build order: by estimated memory, largest first.
+struct PairQueue {
+	char     lock;
+	uint64_t reserved;   // estimated memory of the pairs being built
+	uint64_t done;       // intermediate file bytes of the pairs built so far, for the progress report
+	// followed by int next[num_pairs + 1]: next[i] == i if pair i is not taken yet, otherwise a pair to look at
+	// after it; next[num_pairs] == num_pairs
+};
+
+static void lock_queue(PairQueue *queue)
+{
+	while (__atomic_test_and_set(&queue->lock, __ATOMIC_ACQUIRE))
+		sched_yield();
+}
+
+static void unlock_queue(PairQueue *queue)
+{
+	__atomic_clear(&queue->lock, __ATOMIC_RELEASE);
+}
+
+// Returns the first pair at or after i that is not taken yet, or num_pairs
+static int first_untaken(int *next, int i)
+{
+	while (next[i] != i) {
+		next[i] = next[next[i]];
+		i = next[i];
+	}
+	return i;
+}
+
+void build_pairs(IntervUtils &iu, const vector<PairFiles> &pairs, const vector<uint64_t> &mem, int num_kids,
+				 const function<void(const PairFiles &)> &build)
+{
+	int num_pairs = pairs.size();
+	uint64_t budget = max(iu.get_max_mem_usage(), (uint64_t)1);
+	uint64_t total_size = 0;
+	vector<int> order(num_pairs);
+	vector<uint64_t> cost(num_pairs);   // estimated memory in build order, capped at the budget
+
+	iota(order.begin(), order.end(), 0);
+	stable_sort(order.begin(), order.end(), [&](int a, int b) { return mem[a] > mem[b]; });
+	for (int i = 0; i < num_pairs; ++i) {
+		cost[i] = min(mem[order[i]], budget);
+		total_size += pairs[order[i]].size;
+	}
+
+	// mmap'ed memory starts zeroed: the lock is free and nothing is reserved
+	size_t shm_size = sizeof(PairQueue) + (num_pairs + 1) * sizeof(int);
+	void *shm = mmap(NULL, shm_size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+
+	if (shm == MAP_FAILED)
+		verror("Failed to allocate shared memory: %s", strerror(errno));
+
+	struct Unmapper {
+		void *addr;
+		size_t size;
+		~Unmapper() { munmap(addr, size); }
+	} unmapper{shm, shm_size};
+
+	PairQueue *queue = (PairQueue *)shm;
+	int *next = (int *)(queue + 1);
+
+	iota(next, next + num_pairs + 1, 0);
+
+	run_kids(iu, num_kids, [&](int) {
+		Progress_reporter progress;
+		uint64_t done = 0;
+
+		progress.init(total_size, 1);
+		while (1) {
+			bool all_taken;
+			int ipair;
+
+			// Take the first pair in build order that fits into what the running pairs leave of the budget.
+			// cost is sorted from high to low, so these are the pairs from lower_bound on. A pair above the
+			// budget costs the whole budget and so fits only when nothing is running.
+			lock_queue(queue);
+			ipair = lower_bound(cost.begin(), cost.end(), budget - queue->reserved, greater<uint64_t>()) - cost.begin();
+			ipair = first_untaken(next, ipair);
+			all_taken = first_untaken(next, 0) == num_pairs;
+			if (ipair < num_pairs) {
+				next[ipair] = ipair + 1;
+				queue->reserved += cost[ipair];
+			}
+			unlock_queue(queue);
+
+			if (all_taken)
+				break;
+
+			if (ipair == num_pairs) {
+				// nothing fits now: wait for a running pair to end
+				struct timespec req;
+
+				set_rel_timeout(PAIR_WAIT_MSEC, req);
+				nanosleep(&req, NULL);
+				check_interrupt();
+				continue;
+			}
+
+			build(pairs[order[ipair]]);
+
+			lock_queue(queue);
+			queue->reserved -= cost[ipair];
+			queue->done += pairs[order[ipair]].size;
+			uint64_t all_done = queue->done;
+			unlock_queue(queue);
+
+			progress.report(all_done - done);
+			done = all_done;
+		}
+		progress.report_last();
+		return (char)0;
+	}, false);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -471,18 +590,13 @@ SEXP gtrack_2d_import(SEXP _track, SEXP _files, SEXP _envir)
 			REprintf("Writing the track...\n");
 
 			int num_kids = import_num_kids(iu, min((uint64_t)pairs.size(), num_records / misha::config::MIN_RECORDS_PER_PROCESS));
-			vector<vector<int>> kid_pairs = assign_pairs(pairs, num_kids);
+			vector<uint64_t> mem;
 
-			run_kids(iu, num_kids, [&](int kid) {
-					Progress_reporter progress;
+			for (const PairFiles &pair_files : pairs)
+				mem.push_back(pair_mem(pair_files.size / INTERVAL_RECORD_SIZE, are_all_points ? POINT_MEM : RECT_MEM));
 
-					progress.init(kid_pairs[kid].size(), 1);
-					for (int ipair : kid_pairs[kid]) {
-						write_pair(iu, dirname, pairs[ipair], are_all_points);
-						progress.report(1);
-					}
-					progress.report_last();
-					return (char)0;
+			build_pairs(iu, pairs, mem, num_kids, [&](const PairFiles &pair_files) {
+					write_pair(iu, dirname, pair_files, are_all_points);
 				});
 		}
 	} catch (TGLException &e) {

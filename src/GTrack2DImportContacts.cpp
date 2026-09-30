@@ -44,6 +44,12 @@ public:
 
 static const int64_t CONTACT_RECORD_SIZE = 2 * sizeof(int64_t) + sizeof(float);
 
+// Peak memory of building a chromosome pair, in bytes per contact (see pair_mem): the hash map that sums the
+// duplicates plus the quad trees, which hold every contact twice (mirrored in a cis pair, one tree per
+// orientation in a trans pair). Measured as the peak RSS of a serial import of one pair of 2M - 40M Hi-C-like
+// contacts: at most 202.7 bytes a contact, cis and trans alike. Rounded up to a multiple of 8.
+static const uint64_t CONTACT_MEM = 208;
+
 static unsigned read_header(BufferedFile &file, const char *fname, const char *ftype, const char *colnames[], int num_cols, vector<int> &fcol_idx)
 {
 	vector<string> fields;
@@ -586,18 +592,13 @@ SEXP gtrack_import_contacts(SEXP _track, SEXP _contacts, SEXP _fends, SEXP _allo
 			REprintf("Writing the track...\n");
 
 			int num_kids = import_num_kids(iu, min((uint64_t)pairs.size(), num_records / misha::config::MIN_RECORDS_PER_PROCESS));
-			vector<vector<int>> kid_pairs = assign_pairs(pairs, num_kids);
+			vector<uint64_t> mem;
 
-			run_kids(iu, num_kids, [&](int kid) {
-					Progress_reporter progress;
+			for (const PairFiles &pair_files : pairs)
+				mem.push_back(pair_mem(pair_files.size / CONTACT_RECORD_SIZE, CONTACT_MEM));
 
-					progress.init(kid_pairs[kid].size(), 1);
-					for (int ipair : kid_pairs[kid]) {
-						write_pair(iu, dirname, pairs[ipair], allow_duplicates);
-						progress.report(1);
-					}
-					progress.report_last();
-					return (char)0;
+			build_pairs(iu, pairs, mem, num_kids, [&](const PairFiles &pair_files) {
+					write_pair(iu, dirname, pair_files, allow_duplicates);
 				});
 		}
 	} catch (TGLException &e) {
