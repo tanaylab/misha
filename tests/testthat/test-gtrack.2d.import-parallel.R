@@ -64,13 +64,19 @@ expect_counters_reset <- function() {
 
 # Runs import(track) with multitasking off and on. Returns, per mode, the md5 of the track
 # files, the gextract over the whole genome, the leftover hidden files and the kids' CPU time.
-import_both_ways <- function(import, max_data_size = NULL) {
+import_both_ways <- function(import, max_data_size = NULL, max_mem_usage = NULL) {
     res <- list()
     for (mt in c(FALSE, TRUE)) {
         track <- if (mt) "imp_parallel" else "imp_serial"
         opts <- list(gmultitasking = mt, gmax.processes = 4)
         if (!is.null(max_data_size)) {
             opts$gmax.data.size <- max_data_size
+        }
+        if (!is.null(max_mem_usage)) {
+            opts$gmax.mem.usage <- max_mem_usage
+        }
+        if (gtrack.exists(track)) {
+            gtrack.rm(track, force = TRUE)
         }
         t0 <- proc.time()
         withr::with_options(opts, import(track))
@@ -205,6 +211,41 @@ test_that("gtrack.2d.import_contacts with several subtrees per pair is identical
         res <- import_both_ways(function(track) gtrack.2d.import_contacts(track, "test", files), max_data_size = 1000)
         expect_same_both_ways(res)
         expect_equal(nrow(res$parallel$data), nrow(expected_contacts(d)))
+    })
+})
+
+# gmax.mem.usage (KB) caps the estimated memory of the pairs built at once: a fixed 4 MiB per pair
+# plus its records. A 1 MB budget is below every pair, so the pairs are built one at a time. The
+# larger budgets fit two of these pairs (contacts pairs are larger), and the other kids wait.
+test_that("gtrack.2d.import under a memory budget is identical in parallel", {
+    local_db_state()
+    withr::with_tempdir({
+        setup_import_db()
+        points <- write_slices(random_intervals(40000, seed = 11), c(2, 1, 1), "points")
+        rects <- write_slices(random_intervals(20000, seed = 12, rects = TRUE), c(1, 1), "rects")
+        for (budget in c(1000, 10000)) {
+            for (files in list(points, rects)) {
+                res <- import_both_ways(function(track) gtrack.2d.import(track, "test", files), max_mem_usage = budget)
+                expect_same_both_ways(res)
+            }
+        }
+    })
+})
+
+test_that("gtrack.2d.import_contacts under a memory budget is identical in parallel", {
+    local_db_state()
+    withr::with_tempdir({
+        setup_import_db()
+        d <- random_intervals(40000, seed = 13)
+        files <- write_slices(rbind(d, d[1:3000, ]), c(1, 2, 1), "contacts")
+        for (budget in c(1000, 13000)) {
+            res <- import_both_ways(function(track) gtrack.2d.import_contacts(track, "test", files), max_mem_usage = budget)
+            expect_same_both_ways(res)
+            expect_equal(nrow(res$parallel$data), nrow(expected_contacts(rbind(d, d[1:3000, ]))))
+        }
+        # with subtrees too
+        res <- import_both_ways(function(track) gtrack.2d.import_contacts(track, "test", files), max_data_size = 1000, max_mem_usage = 1000)
+        expect_same_both_ways(res)
     })
 })
 
