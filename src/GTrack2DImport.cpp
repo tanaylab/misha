@@ -406,7 +406,8 @@ static bool read_input_files(IntervUtils &iu, SEXP _files, const vector<int64_t>
 		vector<string> fields;
 		long lineno = 0;
 		BufferedFile infile;
-		infile.open(CHAR(STRING_ELT(_files, ifile)), "r");
+		if (infile.open(CHAR(STRING_ELT(_files, ifile)), "r"))
+			verror("Failed to open file %s: %s", CHAR(STRING_ELT(_files, ifile)), strerror(errno));
 
 		lineno += split_line(infile, fields, '\t');
 

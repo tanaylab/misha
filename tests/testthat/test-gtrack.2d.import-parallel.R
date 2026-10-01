@@ -365,6 +365,26 @@ test_that("malformed input gives the serial error message in parallel", {
     })
 })
 
+# An input file that stat() sees but fopen() cannot open was read through a NULL FILE* (segfault).
+test_that("2D imports report an input file they cannot open", {
+    local_db_state()
+    withr::with_tempdir({
+        setup_import_db()
+        files <- write_slices(random_intervals(100, seed = 18), c(1, 1), "locked")
+        Sys.chmod(files[2], "000")
+        withr::defer(Sys.chmod(files[2], "644"))
+        skip_if(file.access(files[2], 4) == 0, "running as a user who can read a mode 000 file")
+        for (mt in c(FALSE, TRUE)) {
+            withr::with_options(list(gmultitasking = mt, gmax.processes = 4), {
+                expect_error(gtrack.2d.import("imp_locked", "test", files), "Failed to open file .*locked_2")
+                expect_error(gtrack.2d.import_contacts("imp_locked", "test", files), "Failed to open file .*locked_2")
+            })
+            expect_false(gtrack.exists("imp_locked"))
+            expect_counters_reset()
+        }
+    })
+})
+
 test_that("parallel gtrack.2d.import_contacts is converted in an indexed database", {
     local_db_state()
     tmp_root <- withr::local_tempdir()

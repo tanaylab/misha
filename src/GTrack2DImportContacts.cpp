@@ -160,7 +160,8 @@ static void process_contacts_as_intervals(IntervUtils &iu, SEXP _files, const st
 			vector<string> fields;
 			long lineno = 0;
 			BufferedFile infile;
-			infile.open(CHAR(STRING_ELT(_files, ifile)), "r");
+			if (infile.open(CHAR(STRING_ELT(_files, ifile)), "r"))
+				verror("Failed to open file %s: %s", CHAR(STRING_ELT(_files, ifile)), strerror(errno));
 
 			lineno += split_line(infile, fields, '\t');
 
