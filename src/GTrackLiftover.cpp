@@ -471,12 +471,15 @@ static void write_2d_points(BufferedFile &infile, const char *filename, const st
 	for (int64_t i = 0; i < num_subtrees; ++i) {
 		BufferedFile &file = num_subtrees > 1 ? *subtree_files[i] : infile;
 
+		// seq is 32-bit; check the count before reserving, or a huge subtree fails as "Out of memory"
+		int64_t num_file_points = file.file_size() / POINT_RECORD_SIZE;
+		if (num_file_points > (int64_t)numeric_limits<uint32_t>::max())
+			TGLError("Too many points lifted into chromosome pair (%s, %s); lower gmax.data.size",
+					 iu.id2chrom(chromid1).c_str(), iu.id2chrom(chromid2).c_str());
+
 		points.clear();
-		points.reserve(file.file_size() / POINT_RECORD_SIZE);
+		points.reserve(num_file_points);
 		while (read_point(file, x, y, v)) {
-			if (points.size() > numeric_limits<uint32_t>::max())
-				TGLError("Too many points lifted into chromosome pair (%s, %s); lower gmax.data.size",
-						 iu.id2chrom(chromid1).c_str(), iu.id2chrom(chromid2).c_str());
 			PointVal2D p = { x, y, v, (uint32_t)points.size() };
 			points.push_back(p);
 			check_interrupt();
