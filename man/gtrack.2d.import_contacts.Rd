@@ -40,11 +40,13 @@ doubled to include also '(coord2, coord1)' unless 'coord1' equals to
 
 Contacts may come in one or more files.
 
-If 'gmultitasking' is on, the input files are read by several processes
-in parallel, each process reading a contiguous subset of the files, and
-the chromosome pairs are then written in parallel, one pair per process at
-a time. The number of processes is bounded by 'gmax.processes'. The
-resulting track is identical to the one created with 'gmultitasking' off.
+If 'gmultitasking' is on (the default), the input files are read by
+several processes in parallel, each process reading a contiguous subset of
+the files, and the chromosome pairs are then written in parallel, one pair
+per process at a time. A single input file is read by one process, so split
+a large input into several files to read it in parallel. The number of
+processes is bounded by 'gmax.processes'. The resulting track is identical
+to the one created with 'gmultitasking' off.
 The pairs are written largest first, and a pair is started only when its
 estimated memory, added to that of the pairs being written, stays within
 'gmax.mem.usage'. A pair estimated above 'gmax.mem.usage' is written

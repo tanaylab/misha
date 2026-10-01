@@ -3,7 +3,10 @@
 # same import with multitasking off and on and requires byte-identical track files and
 # identical gextract output. The parallel runs also assert that kids were really forked
 # (their CPU time shows up in proc.time()), so a silent fallback to the serial path cannot
-# pass for parallel.
+# pass for parallel. These tests compare serial with parallel on this branch only: that the
+# serial path still writes the same track files as before the parallel import was added
+# (only the intermediate file names changed) was checked by md5 against master on the PR's
+# benchmark inputs, not here.
 
 ensure_valid_groot()
 
