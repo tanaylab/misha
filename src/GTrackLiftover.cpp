@@ -424,8 +424,11 @@ static void write_2d_points(BufferedFile &infile, const char *filename, const st
                             IntervUtils &iu, const AggregationConfig &agg_cfg)
 {
 	int64_t num_points = infile.file_size() / POINT_RECORD_SIZE;
-	int64_t num_subtrees = max(num_points / (int64_t)iu.get_max_data_size(), (int64_t)1);
-	num_subtrees = 1 << (2 * (int)(log2(num_subtrees) / 2));  // round down to a power of 4
+	// Unsigned: an unset gmax.data.size reads as UINT64_MAX. Below 1 (0, or 0.5 read as 0)
+	// it counts as 1 rather than dividing by zero.
+	uint64_t max_data_size = max(iu.get_max_data_size(), (uint64_t)1);
+	int64_t num_subtrees = max((int64_t)((uint64_t)num_points / max_data_size), (int64_t)1);
+	num_subtrees = (int64_t)1 << (2 * (int)(log2(num_subtrees) / 2));  // round down to a power of 4
 
 	GenomeTrackRectsPoints gtrack(iu.get_track_chunk_size(), iu.get_track_num_chunks());
 	PointsQuadTreeCachedSerializer serializer;

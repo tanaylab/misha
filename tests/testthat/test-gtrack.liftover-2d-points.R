@@ -250,6 +250,13 @@ test_that("gtrack.liftover of POINTS gives the same track when the pair is split
     expect_equal(extract_points("split"), whole)
     # no buffer or subtree files left behind
     expect_setequal(list.files(file.path(tgt_db, "tracks", "split.track")), list.files(file.path(tgt_db, "tracks", "whole.track")))
+
+    # gmax.data.size below 1 counts as 1 (it divided by zero and killed R); unset is unlimited
+    for (max_size in list(0, 0.5, NULL)) {
+        if (gtrack.exists("split")) gtrack.rm("split", force = TRUE)
+        withr::with_options(list(gmax.data.size = max_size), gtrack.liftover("split", "x", src_dir, chain))
+        expect_equal(extract_points("split"), whole, info = deparse(max_size))
+    }
 })
 
 test_that("gtrack.liftover of an indexed 2D track reads each chromosome pair by the source genome's ids", {
