@@ -242,6 +242,25 @@
     TRUE
 }
 
+# The canonical chromosome names of the database at groot and the order of their chrom
+# ids, as gsetroot() sets them; chromsizes is its chrom_sizes.txt. A per-chromosome
+# database (.is_per_chromosome_db) gets the "chr" prefix of its seq files, and its chrom
+# ids follow the sorted names, for backward compatibility with existing test snapshots.
+# Any other database keeps the chrom_sizes.txt order, which matches the chromids of an
+# indexed database's genome.idx. An indexed track (track.idx) is keyed by these ids.
+# Returns list(names, id_order, per_chromosome): names in chrom_sizes.txt order, and
+# chrom id i (0-based) is names[id_order[i + 1]].
+.gdb.chrom_order <- function(groot, chromsizes) {
+    per_chromosome <- .is_per_chromosome_db(groot, chromsizes)
+    names <- chromsizes$chrom
+    if (!per_chromosome) {
+        return(list(names = names, id_order = seq_along(names), per_chromosome = FALSE))
+    }
+    needs_prefix <- !startsWith(names, "chr")
+    names[needs_prefix] <- paste0("chr", names[needs_prefix])
+    list(names = names, id_order = order(names), per_chromosome = TRUE)
+}
+
 # Build the full alias map (chr-prefix toggles + MT aliases + optional TSV
 # extras like refseqAccession / genbankAccession / sequenceName / chrName).
 # The result is consumed in two ways at .store_chrom_aliases time:

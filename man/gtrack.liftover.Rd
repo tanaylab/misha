@@ -25,7 +25,9 @@ gtrack.liftover(
 
 \item{description}{a character string description}
 
-\item{src.track.dir}{path to the directory of the source track}
+\item{src.track.dir}{path to the directory of the source track. An indexed
+source track (one with a 'track.idx') must be in the 'tracks' directory of its
+database: it is read by the chromosome ids of that database.}
 
 \item{chain}{name of chain file or data frame as returned by
 'gintervals.load_chain'}

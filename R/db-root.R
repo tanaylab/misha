@@ -123,17 +123,12 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
     assign("GINTERVALS_DATASET", NULL, envir = .misha)
     assign("GDATASETS", character(0), envir = .misha)
 
-    is_per_chromosome <- .is_per_chromosome_db(groot, chromsizes)
+    # For per-chromosome databases, the names get the "chr" prefix of the seq files
+    chrom_order <- .gdb.chrom_order(groot, chromsizes)
+    is_per_chromosome <- chrom_order$per_chromosome
     assign("DB_IS_PER_CHROMOSOME", is_per_chromosome, envir = .misha)
 
-    canonical_names <- chromsizes$chrom
-
-    # For per-chromosome databases, add "chr" prefix to match seq file names
-    if (is_per_chromosome) {
-        # Add chr prefix to names that don't have it
-        needs_prefix <- !startsWith(canonical_names, "chr")
-        canonical_names[needs_prefix] <- paste0("chr", canonical_names[needs_prefix])
-    }
+    canonical_names <- chrom_order$names
 
     # Always compute chromosome aliases for better usability.
     # This allows users to use both "chr1" and "1" interchangeably and
@@ -165,8 +160,8 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
     # For indexed databases, preserve the order from chrom_sizes.txt to match genome.idx chromid assignments
     # For per-chromosome databases, sort alphabetically for backward compatibility with existing test snapshots
     if (is_per_chromosome) {
-        intervals <- intervals[order(canonical_names), ]
-        canonical_names <- sort(canonical_names)
+        intervals <- intervals[chrom_order$id_order, ]
+        canonical_names <- canonical_names[chrom_order$id_order]
     }
 
     intervals$chrom <- factor(intervals$chrom, levels = canonical_names)

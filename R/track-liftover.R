@@ -31,7 +31,9 @@
 #'
 #' @param track name of a created track
 #' @param description a character string description
-#' @param src.track.dir path to the directory of the source track
+#' @param src.track.dir path to the directory of the source track. An indexed
+#' source track (one with a 'track.idx') must be in the 'tracks' directory of its
+#' database: it is read by the chromosome ids of that database.
 #' @param multi_target_agg aggregation/selection policy for contributors that land on the same target locus. When multiple source intervals map to overlapping regions in the target genome (after applying tgt_overlap_policy), their values must be combined into a single value.
 #' @param params additional parameters for aggregation (e.g., for "nth" aggregation)
 #' @param na.rm logical indicating whether NA values should be removed before aggregation (default: TRUE)
@@ -196,11 +198,20 @@ gtrack.liftover <- function(track = NULL,
 
     .gconfirmtrackcreate(trackstr)
 
+    # An indexed source track is keyed by the chrom ids of its own database, which follow
+    # chrom_sizes.txt or, in a per-chromosome database, the sorted names (.gdb.chrom_order).
+    # NULL for a per-chromosome track (read by file name), or if no database is found.
+    src_chroms <- NULL
+    if (file.exists(file.path(src.track.dir, "track.idx"))) {
+        src_chroms <- .gtrack.liftover.src_chroms(src.track.dir)
+    }
+
     .gtrack.create_atomic(trackstr, function() {
         .gcall(
             "gtrack_liftover",
             trackstr,
             src.track.dir,
+            src_chroms,
             chain.intervs,
             src_overlap_policy,
             tgt_overlap_policy,
@@ -254,4 +265,29 @@ gtrack.liftover <- function(track = NULL,
         }
     )
     invisible(0)
+}
+
+# The chromosomes of the database that holds the track directory src.track.dir, in chrom
+# id order (see .gdb.chrom_order), or NULL if there is none: the database is the parent of
+# the nearest enclosing "tracks" directory that has a chrom_sizes.txt next to it.
+.gtrack.liftover.src_chroms <- function(src.track.dir) {
+    dir <- normalizePath(src.track.dir, mustWork = FALSE)
+    repeat {
+        parent <- dirname(dir)
+        if (parent == dir) {
+            return(NULL)
+        }
+        if (basename(parent) == "tracks" && file.exists(file.path(dirname(parent), "chrom_sizes.txt"))) {
+            break
+        }
+        dir <- parent
+    }
+    groot <- dirname(parent)
+    # read as gsetroot() reads it
+    chromsizes <- utils::read.csv(
+        file.path(groot, "chrom_sizes.txt"),
+        sep = "\t", header = FALSE, col.names = c("chrom", "size"), colClasses = c("character", "numeric")
+    )
+    chrom_order <- .gdb.chrom_order(groot, chromsizes)
+    chrom_order$names[chrom_order$id_order]
 }
