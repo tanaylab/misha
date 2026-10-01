@@ -8,6 +8,8 @@ $R  --silent --vanilla --slave <<EOF
 
 retv <- try({        
 	library("misha")	
+	if (!exists(".gcluster.restore_db", envir = asNamespace("misha")))
+		stop("the job loaded misha ", packageVersion("misha"), " from ", find.package("misha"), "; gcluster.run needs misha >= 5.12.1 on the nodes")
     load(paste("${dirname}", "opts", sep="/"))
     options(opts)
 	options(echo = FALSE)
