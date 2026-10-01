@@ -3,14 +3,20 @@
 # with an unmapped end is dropped, and points landing on the same target point are
 # merged by multi_target_agg.
 
+# Creates a DB with the given chromosomes and opens it. gdb.create builds an indexed DB only
+# from a single multi-FASTA file; from one FASTA per chromosome it builds a per-chromosome DB
+# whatever 'format' says.
 mk_points_db <- function(chroms, size, format = "per-chromosome") {
     d <- tempfile("lift2dpts_")
     dir.create(d)
-    fas <- vapply(chroms, function(nm) {
-        fa <- file.path(d, paste0(nm, ".fasta")) # chrom name derives from the file name
-        cat(sprintf(">%s\n%s\n", nm, paste(rep("A", size), collapse = "")), file = fa)
-        fa
-    }, "")
+    seqs <- sprintf(">%s\n%s\n", chroms, paste(rep("A", size), collapse = ""))
+    if (format == "indexed") {
+        fas <- file.path(d, "genome.fasta")
+        cat(seqs, sep = "", file = fas)
+    } else {
+        fas <- file.path(d, paste0(chroms, ".fasta")) # chrom name derives from the file name
+        for (i in seq_along(chroms)) cat(seqs[i], file = fas[i])
+    }
     db <- tempfile("lift2dpts_db_")
     suppressMessages(gdb.create(groot = db, fasta = fas, format = format))
     withr::defer(
@@ -20,6 +26,8 @@ mk_points_db <- function(chroms, size, format = "per-chromosome") {
         },
         envir = testthat::teardown_env()
     )
+    gdb.init(db)
+    expect_equal(.gdb.is_indexed(), format == "indexed")
     db
 }
 
@@ -72,7 +80,6 @@ test_that("gtrack.liftover of a POINTS track gives a POINTS track lifted end by 
     local_db_state()
 
     src_db <- mk_points_db(c("chrS1", "chrS2"), 1000)
-    gdb.init(src_db)
     set.seed(17)
     n <- 300
     contacts <- data.frame(
@@ -87,11 +94,12 @@ test_that("gtrack.liftover of a POINTS track gives a POINTS track lifted end by 
     src <- extract_points("src")
     src_dir <- file.path(src_db, "tracks", "src.track")
 
+    # an indexed target: gtrack.liftover converts the lifted track to indexed at the end
     tgt_db <- mk_points_db(c("chrT1", "chrT2"), 2000, format = "indexed")
-    gdb.init(tgt_db)
     chain <- write_points_chain()
     gtrack.liftover("lifted", "x", src_dir, chain, multi_target_agg = "sum")
     expect_equal(gtrack.info("lifted")$type, "points")
+    expect_true(file.exists(file.path(tgt_db, "tracks", "lifted.track", "track.idx")))
     got <- extract_points("lifted")
 
     # expected: both ends lifted as 1bp intervals; the chain is 1:1, so nothing collides
@@ -125,7 +133,6 @@ test_that("gtrack.liftover of POINTS: explicit points on each kind of block", {
     local_db_state()
 
     src_db <- mk_points_db(c("chrS1", "chrS2"), 1000)
-    gdb.init(src_db)
     import_points("src", data.frame(
         chrom1 = c("chrS1", "chrS1", "chrS1", "chrS1", "chrS1", "chrS1"),
         start1 = c(10, 450, 50, 20, 350, 55),
@@ -136,7 +143,6 @@ test_that("gtrack.liftover of POINTS: explicit points on each kind of block", {
     src_dir <- file.path(src_db, "tracks", "src.track")
 
     tgt_db <- mk_points_db(c("chrT1", "chrT2"), 2000)
-    gdb.init(tgt_db)
     gtrack.liftover("lifted", "x", src_dir, write_points_chain())
 
     # (10, 20) -> (110, 120) and its mirror; (450, 460) is in the inverted block,
@@ -158,7 +164,6 @@ test_that("gtrack.liftover of POINTS merges points landing on one target point b
     local_db_state()
 
     src_db <- mk_points_db("chrS1", 1000)
-    gdb.init(src_db)
     import_points("src", data.frame(
         chrom1 = "chrS1", start1 = c(10, 510, 30, 45, 545), chrom2 = "chrS1", start2 = c(20, 520, 40, 45, 545),
         v = c(2, 5, 7, 1, 4)
@@ -166,7 +171,6 @@ test_that("gtrack.liftover of POINTS merges points landing on one target point b
     src_dir <- file.path(src_db, "tracks", "src.track")
 
     tgt_db <- mk_points_db("chrT1", 1000)
-    gdb.init(tgt_db)
     # two source blocks onto the same target block (kept by tgt_overlap_policy = "keep"):
     # (10, 20) and (510, 520) both land on (10, 20); diagonal (45, 45) and (545, 545) on (45, 45)
     chain <- new_chain_file()
@@ -204,7 +208,6 @@ test_that("gtrack.liftover of POINTS gives the same track when the pair is split
     local_db_state()
 
     src_db <- mk_points_db(c("chrS1", "chrS2"), 1000)
-    gdb.init(src_db)
     set.seed(3)
     n <- 500
     import_points("src", data.frame(
@@ -215,7 +218,6 @@ test_that("gtrack.liftover of POINTS gives the same track when the pair is split
     src_dir <- file.path(src_db, "tracks", "src.track")
 
     tgt_db <- mk_points_db(c("chrT1", "chrT2"), 2000)
-    gdb.init(tgt_db)
     chain <- write_points_chain()
     gtrack.liftover("whole", "x", src_dir, chain)
     withr::with_options(list(gmax.data.size = 10), gtrack.liftover("split", "x", src_dir, chain))
@@ -230,21 +232,22 @@ test_that("gtrack.liftover of POINTS gives the same track when the pair is split
 test_that("gtrack.liftover of an indexed 2D track reads each chromosome pair by the source genome's ids", {
     local_db_state()
 
-    src_db <- mk_points_db(c("chrS1", "chrS2"), 1000, format = "indexed")
-    gdb.init(src_db)
+    # the same track as per-pair files and in an indexed DB, where the import converts it to
+    # indexed; chrS1 has id 0 and chrS2 id 1 in both genomes
     contacts <- data.frame(chrom1 = c("chrS1", "chrS2"), start1 = c(10, 40), chrom2 = c("chrS1", "chrS2"), start2 = c(100, 300), v = c(1, 4))
+    src_db <- mk_points_db(c("chrS1", "chrS2"), 1000)
     import_points("src", contacts)
+    expect_false(file.exists(file.path(src_db, "tracks", "src.track", "track.idx")))
+    src_idx_db <- mk_points_db(c("chrS1", "chrS2"), 1000, format = "indexed")
     import_points("src_idx", contacts)
-    gtrack.convert_to_indexed("src_idx")
-    expect_true(file.exists(file.path(src_db, "tracks", "src_idx.track", "track.idx")))
+    expect_true(file.exists(file.path(src_idx_db, "tracks", "src_idx.track", "track.idx")))
 
     tgt_db <- mk_points_db("chrT2", 2000)
-    gdb.init(tgt_db)
     # the chain covers chrS2 only, so its chrom ids differ from the source genome's
     chain <- new_chain_file()
     write_chain_entry(chain, "chrS2", 1000, "+", 0, 1000, "chrT2", 2000, "+", 0, 1000, 1)
     gtrack.liftover("from_files", "x", file.path(src_db, "tracks", "src.track"), chain)
-    gtrack.liftover("from_idx", "x", file.path(src_db, "tracks", "src_idx.track"), chain)
+    gtrack.liftover("from_idx", "x", file.path(src_idx_db, "tracks", "src_idx.track"), chain)
     exp <- extract_points("from_files")
     expect_equal(exp$start1, c(40, 300))
     expect_equal(extract_points("from_idx"), exp)
