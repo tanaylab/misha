@@ -2,7 +2,13 @@
 
 * **Behavior fix:** `gcluster.run()` jobs run against the caller's database, working directory, loaded datasets and virtual tracks. They had used the bundled example database unless the job called `gsetroot()` itself.
 
+* **Behavior fix:** `gtrack.2d.import()` and `gtrack.2d.import_contacts()` reject a negative `start2`, as they already did a negative `start1`. Such rows had been silently dropped or moved, and could leave a chromosome pair unreadable.
+
+* **Behavior fix:** `gtrack.liftover()` keeps a 2D points track (e.g. Hi-C contacts) as points instead of 1bp rectangles and holds at most one chromosome pair in memory (lower `gmax.data.size` for less), so genome-scale Hi-C tracks can be lifted. It had also lifted the wrong chromosome pairs from an indexed 2D source track.
+
 * `gtrack.2d.import()` and `gtrack.2d.import_contacts()` run in parallel when `gmultitasking` is on. The tracks are identical to serial runs.
+
+* In parallel, the 2D imports start a chromosome pair only when its estimated memory fits within `gmax.mem.usage`, so lowering that option caps their memory.
 
 # misha 5.12.0
 
