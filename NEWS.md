@@ -1,3 +1,19 @@
+# misha 5.12.1
+
+* **Behavior fix:** `gcluster.run()` jobs run against the caller's database, working directory, datasets and virtual tracks, and load misha from the caller's library. They had used the example database unless the job called `gsetroot()` itself.
+
+* **Behavior fix:** `gtrack.liftover()` could read an indexed source track from the wrong chromosomes, with no error: any 2D track, and 1D tracks in a per-chromosome database whose `chrom_sizes.txt` names lack the "chr" prefix. Re-lift such tracks. An indexed source track outside a database is now an error.
+
+* **Behavior fix:** `gtrack.liftover()` of a 2D points track (e.g. Hi-C) writes a points track instead of 1bp rectangles, with memory bounded per chromosome pair (`gmax.data.size`), so genome-scale Hi-C tracks can be lifted.
+
+* **Behavior fix:** `gtrack.2d.import()` and `gtrack.2d.import_contacts()` reject a negative `start2`. Such rows were silently dropped or moved.
+
+* `gtrack.2d.import()` and `gtrack.2d.import_contacts()` run in parallel (up to `gmax.processes` workers) with identical output. A chromosome pair starts only when its estimated memory fits within `gmax.mem.usage`; its default is 80% of the machine's RAM, so on a cluster set it to the job's share. `gmultitasking = FALSE` restores the serial import.
+
+* The 2D imports no longer crash R on an input file they cannot open or with `gmax.data.size` below 1.
+
+* An integer `gmax.mem.usage` above about 2 GB (e.g. `4000000L`) overflowed; it is now read correctly.
+
 # misha 5.12.0
 
 * New `potts`, `potts.max`, `potts.max.pos` and `potts.count` virtual track functions, which score a pairwise (Potts) energy model across the genome, and `gseq.potts()` to score sequences with one. A fitted model's `e`, `J`, `pairs` and `intercept` can be passed to `gvtrack.create(params = )` as they are.
