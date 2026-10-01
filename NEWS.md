@@ -1,18 +1,18 @@
 # misha 5.12.1
 
-* **Behavior fix:** `gcluster.run()` jobs run against the caller's database, working directory, loaded datasets and virtual tracks. They had used the bundled example database unless the job called `gsetroot()` itself. The cluster nodes need misha >= 5.12.1 as well.
+* **Behavior fix:** `gcluster.run()` jobs run against the caller's database, working directory, datasets and virtual tracks, and load misha from the caller's library. They had used the example database unless the job called `gsetroot()` itself.
 
-* **Behavior fix:** `gtrack.2d.import()` and `gtrack.2d.import_contacts()` reject a negative `start2`, as they already did a negative `start1`. Such rows had been silently dropped or moved, and could leave a chromosome pair unreadable.
+* **Behavior fix:** `gtrack.liftover()` could read an indexed source track from the wrong chromosomes, with no error: any 2D track, and 1D tracks in a per-chromosome database whose `chrom_sizes.txt` names lack the "chr" prefix. Re-lift such tracks. An indexed source track outside a database is now an error.
 
-* **Behavior fix:** `gtrack.liftover()` could lift the wrong chromosome pairs from an indexed 2D source track, without an error (since 5.5.0). Re-lift 2D tracks that were lifted from an indexed source.
+* **Behavior fix:** `gtrack.liftover()` of a 2D points track (e.g. Hi-C) writes a points track instead of 1bp rectangles, with memory bounded per chromosome pair (`gmax.data.size`), so genome-scale Hi-C tracks can be lifted.
 
-* **Behavior fix:** `gtrack.liftover()` of a 2D points track (e.g. Hi-C contacts) writes a points track instead of 1bp rectangles, and holds at most one chromosome pair in memory (lower `gmax.data.size` for less), so genome-scale Hi-C tracks can be lifted.
+* **Behavior fix:** `gtrack.2d.import()` and `gtrack.2d.import_contacts()` reject a negative `start2`. Such rows were silently dropped or moved.
 
-* `gtrack.2d.import()` and `gtrack.2d.import_contacts()` now run in parallel by default (`gmultitasking` is on by default), with up to `gmax.processes` workers. The tracks are identical to serial runs, but peak memory grows with the number of workers: limit it with `gmax.processes` or `gmax.mem.usage`, or set `gmultitasking = FALSE`.
+* `gtrack.2d.import()` and `gtrack.2d.import_contacts()` run in parallel (up to `gmax.processes` workers) with identical output. A chromosome pair starts only when its estimated memory fits within `gmax.mem.usage`; its default is 80% of the machine's RAM, so on a cluster set it to the job's share. `gmultitasking = FALSE` restores the serial import.
 
-* In parallel, the 2D imports start a chromosome pair only when its estimated memory fits within `gmax.mem.usage` alongside the pairs being written; a pair above it is written alone. Reading the input is not counted, and the default (80% of the machine's RAM, not a cluster job's share) rarely binds, so set `gmax.mem.usage` to what the job may use.
+* The 2D imports no longer crash R on an input file they cannot open or with `gmax.data.size` below 1.
 
-* `gmax.mem.usage` given as an integer above 2147483 (KB, about 2 GB), e.g. `4000000L`, overflowed, which removed the memory limit of multitasking or set a wrong one. It is now read as given.
+* An integer `gmax.mem.usage` above about 2 GB (e.g. `4000000L`) overflowed; it is now read correctly.
 
 # misha 5.12.0
 
