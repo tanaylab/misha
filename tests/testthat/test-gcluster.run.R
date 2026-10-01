@@ -34,10 +34,42 @@ test_that("a gcluster.run job restores the caller's root, working dir, datasets 
         expect_equal(expected$intervals, "w_set")
         save(.misha, file = "misha") # as gcluster.run does
 
-        gsetroot("other_db") # a fresh job is rooted elsewhere (the example db)
+        # a fresh job is rooted elsewhere (the example db) and has no vtracks
+        gsetroot("other_db")
+        rm("GVTRACKS", envir = .misha)
         .gcluster.restore_db("misha")
 
         expect_equal(state(), expected)
+    })
+})
+
+test_that("a gcluster.run job restores a caller whose working dir is the db root", {
+    local_db_state()
+    withr::with_tempdir({
+        create_test_db("working_db")
+        create_test_db("other_db", chrom_sizes = data.frame(chrom = "chrX", size = 5000))
+        gsetroot("working_db")
+        gdir.cd("..")
+        expected <- gdir.cwd()
+        save(.misha, file = "misha")
+
+        gsetroot("other_db")
+        .gcluster.restore_db("misha")
+
+        expect_equal(.misha$GROOT, normalizePath("working_db"))
+        expect_equal(gdir.cwd(), expected)
+    })
+})
+
+test_that("a gcluster.run job fails when the caller's db is not reachable", {
+    local_db_state()
+    withr::with_tempdir({
+        create_test_db("working_db")
+        gsetroot("working_db")
+        save(.misha, file = "misha")
+        unlink("working_db", recursive = TRUE) # not mounted on the node
+        gdb.init_examples(file.path(getwd(), "job"))
+        expect_error(.gcluster.restore_db("misha"), "does not exist")
     })
 })
 

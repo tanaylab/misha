@@ -550,7 +550,11 @@ gcluster.run <- function(..., opt.flags = "", max.jobs = 400, debug = FALSE, R =
     if (!dir.exists(state$GROOT) && grepl("/trackdb/test$", state$GROOT)) {
         return(invisible())
     }
-    gsetroot(state$GROOT, dir = state$GWD)
+    gsetroot(state$GROOT)
+    # not gsetroot(dir = GWD): it refuses the db root itself, which gdir.cd("..") allows
+    if (!identical(state$GWD, .misha$GWD)) {
+        .gdir.cd(state$GWD, FALSE)
+    }
     for (dataset in state$GDATASETS) {
         gdataset.load(dataset, force = TRUE)
     }
