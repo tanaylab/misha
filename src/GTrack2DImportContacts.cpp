@@ -416,21 +416,69 @@ static void process_contacts_as_fends(IntervUtils &iu, SEXP _contacts, SEXP _fen
 	});
 }
 
-// STAGES 2 - 4 for one chromosome pair
+// The number of subtrees of a pair's quad trees: a cis pair holds every contact twice, mirrored around the diagonal
+static int64_t contacts_num_subtrees(const IntervUtils &iu, const PairFiles &pair_files)
+{
+	int64_t num_contacts = pair_files.size / CONTACT_RECORD_SIZE;
+
+	return pair_num_subtrees(iu, pair_files.chromid1 == pair_files.chromid2 ? 2 * num_contacts : num_contacts);
+}
+
+// STAGE 2 for a chromosome pair whose quad trees have several subtrees: splits its contacts into one file per
+// subtree, mirrored around the diagonal in a cis pair. Returns the number of contacts of the largest subtree,
+// which the memory of the pair is estimated by.
+static uint64_t split_pair(IntervUtils &iu, const string &dirname, const PairFiles &pair_files)
+{
+	int chromid1 = pair_files.chromid1;
+	int chromid2 = pair_files.chromid2;
+	int64_t num_subtrees = contacts_num_subtrees(iu, pair_files);
+	Rectangles subarenas = PointsQuadTreeCachedSerializer::split_arena(0, 0, iu.get_chromkey().get_chrom_size(chromid1),
+																		iu.get_chromkey().get_chrom_size(chromid2), num_subtrees);
+	BufferedFiles subtrees_files(num_subtrees);
+	vector<uint64_t> num_contacts(num_subtrees, 0);
+
+	for (uint64_t i = 0; i < subtrees_files.size(); ++i) {
+		string fname = subtree_file_name(dirname, chromid1, chromid2, i);
+
+		subtrees_files[i] = new BufferedFile();
+		if (subtrees_files[i]->open(fname.c_str(), "w"))
+			verror("Opening an intermediate file %s: %s\n", fname.c_str(), strerror(errno));
+	}
+
+	auto write_to_subtree = [&](int64_t coord1, int64_t coord2, float value) {
+		Point point(coord1, coord2);
+		for (Rectangles::const_iterator isubarena = subarenas.begin(); isubarena != subarenas.end(); ++isubarena) {
+			if (point.do_intersect(*isubarena)) {
+				write_contact(*subtrees_files[isubarena - subarenas.begin()], coord1, coord2, value);
+				num_contacts[isubarena - subarenas.begin()]++;
+				break;
+			}
+		}
+	};
+
+	for_each_contact(pair_files.files, [&](int64_t coord1, int64_t coord2, float value) {
+		write_to_subtree(coord1, coord2, value);
+
+		// if it's a pair of identical chromosomes, mirror the contact around the diagonal
+		if (chromid1 == chromid2 && coord1 != coord2)
+			write_to_subtree(coord2, coord1, value);
+	});
+
+	for (uint64_t i = 0; i < subtrees_files.size(); ++i) {
+		if (subtrees_files[i]->close())
+			verror("Writing an intermediate file %s: %s\n", subtrees_files[i]->file_name().c_str(), strerror(errno));
+	}
+
+	return *max_element(num_contacts.begin(), num_contacts.end());
+}
+
+// STAGE 3 for one chromosome pair: builds its quad trees from its intermediate files, or from its subtree files
+// if split_pair split it.
 static void write_pair(IntervUtils &iu, const string &dirname, const PairFiles &pair_files, bool allow_duplicates)
 {
 	uint64_t chromid1 = pair_files.chromid1;
 	uint64_t chromid2 = pair_files.chromid2;
-
-	// STAGE 2: Check what is the number of contacts in a chromosome pair and based on that number decide how many subtrees would be needed in StatQuadTreeCachedSerializer.
-	//          (Creating a quad tree through seriaizer would be the only feasible method considering the enormous number of contacts.)
-	int64_t num_contacts = pair_files.size / CONTACT_RECORD_SIZE;
-
-	if (chromid1 == chromid2)
-		num_contacts *= 2;   // we are going to mirror the coordinates around the diagonal
-
-	int64_t num_subtrees = max(num_contacts / (int64_t)iu.get_max_data_size(), (int64_t)1);
-	num_subtrees = 1 << (2 * (int)(log2(num_subtrees) / 2));  // round the number of subtrees to the lowest power of 4
+	int64_t num_subtrees = contacts_num_subtrees(iu, pair_files);
 
 	GenomeTrackRectsPoints gtrack1(iu.get_track_chunk_size(), iu.get_track_num_chunks());
 	GenomeTrackRectsPoints gtrack2(iu.get_track_chunk_size(), iu.get_track_num_chunks());
@@ -449,50 +497,13 @@ static void write_pair(IntervUtils &iu, const string &dirname, const PairFiles &
 	// the files to read for each subtree
 	vector<vector<string>> subtree_srcs(1, pair_files.files);
 
-	// 3. STAGE 3: Split contacts of a chromosome pair to binary files (if needed) - each holding contacts of a subtree.
 	if (num_subtrees > 1) {
-		const Rectangles &subarenas = qtree_serializer1.get_subarenas();
-		BufferedFiles subtrees_files(num_subtrees);
-
-		subtree_srcs.resize(num_subtrees);
-		for (uint64_t i = 0; i < subtrees_files.size(); ++i) {
-			char buf[FILENAME_MAX];
-
-			snprintf(buf, sizeof(buf), "%s/.%d-%d.s%ld", dirname.c_str(), (int)chromid1, (int)chromid2, (long)i);
-			subtree_srcs[i].assign(1, buf);
-			subtrees_files[i] = new BufferedFile();
-			if (subtrees_files[i]->open(buf, "w"))
-				verror("Opening an intermediate file %s: %s\n", buf, strerror(errno));
-		}
-
-		for_each_contact(pair_files.files, [&](int64_t coord1, int64_t coord2, float value) {
-			Point point(coord1, coord2);
-			for (Rectangles::const_iterator isubarena = subarenas.begin(); isubarena != subarenas.end(); ++isubarena) {
-				if (point.do_intersect(*isubarena)) {
-					write_contact(*subtrees_files[isubarena - subarenas.begin()], coord1, coord2, value);
-					break;
-				}
-			}
-
-			if (chromid1 == chromid2 && point.x != point.y) {
-				// if it's a pair of identical chromosomes, mirror the contact around the diagonal
-				Point point(coord2, coord1);
-				for (Rectangles::const_iterator isubarena = subarenas.begin(); isubarena != subarenas.end(); ++isubarena) {
-					if (point.do_intersect(*isubarena)) {
-						write_contact(*subtrees_files[isubarena - subarenas.begin()], coord2, coord1, value);
-						break;
-					}
-				}
-			}
-		});
-
-		for (uint64_t i = 0; i < subtrees_files.size(); ++i) {
-			if (subtrees_files[i]->close())
-				verror("Writing an intermediate file %s: %s\n", subtrees_files[i]->file_name().c_str(), strerror(errno));
-		}
+		subtree_srcs.clear();
+		for (int64_t i = 0; i < num_subtrees; ++i)
+			subtree_srcs.push_back(vector<string>(1, subtree_file_name(dirname, chromid1, chromid2, i)));
 	}
 
-	// 4. Read the contacts of a subtree, sum up the duplicates and insert them to StatQuadTreeCachedSerializer.
+	// Read the contacts of a subtree, sum up the duplicates and insert them to StatQuadTreeCachedSerializer.
 	for (const vector<string> &srcs : subtree_srcs) {
 		Contacts contacts;
 
@@ -567,9 +578,9 @@ SEXP gtrack_import_contacts(SEXP _track, SEXP _contacts, SEXP _fends, SEXP _allo
 			// 1. Read the contacts and split them into binary files each holding the contacts of specific pair of chromosomes.
 			// 2. Check what is the number of contacts in a chromosome pair and based on that number decide how many subtrees would be needed in StatQuadTreeCachedSerializer.
 			//    (Creating a quad tree through seriaizer would be the only feasible method considering the enormous number of contacts.)
-			// 3. Split contacts of a chromosome pair to binary files - each holding contacts of a subtree. We assume that we will be able to hold in the memory the contacts of one subtree.
-			// 4. Read the contacts of a subtree, sum up the duplicates and insert them to StatQuadTreeCachedSerializer.
-			// Step 1 runs in parallel over the input files, steps 2 - 4 over the chromosome pairs (see GTrack2DImport.h).
+			//    Split contacts of a chromosome pair of several subtrees to binary files - each holding contacts of a subtree. We assume that we will be able to hold in the memory the contacts of one subtree.
+			// 3. Read the contacts of a subtree, sum up the duplicates and insert them to StatQuadTreeCachedSerializer.
+			// Step 1 runs in parallel over the input files, steps 2 and 3 over the chromosome pairs (see GTrack2DImport.h).
 
 			// STAGE 1: Read the contacts and split them into binary files each holding the contacts of specific pair of chromosomes.
 			if (Rf_isNull(_fends))
@@ -580,6 +591,42 @@ SEXP gtrack_import_contacts(SEXP _track, SEXP _contacts, SEXP _fends, SEXP _allo
 			pairs = list_pair_files(dirname);
 		}
 
+		// the contacts that the memory estimate of each pair counts: all of them, or those of its largest subtree
+		vector<uint64_t> part_records;
+
+		// STAGE 2: split the pairs of several subtrees into one file per subtree
+		{
+			RdbInitializer rdb_init;
+			IntervUtils iu(_envir);
+			vector<PairFiles> split;
+			vector<int> split_idx;
+			uint64_t num_split_records = 0;
+
+			REprintf("Writing the track...\n");
+
+			for (size_t ipair = 0; ipair < pairs.size(); ++ipair) {
+				int64_t num_records = pairs[ipair].size / CONTACT_RECORD_SIZE;
+
+				part_records.push_back(num_records);
+				if (contacts_num_subtrees(iu, pairs[ipair]) > 1) {
+					split.push_back(pairs[ipair]);
+					split_idx.push_back(ipair);
+					num_split_records += num_records;
+				}
+			}
+
+			if (!split.empty()) {
+				int num_kids = import_num_kids(iu, min((uint64_t)split.size(), num_split_records / misha::config::MIN_RECORDS_PER_PROCESS));
+				vector<uint64_t> res = split_pairs(iu, split, num_kids, [&](const PairFiles &pair_files) {
+						return split_pair(iu, dirname, pair_files);
+					});
+
+				for (size_t i = 0; i < split.size(); ++i)
+					part_records[split_idx[i]] = res[i];
+			}
+		}
+
+		// STAGE 3: build the quad trees
 		{
 			RdbInitializer rdb_init;
 			IntervUtils iu(_envir);
@@ -589,13 +636,11 @@ SEXP gtrack_import_contacts(SEXP _track, SEXP _contacts, SEXP _fends, SEXP _allo
 			for (const PairFiles &pair_files : pairs)
 				num_records += pair_files.size / CONTACT_RECORD_SIZE;
 
-			REprintf("Writing the track...\n");
-
 			int num_kids = import_num_kids(iu, min((uint64_t)pairs.size(), num_records / misha::config::MIN_RECORDS_PER_PROCESS));
 			vector<uint64_t> mem;
 
-			for (const PairFiles &pair_files : pairs)
-				mem.push_back(pair_mem(pair_files.size / CONTACT_RECORD_SIZE, CONTACT_MEM));
+			for (uint64_t num_part_records : part_records)
+				mem.push_back(pair_mem(num_part_records, CONTACT_MEM));
 
 			build_pairs(iu, pairs, mem, num_kids, [&](const PairFiles &pair_files) {
 					write_pair(iu, dirname, pair_files, allow_duplicates);

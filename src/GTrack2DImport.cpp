@@ -206,7 +206,7 @@ vector<char> run_kids(IntervUtils &iu, int num_kids, const function<char(int)> &
 // Memory of building a pair beyond its records: file buffers and the serializer (measured at 3.1 - 3.4 MB)
 static const uint64_t PAIR_MEM_OVERHEAD = 4 << 20;
 
-// How long a stage 2 kid waits before it looks again for a pair that fits into the memory budget
+// How long a stage 3 kid waits before it looks again for a pair that fits into the memory budget
 static const int64_t PAIR_WAIT_MSEC = 20;
 
 uint64_t pair_mem(uint64_t num_records, uint64_t bytes_per_record)
@@ -214,12 +214,84 @@ uint64_t pair_mem(uint64_t num_records, uint64_t bytes_per_record)
 	return PAIR_MEM_OVERHEAD + num_records * bytes_per_record;
 }
 
-// Stage 2 state that the kids share, in shared memory, read and written under lock.
+int64_t pair_num_subtrees(const IntervUtils &iu, int64_t num_records)
+{
+	int64_t num_subtrees = max(num_records / (int64_t)iu.get_max_data_size(), (int64_t)1);
+
+	return 1 << (2 * (int)(log2(num_subtrees) / 2));  // round the number of subtrees to the lowest power of 4
+}
+
+string subtree_file_name(const string &dirname, int chromid1, int chromid2, int64_t isubtree)
+{
+	char buf[FILENAME_MAX];
+
+	snprintf(buf, sizeof(buf), "%s/.%d-%d.s%ld", dirname.c_str(), chromid1, chromid2, (long)isubtree);
+	return buf;
+}
+
+// Anonymous shared memory, zeroed, that forked kids inherit. Unmapped by the parent when it goes out of scope
+// (a kid ends without unwinding).
+struct SharedMem {
+	void  *addr;
+	size_t size;
+
+	SharedMem(size_t _size) : size(_size) {
+		addr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+		if (addr == MAP_FAILED)
+			verror("Failed to allocate shared memory: %s", strerror(errno));
+	}
+
+	~SharedMem() { munmap(addr, size); }
+};
+
+vector<uint64_t> split_pairs(IntervUtils &iu, const vector<PairFiles> &pairs, int num_kids, const function<uint64_t(const PairFiles &)> &split)
+{
+	int num_pairs = pairs.size();
+	uint64_t total_size = 0;
+	vector<int> order(num_pairs);
+
+	iota(order.begin(), order.end(), 0);
+	stable_sort(order.begin(), order.end(), [&](int a, int b) { return pairs[a].size > pairs[b].size; });
+	for (const PairFiles &pair_files : pairs)
+		total_size += pair_files.size;
+
+	// int64_t next, done; uint64_t res[num_pairs]
+	SharedMem shm((2 + num_pairs) * sizeof(int64_t));
+	int64_t *next = (int64_t *)shm.addr;
+	int64_t *done = next + 1;
+	uint64_t *res = (uint64_t *)(next + 2);
+
+	run_kids(iu, num_kids, [&](int) {
+		Progress_reporter progress;
+		int64_t reported = 0;
+
+		progress.init(total_size, 1);
+		for (int64_t i; (i = __atomic_fetch_add(next, 1, __ATOMIC_RELAXED)) < num_pairs; ) {
+			int ipair = order[i];
+
+			res[ipair] = split(pairs[ipair]);
+
+			int64_t all_done = __atomic_add_fetch(done, pairs[ipair].size, __ATOMIC_RELAXED);
+
+			progress.report(all_done - reported);
+			reported = all_done;
+		}
+		progress.report_last();
+		return (char)0;
+	});
+
+	return vector<uint64_t>(res, res + num_pairs);
+}
+
+// Stage 3 state that the kids share, in shared memory, read and written under lock.
 // Pairs are numbered in build order: by estimated memory, largest first.
 struct PairQueue {
 	char     lock;
-	uint64_t reserved;   // estimated memory of the pairs being built
-	uint64_t done;       // intermediate file bytes of the pairs built so far, for the progress report
+	uint64_t reserved;      // estimated memory of the pairs being built
+	uint64_t done;          // intermediate file bytes of the pairs built so far, for the progress report
+	uint64_t max_reserved;  // the most memory reserved at once, for the tests
+	int      running;       // number of pairs being built
+	int      max_running;   // the most pairs built at once, for the tests
 	// followed by int next[num_pairs + 1]: next[i] == i if pair i is not taken yet, otherwise a pair to look at
 	// after it; next[num_pairs] == num_pairs
 };
@@ -261,20 +333,9 @@ void build_pairs(IntervUtils &iu, const vector<PairFiles> &pairs, const vector<u
 		total_size += pairs[order[i]].size;
 	}
 
-	// mmap'ed memory starts zeroed: the lock is free and nothing is reserved
-	size_t shm_size = sizeof(PairQueue) + (num_pairs + 1) * sizeof(int);
-	void *shm = mmap(NULL, shm_size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-
-	if (shm == MAP_FAILED)
-		verror("Failed to allocate shared memory: %s", strerror(errno));
-
-	struct Unmapper {
-		void *addr;
-		size_t size;
-		~Unmapper() { munmap(addr, size); }
-	} unmapper{shm, shm_size};
-
-	PairQueue *queue = (PairQueue *)shm;
+	// shared memory starts zeroed: the lock is free and nothing is reserved
+	SharedMem shm(sizeof(PairQueue) + (num_pairs + 1) * sizeof(int));
+	PairQueue *queue = (PairQueue *)shm.addr;
 	int *next = (int *)(queue + 1);
 
 	iota(next, next + num_pairs + 1, 0);
@@ -298,6 +359,9 @@ void build_pairs(IntervUtils &iu, const vector<PairFiles> &pairs, const vector<u
 			if (ipair < num_pairs) {
 				next[ipair] = ipair + 1;
 				queue->reserved += cost[ipair];
+				queue->max_reserved = max(queue->max_reserved, queue->reserved);
+				queue->running++;
+				queue->max_running = max(queue->max_running, queue->running);
 			}
 			unlock_queue(queue);
 
@@ -318,6 +382,7 @@ void build_pairs(IntervUtils &iu, const vector<PairFiles> &pairs, const vector<u
 
 			lock_queue(queue);
 			queue->reserved -= cost[ipair];
+			queue->running--;
 			queue->done += pairs[order[ipair]].size;
 			uint64_t all_done = queue->done;
 			unlock_queue(queue);
@@ -328,6 +393,18 @@ void build_pairs(IntervUtils &iu, const vector<PairFiles> &pairs, const vector<u
 		progress.report_last();
 		return (char)0;
 	}, false);
+
+	const char *stats_fname = getenv("MISHA_2D_IMPORT_STATS");
+
+	if (stats_fname && *stats_fname) {
+		FILE *fp = fopen(stats_fname, "w");
+
+		if (fp) {
+			fprintf(fp, "budget\tmax_mem\tmax_reserved\tmax_running\n%llu\t%llu\t%llu\t%d\n", (unsigned long long)budget,
+					(unsigned long long)(num_pairs ? mem[order[0]] : 0), (unsigned long long)queue->max_reserved, queue->max_running);
+			fclose(fp);
+		}
+	}
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -447,15 +524,55 @@ static bool read_input_files(IntervUtils &iu, SEXP _files, const vector<int64_t>
 	return are_all_points;
 }
 
-// STAGES 2 - 4 for one chromosome pair
-static void write_pair(IntervUtils &iu, const string &dirname, const PairFiles &pair_files, bool are_all_points)
+// STAGE 2 for a chromosome pair whose quad tree has several subtrees: splits its intermediate files into one
+// file per subtree. Returns the number of records of the largest subtree plus the number of rectangles that cross
+// a subtree border, which the serializer keeps until the pair ends: what its memory is estimated by.
+static uint64_t split_pair(IntervUtils &iu, const string &dirname, const PairFiles &pair_files)
 {
-	// STAGE 2. Check what is the number of contacts in a chromosome pair and based on that number decide how many subtrees would be needed in StatQuadTreeCachedSerializer.
 	int chromid1 = pair_files.chromid1;
 	int chromid2 = pair_files.chromid2;
-	int64_t num_intervals = pair_files.size / INTERVAL_RECORD_SIZE;
-	int64_t num_subtrees = max(num_intervals / (int64_t)iu.get_max_data_size(), (int64_t)1);
-	num_subtrees = 1 << (2 * (int)(log2(num_subtrees) / 2));  // round the number of subtrees to the lowest power of 4
+	int64_t num_subtrees = pair_num_subtrees(iu, pair_files.size / INTERVAL_RECORD_SIZE);
+	Rectangles subarenas = RectsQuadTreeCachedSerializer::split_arena(0, 0, iu.get_chromkey().get_chrom_size(chromid1),
+																	   iu.get_chromkey().get_chrom_size(chromid2), num_subtrees);
+	BufferedFiles subtrees_files(num_subtrees);
+	vector<uint64_t> num_records(num_subtrees, 0);
+	uint64_t num_border = 0;
+
+	for (uint64_t i = 0; i < subtrees_files.size(); ++i) {
+		string fname = subtree_file_name(dirname, chromid1, chromid2, i);
+
+		subtrees_files[i] = new BufferedFile();
+		if (subtrees_files[i]->open(fname.c_str(), "w"))
+			verror("Opening an intermediate file %s: %s\n", fname.c_str(), strerror(errno));
+	}
+
+	for_each_interval(pair_files.files, [&](int64_t start1, int64_t end1, int64_t start2, int64_t end2, float val) {
+		Rectangle rect(start1, start2, end1, end2);
+		for (Rectangles::const_iterator isubarena = subarenas.begin(); isubarena != subarenas.end(); ++isubarena) {
+			if (rect.do_intersect(*isubarena)) {
+				write_interval(*subtrees_files[isubarena - subarenas.begin()], start1, end1, start2, end2, val);
+				num_records[isubarena - subarenas.begin()]++;
+				num_border += !rect.is_inside(*isubarena);
+				break;
+			}
+		}
+	});
+
+	for (uint64_t i = 0; i < subtrees_files.size(); ++i) {
+		if (subtrees_files[i]->close())
+			verror("Writing an intermediate file %s: %s\n", subtrees_files[i]->file_name().c_str(), strerror(errno));
+	}
+
+	return *max_element(num_records.begin(), num_records.end()) + num_border;
+}
+
+// STAGE 3 for one chromosome pair: builds its quad tree from its intermediate files, or from its subtree files
+// if split_pair split it.
+static void write_pair(IntervUtils &iu, const string &dirname, const PairFiles &pair_files, bool are_all_points)
+{
+	int chromid1 = pair_files.chromid1;
+	int chromid2 = pair_files.chromid2;
+	int64_t num_subtrees = pair_num_subtrees(iu, pair_files.size / INTERVAL_RECORD_SIZE);
 
 	GenomeTrackRectsPoints gtrack_points(iu.get_track_chunk_size(), iu.get_track_num_chunks());
 	GenomeTrackRectsRects gtrack_rects(iu.get_track_chunk_size(), iu.get_track_num_chunks());
@@ -474,39 +591,13 @@ static void write_pair(IntervUtils &iu, const string &dirname, const PairFiles &
 	// the files to read for each subtree
 	vector<vector<string>> subtree_srcs(1, pair_files.files);
 
-	// STAGE 3: Split the intervals of a chromosome pair to binary files - each holding contacts of a subtree.
 	if (num_subtrees > 1) {
-		const Rectangles &subarenas = are_all_points ? points_serializer.get_subarenas() : rects_serializer.get_subarenas();
-		BufferedFiles subtrees_files(num_subtrees);
-
-		subtree_srcs.resize(num_subtrees);
-		for (uint64_t i = 0; i < subtrees_files.size(); ++i) {
-			char buf[FILENAME_MAX];
-
-			snprintf(buf, sizeof(buf), "%s/.%d-%d.s%ld", dirname.c_str(), chromid1, chromid2, (long)i);
-			subtree_srcs[i].assign(1, buf);
-			subtrees_files[i] = new BufferedFile();
-			if (subtrees_files[i]->open(buf, "w"))
-				verror("Opening an intermediate file %s: %s\n", buf, strerror(errno));
-		}
-
-		for_each_interval(pair_files.files, [&](int64_t start1, int64_t end1, int64_t start2, int64_t end2, float val) {
-			Rectangle rect(start1, start2, end1, end2);
-			for (Rectangles::const_iterator isubarena = subarenas.begin(); isubarena != subarenas.end(); ++isubarena) {
-				if (rect.do_intersect(*isubarena)) {
-					write_interval(*subtrees_files[isubarena - subarenas.begin()], start1, end1, start2, end2, val);
-					break;
-				}
-			}
-		});
-
-		for (uint64_t i = 0; i < subtrees_files.size(); ++i) {
-			if (subtrees_files[i]->close())
-				verror("Writing an intermediate file %s: %s\n", subtrees_files[i]->file_name().c_str(), strerror(errno));
-		}
+		subtree_srcs.clear();
+		for (int64_t i = 0; i < num_subtrees; ++i)
+			subtree_srcs.push_back(vector<string>(1, subtree_file_name(dirname, chromid1, chromid2, i)));
 	}
 
-	// Stage 4: Read the contacts of a subtree and insert them to StatQuadTreeCachedSerializer.
+	// Read the records of a subtree and insert them to StatQuadTreeCachedSerializer.
 	for (const vector<string> &srcs : subtree_srcs) {
 		for_each_interval(srcs, [&](int64_t start1, int64_t end1, int64_t start2, int64_t end2, float val) {
 			if (are_all_points)
@@ -549,11 +640,11 @@ SEXP gtrack_2d_import(SEXP _track, SEXP _files, SEXP _envir)
 			// The number of 2D intervals might be huge. We might not be even able to hold all the intervals of one chromosome pair in memory and to build the quad tree with it.
 			// Our strategy is therefore that:
 			// 1. Read the input files and split them into binary files each holding the intervals of specific chromosomes pair.
-			// 2. Check what is the number of contacts in a chromosome pair and based on that number decide how many subtrees would be needed in StatQuadTreeCachedSerializer.
+			// 2. Check what is the number of intervals in a chromosome pair and based on that number decide how many subtrees would be needed in StatQuadTreeCachedSerializer.
 			//    (Creating a quad tree through seriaizer would be the only feasible method when only part of the intervals of a chromosome pair can be loaded into RAM.)
-			// 3. Split the intervals of a chromosome pair to binary files - each holding contacts of a subtree. We assume that we will be able to hold in the memory the contacts of one subtree.
-			// 4. Read the contacts of a subtree and insert them to StatQuadTreeCachedSerializer.
-			// Step 1 runs in parallel over the input files, steps 2 - 4 over the chromosome pairs (see GTrack2DImport.h).
+			//    Split the intervals of a chromosome pair of several subtrees to binary files - each holding the intervals of a subtree. We assume that we will be able to hold in the memory the intervals of one subtree.
+			// 3. Read the intervals of a subtree and insert them to StatQuadTreeCachedSerializer.
+			// Step 1 runs in parallel over the input files, steps 2 and 3 over the chromosome pairs (see GTrack2DImport.h).
 
 			REprintf("Reading input file(s)...\n");
 
@@ -579,6 +670,42 @@ SEXP gtrack_2d_import(SEXP _track, SEXP _files, SEXP _envir)
 			pairs = list_pair_files(dirname);
 		}
 
+		// the records that the memory estimate of each pair counts: all of them, or those of its largest subtree
+		vector<uint64_t> part_records;
+
+		// STAGE 2: split the pairs of several subtrees into one file per subtree
+		{
+			RdbInitializer rdb_init;
+			IntervUtils iu(_envir);
+			vector<PairFiles> split;
+			vector<int> split_idx;
+			uint64_t num_split_records = 0;
+
+			REprintf("Writing the track...\n");
+
+			for (size_t ipair = 0; ipair < pairs.size(); ++ipair) {
+				int64_t num_records = pairs[ipair].size / INTERVAL_RECORD_SIZE;
+
+				part_records.push_back(num_records);
+				if (pair_num_subtrees(iu, num_records) > 1) {
+					split.push_back(pairs[ipair]);
+					split_idx.push_back(ipair);
+					num_split_records += num_records;
+				}
+			}
+
+			if (!split.empty()) {
+				int num_kids = import_num_kids(iu, min((uint64_t)split.size(), num_split_records / misha::config::MIN_RECORDS_PER_PROCESS));
+				vector<uint64_t> res = split_pairs(iu, split, num_kids, [&](const PairFiles &pair_files) {
+						return split_pair(iu, dirname, pair_files);
+					});
+
+				for (size_t i = 0; i < split.size(); ++i)
+					part_records[split_idx[i]] = res[i];
+			}
+		}
+
+		// STAGE 3: build the quad trees
 		{
 			RdbInitializer rdb_init;
 			IntervUtils iu(_envir);
@@ -587,13 +714,11 @@ SEXP gtrack_2d_import(SEXP _track, SEXP _files, SEXP _envir)
 			for (const PairFiles &pair_files : pairs)
 				num_records += pair_files.size / INTERVAL_RECORD_SIZE;
 
-			REprintf("Writing the track...\n");
-
 			int num_kids = import_num_kids(iu, min((uint64_t)pairs.size(), num_records / misha::config::MIN_RECORDS_PER_PROCESS));
 			vector<uint64_t> mem;
 
-			for (const PairFiles &pair_files : pairs)
-				mem.push_back(pair_mem(pair_files.size / INTERVAL_RECORD_SIZE, are_all_points ? POINT_MEM : RECT_MEM));
+			for (uint64_t num_part_records : part_records)
+				mem.push_back(pair_mem(num_part_records, are_all_points ? POINT_MEM : RECT_MEM));
 
 			build_pairs(iu, pairs, mem, num_kids, [&](const PairFiles &pair_files) {
 					write_pair(iu, dirname, pair_files, are_all_points);

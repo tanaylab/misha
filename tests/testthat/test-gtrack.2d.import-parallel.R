@@ -96,6 +96,24 @@ import_both_ways <- function(import, max_data_size = NULL, max_mem_usage = NULL)
     res
 }
 
+# import_both_ways, plus what stage 3 of the parallel run reports through MISHA_2D_IMPORT_STATS:
+# the budget and the largest estimate of a pair in bytes, and the most memory reserved and pairs
+# built at once
+import_with_stats <- function(...) {
+    stats_file <- withr::local_tempfile(fileext = ".tsv")
+    withr::local_envvar(MISHA_2D_IMPORT_STATS = stats_file)
+    res <- import_both_ways(...)
+    res$stats <- read.delim(stats_file)
+    res
+}
+
+# The pairs built at once stayed within the budget, and were at most max_running
+expect_budget_kept <- function(stats, budget_kb, max_running) {
+    expect_equal(stats$budget, budget_kb * 1000)
+    expect_lte(stats$max_reserved, stats$budget)
+    expect_lte(stats$max_running, max_running)
+}
+
 expect_same_both_ways <- function(res) {
     expect_gt(length(res$serial$md5), 0)
     expect_identical(res$parallel$md5, res$serial$md5)
@@ -220,6 +238,7 @@ test_that("gtrack.2d.import_contacts with several subtrees per pair is identical
 # gmax.mem.usage (KB) caps the estimated memory of the pairs built at once: a fixed 4 MiB per pair
 # plus its records. A 1 MB budget is below every pair, so the pairs are built one at a time. The
 # larger budgets fit two of these pairs (contacts pairs are larger), and the other kids wait.
+# The 4 kids start together, so a budget that were not kept would show up in the stats.
 test_that("gtrack.2d.import under a memory budget is identical in parallel", {
     local_db_state()
     withr::with_tempdir({
@@ -228,8 +247,9 @@ test_that("gtrack.2d.import under a memory budget is identical in parallel", {
         rects <- write_slices(random_intervals(20000, seed = 12, rects = TRUE), c(1, 1), "rects")
         for (budget in c(1000, 10000)) {
             for (files in list(points, rects)) {
-                res <- import_both_ways(function(track) gtrack.2d.import(track, "test", files), max_mem_usage = budget)
+                res <- import_with_stats(function(track) gtrack.2d.import(track, "test", files), max_mem_usage = budget)
                 expect_same_both_ways(res)
+                expect_budget_kept(res$stats, budget, if (budget == 1000) 1 else 2)
             }
         }
     })
@@ -242,13 +262,47 @@ test_that("gtrack.2d.import_contacts under a memory budget is identical in paral
         d <- random_intervals(40000, seed = 13)
         files <- write_slices(rbind(d, d[1:3000, ]), c(1, 2, 1), "contacts")
         for (budget in c(1000, 13000)) {
-            res <- import_both_ways(function(track) gtrack.2d.import_contacts(track, "test", files), max_mem_usage = budget)
+            res <- import_with_stats(function(track) gtrack.2d.import_contacts(track, "test", files), max_mem_usage = budget)
             expect_same_both_ways(res)
+            expect_budget_kept(res$stats, budget, if (budget == 1000) 1 else 2)
             expect_equal(nrow(res$parallel$data), nrow(expected_contacts(rbind(d, d[1:3000, ]))))
         }
         # with subtrees too
-        res <- import_both_ways(function(track) gtrack.2d.import_contacts(track, "test", files), max_data_size = 1000, max_mem_usage = 1000)
+        res <- import_with_stats(function(track) gtrack.2d.import_contacts(track, "test", files), max_data_size = 1000, max_mem_usage = 1000)
         expect_same_both_ways(res)
+        expect_budget_kept(res$stats, 1000, 1)
+    })
+})
+
+# A pair split into subtrees is built one subtree at a time, so its estimate counts the records of
+# its largest subtree, not of the whole pair: lowering gmax.data.size lets more pairs fit the budget.
+test_that("the memory estimate of a pair split into subtrees is that of its largest subtree", {
+    local_db_state()
+    withr::with_tempdir({
+        setup_import_db()
+        points <- write_slices(random_intervals(40000, seed = 14), c(1, 1), "points")
+        rects <- write_slices(random_intervals(20000, seed = 15, rects = TRUE), c(1, 1), "rects")
+        for (import in list(
+            function(track) gtrack.2d.import(track, "test", points),
+            function(track) gtrack.2d.import(track, "test", rects),
+            function(track) gtrack.2d.import_contacts(track, "test", points)
+        )) {
+            whole <- import_with_stats(import)
+            parts <- import_with_stats(import, max_data_size = 500)
+            expect_same_both_ways(parts)
+            expect_lt(parts$stats$max_mem, whole$stats$max_mem)
+        }
+    })
+})
+
+test_that("gmax.mem.usage given as an integer is not truncated", {
+    local_db_state()
+    withr::with_tempdir({
+        setup_import_db()
+        points <- write_slices(random_intervals(2000, seed = 16), c(1, 1), "points")
+        # 4 GB as KB: overflows a 32-bit int multiplied by 1000
+        res <- import_with_stats(function(track) gtrack.2d.import(track, "test", points), max_mem_usage = 4000000L)
+        expect_equal(res$stats$budget, 4e9)
     })
 })
 

@@ -41,10 +41,14 @@ per process at a time. A single input file is read by one process, so split
 a large input into several files to read it in parallel. The number of
 processes is bounded by 'gmax.processes'. The resulting track is identical
 to the one created with 'gmultitasking' off.
-The pairs are written largest first, and a pair is started only when its
-estimated memory, added to that of the pairs being written, stays within
-'gmax.mem.usage'. A pair estimated above 'gmax.mem.usage' is written
-alone. Lower 'gmax.mem.usage' to use less memory.
+A pair is started only when its estimated memory, added to that of the
+pairs being written, stays within 'gmax.mem.usage'. Larger pairs are taken
+first, but a smaller pair that fits may start while a larger one waits, and
+a pair estimated above 'gmax.mem.usage' is written alone. A pair with at
+least 4 x 'gmax.data.size' records is written in parts and estimated by its
+largest part, so lowering 'gmax.data.size' lets more pairs be written at
+once. Lower 'gmax.mem.usage' to use less memory. Reading the input is not
+covered by the estimate.
 
 'description' is added as a track attribute.
 
