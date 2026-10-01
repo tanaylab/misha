@@ -51,7 +51,8 @@ A pair is started only when its estimated memory, added to that of the
 pairs being written, stays within 'gmax.mem.usage'. Larger pairs are taken
 first, but a smaller pair that fits may start while a larger one waits, and
 a pair estimated above 'gmax.mem.usage' is written alone. A pair with at
-least 4 x 'gmax.data.size' records is written in parts and estimated by its
+least 4 x 'gmax.data.size' contacts (2 x for a chromosome with itself, whose
+contacts are stored mirrored) is written in parts and estimated by its
 largest part, so lowering 'gmax.data.size' lets more pairs be written at
 once. Lower 'gmax.mem.usage' to use less memory. Reading the input is not
 covered by the estimate.
