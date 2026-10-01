@@ -409,6 +409,10 @@ static bool read_point(BufferedFile &file, int64_t &x, int64_t &y, float &v)
 	memcpy(&x, buf, sizeof(x));
 	memcpy(&y, buf + sizeof(x), sizeof(y));
 	memcpy(&v, buf + sizeof(x) + sizeof(y), sizeof(v));
+
+	// an infinite source value becomes NaN, as in BufferedIntervals2D::read_interval
+	if (isinf(v))
+		v = numeric_limits<float>::quiet_NaN();
 	return true;
 }
 

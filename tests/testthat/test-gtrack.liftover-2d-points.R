@@ -204,6 +204,29 @@ test_that("gtrack.liftover of POINTS merges points landing on one target point b
     expect_true(is.na(value_at(got, 30, 40)))
 })
 
+test_that("gtrack.liftover of POINTS turns an infinite value into NaN, as for 1D and rects", {
+    local_db_state()
+
+    src_db <- mk_points_db("chrS1", 1000)
+    import_points("src", data.frame(
+        chrom1 = "chrS1", start1 = c(10, 30, 510), chrom2 = "chrS1", start2 = c(20, 40, 520),
+        v = c(Inf, -Inf, 3)
+    ))
+    expect_equal(extract_points("src")$v, c(Inf, Inf, -Inf, -Inf, 3, 3))
+    src_dir <- file.path(src_db, "tracks", "src.track")
+
+    tgt_db <- mk_points_db("chrT1", 1000)
+    # (10, 20) and (510, 520) land on (10, 20)
+    chain <- new_chain_file()
+    write_chain_entry(chain, "chrS1", 1000, "+", 0, 100, "chrT1", 1000, "+", 0, 100, 1)
+    write_chain_entry(chain, "chrS1", 1000, "+", 500, 600, "chrT1", 1000, "+", 0, 100, 2)
+    gtrack.liftover("lifted", "x", src_dir, chain, tgt_overlap_policy = "keep", multi_target_agg = "sum")
+    got <- extract_points("lifted")
+    expect_equal(got$start1, c(10, 20, 30, 40))
+    # the NaN from Inf is dropped by na.rm; -Inf alone gives NaN
+    expect_equal(got$v, c(3, 3, NaN, NaN))
+})
+
 test_that("gtrack.liftover of POINTS gives the same track when the pair is split into subtrees", {
     local_db_state()
 
