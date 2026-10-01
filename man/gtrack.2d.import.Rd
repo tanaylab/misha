@@ -34,6 +34,22 @@ the file.
 If all the imported intervals represent a point (i.e. end == start + 1) a
 'Points' track is created otherwise it is a 'Rectangles' track.
 
+If 'gmultitasking' is on (the default), the input files are read by
+several processes in parallel, each process reading a contiguous subset of
+the files, and the chromosome pairs are then written in parallel, one pair
+per process at a time. A single input file is read by one process, so split
+a large input into several files to read it in parallel. The number of
+processes is bounded by 'gmax.processes'. The resulting track is identical
+to the one created with 'gmultitasking' off.
+A pair is started only when its estimated memory, added to that of the
+pairs being written, stays within 'gmax.mem.usage'. Larger pairs are taken
+first, but a smaller pair that fits may start while a larger one waits, and
+a pair estimated above 'gmax.mem.usage' is written alone. A pair with at
+least 4 x 'gmax.data.size' records is written in parts and estimated by its
+largest part, so lowering 'gmax.data.size' lets more pairs be written at
+once. Lower 'gmax.mem.usage' to use less memory. Reading the input is not
+covered by the estimate.
+
 'description' is added as a track attribute.
 
 Note: temporary files are created in the directory of the track during the

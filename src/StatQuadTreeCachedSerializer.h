@@ -84,6 +84,10 @@ public:
 	
 	const Rectangles &get_subarenas() const { return m_subarenas; }
 
+	// The subarenas that begin() splits the arena (x1, y1) - (x2, y2) into, in the order of get_subarenas().
+	// num_subtrees must be a power of 4.
+	static Rectangles split_arena(int64_t x1, int64_t y1, int64_t x2, int64_t y2, unsigned num_subtrees);
+
 	// returns the index of the last subtree used for object insertion (can be -1 if the objects fall at the border between the subtrees)
 	int get_cur_subarena_idx() const { return m_cur_qtree_idx; }
 
@@ -114,9 +118,8 @@ private:
 	vector< vector<uint64_t> > m_border_obj_ptrs;
 
 	int idx2dto1d(int i, int j) const { return i + m_num_subtrees_sqrt * j; }
-	Rectangle &subarena(int i, int j) { return m_subarenas[idx2dto1d(i, j)]; }
-
-	void set_subarenas(int i1, int j1, int i2, int j2, int64_t x1, int64_t y1, int64_t x2, int64_t y2);
+	static void set_subarenas(Rectangles &subarenas, unsigned num_subtrees_sqrt, int i1, int j1, int i2, int j2,
+							  int64_t x1, int64_t y1, int64_t x2, int64_t y2);
 
 	// serializes the top tree (the ancestor of all subtrees); returns file position relative to the beginning of the chunk
 	int64_t serialize_top_tree(int i1, int j1, int i2, int j2, int64_t x1, int64_t y1, int64_t x2, int64_t y2,
@@ -168,13 +171,11 @@ void StatQuadTreeCachedSerializer<T, Size>::begin(BufferedFile &file, int64_t x1
 	m_num_subtrees = num_subtrees;
 	m_num_subtrees_sqrt = (unsigned)(sqrt(m_num_subtrees) + .5);
 
-	m_subarenas.resize(m_num_subtrees);
+	m_subarenas = split_arena(m_arena.x1, m_arena.y1, m_arena.x2, m_arena.y2, m_num_subtrees);
 	m_subtree_fpos.resize(m_num_subtrees);
 	m_is_qtree_sealed.resize(m_num_subtrees, false);
 	m_border_obj_ptrs.resize(m_num_subtrees);
 	m_stat.resize(m_num_subtrees);
-
-	set_subarenas(0, 0, m_num_subtrees_sqrt, m_num_subtrees_sqrt, m_arena.x1, m_arena.y1, m_arena.x2, m_arena.y2);
 
 	if (m_num_subtrees > 1) {
 		m_tree_start_fpos = m_file->tell();
@@ -360,13 +361,24 @@ void StatQuadTreeCachedSerializer<T, Size>::seal_qtree()
 }
 
 template <class T, class Size>
-void StatQuadTreeCachedSerializer<T, Size>::set_subarenas(int i1, int j1, int i2, int j2, int64_t x1, int64_t y1, int64_t x2, int64_t y2)
+Rectangles StatQuadTreeCachedSerializer<T, Size>::split_arena(int64_t x1, int64_t y1, int64_t x2, int64_t y2, unsigned num_subtrees)
+{
+	unsigned num_subtrees_sqrt = (unsigned)(sqrt(num_subtrees) + .5);
+	Rectangles subarenas(num_subtrees);
+
+	set_subarenas(subarenas, num_subtrees_sqrt, 0, 0, num_subtrees_sqrt, num_subtrees_sqrt, x1, y1, x2, y2);
+	return subarenas;
+}
+
+template <class T, class Size>
+void StatQuadTreeCachedSerializer<T, Size>::set_subarenas(Rectangles &subarenas, unsigned num_subtrees_sqrt, int i1, int j1, int i2, int j2,
+														  int64_t x1, int64_t y1, int64_t x2, int64_t y2)
 {
 	if (x1 == x2 || y1 == y2)
-		TGLError< StatQuadTreeCachedSerializer<T, Size> >("Arena is not big enough to be split to %ld subtrees", m_subarenas.size());
+		TGLError< StatQuadTreeCachedSerializer<T, Size> >("Arena is not big enough to be split to %ld subtrees", subarenas.size());
 	
 	if (i1 >= i2 - 1) {
-		Rectangle &rect = subarena(i1, j1);
+		Rectangle &rect = subarenas[i1 + num_subtrees_sqrt * j1];
 		rect.x1 = x1;
 		rect.y1 = y1;
 		rect.x2 = x2;
@@ -377,10 +389,10 @@ void StatQuadTreeCachedSerializer<T, Size>::set_subarenas(int i1, int j1, int i2
 		int split_i = (i1 + i2) / 2;
 		int split_j = (j1 + j2) / 2;
 
-		set_subarenas(i1, j1, split_i, split_j, x1, y1, split_x, split_y);  // SW
-		set_subarenas(split_i, j1, i2, split_j, split_x, y1, x2, split_y);  // SE
-		set_subarenas(i1, split_j, split_i, j2, x1, split_y, split_x, y2);  // NW
-		set_subarenas(split_i, split_j, i2, j2, split_x, split_y, x2, y2);  // NE
+		set_subarenas(subarenas, num_subtrees_sqrt, i1, j1, split_i, split_j, x1, y1, split_x, split_y);  // SW
+		set_subarenas(subarenas, num_subtrees_sqrt, split_i, j1, i2, split_j, split_x, y1, x2, split_y);  // SE
+		set_subarenas(subarenas, num_subtrees_sqrt, i1, split_j, split_i, j2, x1, split_y, split_x, y2);  // NW
+		set_subarenas(subarenas, num_subtrees_sqrt, split_i, split_j, i2, j2, split_x, split_y, x2, y2);  // NE
 	}
 }
 
