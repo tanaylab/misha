@@ -416,13 +416,18 @@ static bool read_point(BufferedFile &file, int64_t &x, int64_t &y, float &v)
 	return true;
 }
 
-// Writes the points lifted into one target chromosome pair (buffered in infile) as a POINTS
-// track file. Points that landed on the same target point are merged by agg_cfg. As in
-// gtrack.2d.import_contacts the pair is split into subtrees by gmax.data.size, and only one
-// subtree is held in memory at a time.
-static void write_2d_points(BufferedFile &infile, const char *filename, const string &dirname, int chromid1, int chromid2,
+// Writes the points lifted into one target chromosome pair (buffered in the file infilename)
+// as a POINTS track file. Points that landed on the same target point are merged by agg_cfg.
+// As in gtrack.2d.import_contacts the pair is split into subtrees by gmax.data.size, and only
+// one subtree is held in memory at a time. The buffer file is removed once it is read: after
+// the split, so that the pair is not on disk twice.
+static void write_2d_points(const string &infilename, const char *filename, const string &dirname, int chromid1, int chromid2,
                             IntervUtils &iu, const AggregationConfig &agg_cfg)
 {
+	BufferedFile infile;
+	if (infile.open(infilename.c_str(), "r"))
+		TGLError("Opening file %s: %s", infilename.c_str(), strerror(errno));
+
 	int64_t num_points = infile.file_size() / POINT_RECORD_SIZE;
 	// Unsigned: an unset gmax.data.size reads as UINT64_MAX. Below 1 (0, or 0.5 read as 0)
 	// it counts as 1 rather than dividing by zero.
@@ -466,6 +471,9 @@ static void write_2d_points(BufferedFile &infile, const char *filename, const st
 				TGLError("Failed to write points to file %s: %s", subtree_files[i]->file_name().c_str(), strerror(errno));
 			subtree_files[i]->seek(0, SEEK_SET);
 		}
+
+		infile.close();
+		unlink(infilename.c_str());
 	}
 
 	vector<PointVal2D> points;
@@ -488,6 +496,10 @@ static void write_2d_points(BufferedFile &infile, const char *filename, const st
 			check_interrupt();
 		}
 
+		string read_filename = file.file_name();
+		file.close();
+		unlink(read_filename.c_str());
+
 		sort(points.begin(), points.end(), [](const PointVal2D &a, const PointVal2D &b) {
 			if (a.x != b.x)
 				return a.x < b.x;
@@ -507,12 +519,6 @@ static void write_2d_points(BufferedFile &infile, const char *filename, const st
 				out_val = (float)aggregated;
 			serializer.insert(PointsQuadTree::ValueType(points[first].x, points[first].y, out_val));
 			check_interrupt();
-		}
-
-		if (num_subtrees > 1) {
-			string subtree_filename = file.file_name();
-			file.close();
-			unlink(subtree_filename.c_str());
 		}
 	}
 
@@ -1214,65 +1220,62 @@ SEXP gtrack_liftover(SEXP _track,
 
 			progress.report_last();
 
-			// read the temporary files one by one into memory, build the quad tree and save it in corresponding track
+			// Close every pair buffer before the pairs are written, and reopen each when its pair
+			// is written. A pair split into subtrees opens a file per subtree; with all the pair
+			// buffers (and their stdio buffers) still open, hundreds of target pairs could exceed
+			// the limit on open files. gtrack.2d.import_contacts closes its pair files the same way.
+			for (map<ChromPair, BufferedIntervals2D>::iterator ibuffered_interv = buffered_intervs.begin(); ibuffered_interv != buffered_intervs.end(); ++ibuffered_interv) {
+				if (ibuffered_interv->second.bfile().flush())
+					TGLError("Failed to write intervals to file %s: %s", ibuffered_interv->second.file_name().c_str(), strerror(errno));
+				ibuffered_interv->second.close();
+			}
+
+			// read the temporary files one by one into memory, build the quad tree and save it in corresponding track;
+			// each buffer file is removed once it is read (on a Hi-C track these are the size of the track)
 			progress.init(buffered_intervs.size(), 1);
 			for (map<ChromPair, BufferedIntervals2D>::iterator ibuffered_interv = buffered_intervs.begin(); ibuffered_interv != buffered_intervs.end(); ++ibuffered_interv) {
-				if (ibuffered_interv->second.opened()) {
-					int chromid1 = ibuffered_interv->second.chromid1();
-					int chromid2 = ibuffered_interv->second.chromid2();
+				BufferedIntervals2D &buffered_interv = ibuffered_interv->second;
+				int chromid1 = buffered_interv.chromid1();
+				int chromid2 = buffered_interv.chromid2();
+				string buffer_filename = buffered_interv.file_name();
 
-					if (ibuffered_interv->second.bfile().flush())
-						TGLError("Failed to write intervals to file %s: %s", ibuffered_interv->second.file_name().c_str(), strerror(errno));
-					ibuffered_interv->second.seek(0, SEEK_SET);
+				snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_2d_filename(iu.get_chromkey(), chromid1, chromid2).c_str());
 
-					// A POINTS source gives a POINTS track. Its buffer file is removed right away:
-					// on a Hi-C track these are the size of the track.
-					if (src_track_type == GenomeTrack::POINTS) {
-						snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_2d_filename(iu.get_chromkey(), chromid1, chromid2).c_str());
-						write_2d_points(ibuffered_interv->second.bfile(), filename, dirname, chromid1, chromid2, iu, agg_cfg);
-						string buffer_filename = ibuffered_interv->second.file_name();
-						ibuffered_interv->second.close();
-						unlink(buffer_filename.c_str());
-						progress.report(1);
-						continue;
-					}
+				// A POINTS source gives a POINTS track
+				if (src_track_type == GenomeTrack::POINTS) {
+					write_2d_points(buffer_filename, filename, dirname, chromid1, chromid2, iu, agg_cfg);
+					progress.report(1);
+					continue;
+				}
 
-					RectsQuadTree qtree;
+				// Collect the mapped rects, then aggregate overlaps into disjoint
+				// rects before inserting (the quadtree forbids overlapping objects).
+				vector<RectVal2D> rects;
+				buffered_interv.open(buffer_filename.c_str(), "r", chromid1, chromid2);
+				while (buffered_interv.read_interval()) {
+					const GInterval2D &gi = buffered_interv.last_interval();
+					RectVal2D rv;
+					rv.x1 = gi.start1(); rv.x2 = gi.end1();
+					rv.y1 = gi.start2(); rv.y2 = gi.end2();
+					rv.v = buffered_interv.last_val();
+					rects.push_back(rv);
+				}
+				buffered_interv.close();
+				unlink(buffer_filename.c_str());
 
-					qtree.reset(0, 0, iu.get_chromkey().get_chrom_size(chromid1), iu.get_chromkey().get_chrom_size(chromid2));
+				RectsQuadTree qtree;
 
-					// Collect the mapped rects, then aggregate overlaps into disjoint
-					// rects before inserting (the quadtree forbids overlapping objects).
-					vector<RectVal2D> rects;
-					while (ibuffered_interv->second.read_interval()) {
-						const GInterval2D &gi = ibuffered_interv->second.last_interval();
-						RectVal2D rv;
-						rv.x1 = gi.start1(); rv.x2 = gi.end1();
-						rv.y1 = gi.start2(); rv.y2 = gi.end2();
-						rv.v = ibuffered_interv->second.last_val();
-						rects.push_back(rv);
-					}
-					aggregate_2d_rects(rects, agg_cfg, qtree);
+				qtree.reset(0, 0, iu.get_chromkey().get_chrom_size(chromid1), iu.get_chromkey().get_chrom_size(chromid2));
+				aggregate_2d_rects(rects, agg_cfg, qtree);
 
-					if (!qtree.empty()) {
-						GenomeTrackRectsRects gtrack(iu.get_track_chunk_size(), iu.get_track_num_chunks());
+				if (!qtree.empty()) {
+					GenomeTrackRectsRects gtrack(iu.get_track_chunk_size(), iu.get_track_num_chunks());
 
-						snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_2d_filename(iu.get_chromkey(), chromid1, chromid2).c_str());
-						gtrack.init_write(filename, chromid1, chromid2);
-						gtrack.write(qtree);
-					}
+					gtrack.init_write(filename, chromid1, chromid2);
+					gtrack.write(qtree);
 				}
 
 				progress.report(1);
-			}
-
-			// remove the buffered intervals files
-			for (map<ChromPair, BufferedIntervals2D>::iterator ibuffered_interv = buffered_intervs.begin(); ibuffered_interv != buffered_intervs.end(); ++ibuffered_interv) {
-				if (ibuffered_interv->second.opened()) {
-					string filename = ibuffered_interv->second.file_name();
-					ibuffered_interv->second.close();
-					unlink(filename.c_str());
-				}
 			}
 
 			progress.report_last();
