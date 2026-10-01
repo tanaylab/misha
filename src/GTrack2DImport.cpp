@@ -604,7 +604,8 @@ SEXP gtrack_2d_import(SEXP _track, SEXP _files, SEXP _envir)
 		bool are_all_points = true;
 
 		// Each stage has its own RdbInitializer: the multitasking state (shared memory, kid bookkeeping)
-		// is set up once per RdbInitializer, so the kids of the second stage need a fresh one.
+		// is set up once per RdbInitializer, so the kids of each stage need a fresh one. A new RdbInitializer
+		// also clears a pending Ctrl-C, so stages 1 and 2 check for one before they end.
 		{
 			RdbInitializer rdb_init;
 
@@ -649,6 +650,7 @@ SEXP gtrack_2d_import(SEXP _track, SEXP _files, SEXP _envir)
 				are_all_points &= (bool)kid_all_points;
 
 			pairs = list_pair_files(dirname);
+			check_interrupt();
 		}
 
 		// the records that the memory estimate of each pair counts: all of them, or those of its largest subtree
@@ -684,6 +686,7 @@ SEXP gtrack_2d_import(SEXP _track, SEXP _files, SEXP _envir)
 				for (size_t i = 0; i < split.size(); ++i)
 					part_records[split_idx[i]] = res[i];
 			}
+			check_interrupt();
 		}
 
 		// STAGE 3: build the quad trees

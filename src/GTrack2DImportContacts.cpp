@@ -553,7 +553,8 @@ SEXP gtrack_import_contacts(SEXP _track, SEXP _contacts, SEXP _fends, SEXP _allo
 		vector<PairFiles> pairs;
 
 		// Each stage has its own RdbInitializer: the multitasking state (shared memory, kid bookkeeping)
-		// is set up once per RdbInitializer, so the kids of the second stage need a fresh one.
+		// is set up once per RdbInitializer, so the kids of each stage need a fresh one. A new RdbInitializer
+		// also clears a pending Ctrl-C, so stages 1 and 2 check for one before they end.
 		{
 			RdbInitializer rdb_init;
 
@@ -589,6 +590,7 @@ SEXP gtrack_import_contacts(SEXP _track, SEXP _contacts, SEXP _fends, SEXP _allo
 				process_contacts_as_fends(iu, _contacts, _fends, dirname);
 
 			pairs = list_pair_files(dirname);
+			check_interrupt();
 		}
 
 		// the contacts that the memory estimate of each pair counts: all of them, or those of its largest subtree
@@ -624,6 +626,7 @@ SEXP gtrack_import_contacts(SEXP _track, SEXP _contacts, SEXP _fends, SEXP _allo
 				for (size_t i = 0; i < split.size(); ++i)
 					part_records[split_idx[i]] = res[i];
 			}
+			check_interrupt();
 		}
 
 		// STAGE 3: build the quad trees
