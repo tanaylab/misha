@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">misha</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.12.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.12.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -36,9 +36,19 @@
   <main id="main" class="col-md-9"><div class="page-header">
 
       <h1>Changelog</h1>
-      <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
+      <small>Source: <a href="https://github.com/tanaylab/misha/blob/v5.12.1/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="5.12.1" id="misha-5121">misha 5.12.1<a class="anchor" aria-label="anchor" href="#misha-5121"></a></h2>
+<ul><li><p><strong>Behavior fix:</strong> <code><a href="../reference/gcluster.run.html">gcluster.run()</a></code> jobs run against the caller’s database, working directory, datasets and virtual tracks, and load misha from the caller’s library. They had used the example database unless the job called <code><a href="../reference/gdb.init.html">gsetroot()</a></code> itself.</p></li>
+<li><p><strong>Behavior fix:</strong> <code><a href="../reference/gtrack.liftover.html">gtrack.liftover()</a></code> could read an indexed source track from the wrong chromosomes, with no error: any 2D track, and 1D tracks in a per-chromosome database whose <code>chrom_sizes.txt</code> names lack the “chr” prefix. Re-lift such tracks. An indexed source track outside a database is now an error.</p></li>
+<li><p><strong>Behavior fix:</strong> <code><a href="../reference/gtrack.liftover.html">gtrack.liftover()</a></code> of a 2D points track (e.g. Hi-C) writes a points track instead of 1bp rectangles, with memory bounded per chromosome pair (<code>gmax.data.size</code>), so genome-scale Hi-C tracks can be lifted.</p></li>
+<li><p><strong>Behavior fix:</strong> <code><a href="../reference/gtrack.2d.import.html">gtrack.2d.import()</a></code> and <code><a href="../reference/gtrack.2d.import_contacts.html">gtrack.2d.import_contacts()</a></code> reject a negative <code>start2</code>. Such rows were silently dropped or moved.</p></li>
+<li><p><code><a href="../reference/gtrack.2d.import.html">gtrack.2d.import()</a></code> and <code><a href="../reference/gtrack.2d.import_contacts.html">gtrack.2d.import_contacts()</a></code> run in parallel (up to <code>gmax.processes</code> workers) with identical output. A chromosome pair starts only when its estimated memory fits within <code>gmax.mem.usage</code>; its default is 80% of the machine’s RAM, so on a cluster set it to the job’s share. <code>gmultitasking = FALSE</code> restores the serial import.</p></li>
+<li><p>The 2D imports no longer crash R on an input file they cannot open or with <code>gmax.data.size</code> below 1.</p></li>
+<li><p>An integer <code>gmax.mem.usage</code> above about 2 GB (e.g. <code>4000000L</code>) overflowed; it is now read correctly.</p></li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="5.12.0" id="misha-5120">misha 5.12.0<a class="anchor" aria-label="anchor" href="#misha-5120"></a></h2>
 <ul><li><p>New <code>potts</code>, <code>potts.max</code>, <code>potts.max.pos</code> and <code>potts.count</code> virtual track functions, which score a pairwise (Potts) energy model across the genome, and <code><a href="../reference/gseq.potts.html">gseq.potts()</a></code> to score sequences with one. A fitted model’s <code>e</code>, <code>J</code>, <code>pairs</code> and <code>intercept</code> can be passed to <code>gvtrack.create(params = )</code> as they are.</p></li>
