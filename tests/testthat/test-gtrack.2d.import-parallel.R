@@ -217,6 +217,25 @@ test_that("gtrack.2d.import_contacts with several subtrees per pair is identical
     })
 })
 
+# gmax.data.size below 1 reads as 0 in C++, which the number of subtrees of a pair was divided by
+# (SIGFPE, killing R). It now means one record per subtree.
+test_that("2D imports with gmax.data.size below 1 do not crash", {
+    local_db_state()
+    withr::with_tempdir({
+        setup_import_db()
+        files <- write_slices(random_intervals(200, seed = 17), c(1, 1), "tiny")
+        for (import in list(
+            function(track) gtrack.2d.import(track, "test", files),
+            function(track) gtrack.2d.import_contacts(track, "test", files)
+        )) {
+            res <- import_both_ways(import, max_data_size = 0.5)
+            expect_gt(length(res$serial$md5), 0)
+            expect_identical(res$parallel$md5, res$serial$md5)
+            expect_identical(res$parallel$data, res$serial$data)
+        }
+    })
+})
+
 # gmax.mem.usage (KB) caps the estimated memory of the pairs built at once: a fixed 4 MiB per pair
 # plus its records. A 1 MB budget is below every pair, so the pairs are built one at a time. The
 # larger budgets fit two of these pairs (contacts pairs are larger), and the other kids wait.

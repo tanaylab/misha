@@ -216,9 +216,10 @@ uint64_t pair_mem(uint64_t num_records, uint64_t bytes_per_record)
 
 int64_t pair_num_subtrees(const IntervUtils &iu, int64_t num_records)
 {
-	int64_t num_subtrees = max(num_records / (int64_t)iu.get_max_data_size(), (int64_t)1);
+	// gmax.data.size below 1 reads as 0
+	int64_t num_subtrees = max(num_records / max((int64_t)iu.get_max_data_size(), (int64_t)1), (int64_t)1);
 
-	return 1 << (2 * (int)(log2(num_subtrees) / 2));  // round the number of subtrees to the lowest power of 4
+	return (int64_t)1 << (2 * (int)(log2(num_subtrees) / 2));  // round the number of subtrees to the lowest power of 4
 }
 
 string subtree_file_name(const string &dirname, int chromid1, int chromid2, int64_t isubtree)
