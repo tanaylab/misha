@@ -289,9 +289,6 @@ struct PairQueue {
 	char     lock;
 	uint64_t reserved;      // estimated memory of the pairs being built
 	uint64_t done;          // intermediate file bytes of the pairs built so far, for the progress report
-	uint64_t max_reserved;  // the most memory reserved at once, for the tests
-	int      running;       // number of pairs being built
-	int      max_running;   // the most pairs built at once, for the tests
 	// followed by int next[num_pairs + 1]: next[i] == i if pair i is not taken yet, otherwise a pair to look at
 	// after it; next[num_pairs] == num_pairs
 };
@@ -359,9 +356,6 @@ void build_pairs(IntervUtils &iu, const vector<PairFiles> &pairs, const vector<u
 			if (ipair < num_pairs) {
 				next[ipair] = ipair + 1;
 				queue->reserved += cost[ipair];
-				queue->max_reserved = max(queue->max_reserved, queue->reserved);
-				queue->running++;
-				queue->max_running = max(queue->max_running, queue->running);
 			}
 			unlock_queue(queue);
 
@@ -382,7 +376,6 @@ void build_pairs(IntervUtils &iu, const vector<PairFiles> &pairs, const vector<u
 
 			lock_queue(queue);
 			queue->reserved -= cost[ipair];
-			queue->running--;
 			queue->done += pairs[order[ipair]].size;
 			uint64_t all_done = queue->done;
 			unlock_queue(queue);
@@ -393,18 +386,6 @@ void build_pairs(IntervUtils &iu, const vector<PairFiles> &pairs, const vector<u
 		progress.report_last();
 		return (char)0;
 	}, false);
-
-	const char *stats_fname = getenv("MISHA_2D_IMPORT_STATS");
-
-	if (stats_fname && *stats_fname) {
-		FILE *fp = fopen(stats_fname, "w");
-
-		if (fp) {
-			fprintf(fp, "budget\tmax_mem\tmax_reserved\tmax_running\n%llu\t%llu\t%llu\t%d\n", (unsigned long long)budget,
-					(unsigned long long)(num_pairs ? mem[order[0]] : 0), (unsigned long long)queue->max_reserved, queue->max_running);
-			fclose(fp);
-		}
-	}
 }
 
 //--------------------------------------------------------------------------------------------------

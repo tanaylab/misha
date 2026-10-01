@@ -67,8 +67,6 @@ uint64_t pair_mem(uint64_t num_records, uint64_t bytes_per_record);
 // one waits. A pair whose estimate exceeds gmax.mem.usage is built alone.
 // The throttle of run_kids is off here: it keeps one kid running and suspends the others, and if the kid
 // it keeps is one waiting for memory, the suspended kids never resume.
-// If the environment variable MISHA_2D_IMPORT_STATS names a file, the budget, the largest estimate, and the
-// most memory reserved and pairs built at once are written to it, for the tests.
 void build_pairs(rdb::IntervUtils &iu, const std::vector<PairFiles> &pairs, const std::vector<uint64_t> &mem, int num_kids,
 				 const std::function<void(const PairFiles &)> &build);
 
