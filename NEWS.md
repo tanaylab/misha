@@ -1,14 +1,18 @@
 # misha 5.12.1
 
-* **Behavior fix:** `gcluster.run()` jobs run against the caller's database, working directory, loaded datasets and virtual tracks. They had used the bundled example database unless the job called `gsetroot()` itself.
+* **Behavior fix:** `gcluster.run()` jobs run against the caller's database, working directory, loaded datasets and virtual tracks. They had used the bundled example database unless the job called `gsetroot()` itself. The cluster nodes need misha >= 5.12.1 as well.
 
 * **Behavior fix:** `gtrack.2d.import()` and `gtrack.2d.import_contacts()` reject a negative `start2`, as they already did a negative `start1`. Such rows had been silently dropped or moved, and could leave a chromosome pair unreadable.
 
-* **Behavior fix:** `gtrack.liftover()` keeps a 2D points track (e.g. Hi-C contacts) as points instead of 1bp rectangles and holds at most one chromosome pair in memory (lower `gmax.data.size` for less), so genome-scale Hi-C tracks can be lifted. It had also lifted the wrong chromosome pairs from an indexed 2D source track.
+* **Behavior fix:** `gtrack.liftover()` could lift the wrong chromosome pairs from an indexed 2D source track, without an error (since 5.5.0). Re-lift 2D tracks that were lifted from an indexed source.
 
-* `gtrack.2d.import()` and `gtrack.2d.import_contacts()` run in parallel when `gmultitasking` is on. The tracks are identical to serial runs.
+* **Behavior fix:** `gtrack.liftover()` of a 2D points track (e.g. Hi-C contacts) writes a points track instead of 1bp rectangles, and holds at most one chromosome pair in memory (lower `gmax.data.size` for less), so genome-scale Hi-C tracks can be lifted.
 
-* In parallel, the 2D imports start a chromosome pair only when its estimated memory fits within `gmax.mem.usage`, so lowering that option caps their memory.
+* `gtrack.2d.import()` and `gtrack.2d.import_contacts()` now run in parallel by default (`gmultitasking` is on by default), with up to `gmax.processes` workers. The tracks are identical to serial runs, but peak memory grows with the number of workers: limit it with `gmax.processes` or `gmax.mem.usage`, or set `gmultitasking = FALSE`.
+
+* In parallel, the 2D imports start a chromosome pair only when its estimated memory fits within `gmax.mem.usage` alongside the pairs being written; a pair above it is written alone. Reading the input is not counted, and the default (80% of the machine's RAM, not a cluster job's share) rarely binds, so set `gmax.mem.usage` to what the job may use.
+
+* `gmax.mem.usage` given as an integer above 2147483 (KB, about 2 GB), e.g. `4000000L`, overflowed, which removed the memory limit of multitasking or set a wrong one. It is now read as given.
 
 # misha 5.12.0
 
