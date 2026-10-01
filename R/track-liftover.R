@@ -11,6 +11,18 @@
 #' function. The name of the newly created track is specified by 'track'
 #' argument and 'description' is added as a track attribute.
 #'
+#' For a 2D track both ends of every object are lifted. A point with an end
+#' outside the chain is dropped; a rectangle is clipped to the parts of its ends
+#' that the chain maps. A points track (e.g. Hi-C contacts) gives a points
+#' track; points that land on the same target point are merged by
+#' 'multi_target_agg' (e.g. "sum" for counts). With 'tgt_overlap_policy' "keep"
+#' or "agg" both ends of a cis contact can land on the same target position;
+#' its two mirrored copies, (x, y) and (y, x), then merge into one diagonal
+#' point, where "sum" and "count" count the contact twice. As in
+#' 'gtrack.2d.import_contacts', a chromosome pair with at least 4 times
+#' 'gmax.data.size' points is written in parts (a power of 4, rounded down),
+#' which lowers the memory used.
+#'
 #' Note: When passing a pre-loaded chain (data frame), overlap policies cannot
 #' be specified - they are taken from the chain's attributes that were set
 #' during loading. When passing a chain file path, policies can be specified
@@ -19,7 +31,9 @@
 #'
 #' @param track name of a created track
 #' @param description a character string description
-#' @param src.track.dir path to the directory of the source track
+#' @param src.track.dir path to the directory of the source track. An indexed
+#' source track (one with a 'track.idx') must be in the 'tracks' directory of its
+#' database: it is read by the chromosome ids of that database.
 #' @param multi_target_agg aggregation/selection policy for contributors that land on the same target locus. When multiple source intervals map to overlapping regions in the target genome (after applying tgt_overlap_policy), their values must be combined into a single value.
 #' @param params additional parameters for aggregation (e.g., for "nth" aggregation)
 #' @param na.rm logical indicating whether NA values should be removed before aggregation (default: TRUE)
@@ -184,11 +198,20 @@ gtrack.liftover <- function(track = NULL,
 
     .gconfirmtrackcreate(trackstr)
 
+    # An indexed source track is keyed by the chrom ids of its own database, which follow
+    # chrom_sizes.txt or, in a per-chromosome database, the sorted names (.gdb.chrom_order).
+    # NULL for a per-chromosome track (read by file name), or if no database is found.
+    src_chroms <- NULL
+    if (file.exists(file.path(src.track.dir, "track.idx"))) {
+        src_chroms <- .gtrack.liftover.src_chroms(src.track.dir)
+    }
+
     .gtrack.create_atomic(trackstr, function() {
         .gcall(
             "gtrack_liftover",
             trackstr,
             src.track.dir,
+            src_chroms,
             chain.intervs,
             src_overlap_policy,
             tgt_overlap_policy,
@@ -242,4 +265,29 @@ gtrack.liftover <- function(track = NULL,
         }
     )
     invisible(0)
+}
+
+# The chromosomes of the database that holds the track directory src.track.dir, in chrom
+# id order (see .gdb.chrom_order), or NULL if there is none: the database is the parent of
+# the nearest enclosing "tracks" directory that has a chrom_sizes.txt next to it.
+.gtrack.liftover.src_chroms <- function(src.track.dir) {
+    dir <- normalizePath(src.track.dir, mustWork = FALSE)
+    repeat {
+        parent <- dirname(dir)
+        if (parent == dir) {
+            return(NULL)
+        }
+        if (basename(parent) == "tracks" && file.exists(file.path(dirname(parent), "chrom_sizes.txt"))) {
+            break
+        }
+        dir <- parent
+    }
+    groot <- dirname(parent)
+    # read as gsetroot() reads it
+    chromsizes <- utils::read.csv(
+        file.path(groot, "chrom_sizes.txt"),
+        sep = "\t", header = FALSE, col.names = c("chrom", "size"), colClasses = c("character", "numeric")
+    )
+    chrom_order <- .gdb.chrom_order(groot, chromsizes)
+    chrom_order$names[chrom_order$id_order]
 }

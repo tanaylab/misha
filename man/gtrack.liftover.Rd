@@ -25,7 +25,9 @@ gtrack.liftover(
 
 \item{description}{a character string description}
 
-\item{src.track.dir}{path to the directory of the source track}
+\item{src.track.dir}{path to the directory of the source track. An indexed
+source track (one with a 'track.idx') must be in the 'tracks' directory of its
+database: it is read by the chromosome ids of that database.}
 
 \item{chain}{name of chain file or data frame as returned by
 'gintervals.load_chain'}
@@ -69,6 +71,18 @@ coordinates should be done. It can be either a name of a chain file or a
 data frame in the same format as returned by 'gintervals.load_chain'
 function. The name of the newly created track is specified by 'track'
 argument and 'description' is added as a track attribute.
+
+For a 2D track both ends of every object are lifted. A point with an end
+outside the chain is dropped; a rectangle is clipped to the parts of its ends
+that the chain maps. A points track (e.g. Hi-C contacts) gives a points
+track; points that land on the same target point are merged by
+'multi_target_agg' (e.g. "sum" for counts). With 'tgt_overlap_policy' "keep"
+or "agg" both ends of a cis contact can land on the same target position;
+its two mirrored copies, (x, y) and (y, x), then merge into one diagonal
+point, where "sum" and "count" count the contact twice. As in
+'gtrack.2d.import_contacts', a chromosome pair with at least 4 times
+'gmax.data.size' points is written in parts (a power of 4, rounded down),
+which lowers the memory used.
 
 Note: When passing a pre-loaded chain (data frame), overlap policies cannot
 be specified - they are taken from the chain's attributes that were set

@@ -1762,3 +1762,106 @@ test_that("gtrack.liftover fills missing target contigs for dense tracks", {
     vals <- readBin(con, numeric(), n = expected_bins, size = 4, endian = .Platform$endian)
     expect_true(all(is.nan(vals)))
 })
+
+# A per-chromosome database whose chrom_sizes.txt lacks the "chr" prefix of its seq files:
+# gsetroot() adds the prefix and sorts the names, so its chrom ids (chr1 = 0, chr2 = 1) are
+# not the chrom_sizes.txt order (2, 1). Returns the database, opened, with a sparse, a dense
+# and a points track; chr1 holds value 1 and chr2 value 2 (3 on the trans pair chr1-chr2).
+setup_db_with_unprefixed_chrom_sizes <- function(dir) {
+    fas <- file.path(dir, c("chr1.fasta", "chr2.fasta"))
+    cat(">chr1\n", strrep("A", 1000), "\n", sep = "", file = fas[1])
+    cat(">chr2\n", strrep("C", 2000), "\n", sep = "", file = fas[2])
+    db <- file.path(dir, "src")
+    suppressMessages(gdb.create(groot = db, fasta = fas))
+    writeLines(c("2\t2000", "1\t1000"), file.path(db, "chrom_sizes.txt"))
+    gsetroot(db)
+    expect_equal(as.character(gintervals.all()$chrom), c("chr1", "chr2"))
+
+    gtrack.create_sparse("sp", "x", gintervals(c("chr1", "chr2"), 0, 100), c(1, 2))
+    gtrack.create("dn", "x", "sp", iterator = 100)
+    contacts <- file.path(dir, "contacts.tsv")
+    write.table(data.frame(
+        chrom1 = c("chr1", "chr2", "chr1"), start1 = c(10, 20, 50), end1 = c(11, 21, 51),
+        chrom2 = c("chr1", "chr2", "chr2"), start2 = c(30, 40, 60), end2 = c(31, 41, 61), value = c(1, 2, 3)
+    ), contacts, sep = "\t", quote = FALSE, row.names = FALSE)
+    suppressMessages(gtrack.2d.import_contacts("pts", "x", contacts, fends = NULL))
+    db
+}
+
+test_that("gtrack.liftover reads an indexed source by the chrom ids gsetroot gives its database", {
+    local_db_state()
+    td <- tempfile("lift_idx_order_")
+    dir.create(td)
+    withr::defer(unlink(td, recursive = TRUE))
+
+    src_db <- setup_db_with_unprefixed_chrom_sizes(td)
+    tgt_db <- setup_db(list(">chrT1\n", strrep("A", 1000), "\n", ">chrT2\n", strrep("C", 2000), "\n"), return_db = TRUE)
+    chain <- new_chain_file()
+    write_chain_entry(chain, "chr1", 1000, "+", 0, 1000, "chrT1", 1000, "+", 0, 1000, 1)
+    write_chain_entry(chain, "chr2", 2000, "+", 0, 2000, "chrT2", 2000, "+", 0, 2000, 2)
+
+    tracks <- c("sp", "dn", "pts")
+    lift_all <- function(prefix) {
+        for (tr in tracks) {
+            gtrack.liftover(paste0(prefix, tr), "x", file.path(src_db, "tracks", paste0(tr, ".track")), chain)
+        }
+    }
+    extract_all <- function(prefix) {
+        list(
+            sp = gextract(paste0(prefix, "sp"), gintervals.all(), colnames = "v"),
+            dn = gextract(paste0(prefix, "dn"), gintervals(c("chrT1", "chrT2"), 0, 100), colnames = "v"),
+            pts = gextract(paste0(prefix, "pts"), gintervals.2d.all(), colnames = "v")
+        )
+    }
+
+    # per-chromosome source files are found by name
+    lift_all("files_")
+    from_files <- extract_all("files_")
+    expect_equal(from_files$sp$v, c(1, 2))
+    expect_equal(from_files$dn$v, c(1, 2))
+    expect_equal(
+        data.frame(
+            chrom1 = as.character(from_files$pts$chrom1), start1 = from_files$pts$start1,
+            chrom2 = as.character(from_files$pts$chrom2), start2 = from_files$pts$start2, v = from_files$pts$v
+        ),
+        data.frame(
+            chrom1 = c("chrT1", "chrT1", "chrT1", "chrT2", "chrT2", "chrT2"), start1 = c(10, 30, 50, 60, 20, 40),
+            chrom2 = c("chrT1", "chrT1", "chrT2", "chrT1", "chrT2", "chrT2"), start2 = c(30, 10, 60, 50, 40, 20),
+            v = c(1, 1, 3, 3, 2, 2)
+        )
+    )
+
+    gsetroot(src_db)
+    for (tr in tracks) {
+        gtrack.convert_to_indexed(tr)
+        expect_true(file.exists(file.path(src_db, "tracks", paste0(tr, ".track"), "track.idx")))
+    }
+    gsetroot(tgt_db)
+    lift_all("idx_")
+    expect_equal(extract_all("idx_"), from_files)
+})
+
+test_that("gtrack.liftover of an indexed source outside a database is an error", {
+    local_db_state()
+    td <- tempfile("lift_idx_nodb_")
+    dir.create(td)
+    withr::defer(unlink(td, recursive = TRUE))
+
+    src_db <- setup_db_with_unprefixed_chrom_sizes(td)
+    gtrack.convert_to_indexed("sp")
+    # copies of the track that no database contains
+    loose <- file.path(td, "loose")
+    dir.create(loose)
+    file.copy(file.path(src_db, "tracks", c("sp.track", "dn.track")), loose, recursive = TRUE)
+
+    setup_db(list(">chrT1\n", strrep("A", 1000), "\n", ">chrT2\n", strrep("C", 2000), "\n"))
+    chain <- new_chain_file()
+    write_chain_entry(chain, "chr1", 1000, "+", 0, 1000, "chrT1", 1000, "+", 0, 1000, 1)
+    write_chain_entry(chain, "chr2", 2000, "+", 0, 2000, "chrT2", 2000, "+", 0, 2000, 2)
+
+    # the chrom ids of an indexed track are unknown without its database
+    expect_error(gtrack.liftover("lifted_sp", "x", file.path(loose, "sp.track"), chain), "database")
+    # a per-chromosome track is read by file name and needs none
+    gtrack.liftover("lifted_dn", "x", file.path(loose, "dn.track"), chain)
+    expect_equal(gextract("lifted_dn", gintervals(c("chrT1", "chrT2"), 0, 100))$lifted_dn, c(1, 2))
+})
