@@ -110,7 +110,7 @@ uint64_t ConfigurationManager::get_max_mem_usage() const
 		if (Rf_isReal(r_max_mem_usage))
 			m_max_mem_usage = (uint64_t)REAL(r_max_mem_usage)[0] * 1000;
 		else if (Rf_isInteger(r_max_mem_usage))
-			m_max_mem_usage = INTEGER(r_max_mem_usage)[0] * 1000;
+			m_max_mem_usage = (uint64_t)INTEGER(r_max_mem_usage)[0] * 1000;  // in 64 bits: 4 GB as KB overflows an int
 		else
 			m_max_mem_usage = misha::config::UNLIMITED;
 	}
