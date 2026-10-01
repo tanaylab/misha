@@ -54,6 +54,20 @@ test_that("gtrack.2d.import_contacts rejects a negative start2", {
     expect_false(gtrack.exists(tmptrack))
 })
 
+test_that("2D importers name end2 when start2 >= end2", {
+    tmptrack <- paste0("test.tmptrack_", sample(1:1e9, 1))
+    withr::defer(gtrack.rm(tmptrack, force = TRUE))
+
+    src <- write_2d_intervals_file(data.frame(
+        chrom1 = "chr1", start1 = 100, end1 = 101,
+        chrom2 = "chr2", start2 = 10, end2 = 10, value = 1
+    ))
+    msg <- "start2 coordinate exceeds or equals the end2 coordinate"
+    expect_error(gtrack.2d.import(tmptrack, "start2 >= end2", src), msg)
+    expect_error(gtrack.2d.import_contacts(tmptrack, "start2 >= end2", src), msg)
+    expect_false(gtrack.exists(tmptrack))
+})
+
 test_that("import with attrs parameter - single attribute", {
     tmptrack <- paste0("test.tmptrack_", sample(1:1e9, 1))
     gtrack.rm(tmptrack, force = TRUE)

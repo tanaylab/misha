@@ -159,7 +159,7 @@ static void process_contacts_as_intervals(IntervUtils &iu, SEXP _files, Contact_
 				verror("File %s, line %ld: invalid format of end2 coordinate", infile.file_name().c_str(), lineno);
 
 			if (start2 >= end2) 
-				verror("File %s, line %ld: start2 coordinate exceeds or equals the end1 coordinate", infile.file_name().c_str(), lineno);
+				verror("File %s, line %ld: start2 coordinate exceeds or equals the end2 coordinate", infile.file_name().c_str(), lineno);
 
 			if ((uint64_t)end2 > iu.get_chromkey().get_chrom_size(chromid2)) 
 				verror("File %s, line %ld: end2 coordinate exceeds chromosome's size", infile.file_name().c_str(), lineno);
