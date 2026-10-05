@@ -26,6 +26,31 @@ create_test_db <- function(path, chrom_sizes = data.frame(chrom = c("chr1", "chr
     invisible(path)
 }
 
+#' Create a per-chromosome database whose chrom_sizes.txt is not in sorted order
+#'
+#' Laid out like the lab's hg38 and mm10: chrom_sizes.txt names have no "chr"
+#' prefix and are not sorted, the .seq files have the prefix, and there is no
+#' seq/genome.idx. gsetroot() names the chromosomes chr2, chr10, chr1, chrX and
+#' chr1_KI270706v1_random, and gives them chrom ids in the order of the sorted
+#' names (.gdb.chrom_order), not the chrom_sizes.txt order. Each chromosome's
+#' sequence is a different letter, so a sequence read from the wrong chromosome
+#' shows.
+#'
+#' @param path Path where the database should be created
+#' @return Invisible normalized path to the created database
+create_db_with_unsorted_chrom_sizes <- function(path) {
+    chroms <- c("2", "10", "1", "X", "1_KI270706v1_random")
+    sizes <- c(2000, 1500, 1000, 1200, 500)
+    bases <- c("A", "C", "G", "T", "N")
+    dir.create(file.path(path, "tracks"), recursive = TRUE, showWarnings = FALSE)
+    dir.create(file.path(path, "seq"), showWarnings = FALSE)
+    for (i in seq_along(chroms)) {
+        writeBin(charToRaw(strrep(bases[i], sizes[i])), file.path(path, "seq", paste0("chr", chroms[i], ".seq")))
+    }
+    writeLines(paste(chroms, sizes, sep = "\t"), file.path(path, "chrom_sizes.txt"))
+    invisible(normalizePath(path))
+}
+
 #' Path to the shared, read-only test database
 #'
 #' This is the *source* the per-run overlays are built from. Nothing in the

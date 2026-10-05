@@ -89,7 +89,7 @@ test_that("gdb.convert_to_indexed preserves chrom_sizes.txt order (non-alphabeti
     expect_false(identical(converted_chrom_sizes$chrom, sort(converted_chrom_sizes$chrom)))
 })
 
-test_that("gdb.convert_to_indexed preserves chrom_sizes.txt order when adding chr prefix", {
+test_that("gdb.convert_to_indexed adds the chr prefix and keeps the chrom order gsetroot gives the database", {
     local_db_state()
 
     # Create a database with chrom_sizes.txt WITHOUT chr prefix
@@ -127,17 +127,15 @@ test_that("gdb.convert_to_indexed preserves chrom_sizes.txt order when adding ch
     )
     colnames(converted_chrom_sizes) <- c("chrom", "size")
 
-    # Verify order is preserved (should match original order)
-    # Note: chromosome names should now have chr prefix, but order should be preserved
-    expected_order <- c("chr15", "chr10", "chr17_random", "chr1")
-    expect_equal(converted_chrom_sizes$chrom, expected_order)
-    expect_equal(converted_chrom_sizes$size, original_chrom_sizes$size)
-
-    # Verify it's NOT sorted alphabetically
-    expect_false(identical(converted_chrom_sizes$chrom, sort(converted_chrom_sizes$chrom)))
+    # This is a per-chromosome database (unprefixed chrom_sizes.txt, prefixed .seq files), so
+    # gsetroot() names its chromosomes with the chr prefix and gives them chrom ids in the
+    # order of the sorted names. The converted database keeps that order, not the
+    # chrom_sizes.txt one, so that existing indexed tracks keep their chrom ids.
+    expect_equal(converted_chrom_sizes$chrom, c("chr1", "chr10", "chr15", "chr17_random"))
+    expect_equal(converted_chrom_sizes$size, c(20, 10, 15, 17))
 })
 
-test_that("gdb.convert_to_indexed preserves chrom_sizes.txt order when removing chr prefix", {
+test_that("gdb.convert_to_indexed keeps the chrom_sizes.txt names and order when the .seq files lack the chr prefix", {
     local_db_state()
 
     # Create a database with chrom_sizes.txt WITH chr prefix
@@ -175,10 +173,9 @@ test_that("gdb.convert_to_indexed preserves chrom_sizes.txt order when removing 
     )
     colnames(converted_chrom_sizes) <- c("chrom", "size")
 
-    # Verify order is preserved (should match original order)
-    # Note: chromosome names should now be without chr prefix, but order should be preserved
-    expected_order <- c("15", "10", "17_random", "1")
-    expect_equal(converted_chrom_sizes$chrom, expected_order)
+    # The chromosomes keep the names gsetroot() gives them (those of chrom_sizes.txt), as they
+    # do when the database is loaded; the .seq files are found without the prefix
+    expect_equal(converted_chrom_sizes$chrom, original_chrom_sizes$chrom)
     expect_equal(converted_chrom_sizes$size, original_chrom_sizes$size)
 
     # Verify it's NOT sorted alphabetically
@@ -368,4 +365,51 @@ test_that("gdb.convert_to_indexed validates converted sequences", {
         gdb.convert_to_indexed(groot = test_db, force = TRUE, validate = TRUE, verbose = TRUE, convert_tracks = FALSE, convert_intervals = FALSE),
         "already in indexed format"
     )
+})
+
+test_that("gdb.convert_to_indexed keeps the chrom ids of a per-chromosome database whether or not it is loaded", {
+    local_db_state()
+    td <- tempfile("convert_order_")
+    dir.create(td)
+    withr::defer(unlink(td, recursive = TRUE))
+
+    # chrom_sizes.txt is unsorted, so gsetroot() gives the chromosomes the ids of the sorted
+    # names. An indexed track made now is keyed by those ids and must stay readable.
+    loaded_db <- create_db_with_unsorted_chrom_sizes(file.path(td, "loaded"))
+    unloaded_db <- create_db_with_unsorted_chrom_sizes(file.path(td, "unloaded"))
+    other_db <- create_test_db(file.path(td, "other"))
+    snapshot <- function() {
+        list(
+            chroms = gintervals.all(),
+            sp = gextract("sp", gintervals.all()),
+            seq = gseq.extract(gintervals(gintervals.all()$chrom, 0, 5))
+        )
+    }
+    before <- list()
+    for (db in c(loaded_db, unloaded_db)) {
+        gsetroot(db)
+        cs <- read.table(file.path(db, "chrom_sizes.txt"), colClasses = "character")
+        expect_false(identical(as.character(gintervals.all()$chrom), paste0("chr", cs$V1)))
+        intervs <- gintervals.all()
+        intervs$end <- 100
+        gtrack.create_sparse("sp", "x", intervs, seq_len(nrow(intervs)))
+        gtrack.convert_to_indexed("sp")
+        before[[db]] <- snapshot()
+    }
+
+    gsetroot(loaded_db)
+    suppressMessages(gdb.convert_to_indexed(force = TRUE))
+    gsetroot(other_db)
+    suppressMessages(gdb.convert_to_indexed(groot = unloaded_db, force = TRUE))
+
+    for (db in c(loaded_db, unloaded_db)) {
+        expect_true(misha:::.gdb.is_indexed_at(db))
+        gsetroot(db)
+        expect_equal(snapshot(), before[[db]])
+    }
+    # the same database whichever database was loaded
+    for (f in c("chrom_sizes.txt", "seq/genome.idx", "seq/genome.seq")) {
+        read_bytes <- function(db) readBin(file.path(db, f), "raw", n = file.size(file.path(db, f)))
+        expect_identical(read_bytes(unloaded_db), read_bytes(loaded_db), info = f)
+    }
 })
