@@ -1,3 +1,13 @@
+# misha 5.12.2
+
+* **Behavior fix:** `gdb.convert_to_indexed()` converts a database that is not loaded as it does the loaded one. It had renumbered the chromosomes of a per-chromosome database with an unsorted, unprefixed `chrom_sizes.txt`, so its existing indexed tracks and interval sets read the wrong chromosomes; recreate those in a database converted that way.
+
+* **Behavior fix:** `gtrack.copy()` of an indexed track out of a per-chromosome database with an unsorted, unprefixed `chrom_sizes.txt` put values on the wrong chromosomes. Re-copy such tracks.
+
+* **Behavior fix:** a per-chromosome database with an unprefixed `chrom_sizes.txt` gets the same chromosome order in every locale: a session in a C locale now numbers its chromosomes as an en_US session does (on hg38 they differed). Indexed tracks and interval sets converted in a C-locale session in such a database must be reconverted.
+
+* **Behavior fix:** files named by chromosome aliases (`1` for `chr1`, `1-2` for `chr1` and `chr2`, as earlier pymisha wrote them) are found in 2D tracks, big interval sets and `gtrack.liftover()` source tracks, as in 1D tracks. Such 2D tracks had read as empty and such sources lifted to empty tracks, with no error. If such a 2D track was used as an intervals set, delete the `.meta` file in its directory.
+
 # misha 5.12.1
 
 * **Behavior fix:** `gcluster.run()` jobs run against the caller's database, working directory, datasets and virtual tracks, and load misha from the caller's library. They had used the example database unless the job called `gsetroot()` itself.
