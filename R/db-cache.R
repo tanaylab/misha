@@ -714,20 +714,20 @@ gdb.mark_cache_dirty <- function() {
         file.exists(file.path(seq_dir, "genome.seq"))
 }
 
-# Read chromosome names verbatim from chrom_sizes.txt (no "chr" prefix
-# normalization), in declaration order. Callers that need normalization
-# must apply it themselves.
+# The chromosome names of the database at groot in chrom id order, as gsetroot() gives
+# them (.gdb.chrom_order), without loading it: chrom id i (0-based) is element i + 1. An
+# indexed track of the database is keyed by these ids. In a per-chromosome database the
+# names get the "chr" prefix and follow the sorted names, not the chrom_sizes.txt order.
 .gdb.chrom_names_at <- function(groot) {
     cs <- file.path(groot, "chrom_sizes.txt")
     if (!file.exists(cs)) {
         stop(sprintf("chrom_sizes.txt missing in %s", groot), call. = FALSE)
     }
-    df <- utils::read.table(
+    # read as gsetroot() reads it
+    chromsizes <- utils::read.csv(
         cs,
-        header = FALSE, sep = "\t",
-        stringsAsFactors = FALSE,
-        colClasses = c("character", "integer"),
-        col.names = c("chrom", "size")
+        sep = "\t", header = FALSE, col.names = c("chrom", "size"), colClasses = c("character", "numeric")
     )
-    df$chrom
+    chrom_order <- .gdb.chrom_order(groot, chromsizes)
+    chrom_order$names[chrom_order$id_order]
 }

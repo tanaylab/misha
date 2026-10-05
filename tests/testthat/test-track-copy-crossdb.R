@@ -15,6 +15,16 @@ test_that(".gdb.is_indexed_at and .gdb.chrom_names_at probe a db without loading
     })
 })
 
+test_that(".gdb.chrom_names_at gives the chrom id order gsetroot gives a per-chromosome db", {
+    local_db_state()
+    withr::with_tempdir({
+        db <- create_db_with_unsorted_chrom_sizes("unsorted_db")
+        names_at <- misha:::.gdb.chrom_names_at(db)
+        gsetroot(db)
+        expect_equal(names_at, as.character(gintervals.all()$chrom))
+    })
+})
+
 test_that(".gdb.is_indexed_at returns TRUE for an indexed db", {
     withr::with_tempdir({
         create_test_db("idx_db")
@@ -430,5 +440,36 @@ test_that("split followed by pack reproduces the original indexed pair byte-for-
 
         expect_equal(idx_after, idx_before)
         expect_equal(dat_after, dat_before)
+    })
+})
+
+test_that("gtrack.copy splits an indexed track of a per-chromosome db by the chrom ids gsetroot gives it", {
+    local_db_state()
+    withr::with_tempdir({
+        # chrom_sizes.txt is unsorted, so the chrom ids of src follow the sorted names
+        src <- create_db_with_unsorted_chrom_sizes("src")
+        dest_perchrom <- create_db_with_unsorted_chrom_sizes("dest_perchrom")
+        dest_indexed <- normalizePath(create_test_db("dest_indexed", chrom_sizes = data.frame(
+            chrom = c("chr2", "chr10", "chr1", "chrX", "chr1_KI270706v1_random"),
+            size = c(2000, 1500, 1000, 1200, 500)
+        )))
+        gdb.init(dest_indexed)
+        gdb.convert_to_indexed(force = TRUE, verbose = FALSE)
+
+        gsetroot(src)
+        intervs <- gintervals.all()
+        intervs$end <- 100
+        gtrack.create_sparse("sp", "x", intervs, seq_len(nrow(intervs)))
+        gtrack.convert_to_indexed("sp")
+        src_vals <- gextract("sp", gintervals.all())
+        expected <- setNames(src_vals$sp, as.character(src_vals$chrom))
+
+        for (db in c(dest_perchrom, dest_indexed)) {
+            gsetroot(src)
+            gtrack.copy("sp", "sp_copy", db = db)
+            gsetroot(db)
+            res <- gextract("sp_copy", gintervals.all())
+            expect_equal(setNames(res$sp_copy, as.character(res$chrom))[names(expected)], expected, info = db)
+        }
     })
 })

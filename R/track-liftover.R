@@ -282,12 +282,5 @@ gtrack.liftover <- function(track = NULL,
         }
         dir <- parent
     }
-    groot <- dirname(parent)
-    # read as gsetroot() reads it
-    chromsizes <- utils::read.csv(
-        file.path(groot, "chrom_sizes.txt"),
-        sep = "\t", header = FALSE, col.names = c("chrom", "size"), colClasses = c("character", "numeric")
-    )
-    chrom_order <- .gdb.chrom_order(groot, chromsizes)
-    chrom_order$names[chrom_order$id_order]
+    .gdb.chrom_names_at(dirname(parent))
 }
