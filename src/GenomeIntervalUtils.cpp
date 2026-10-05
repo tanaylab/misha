@@ -892,6 +892,10 @@ SEXP gbigintervs_load_chrom(SEXP _intervset, SEXP _chrom, SEXP _envir)
 
 		SEXP rintervals = R_NilValue;
 
+		// a per-chromosome file may be named by an alias of the chromosome, as a track's is
+		if (stat(chrom_filename.c_str(), &st) != 0 && stat((intervset_path + "/intervals.idx").c_str(), &st) != 0)
+			chrom_filename = intervset_path + "/" + GenomeTrack::find_existing_1d_filename(iu.get_chromkey(), intervset_path, chromid);
+
 		if (stat(chrom_filename.c_str(), &st) == 0) {
 			// PER-CHROMOSOME PATH: Per-chromosome file exists
 			rintervals = rprotect_ptr(RSaneUnserialize(chrom_filename.c_str()));
@@ -995,6 +999,13 @@ SEXP gbigintervs_load_chrom2d(SEXP _intervset, SEXP _chrom1, SEXP _chrom2, SEXP 
 		struct stat st;
 
 		SEXP rintervals = R_NilValue;
+
+		// a per-pair file may be named by aliases of the chromosomes, as a 2D track's is
+		if (stat(pair_filename.c_str(), &st) != 0 && stat((intervset_path + "/intervals2d.idx").c_str(), &st) != 0) {
+			GenomeTrack::Pair2Filename alias_filenames;
+			GenomeTrack::get_2d_alias_filenames(iu.get_chromkey(), intervset_path, alias_filenames);
+			pair_filename = intervset_path + "/" + GenomeTrack::get_2d_filename(iu.get_chromkey(), chromid1, chromid2, alias_filenames);
+		}
 
 		if (stat(pair_filename.c_str(), &st) == 0) {
 			// PER-PAIR PATH: Per-pair file exists

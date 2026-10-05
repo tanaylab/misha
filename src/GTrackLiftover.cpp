@@ -704,7 +704,8 @@ SEXP gtrack_liftover(SEXP _track,
 					}
 
 					try {
-						snprintf(filename, sizeof(filename), "%s/%s", src_track_dir, ichrom->c_str());
+						snprintf(filename, sizeof(filename), "%s/%s", src_track_dir,
+								 GenomeTrack::find_existing_1d_filename(src_chromkey, src_track_dir, src_chromid_in_chain).c_str());
 						src_track.init_read(filename, chromid_to_use);
 						if (binsize > 0 && binsize != src_track.get_bin_size()) {
 							char filename2[FILENAME_MAX];
@@ -758,7 +759,8 @@ SEXP gtrack_liftover(SEXP _track,
 					}
 
 					try {
-						snprintf(filename, sizeof(filename), "%s/%s", src_track_dir, ichrom->c_str());
+						snprintf(filename, sizeof(filename), "%s/%s", src_track_dir,
+								 GenomeTrack::find_existing_1d_filename(src_chromkey, src_track_dir, src_chromid_in_chain).c_str());
 						src_track.init_read(filename, chromid_to_use);
 					} catch (TGLException &) {  // some of source chroms might be missing, this is normal
 						progress.report(1);
@@ -1048,6 +1050,16 @@ SEXP gtrack_liftover(SEXP _track,
 			// chromosome-pair file (tens of GB for a Hi-C pair); bound the cache instead.
 			int64_t src_num_chunks = iu.get_track_num_chunks() ? iu.get_track_num_chunks() : 100;
 
+			// A per-pair source file may be named by the chain's names with the "chr" prefix
+			// toggled (as find_existing_1d_filename tries for 1D files, and as an indexed source
+			// is matched in map_src_chainid2genomeid), e.g. "1-2" for chr1 and chr2.
+			for (int chromid = 0; chromid < (int)src_id2chrom.size(); ++chromid) {
+				const string &name = src_id2chrom[chromid];
+				src_chromkey.add_chrom_alias(name.compare(0, 3, "chr") ? "chr" + name : name.substr(3), chromid);
+			}
+			GenomeTrack::Pair2Filename src_alias_filenames;
+			GenomeTrack::get_2d_alias_filenames(src_chromkey, src_track_dir, src_alias_filenames);
+
 			// convert source intervals and write them to files
 			for (vector<string>::const_iterator ichrom1 = src_id2chrom.begin(); ichrom1 != src_id2chrom.end(); ++ichrom1) {
 				for (vector<string>::const_iterator ichrom2 = src_id2chrom.begin(); ichrom2 != src_id2chrom.end(); ++ichrom2) {
@@ -1073,7 +1085,8 @@ SEXP gtrack_liftover(SEXP _track,
 					}
 
 					try {
-						snprintf(filename, sizeof(filename), "%s/%s-%s", src_track_dir, ichrom1->c_str(), ichrom2->c_str());
+						snprintf(filename, sizeof(filename), "%s/%s", src_track_dir,
+								 GenomeTrack::get_2d_filename(src_chromkey, chromid1, chromid2, src_alias_filenames).c_str());
 						src_track->init_read(filename, read_chromid1, read_chromid2);
 						if (!src_track->has_data_for_pair()) {
 							progress.report(1);

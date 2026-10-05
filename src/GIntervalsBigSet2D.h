@@ -9,6 +9,7 @@
 #include "GIntervalsBigSet.h"
 #include "GIntervalsFetcher2D.h"
 #include "GIntervalsMeta2D.h"
+#include "GenomeTrack.h"
 #include "rdbinterval.h"
 
 // Forward declarations
@@ -105,6 +106,10 @@ private:
 	std::string m_dat2d_path;       // Path to currently open intervals2d.dat
 	FILE*       m_dat2d_fp;         // Open file pointer for intervals2d.dat
 	bool        m_dat2d_open;       // Whether m_dat2d_fp is valid
+
+	// Per-pair files named by chromosome aliases, listed on first need
+	GenomeTrack::Pair2Filename m_alias_filenames;
+	bool        m_alias_filenames_listed{false};
 
 	// Static index cache (thread-safe)
 	static std::map<std::string, std::shared_ptr<IntervalsIndex2D>> s_index_cache;

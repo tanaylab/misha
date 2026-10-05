@@ -1841,6 +1841,53 @@ test_that("gtrack.liftover reads an indexed source by the chrom ids gsetroot giv
     expect_equal(extract_all("idx_"), from_files)
 })
 
+test_that("gtrack.liftover finds per-chromosome source files named by a chromosome alias", {
+    local_db_state()
+    td <- tempfile("lift_alias_names_")
+    dir.create(td)
+    withr::defer(unlink(td, recursive = TRUE))
+
+    src_db <- setup_db_with_unprefixed_chrom_sizes(td)
+    setup_db(list(">chrT1\n", strrep("A", 1000), "\n", ">chrT2\n", strrep("C", 2000), "\n"))
+    chain <- new_chain_file()
+    write_chain_entry(chain, "chr1", 1000, "+", 0, 1000, "chrT1", 1000, "+", 0, 1000, 1)
+    write_chain_entry(chain, "chr2", 2000, "+", 0, 2000, "chrT2", 2000, "+", 0, 2000, 2)
+
+    tracks <- c("sp", "dn", "pts")
+    lift_all <- function(prefix) {
+        for (tr in tracks) {
+            gtrack.liftover(paste0(prefix, tr), "x", file.path(src_db, "tracks", paste0(tr, ".track")), chain)
+        }
+    }
+    extract_all <- function(prefix) {
+        list(
+            sp = gextract(paste0(prefix, "sp"), gintervals.all(), colnames = "v"),
+            dn = gextract(paste0(prefix, "dn"), gintervals(c("chrT1", "chrT2"), 0, 100), colnames = "v"),
+            pts = gextract(paste0(prefix, "pts"), gintervals.2d.all(), colnames = "v")
+        )
+    }
+    lift_all("canonical_")
+    expected <- extract_all("canonical_")
+    expect_equal(expected$sp$v, c(1, 2))
+    expect_equal(nrow(expected$pts), 6)
+
+    # the source files named as earlier pymisha named them: "1" for chr1, and pairs such as
+    # "1-1", "1-chr2" or "chr2-1"
+    alias_name <- function(file, i) {
+        chroms <- strsplit(file, "-", fixed = TRUE)[[1]]
+        strip <- if (length(chroms) == 1) TRUE else list(c(TRUE, TRUE), c(TRUE, FALSE), c(FALSE, TRUE))[[(i - 1) %% 3 + 1]]
+        chroms[strip] <- sub("^chr", "", chroms[strip])
+        paste(chroms, collapse = "-")
+    }
+    for (tr in tracks) {
+        track_dir <- file.path(src_db, "tracks", paste0(tr, ".track"))
+        files <- grep("^chr", list.files(track_dir), value = TRUE)
+        expect_true(all(file.rename(file.path(track_dir, files), file.path(track_dir, mapply(alias_name, files, seq_along(files))))))
+    }
+    lift_all("alias_")
+    expect_equal(extract_all("alias_"), expected)
+})
+
 test_that("gtrack.liftover of an indexed source outside a database is an error", {
     local_db_state()
     td <- tempfile("lift_idx_nodb_")

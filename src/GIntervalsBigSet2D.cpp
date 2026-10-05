@@ -4,6 +4,7 @@
 #include <sys/types.h>
 
 #include "GIntervalsBigSet2D.h"
+#include "GenomeTrack.h"
 #include "IntervalsIndex2D.h"
 #include "rdbutils.h"
 
@@ -79,6 +80,15 @@ void GIntervalsBigSet2D::load_chrom(int chromid1, int chromid2)
 			// SURGICAL PIVOT: Check for per-chromosome file first
 			struct stat st;
 			SEXP rintervals = R_NilValue;
+
+			// a per-pair file may be named by aliases of the chromosomes, as a 2D track's is
+			if (stat(filename.c_str(), &st) != 0 && !get_intervals_index(intervset_dir)) {
+				if (!m_alias_filenames_listed) {
+					GenomeTrack::get_2d_alias_filenames(m_iu->get_chromkey(), intervset_dir, m_alias_filenames);
+					m_alias_filenames_listed = true;
+				}
+				filename = intervset_dir + "/" + GenomeTrack::get_2d_filename(m_iu->get_chromkey(), chromid1, chromid2, m_alias_filenames);
+			}
 
 			if (stat(filename.c_str(), &st) == 0) {
 				// PER-CHROMOSOME PATH: Per-pair file exists

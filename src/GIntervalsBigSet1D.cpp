@@ -3,6 +3,7 @@
 #include <sys/types.h>
 
 #include "GIntervalsBigSet1D.h"
+#include "GenomeTrack.h"
 #include "IntervalsIndex1D.h"
 #include "rdbutils.h"
 
@@ -76,6 +77,10 @@ void GIntervalsBigSet1D::load_chrom(int chromid)
 			// SURGICAL PIVOT: Check for per-chromosome file first
 			struct stat st;
 			SEXP rintervals = R_NilValue;
+
+			// a per-chromosome file may be named by an alias of the chromosome, as a track's is
+			if (stat(filename.c_str(), &st) != 0 && !get_intervals_index(intervset_dir))
+				filename = intervset_dir + "/" + GenomeTrack::find_existing_1d_filename(m_iu->get_chromkey(), intervset_dir, chromid);
 
 			if (stat(filename.c_str(), &st) == 0) {
 				// PER-CHROMOSOME PATH: Per-chromosome file exists
