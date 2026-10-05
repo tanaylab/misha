@@ -124,6 +124,28 @@ string GenomeTrack::find_existing_1d_filename(const GenomeChromKey &chromkey, co
 	return base;
 }
 
+void GenomeTrack::get_2d_alias_filenames(const GenomeChromKey &chromkey, const string &track_dir, Pair2Filename &alias_filenames)
+{
+	alias_filenames.clear();
+
+	// get_chrom_files lists nothing for an indexed track: it keeps every pair in track.dat
+	vector<string> filenames;
+	rdb::get_chrom_files(track_dir.c_str(), filenames);
+	sort(filenames.begin(), filenames.end());
+
+	unordered_set<string> existing(filenames.begin(), filenames.end());
+	for (const string &filename : filenames) {
+		pair<int, int> chromids;
+		try {
+			chromids = get_chromid_2d(chromkey, filename);
+		} catch (TGLException &) {
+			continue;  // not a pair file
+		}
+		if (!existing.count(get_2d_filename(chromkey, chromids.first, chromids.second)))
+			alias_filenames.emplace(chromids, filename);  // keeps the first in sorted order
+	}
+}
+
 
 GenomeTrack::Type GenomeTrack::get_type(const char *track_dir, const GenomeChromKey &chromkey, bool return_obsolete_types)
 {

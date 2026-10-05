@@ -2133,7 +2133,12 @@ void TrackExpressionVars::start_chrom(const GInterval2D &interval)
 					}
 				}
 			} else if (!m_interval2d.is_same_chrom(interval)) {
-				string filename(track2path(m_iu.get_env(), itrack_n_imdf->name) + "/" + GenomeTrack::get_2d_filename(m_iu.get_chromkey(), interval.chromid1(), interval.chromid2()));
+				string track_dir(track2path(m_iu.get_env(), itrack_n_imdf->name));
+				if (!itrack_n_imdf->alias_filenames_2d_listed) {
+					GenomeTrack::get_2d_alias_filenames(m_iu.get_chromkey(), track_dir, itrack_n_imdf->alias_filenames_2d);
+					itrack_n_imdf->alias_filenames_2d_listed = true;
+				}
+				string filename(track_dir + "/" + GenomeTrack::get_2d_filename(m_iu.get_chromkey(), interval.chromid1(), interval.chromid2(), itrack_n_imdf->alias_filenames_2d));
 				if (itrack_n_imdf->type == GenomeTrack::RECTS) {
 					auto t = make_shared<GenomeTrackRectsRects>(m_iu.get_track_chunk_size(), m_iu.get_track_num_chunks());
 					t->init_read(filename.c_str(), interval.chromid1(), interval.chromid2());

@@ -63,6 +63,25 @@ public:
 		return chromkey.id2chrom(chromid1) + "-" + chromkey.id2chrom(chromid2);
 	}
 
+	// Per-pair files of a 2D track named by aliases of their chromosomes (e.g. "1-2" or "chr1-2"
+	// for chr1 and chr2), keyed by chrom pair
+	typedef map<pair<int, int>, string> Pair2Filename;
+
+	// The per-pair files in track_dir whose names resolve (get_chromid_2d) to a chrom pair that
+	// has no file named get_2d_filename; when several do, the first in sorted order. This is
+	// the 2D counterpart of find_existing_1d_filename. Empty for an indexed track.
+	static void get_2d_alias_filenames(const GenomeChromKey &chromkey, const string &track_dir, Pair2Filename &alias_filenames);
+
+	// The file of (chromid1, chromid2) in alias_filenames if it is there, otherwise get_2d_filename
+	static string get_2d_filename(const GenomeChromKey &chromkey, int chromid1, int chromid2, const Pair2Filename &alias_filenames) {
+		if (!alias_filenames.empty()) {
+			Pair2Filename::const_iterator ifilename = alias_filenames.find(pair<int, int>(chromid1, chromid2));
+			if (ifilename != alias_filenames.end())
+				return ifilename->second;
+		}
+		return get_2d_filename(chromkey, chromid1, chromid2);
+	}
+
 	static const int get_chromid_1d(const GenomeChromKey &chromkey, const string &filename) { return chromkey.chrom2id(filename); }
 
 	static const pair<int, int> get_chromid_2d(const GenomeChromKey &chromkey, const string &filename);

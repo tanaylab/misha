@@ -834,7 +834,9 @@ SEXP gtrack_intervals_load(SEXP _track, SEXP _chrom, SEXP _chrom1, SEXP _chrom2,
 			int chromid1 = iu.chrom2id(chrom1);
 			int chromid2 = iu.chrom2id(chrom2);
 
-			string filename(trackpath + "/" + GenomeTrack::get_2d_filename(iu.get_chromkey(), chromid1, chromid2));
+			GenomeTrack::Pair2Filename alias_filenames;
+			GenomeTrack::get_2d_alias_filenames(iu.get_chromkey(), trackpath, alias_filenames);
+			string filename(trackpath + "/" + GenomeTrack::get_2d_filename(iu.get_chromkey(), chromid1, chromid2, alias_filenames));
 
 			if (track_type == GenomeTrack::RECTS) {
 				track = unique_ptr<GenomeTrack2D>(new GenomeTrackRectsRects(iu.get_track_chunk_size(), iu.get_track_num_chunks()));

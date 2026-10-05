@@ -17,6 +17,7 @@ bool TrackExpressionTrackRectsIterator::begin(const string &track_dir, GenomeTra
 	m_track = NULL;
 	m_track_dir = track_dir;
 	m_track_type = track_type;
+	GenomeTrack::get_2d_alias_filenames(*m_chromkey, m_track_dir, m_alias_filenames);
 
 	TrackExpression2DIterator::begin(scope, band);
 
@@ -74,7 +75,7 @@ bool TrackExpressionTrackRectsIterator::next()
 		else if (!m_scope->get_next_chroms(&m_chromid1, &m_chromid2))
 			break;
 
-		string track_filename = m_track_dir + "/" + GenomeTrack::get_2d_filename(*m_chromkey, m_chromid1, m_chromid2);
+		string track_filename = m_track_dir + "/" + GenomeTrack::get_2d_filename(*m_chromkey, m_chromid1, m_chromid2, m_alias_filenames);
 
 		if ((m_band.is_non_empty_area() && m_chromid1 != m_chromid2) || !m_scope->size(m_chromid1, m_chromid2))
 		{

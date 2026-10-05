@@ -23,6 +23,7 @@ public:
 
 protected:
 	string                        m_track_dir;
+	GenomeTrack::Pair2Filename    m_alias_filenames;
 	GenomeChromKey               *m_chromkey;
 	uint64_t                      m_max_data_size;
 	GenomeTrack2D                *m_track;

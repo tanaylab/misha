@@ -49,6 +49,7 @@ public:
 
 protected:
 	Track              *m_track;
+	GenomeTrack::Pair2Filename m_alias_filenames;
 	// Phase 7a: positions in m_pair_keys_sorted (sparse pair walk).
 	int                 m_cur_pair_idx;
 	int                 m_iter_pair_idx;
@@ -82,6 +83,8 @@ void GTrackIntervalsFetcher2D<Track>::init(const char *track_name, SEXP meta, co
 	else
 		verror("This track type cannot currently be used a substitute of intervals");
 
+	GenomeTrack::get_2d_alias_filenames(*m_chromkey, track2path(m_iu->get_env(), m_track_name), m_alias_filenames);
+
 	m_cur_pair_idx = (int)m_pair_keys_sorted.size();
 	m_iter_pair_idx = -1;
 	m_iter_index = 0;
@@ -98,6 +101,7 @@ GIntervalsFetcher2D *GTrackIntervalsFetcher2D<Track>::create_masked_copy(const s
 
 	obj->m_track_name = m_track_name;
 	obj->m_iu = m_iu;
+	obj->m_alias_filenames = m_alias_filenames;
 	obj->m_cur_pair_idx = (int)obj->m_pair_keys_sorted.size();
 	obj->m_iter_pair_idx = -1;
 	obj->m_iter_index = 0;
@@ -253,7 +257,7 @@ void GTrackIntervalsFetcher2D<Track>::load_chrom_by_pair_idx(int pair_idx)
 		int chromid1 = key_chrom1(k);
 		int chromid2 = key_chrom2(k);
 
-		string filename(track2path(m_iu->get_env(), m_track_name) + "/" + GenomeTrack::get_2d_filename(*m_chromkey, chromid1, chromid2));
+		string filename(track2path(m_iu->get_env(), m_track_name) + "/" + GenomeTrack::get_2d_filename(*m_chromkey, chromid1, chromid2, m_alias_filenames));
 		m_track->init_read(filename.c_str(), chromid1, chromid2);
 		m_cur_pair_idx = pair_idx;
 	}

@@ -111,6 +111,9 @@ public:
         Iterator_modifier1D *imdf1d{NULL};
         Iterator_modifier2D *imdf2d{NULL};
         bool                 has_only_sequence_functions{false};
+        // per-pair files of a 2D track named by chromosome aliases, listed on first use
+        GenomeTrack::Pair2Filename alias_filenames_2d;
+        bool                 alias_filenames_2d_listed{false};
     };
 
     typedef vector<Track_n_imdf> Track_n_imdfs;

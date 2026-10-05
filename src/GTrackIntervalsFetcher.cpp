@@ -205,13 +205,16 @@ void GTrackIntervalsFetcher::create_track_meta(const char *track_name, const Int
 			}
 		}
 
+		GenomeTrack::Pair2Filename alias_filenames;
+		GenomeTrack::get_2d_alias_filenames(iu.get_chromkey(), trackpath, alias_filenames);
+
 		Progress_reporter progress;
 		progress.init(pairs.size(), 1);
 
 		for (const auto &p : pairs) {
 			uint64_t chromid1 = p.first;
 			uint64_t chromid2 = p.second;
-			string filename(trackpath + "/" + GenomeTrack::get_2d_filename(iu.get_chromkey(), chromid1, chromid2));
+			string filename(trackpath + "/" + GenomeTrack::get_2d_filename(iu.get_chromkey(), chromid1, chromid2, alias_filenames));
 			unique_ptr<GenomeTrack2D> track;
 
 			if (track_type == GenomeTrack::RECTS) {
