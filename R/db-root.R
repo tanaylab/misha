@@ -158,7 +158,7 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
     )
 
     # For indexed databases, preserve the order from chrom_sizes.txt to match genome.idx chromid assignments
-    # For per-chromosome databases, sort alphabetically for backward compatibility with existing test snapshots
+    # For per-chromosome databases, sort the names (.gdb.chrom_order: the same order in every locale)
     if (is_per_chromosome) {
         intervals <- intervals[chrom_order$id_order, ]
         canonical_names <- canonical_names[chrom_order$id_order]

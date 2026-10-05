@@ -66,3 +66,35 @@ test_that("indexed database preserves chrom_sizes.txt order for chromid mapping"
     expect_equal(allgenome$end[allgenome$chrom == "chr15"], 10)
     expect_equal(allgenome$end[allgenome$chrom == "chr17_random"], 10)
 })
+
+test_that("a per-chromosome database gets the same chrom ids in a C and an en_US locale", {
+    local_db_state()
+    td <- withr::local_tempdir()
+    db <- create_db_with_unsorted_chrom_sizes(file.path(td, "db"))
+    cs <- utils::read.csv(file.path(db, "chrom_sizes.txt"),
+        sep = "\t", header = FALSE, col.names = c("chrom", "size"), colClasses = c("character", "numeric")
+    )
+    chroms_by_id <- function(collate) {
+        withr::with_collate(collate, {
+            chrom_order <- misha:::.gdb.chrom_order(db, cs)
+            gsetroot(db)
+            list(order = chrom_order$names[chrom_order$id_order], allgenome = as.character(gintervals.all()$chrom))
+        })
+    }
+
+    # the order of an en_US.UTF-8 session (ICU root collation), where a C locale's byte
+    # order would put chr10 before chr1_KI270706v1_random
+    expected <- c("chr1", "chr1_KI270706v1_random", "chr10", "chr2", "chrX")
+    in_c <- chroms_by_id("C")
+    expect_equal(in_c$order, expected)
+    expect_equal(in_c$allgenome, expected)
+
+    collate_available <- function(locale) {
+        old <- Sys.getlocale("LC_COLLATE")
+        withr::defer(Sys.setlocale("LC_COLLATE", old))
+        nzchar(suppressWarnings(Sys.setlocale("LC_COLLATE", locale)))
+    }
+    en_us <- Filter(collate_available, c("en_US.UTF-8", "en_US.utf8"))
+    skip_if(!length(en_us), "no en_US.UTF-8 locale")
+    expect_equal(chroms_by_id(en_us[[1]]), in_c)
+})
