@@ -245,11 +245,11 @@
 # The canonical chromosome names of the database at groot and the order of their chrom
 # ids, as gsetroot() sets them; chromsizes is its chrom_sizes.txt. A per-chromosome
 # database (.is_per_chromosome_db) gets the "chr" prefix of its seq files, and its chrom
-# ids follow the sorted names, for backward compatibility with existing test snapshots.
-# Any other database keeps the chrom_sizes.txt order, which matches the chromids of an
-# indexed database's genome.idx. An indexed track (track.idx) is keyed by these ids.
-# Returns list(names, id_order, per_chromosome): names in chrom_sizes.txt order, and
-# chrom id i (0-based) is names[id_order[i + 1]].
+# ids follow the sorted names (.gdb.chrom_sort_key), for backward compatibility with
+# existing test snapshots. Any other database keeps the chrom_sizes.txt order, which
+# matches the chromids of an indexed database's genome.idx. An indexed track (track.idx)
+# is keyed by these ids. Returns list(names, id_order, per_chromosome): names in
+# chrom_sizes.txt order, and chrom id i (0-based) is names[id_order[i + 1]].
 .gdb.chrom_order <- function(groot, chromsizes) {
     per_chromosome <- .is_per_chromosome_db(groot, chromsizes)
     names <- chromsizes$chrom
@@ -258,7 +258,40 @@
     }
     needs_prefix <- !startsWith(names, "chr")
     names[needs_prefix] <- paste0("chr", names[needs_prefix])
-    list(names = names, id_order = order(names), per_chromosome = TRUE)
+    # radix: by bytes in every locale, and stable as order() is
+    list(names = names, id_order = order(.gdb.chrom_sort_key(names), method = "radix"), per_chromosome = TRUE)
+}
+
+# Keys that sort by bytes as the names sort under ICU's root collation, which is how order()
+# sorts a character vector in an R built with ICU and run in an en_US.UTF-8 session, the
+# lab's setting when per-chromosome databases got their chrom ids. order() on the names
+# themselves follows the session's LC_COLLATE instead: a C locale sorts by bytes and puts
+# chr10 before chr1_KI270706v1_random, so a session's locale changed the chrom ids.
+#
+# For ASCII, ICU root gives each printable character a primary weight, in the order of
+# `punct_digits` below and then the letters, a letter's two cases sharing one; the cases
+# differ at the tertiary level, lowercase first; control characters are ignored. Names are
+# compared by their primary weights, then by their tertiary weights. A byte outside ASCII
+# sorts after every ASCII character, by its value: ICU's order of non-ASCII characters is
+# not reproduced, so a name with one may sort differently than order() sorts it in an
+# en_US.UTF-8 session. pymisha's r_collate_less (src/PMDb.cpp) uses the same rule.
+.gdb.chrom_sort_key <- function(names) {
+    punct_digits <- utf8ToInt(" _-,;:!?.'\"()[]{}@*/\\&#%`^+<=>|~$0123456789")
+    primary <- rep(NA_integer_, 256) # by byte value + 1; NA: ignored
+    tertiary <- integer(256)
+    primary[punct_digits + 1L] <- seq_along(punct_digits)
+    letter_weights <- length(punct_digits) + seq_len(26)
+    primary[utf8ToInt(paste(letters, collapse = "")) + 1L] <- letter_weights
+    primary[utf8ToInt(paste(LETTERS, collapse = "")) + 1L] <- letter_weights
+    tertiary[utf8ToInt(paste(LETTERS, collapse = "")) + 1L] <- 1L
+    primary[129:256] <- 1000L + 128:255
+    # fixed-width primary weights, then a space (below any digit, so a name sorts before the
+    # names it is a prefix of), then the tertiary weights
+    vapply(names, function(name) {
+        bytes <- as.integer(charToRaw(name)) + 1L
+        bytes <- bytes[!is.na(primary[bytes])]
+        paste0(paste(sprintf("%04d", primary[bytes]), collapse = ""), " ", paste(tertiary[bytes], collapse = ""))
+    }, character(1), USE.NAMES = FALSE)
 }
 
 # Build the full alias map (chr-prefix toggles + MT aliases + optional TSV
