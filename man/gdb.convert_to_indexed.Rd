@@ -53,22 +53,16 @@ This function converts a per-chromosome database (with separate .seq files per c
 indexed format (single genome.seq + genome.idx). The indexed format
 provides better performance and scalability, especially for genomes with many contigs.
 
-\strong{Important: Preserving Chromosome Order}
-
-For exact conversion that produces bit-for-bit identical results before and after conversion,
-you should load the source database first using \code{gsetroot()} or \code{gdb.init()}:
-\itemize{
-  \item If database is loaded: Uses chromosome order from ALLGENOME (exact preservation)
-  \item If database is not loaded: Uses order from chrom_sizes.txt (may differ from ALLGENOME)
-}
-
-This ensures that the converted database has the exact same chromosome ordering, which affects
-iteration order, interval IDs, and other operations that depend on chromosome order.
+The converted database keeps the chromosome names and order that \code{gsetroot()} gives it,
+whether or not it is the loaded database, so its indexed tracks and interval sets, iteration
+order and interval IDs stay the same. In a per-chromosome database whose chrom_sizes.txt names
+lack the "chr" prefix of its .seq files, that order is the sorted chromosome names, not the
+chrom_sizes.txt order, and chrom_sizes.txt is rewritten in it.
 
 The conversion process:
 \enumerate{
   \item Checks if database is already in indexed format
-  \item Gets chromosome order from ALLGENOME (if loaded) or chrom_sizes.txt
+  \item Gets the chromosome names and order that \code{gsetroot()} gives the database
   \item Consolidates all per-chromosome .seq files into genome.seq
   \item Creates genome.idx with CRC64 checksum
   \item Optionally validates the conversion
@@ -85,7 +79,7 @@ Tracks and intervals that cannot be converted (and are skipped):
 }
 \examples{
 \dontrun{
-# Recommended: Load database first for exact conversion
+# Convert the loaded database with its tracks and interval sets
 gsetroot("/path/to/database")
 gdb.convert_to_indexed(
     convert_tracks = TRUE,
@@ -98,14 +92,13 @@ gdb.convert_to_indexed(
 gdb.convert_to_indexed()
 
 # Convert specific database without loading it first
-# Note: chromosome order may differ from ALLGENOME
 gdb.convert_to_indexed(groot = "/path/to/database")
 
 # Convert genome and all tracks to indexed format
 gdb.convert_to_indexed(convert_tracks = TRUE)
 
 # Full conversion with validation and cleanup
-gsetroot("/path/to/database") # Load first for exact order preservation
+gsetroot("/path/to/database")
 gdb.convert_to_indexed(
     convert_tracks = TRUE,
     convert_intervals = TRUE,

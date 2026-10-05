@@ -45,22 +45,16 @@
 #' indexed format (single genome.seq + genome.idx). The indexed format
 #' provides better performance and scalability, especially for genomes with many contigs.
 #'
-#' \strong{Important: Preserving Chromosome Order}
-#'
-#' For exact conversion that produces bit-for-bit identical results before and after conversion,
-#' you should load the source database first using \code{gsetroot()} or \code{gdb.init()}:
-#' \itemize{
-#'   \item If database is loaded: Uses chromosome order from ALLGENOME (exact preservation)
-#'   \item If database is not loaded: Uses order from chrom_sizes.txt (may differ from ALLGENOME)
-#' }
-#'
-#' This ensures that the converted database has the exact same chromosome ordering, which affects
-#' iteration order, interval IDs, and other operations that depend on chromosome order.
+#' The converted database keeps the chromosome names and order that \code{gsetroot()} gives it,
+#' whether or not it is the loaded database, so its indexed tracks and interval sets, iteration
+#' order and interval IDs stay the same. In a per-chromosome database whose chrom_sizes.txt names
+#' lack the "chr" prefix of its .seq files, that order is the sorted chromosome names, not the
+#' chrom_sizes.txt order, and chrom_sizes.txt is rewritten in it.
 #'
 #' The conversion process:
 #' \enumerate{
 #'   \item Checks if database is already in indexed format
-#'   \item Gets chromosome order from ALLGENOME (if loaded) or chrom_sizes.txt
+#'   \item Gets the chromosome names and order that \code{gsetroot()} gives the database
 #'   \item Consolidates all per-chromosome .seq files into genome.seq
 #'   \item Creates genome.idx with CRC64 checksum
 #'   \item Optionally validates the conversion
@@ -77,7 +71,7 @@
 #'
 #' @examples
 #' \dontrun{
-#' # Recommended: Load database first for exact conversion
+#' # Convert the loaded database with its tracks and interval sets
 #' gsetroot("/path/to/database")
 #' gdb.convert_to_indexed(
 #'     convert_tracks = TRUE,
@@ -90,14 +84,13 @@
 #' gdb.convert_to_indexed()
 #'
 #' # Convert specific database without loading it first
-#' # Note: chromosome order may differ from ALLGENOME
 #' gdb.convert_to_indexed(groot = "/path/to/database")
 #'
 #' # Convert genome and all tracks to indexed format
 #' gdb.convert_to_indexed(convert_tracks = TRUE)
 #'
 #' # Full conversion with validation and cleanup
-#' gsetroot("/path/to/database") # Load first for exact order preservation
+#' gsetroot("/path/to/database")
 #' gdb.convert_to_indexed(
 #'     convert_tracks = TRUE,
 #'     convert_intervals = TRUE,
@@ -241,108 +234,37 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
         return(list(already_indexed = TRUE, groot = groot))
     }
 
-    # Get canonical chromosome names and order from ALLGENOME if database is currently loaded
-    # This ensures the converted database has the exact same order as the source
-    # IMPORTANT: For exact conversion, initialize the database first with gsetroot(groot)
-    canonical_names <- NULL
-
-    # Check if the database being converted is currently loaded
-    if (exists("GROOT", envir = .misha, inherits = FALSE) &&
-        exists("ALLGENOME", envir = .misha, inherits = FALSE)) {
-        current_groot <- get("GROOT", envir = .misha)
-
-        # Only use ALLGENOME if it's from the database we're converting
-        if (!is.null(current_groot) && normalizePath(current_groot) == normalizePath(groot)) {
-            allgenome <- get("ALLGENOME", envir = .misha)
-            if (!is.null(allgenome[[1]]) && "chrom" %in% colnames(allgenome[[1]])) {
-                canonical_names <- as.character(allgenome[[1]]$chrom)
-                if (verbose) {
-                    message(sprintf("Using chromosome order from loaded database (%d chromosomes)", length(canonical_names)))
-                }
-            }
-        } else {
-            if (verbose) {
-                message("Database not currently loaded - using chrom_sizes.txt order")
-                message("For exact conversion preserving chromosome order, run gsetroot() first")
-            }
-        }
-    } else {
-        if (verbose) {
-            message("No database currently loaded - using chrom_sizes.txt order")
-            message("For exact conversion preserving chromosome order, run gsetroot() first")
-        }
-    }
-
-    # Read chromosome information
+    # Read chromosome information as gsetroot() reads it
     chrom_sizes_path <- file.path(groot, "chrom_sizes.txt")
     if (!file.exists(chrom_sizes_path)) {
         stop(sprintf("chrom_sizes.txt not found: %s", chrom_sizes_path), call. = FALSE)
     }
 
-    chrom_sizes <- read.table(chrom_sizes_path, header = FALSE, stringsAsFactors = FALSE, sep = "\t")
-    colnames(chrom_sizes) <- c("chrom", "size")
+    chrom_sizes <- utils::read.csv(
+        chrom_sizes_path,
+        sep = "\t", header = FALSE, col.names = c("chrom", "size"), colClasses = c("character", "numeric")
+    )
 
-    # Store original order index to preserve order even when modifying chromosome names
-    original_order_index <- seq_len(nrow(chrom_sizes))
-
-    # If we have canonical names from ALLGENOME, use them AND their order
-    # This ensures exact same chromosome order before and after conversion
-    if (!is.null(canonical_names) && length(canonical_names) == nrow(chrom_sizes)) {
-        # ALLGENOME order is the source of truth - preserve it exactly
-        # This ensures that converting per-chromosome -> indexed produces identical results
-
-        # Create mapping from chrom_sizes names to ALLGENOME names
-        original_chrom_names <- chrom_sizes$chrom
-
-        # Build reverse lookup: for each chrom_sizes name, find its corresponding ALLGENOME index
-        allgenome_indices <- integer(length(original_chrom_names))
-        for (i in seq_along(original_chrom_names)) {
-            orig_chrom <- original_chrom_names[i]
-            # Try exact match first
-            match_idx <- which(canonical_names == orig_chrom)
-            if (length(match_idx) > 0) {
-                allgenome_indices[i] <- match_idx[1]
-            } else {
-                # Try with/without chr prefix
-                if (startsWith(orig_chrom, "chr")) {
-                    no_chr <- sub("^chr", "", orig_chrom)
-                    match_idx <- which(canonical_names == no_chr)
-                } else {
-                    chr_version <- paste0("chr", orig_chrom)
-                    match_idx <- which(canonical_names == chr_version)
-                }
-                if (length(match_idx) > 0) {
-                    allgenome_indices[i] <- match_idx[1]
-                } else {
-                    # Fallback: maintain original position
-                    allgenome_indices[i] <- i
-                }
-            }
-        }
-
-        # Reorder chrom_sizes to match ALLGENOME order
-        chrom_sizes <- chrom_sizes[order(allgenome_indices), ]
-        chrom_sizes$chrom <- canonical_names
-        original_order_index <- original_order_index[order(allgenome_indices)]
-    }
-    # Note: When ALLGENOME is available, we use its order to ensure exact equivalence
-    # When not available, we preserve chrom_sizes.txt order
+    # The converted database keeps the chromosome names and chrom ids that gsetroot() gives it
+    # (.gdb.chrom_order), whether or not it is the loaded database, so that its indexed tracks
+    # and interval sets, which are keyed by these ids, stay valid. In a per-chromosome database
+    # the ids follow the sorted names, not the chrom_sizes.txt order.
+    chrom_order <- .gdb.chrom_order(groot, chrom_sizes)
+    chrom_sizes$chrom <- chrom_order$names
+    chrom_sizes <- chrom_sizes[chrom_order$id_order, ]
+    rownames(chrom_sizes) <- NULL
 
     # Check that per-chromosome .seq files exist
-    # Handle chr prefix mismatch between chrom_sizes.txt and .seq files
-    # Also preserve the actual chromosome names from the seq files
+    # Handle chr prefix mismatch between chromosome names and .seq files
     seq_files <- character(nrow(chrom_sizes))
-    actual_chrom_names <- character(nrow(chrom_sizes))
 
     for (i in seq_len(nrow(chrom_sizes))) {
         chrom <- chrom_sizes$chrom[i]
-        found_chrom <- chrom # Track the actual chromosome name found
 
         # Try the chromosome name as-is first
         seq_file <- file.path(seq_dir, paste0(chrom, ".seq"))
         if (file.exists(seq_file)) {
             seq_files[i] <- seq_file
-            actual_chrom_names[i] <- chrom
             next
         }
 
@@ -351,38 +273,26 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
             chr_seq_file <- file.path(seq_dir, paste0("chr", chrom, ".seq"))
             if (file.exists(chr_seq_file)) {
                 seq_files[i] <- chr_seq_file
-                actual_chrom_names[i] <- paste0("chr", chrom)
                 next
             }
         }
 
         # If not found, try without chr prefix
         if (startsWith(chrom, "chr")) {
-            no_chr_chrom <- sub("^chr", "", chrom)
-            no_chr_seq_file <- file.path(seq_dir, paste0(no_chr_chrom, ".seq"))
+            no_chr_seq_file <- file.path(seq_dir, paste0(sub("^chr", "", chrom), ".seq"))
             if (file.exists(no_chr_seq_file)) {
                 seq_files[i] <- no_chr_seq_file
-                actual_chrom_names[i] <- no_chr_chrom
                 next
             }
         }
 
         # If still not found, this is a missing file
         seq_files[i] <- seq_file # Use original name for error reporting
-        actual_chrom_names[i] <- chrom
     }
 
     missing_files <- seq_files[!file.exists(seq_files)]
     if (length(missing_files) > 0) {
         stop(sprintf("Missing sequence files: %s", paste(basename(missing_files), collapse = ", ")), call. = FALSE)
-    }
-
-    # Only update chromosome names if we don't have canonical names from ALLGENOME
-    # If ALLGENOME is available, we already set the canonical names and reordered to match
-    if (is.null(canonical_names)) {
-        # Update chrom_sizes with actual chromosome names found in files
-        # This preserves the chr prefix if files are named with chr prefix
-        chrom_sizes$chrom <- actual_chrom_names
     }
 
     return(list(
@@ -393,8 +303,7 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
         seq_files = seq_files,
         index_path = index_path,
         genome_seq_path = genome_seq_path,
-        chrom_sizes_path = chrom_sizes_path,
-        original_order_index = original_order_index
+        chrom_sizes_path = chrom_sizes_path
     ))
 }
 
@@ -468,14 +377,14 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
             close(fasta_con)
 
             # Call C++ import function
-            # Use sort=FALSE to preserve the chromosome order from chrom_sizes.txt
+            # Use sort=FALSE to keep the chrom id order set up by validate_and_setup
             if (verbose) message("Creating indexed format...")
             contig_info <- .gcall(
                 "gseq_multifasta_import",
                 temp_fasta,
                 genome_seq_path,
                 index_path,
-                FALSE, # sort=FALSE to preserve chrom_sizes.txt order
+                FALSE, # sort=FALSE: keep the chrom id order
                 .misha_env()
             )
 
