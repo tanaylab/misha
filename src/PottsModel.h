@@ -57,7 +57,8 @@ using namespace std;
 // build_blocked_tables().
 //
 // build_blocked_tables() generalizes to odd W (a trailing size-1 block) and
-// to sparse or absent pairs (a missing coupling contributes 0 to its slot),
+// to sparse or absent pairs (a missing coupling contributes 0 to its block
+// pair's table, and a block pair that no coupling links has no table),
 // so score_codes_blocked() agrees with score_codes_naive() for ANY
 // PottsModel - not only the dense, even-W case it is designed to win on. For
 // a W wide enough that ceil(W/2) would overflow the fixed block-code scratch
