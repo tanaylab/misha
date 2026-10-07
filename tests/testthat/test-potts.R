@@ -313,7 +313,7 @@ test_that("the blocked kernel agrees with the naive one on 1e6 random windows at
 })
 
 # The trailing size-1 block build_blocked_tables() uses for an odd W has no
-# coverage anywhere else in this file - every W above (4, 6, 8, 20) is even.
+# coverage in the tests above - every W above (4, 6, 8, 20) is even.
 # Sweep W = 20/21 (even/odd) x every pairing density: score_codes_blocked()
 # must agree with score_codes_naive() at EVERY density, even the ones where
 # PottsModel.h's gate picks naive for production score_codes() - the
