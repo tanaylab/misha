@@ -135,9 +135,10 @@ public:
         // Only the block pairs some coupling links, in (u, v) order; pair k's
         // 16 x 16 table starts at k * 256. Any other block pair's table would
         // be all zeros, and adding 0 leaves the sum as it was. When every
-        // block pair is linked, u and v come from the loop counters instead
-        // of m_pair_u / m_pair_v - the same terms in the same order, and
-        // measured 6-30% faster on full pairwise models (W = 20 to 64).
+        // block pair has a table (see build_blocked_tables()), u and v come
+        // from the loop counters instead of m_pair_u / m_pair_v - the same
+        // terms in the same order, and measured 6-30% faster on full
+        // pairwise models (W = 20 to 64).
         if (m_pair_u.size() == (std::size_t)m_nblocks * (std::size_t)(m_nblocks - 1) / 2) {
             std::size_t k = 0;
             for (int u = 0; u < m_nblocks; ++u) {
@@ -261,12 +262,13 @@ private:
         }
 
         // Per-block-pair tables: up to 4 cross terms between the (1 or 2)
-        // positions of block u and the (1 or 2) positions of block v. Only a
-        // block pair that some coupling links (a position of u with a
-        // position of v) gets a table: any other block pair's table would be
-        // all zeros. A model whose couplings are local links few of its
-        // block pairs - a sum of four side-by-side models at W = 41 links 73
-        // of its 210 - and the zero tables were most of the kernel's lookups.
+        // positions of block u and the (1 or 2) positions of block v. Unless
+        // most block pairs are linked (below), only a block pair that some
+        // coupling links (a position of u with a position of v) gets a
+        // table: any other block pair's table would be all zeros. A model
+        // whose couplings are local links few of its block pairs - a sum of
+        // four side-by-side models at W = 41 links 73 of its 210 - and the
+        // zero tables were most of the kernel's lookups.
         // Every table is 16 x 16: u < v, so u is never the trailing size-1
         // block, and when v is, columns 4..15 stay 0 and are never read.
         vector<char> linked((std::size_t)m_nblocks * (std::size_t)m_nblocks, 0);
@@ -278,6 +280,18 @@ private:
                 l = 1;
                 ++nlinked;
             }
+        }
+        // Once most block pairs are linked, every block pair gets a table
+        // (all zeros for an unlinked one) so that the kernel takes u and v
+        // from its loop counters. Reading them from m_pair_u / m_pair_v costs
+        // more per lookup, and from about 80% linked down, the fewer lookups
+        // no longer make up for it (measured at W = 20, 41 and 64).
+        const std::size_t npairs_blocks = (std::size_t)m_nblocks * (std::size_t)(m_nblocks - 1) / 2;
+        if (5 * nlinked >= 4 * npairs_blocks) {
+            for (int u = 0; u < m_nblocks; ++u)
+                for (int v = u + 1; v < m_nblocks; ++v)
+                    linked[(std::size_t)u * m_nblocks + v] = 1;
+            nlinked = npairs_blocks;
         }
 
         m_pair_u.clear();
@@ -325,7 +339,6 @@ private:
         // a potts.max vtrack). Changing the count would also change some
         // models' scores in the last bits, since the two kernels add the
         // same terms in different orders.
-        const std::size_t npairs_blocks = (std::size_t)m_nblocks * (std::size_t)(m_nblocks - 1) / 2;
         const std::size_t blocked_lookups = (std::size_t)m_nblocks + npairs_blocks;
         const std::size_t naive_lookups = 1 + (std::size_t)m_W + m_p1.size();
         m_use_blocked = blocked_lookups < naive_lookups;

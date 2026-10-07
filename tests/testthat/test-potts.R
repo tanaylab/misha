@@ -404,6 +404,43 @@ test_that("a model whose couplings link only some block pairs scores like the or
     )
 })
 
+test_that("the blocked kernel agrees with naive on both sides of 80% linked block pairs", {
+    # build_blocked_tables() gives every block pair a table, and the kernel
+    # loops over all of them, once at least 80% of block pairs are linked;
+    # below that it loops over the linked ones only. At W = 20, full pairwise
+    # minus the couplings of block pair (0, 9) links 44 of the 45 block pairs;
+    # minus every block pair 6 or more apart, 35 of them.
+    W <- 20L
+    full <- t(utils::combn(W, 2))
+    bu <- (full[, 1] - 1L) %/% 2L
+    bv <- (full[, 2] - 1L) %/% 2L
+    for (case in list(list(keep = !(bu == 0L & bv == 9L), nlinked = 44L), list(keep = bv - bu < 6L, nlinked = 35L))) {
+        pairs <- full[case$keep, , drop = FALSE]
+        storage.mode(pairs) <- "integer"
+        expect_equal(nrow(unique(cbind(bu, bv)[case$keep & bu != bv, , drop = FALSE])), case$nlinked)
+        set.seed(61L)
+        m <- list(
+            e = matrix(round(rnorm(W * 4), 4), nrow = W, ncol = 4, dimnames = list(NULL, POTTS_BASES)),
+            J = lapply(seq_len(nrow(pairs)), function(k) matrix(round(rnorm(16), 4), 4L, 4L)),
+            pairs = pairs,
+            intercept = round(rnorm(1), 4)
+        )
+        params <- misha:::.potts_params(m,
+            bidirect = TRUE, extend = FALSE, strand = 1L, score.thresh = 0,
+            what = "80% linked test"
+        )
+        set.seed(62L)
+        n <- 20000L
+        codes <- matrix(sample(0:3, W * n, replace = TRUE), nrow = W, ncol = n)
+        storage.mode(codes) <- "integer"
+        res <- .Call("C_potts_score_codes_cmp", params, codes)
+        max_diff <- max(abs(res$naive - res$blocked))
+        expect_true(max_diff < 1e-9,
+            info = sprintf("%d linked: max |naive - blocked| = %.3e over %d windows", case$nlinked, max_diff, n)
+        )
+    }
+})
+
 test_that("a repeated pair contributes BOTH couplings, in both kernels", {
     # .coerce_potts_model() rejects a duplicate (p1, p2), so this cannot be
     # reached through gseq.potts() or a vtrack. PottsParams::parse() is a
