@@ -287,7 +287,7 @@ test_that("gseq.potts mode = pos works on the reverse strand alone", {
 
 test_that("the blocked kernel agrees with the naive one on 1e6 random windows at W = 20, full pairwise", {
     # PottsModel.h's score_codes() only dispatches to score_codes_blocked()
-    # when it has FEWER lookups than score_codes_naive() for this model - a
+    # when build_blocked_tables()'s gate picks it for this model - a
     # dense model like this one (W = 20, every pair present) is exactly the
     # case that wins, measured well past the point where it's worth it,
     # through gseq.potts() on an idle host. This is the equivalence check
@@ -374,17 +374,21 @@ test_that("a model whose couplings link only some block pairs scores like the or
     expect_true(any(linked[, 2] == nb - 1L))
     expect_gt(1 + W + nrow(pairs), nb + choose(nb, 2))
 
-    params <- misha:::.potts_params(m,
-        bidirect = TRUE, extend = FALSE, strand = 1L, score.thresh = 0,
-        what = "linked block pairs test"
-    )
+    # Both kernels on the model and on its reverse complement, which (odd W
+    # shifts the blocks) links a different set of block pairs.
     set.seed(52L)
     n <- 20000L
     codes <- matrix(sample(0:3, W * n, replace = TRUE), nrow = W, ncol = n)
     storage.mode(codes) <- "integer"
-    res <- .Call("C_potts_score_codes_cmp", params, codes)
-    max_diff <- max(abs(res$naive - res$blocked))
-    expect_true(max_diff < 1e-9, info = sprintf("max |naive - blocked| = %.3e over %d windows", max_diff, n))
+    for (model in list(m, potts_ref_rc(m))) {
+        params <- misha:::.potts_params(model,
+            bidirect = TRUE, extend = FALSE, strand = 1L, score.thresh = 0,
+            what = "linked block pairs test"
+        )
+        res <- .Call("C_potts_score_codes_cmp", params, codes)
+        max_diff <- max(abs(res$naive - res$blocked))
+        expect_true(max_diff < 1e-9, info = sprintf("max |naive - blocked| = %.3e over %d windows", max_diff, n))
+    }
 
     set.seed(53L)
     seqs <- vapply(1:30, function(i) {
