@@ -160,3 +160,45 @@ test_that("paired import warns when a SAM file is read as fragments", {
     writeLines(paired_sam_text(), sam)
     expect_warning(import_tmp(sam, binsize = 50, paired = TRUE), "cols.order = NULL")
 })
+
+test_that("a bgzipped SAM is read as SAM with the default cols.order", {
+    skip_if(!nzchar(Sys.which("bgzip")), "bgzip not on PATH")
+    sam <- tempfile(fileext = ".sam")
+    writeLines(default_sam_text(), sam)
+    system2("bgzip", sam)
+    res <- import_tmp(paste0(sam, ".gz"))
+    expect_equal(res$stats[[1]][["total.mapped"]], 2)
+    expect_equal(res$stats[[1]][["total.unmapped"]], 1)
+})
+
+test_that("a large max.fraglen is recorded without failing the import", {
+    bam <- make_test_bam(paired_sam_text())
+    res <- import_tmp(bam, binsize = 50, paired = TRUE, max.fraglen = 1e10)
+    expect_equal(bins_at(res$track, c(5000, 9900)), c(1, 1))
+    expect_true(grepl("max.fraglen=1e+10", gtrack.attr.get(res$track, "created.by"), fixed = TRUE))
+})
+
+test_that("fragment files with CRLF line endings are read", {
+    frag <- tempfile(fileext = ".bed")
+    writeBin(charToRaw("chr1\t100\t300\r\nchr1\t1000\t1050\r\n"), frag)
+    res <- import_tmp(frag, binsize = 50, paired = TRUE)
+    expect_equal(bins_at(res$track, c(100, 1000)), c(1, 1))
+    expect_equal(res$stats[[1]][["total.unmapped"]], 0)
+})
+
+test_that("total counts each record once", {
+    bam <- make_test_bam(paired_sam_text())
+    s <- import_tmp(bam, binsize = 50, paired = TRUE)$stats[[1]]
+    # first mates p1-p8 and the unmapped u1
+    expect_equal(s[["total"]], 9)
+    expect_equal(s[["total"]], s[["total.mapped"]] + s[["total.unmapped"]] + s[["total.filtered"]])
+})
+
+test_that("a reverse read past the chromosome end does not overflow the dense track", {
+    chr1_end <- gintervals.all()$end[gintervals.all()$chrom == "chr1"]
+    sam <- tempfile(fileext = ".sam")
+    writeLines(paste("r1", 16, "chr1", chr1_end - 10, 30, "151M", "*", 0, 0, strrep("A", 151), "*", sep = "\t"), sam)
+    res <- import_tmp(sam, cols.order = NULL, pileup = 100, binsize = 20)
+    expect_equal(res$stats[[1]][["total.mapped"]], 1)
+    expect_equal(sum(gextract(res$track, gintervals("chr1", chr1_end - 200, chr1_end), iterator = 20, colnames = "v")$v), 0)
+})

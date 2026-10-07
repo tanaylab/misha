@@ -314,8 +314,10 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
 
 # Returns TRUE if `path` looks like a BAM file (bgzip magic 1f 8b 08 04 in
 # the first 4 bytes). BAM files renamed away from `.bam` are still detected.
+# With `payload = TRUE` the decompressed stream must also start with "BAM\1",
+# which tells a BAM from bgzipped text (SAM, 10x fragments.tsv.gz).
 # Returns FALSE on any read error or non-character/NA input.
-.is_bam_file <- function(path) {
+.is_bam_file <- function(path, payload = FALSE) {
     if (!is.character(path) || length(path) != 1L || is.na(path) || !file.exists(path)) {
         return(FALSE)
     }
@@ -326,7 +328,9 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
     if (length(bytes) != 4L || !identical(as.integer(bytes), c(0x1fL, 0x8bL, 0x08L, 0x04L))) {
         return(FALSE)
     }
-    # bgzip is also used for text (e.g. 10x fragments.tsv.gz): a BAM decompresses to "BAM\1"
+    if (!payload) {
+        return(TRUE)
+    }
     read_payload <- function() {
         con <- gzfile(path, "rb")
         on.exit(close(con))
@@ -389,12 +393,13 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
 #' Fragment files are taken as already deduplicated, so 'remove.dups' does not
 #' apply to them, and 'cols.order' must not be set. Fragments longer than
 #' 'max.fraglen' are skipped in both cases. With 'paired' the returned
-#' statistics count fragments: each pair is counted once, by its first mate.
+#' statistics count the records of first mates only; second mates are not
+#' counted.
 #'
-#' The statistics report 'total.mapped' (imported, duplicates included),
-#' 'total.unmapped' (unmapped, or on a chromosome missing from the database),
-#' 'total.dups' and 'total.filtered' (left out by the flag, MAPQ, proper-pair
-#' or fragment length filters).
+#' The statistics report 'total' records, 'total.mapped' (imported,
+#' duplicates included), 'total.unmapped' (unmapped, or on a chromosome
+#' missing from the database), 'total.dups' and 'total.filtered' (left out by
+#' the flag, MAPQ, proper-pair or fragment length filters).
 #'
 #' 'description' is added as a track attribute.
 #'
@@ -427,8 +432,12 @@ gtrack.import_mappedseq <- function(track = NULL, description = NULL, file = NUL
     }
     .gcheckroot()
 
+    # Any bgzip file is read as SAM (BAM, or a bgzipped SAM) - except with `paired`, where a
+    # bgzipped text file is a fragment file (e.g. 10x fragments.tsv.gz).
+    sam_input <- .is_bam_file(file, payload = isTRUE(paired))
+
     # paired fragment files have a fixed layout (chrom, start, end in columns 1-3)
-    if (isTRUE(paired) && !missing(cols.order) && !is.null(cols.order) && !.is_bam_file(file)) {
+    if (isTRUE(paired) && !missing(cols.order) && !is.null(cols.order) && !sam_input) {
         stop("cols.order is not used for fragment files: columns 1-3 must be chrom, start and end. ",
             "Pass `cols.order = NULL` for a SAM file.",
             call. = FALSE
@@ -438,7 +447,7 @@ gtrack.import_mappedseq <- function(track = NULL, description = NULL, file = NUL
     # BAM auto-detect: samtools view emits SAM-format payload, so cols.order
     # must be NULL. Honor the function-arg default (user didn't pass anything)
     # by silently switching; error if the user passed something explicit.
-    if (.is_bam_file(file)) {
+    if (sam_input) {
         if (!missing(cols.order) && !is.null(cols.order)) {
             stop(
                 "BAM input forces SAM column layout. Pass `cols.order = NULL` ",
@@ -466,7 +475,7 @@ gtrack.import_mappedseq <- function(track = NULL, description = NULL, file = NUL
                 trackstr, "created.by",
                 sprintf(
                     "gtrack.import_mappedseq(%s, description, \"%s\", pileup=%d, binsize=%d, remove.dups=%s%s)", trackstr, file, pileup, binsize, remove.dups,
-                    if (isTRUE(paired) || min.mapq > 0) sprintf(", paired=%s, min.mapq=%d, max.fraglen=%d", paired, min.mapq, max.fraglen) else ""
+                    if (isTRUE(paired) || min.mapq > 0) sprintf(", paired=%s, min.mapq=%s, max.fraglen=%s", paired, min.mapq, max.fraglen) else ""
                 ), TRUE
             )
             .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
@@ -487,7 +496,12 @@ gtrack.import_mappedseq <- function(track = NULL, description = NULL, file = NUL
         }
     )
     if (isTRUE(paired) && retv[[1]][["total.mapped"]] == 0) {
-        warning("No fragment was imported. A SAM file needs `cols.order = NULL`; other files are read as fragments (chrom, start, end).",
+        warning(
+            if (is.null(cols.order)) {
+                "No fragment was imported: no record was the first mate of a proper pair that passed the filters."
+            } else {
+                "No fragment was imported. A SAM file needs `cols.order = NULL`; other files are read as fragments (chrom, start, end)."
+            },
             call. = FALSE
         )
     }

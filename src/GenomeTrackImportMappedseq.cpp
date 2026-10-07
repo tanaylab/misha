@@ -347,6 +347,10 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 		while (1) {
 			c = src->getc();
 
+			// CRLF line endings: drop the CR
+			if (c == '\r')
+				continue;
+
 			// skip SAM headers (@) and fragment file comments (#)
 			if (!pos && comment_char && c == comment_char) {
 				while (1) {
@@ -525,6 +529,9 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 
 				// adds the fraction of each bin covered by [from_coord, to_coord)
 				auto add_coverage = [&](int64_t from_coord, int64_t to_coord) {
+					// a reverse read longer than pileup can end past the chromosome: nothing left to add
+					if (from_coord >= to_coord)
+						return;
 					int64_t from_bin = (int64_t)(from_coord / binsize);
 					int64_t to_bin = (int64_t)ceil(to_coord / binsize) - 1;
 
@@ -662,7 +669,7 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
         Rf_setAttrib(chrom_stat, R_RowNamesSymbol, row_names);
 
 		rprotect(total_stat = RSaneAllocVector(REALSXP, 5));
-		REAL(total_stat)[0] = total_mapped + total_unmapped + total_dups + total_filtered;
+		REAL(total_stat)[0] = total_mapped + total_unmapped + total_filtered; // total_mapped includes the duplicates
 		REAL(total_stat)[1] = total_mapped;
 		REAL(total_stat)[2] = total_unmapped;
 		REAL(total_stat)[3] = total_dups;

@@ -99,12 +99,13 @@ tab-delimited, 0-based half-open chromosome, start and end in columns 1-3
 Fragment files are taken as already deduplicated, so 'remove.dups' does not
 apply to them, and 'cols.order' must not be set. Fragments longer than
 'max.fraglen' are skipped in both cases. With 'paired' the returned
-statistics count fragments: each pair is counted once, by its first mate.
+statistics count the records of first mates only; second mates are not
+counted.
 
-The statistics report 'total.mapped' (imported, duplicates included),
-'total.unmapped' (unmapped, or on a chromosome missing from the database),
-'total.dups' and 'total.filtered' (left out by the flag, MAPQ, proper-pair
-or fragment length filters).
+The statistics report 'total' records, 'total.mapped' (imported,
+duplicates included), 'total.unmapped' (unmapped, or on a chromosome
+missing from the database), 'total.dups' and 'total.filtered' (left out by
+the flag, MAPQ, proper-pair or fragment length filters).
 
 'description' is added as a track attribute.
 

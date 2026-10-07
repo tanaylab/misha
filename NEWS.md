@@ -4,11 +4,15 @@
 
 * New `min.mapq` argument of `gtrack.import_mappedseq()` drops SAM/BAM records with a lower MAPQ (default 0: no filter). For pairs it is tested on the first mate.
 
-* The statistics returned by `gtrack.import_mappedseq()` gain `total.filtered`: records left out by the flag, MAPQ, proper-pair or fragment length filters. They are also added to `total`.
+* The statistics returned by `gtrack.import_mappedseq()` gain `total.filtered`: records left out by the flag, MAPQ, proper-pair or fragment length filters. `total` no longer counts duplicates twice (`total.mapped` already includes them).
+
+* **Bug fix:** `gtrack.import_mappedseq()` with `pileup > 0` could write past the end of its buffer and crash R when a reverse-strand read longer than `pileup` ended past the end of a chromosome (e.g. chrM).
+
+* `gtrack.import_mappedseq()` accepts files with CRLF line endings.
 
 * **Behavior fix:** `gtrack.import_mappedseq()` no longer imports unmapped, secondary, QC-failed or supplementary SAM/BAM records (FLAG 0x4, 0x100, 0x200, 0x800). An unmapped mate placed at its partner's position was counted as a mapped read, and supplementary alignments (e.g. from BWA) as extra reads. Re-import tracks built from such files if exact counts matter.
 
-* `gtrack.import_mappedseq()` reads a bgzipped text file with zlib instead of passing it to `samtools view` as if it were a BAM.
+* `gtrack.import_mappedseq()` reads a bgzipped text file with zlib instead of passing it to `samtools view` as if it were a BAM, so bgzipped fragment files work. A bgzipped SAM is still read as SAM.
 
 # misha 5.12.1
 
