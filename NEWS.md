@@ -1,6 +1,6 @@
 # misha 5.12.2
 
-* A Potts model with many couplings that all link nearby positions, such as several models summed side by side, scores faster in the `potts` virtual tracks and `gseq.potts()`: about 2x for a 41 bp sum of four models. Values are unchanged.
+* A Potts model with many couplings that all link nearby positions, such as several models summed side by side, scores faster in the `potts` virtual tracks and `gseq.potts()`: about 2x for a 41 bp sum of four models (253 couplings). Only models with enough couplings are affected - at W = 41, more than 189. Values are unchanged.
 
 # misha 5.12.1
 
