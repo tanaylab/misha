@@ -76,7 +76,7 @@ SEXP C_gseq_potts(SEXP r_seqs, SEXP r_params, SEXP r_mode, SEXP r_envir)
                 continue;
             }
             potts_encode(target, codes, nbad);
-            potts_block_codes(codes, block_codes, 0, model.blocked_available() ? codes.size() : 0);
+            potts_block_codes(codes, block_codes, 0, codes.size());
             const size_t n_anchor = target.size() - (size_t)W + 1;
 
             double acc_lse = -numeric_limits<double>::infinity();
@@ -172,7 +172,8 @@ SEXP C_gseq_potts(SEXP r_seqs, SEXP r_params, SEXP r_mode, SEXP r_envir)
 // window's W codes contiguously) with BOTH PottsModel kernels and returns
 // them side by side, so the test can assert score_codes_naive() and
 // score_codes_blocked() agree without going through a DNA string at all.
-// Not reachable from any exported R function.
+// Also returns use_blocked: which kernel score_codes() runs for the model and
+// for its reverse complement. Not reachable from any exported R function.
 SEXP C_potts_score_codes_cmp(SEXP r_params, SEXP r_codes)
 {
     try {
@@ -202,7 +203,8 @@ SEXP C_potts_score_codes_cmp(SEXP r_params, SEXP r_codes)
         double *naive = REAL(r_naive);
         double *blocked = REAL(r_blocked);
 
-        vector<int8_t> win((size_t)W), win_block_codes((size_t)W);
+        // One base past the window, for the trailing block's second base.
+        vector<int8_t> win((size_t)W + 1), win_block_codes;
         for (int i = 0; i < n; ++i) {
             check_interrupt();
             const int *col = codes + (size_t)i * W;
@@ -210,30 +212,39 @@ SEXP C_potts_score_codes_cmp(SEXP r_params, SEXP r_codes)
                 // Every other input to this function is checked, and a code
                 // outside 0..3 is not a wrong answer but an out-of-bounds
                 // read: a block code is 4*c[p] + c[p+1], which for 100 wraps
-                // int8_t to -12 and indexes m_block_table at (size_t)(-12).
+                // int8_t to -112 + c[p+1] and indexes m_block_table out of
+                // bounds.
                 if (col[j] < 0 || col[j] > 3)
                     rdb::verror("C_potts_score_codes_cmp: code at row %d of column %d is %d, outside 0..3",
                                 j + 1, i + 1, col[j]);
                 win[j] = (int8_t)col[j];
             }
-            // As potts_block_codes() builds them. Past the window's end the
-            // second base is whatever follows, which the trailing block's
-            // tables must ignore: win[0] varies it from window to window.
-            for (int j = 0; j < W; ++j)
-                win_block_codes[j] = (int8_t)(4 * win[j] + (j + 1 < W ? win[j + 1] : win[0]));
+            // The base past the window is whatever follows, which the
+            // trailing block's tables must ignore: win[0] varies it from
+            // window to window.
+            win[W] = win[0];
+            potts_block_codes(win, win_block_codes, 0, (size_t)W);
             naive[i] = model.score_codes_naive(win.data());
             blocked[i] = model.score_codes_blocked(win_block_codes.data());
         }
 
-        SEXP res = rprotect_ptr(RSaneAllocVector(VECSXP, 2));
+        // Which kernel score_codes() runs, for the model and for its
+        // reverse-complement twin.
+        SEXP r_use_blocked = rprotect_ptr(RSaneAllocVector(LGLSXP, 2));
+        LOGICAL(r_use_blocked)[0] = model.use_blocked();
+        LOGICAL(r_use_blocked)[1] = model.rc().use_blocked();
+
+        SEXP res = rprotect_ptr(RSaneAllocVector(VECSXP, 3));
         SET_VECTOR_ELT(res, 0, r_naive);
         SET_VECTOR_ELT(res, 1, r_blocked);
-        SEXP names = rprotect_ptr(RSaneAllocVector(STRSXP, 2));
+        SET_VECTOR_ELT(res, 2, r_use_blocked);
+        SEXP names = rprotect_ptr(RSaneAllocVector(STRSXP, 3));
         SET_STRING_ELT(names, 0, RSaneMkChar("naive"));
         SET_STRING_ELT(names, 1, RSaneMkChar("blocked"));
+        SET_STRING_ELT(names, 2, RSaneMkChar("use_blocked"));
         Rf_setAttrib(res, R_NamesSymbol, names);
 
-        runprotect(4);
+        runprotect(5);
         return res;
     } catch (TGLException &e) {
         rerror("Error in C_potts_score_codes_cmp: %s", e.msg());

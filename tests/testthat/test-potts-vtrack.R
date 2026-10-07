@@ -562,6 +562,39 @@ test_that("the sliding cache returns what the seeded path returns", {
     }
 })
 
+test_that("an odd-W potts vtrack scores like gseq.potts, seeded and slid", {
+    # The blocked kernel reads block codes up to i + W - 1 for an odd W (its
+    # trailing size-1 block), one further than for an even W, so the block-code
+    # ranges PottsScorer fills on the seeded and the slid paths are only fully
+    # exercised at an odd W. Every other test in this file uses an even W.
+    W <- 9L
+    m <- potts_ref_model(W = W, npair_mode = "full", seed = 151L)
+
+    remove_all_vtracks()
+    iv <- gintervals(1, 200, 300)
+    seq_ext <- toupper(gseq.extract(gintervals(1, 200, 300 + W - 1L)))
+    gvtrack.create("p_lse", NULL, "potts", params = c(m, list(bidirect = TRUE, extend = TRUE)))
+    gvtrack.create("p_max", NULL, "potts.max", params = c(m, list(bidirect = TRUE, extend = TRUE)))
+    got <- gextract(c("p_lse", "p_max"), iv, iterator = iv)
+    expect_equal(got$p_lse, gseq.potts(seq_ext, m, mode = "lse", bidirect = TRUE), tolerance = 1e-5)
+    expect_equal(got$p_max, gseq.potts(seq_ext, m, mode = "max", bidirect = TRUE), tolerance = 1e-5)
+
+    iv <- gintervals(1, 5000, 5100)
+    for (o in list(list(bidirect = TRUE, strand = 1), list(bidirect = FALSE, strand = -1))) {
+        for (it in c(1L, 7L)) {
+            th <- potts_cache_thresh(m, iv, 40L, o$bidirect, as.integer(o$strand))
+            for (fn in c("potts", "potts.max", "potts.max.pos", "potts.count")) {
+                expect_potts_cache_agrees(
+                    fn, c(m, o, list(extend = TRUE, score.thresh = th)),
+                    40L, iv,
+                    info = paste("W = 9, bidirect", o$bidirect, "iterator", it, fn),
+                    it = it
+                )
+            }
+        }
+    }
+})
+
 test_that("the potts cache re-seeds where the chromosome end clips the fetch", {
     m <- potts_ref_model(W = 12L, npair_mode = "full", seed = 149L)
     pad <- 30L

@@ -116,8 +116,7 @@ double PottsScorer::score_direct(size_t i_min, size_t i_max, size_t motif_len, s
                                 bool fill_window)
 {
     // The block codes of every window scored below.
-    potts_block_codes(m_codes, m_block_codes, i_min,
-                      m_model.blocked_available() ? i_max + motif_len : i_min);
+    potts_block_codes(m_codes, m_block_codes, i_min, i_max + motif_len);
     const bool union_max = (m_mode == MAX_LIKELIHOOD_POS);
     double acc = -std::numeric_limits<double>::infinity();
     bool have_acc = false;
@@ -391,8 +390,7 @@ double PottsScorer::try_slide_window(const GInterval &original_interval,
     const size_t first = slot_index(W - stride, i_min, i_max);
     const size_t last = slot_index(W - 1, i_min, i_max);
     const size_t lo = std::min(first, last);
-    potts_block_codes(m_codes, m_block_codes, lo,
-                      m_model.blocked_available() ? std::max(first, last) + motif_len : lo);
+    potts_block_codes(m_codes, m_block_codes, lo, std::max(first, last) + motif_len);
 
     switch (m_mode) {
     case TOTAL_LIKELIHOOD: {

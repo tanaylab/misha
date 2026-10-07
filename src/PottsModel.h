@@ -50,13 +50,13 @@ using namespace std;
 //                            models at W = 41 (253 pairs), 21 + 73 = 94
 //                            instead of 295.
 //
-// score_codes() runs the blocked kernel whenever its tables are built. With
-// block codes built once per window it was the faster one through
-// gseq.potts() on 169 models (W 6-64; order 1, bands, random, side-by-side
-// blocks and full pairwise; one strand and both) - at worst 4% slower, and
-// 0.56-1.00x of naive for order-1 models - and at most 9% slower on couplings
-// scattered so that each needs a block pair of its own. The naive kernel is
-// the fallback for W > 256 and the equivalence tests' reference.
+// score_codes() picks one of the two per model (m_use_blocked, set once in
+// build_blocked_tables()). The blocked kernel is 2-5x faster on a model whose
+// couplings are local or dense, and faster on an order-1 model, but up to
+// 1.5x slower on a wide model whose couplings are scattered so that each
+// needs a block pair of its own - see the gate in build_blocked_tables().
+// The naive kernel is also the fallback for W > 256 and the equivalence
+// tests' reference.
 //
 // build_blocked_tables() generalizes to odd W (a trailing size-1 block) and
 // to sparse or absent pairs (a missing coupling contributes 0 to its block
@@ -105,6 +105,11 @@ public:
     // it itself before calling score_codes_blocked() directly.
     bool blocked_available() const { return m_nblocks > 0; }
 
+    // Whether score_codes() runs the blocked kernel for this model - the
+    // gate in build_blocked_tables(). C_potts_score_codes_cmp reports it so
+    // that tests can check the gate rather than restate it.
+    bool use_blocked() const { return m_use_blocked; }
+
     // The reference kernel: one table lookup per single-site term and one per
     // pair term, in whatever order pairs were given. 1 + W + npair lookups.
     inline double score_codes_naive(const int8_t *c) const
@@ -151,13 +156,12 @@ public:
     }
 
     // Production entry point - GseqPotts.cpp and PottsParams' consumers call
-    // this and never the two kernels above directly. Runs the blocked kernel
-    // whenever its tables are built (W <= 256) - see the class comment. c and
-    // bc are the window's codes and block codes (potts_encode(),
-    // potts_block_codes()).
+    // this and never the two kernels above directly. Runs the kernel that
+    // build_blocked_tables()'s gate picked for THIS model. c and bc are the
+    // window's codes and block codes (potts_encode(), potts_block_codes()).
     inline double score_codes(const int8_t *c, const int8_t *bc) const
     {
-        return m_nblocks > 0 ? score_codes_blocked(bc) : score_codes_naive(c);
+        return m_use_blocked ? score_codes_blocked(bc) : score_codes_naive(c);
     }
 
     // The complemented twin: rc().score_codes(w) == score_codes(revcomp(w)).
@@ -233,7 +237,7 @@ private:
         // terms, plus the within-block pair if the model has one. A block
         // code is 4 * (first base) + (second base). The trailing block of an
         // odd W has one position, and its table ignores the second base
-        // (whatever follows the window, or 0 - see potts_encode()).
+        // (whatever follows the window, or 0 - see potts_block_codes()).
         m_block_table.assign((std::size_t)m_nblocks * 16, 0.0);
         for (int b = 0; b < m_nblocks; ++b) {
             const int p0 = 2 * b;
@@ -315,6 +319,22 @@ private:
                 }
             }
         }
+
+        // The gate. Fitted to gseq.potts() times of both kernels on 241 models
+        // (W 6-256; order 1, bands, random, side-by-side blocks, full pairwise
+        // and scattered diagonals; one strand and both): blocked whenever
+        // every block pair has a table, otherwise when 1.5 * nlinked +
+        // 0.5 * m_nblocks - 4 < W + npair, in naive lookups. A linked block
+        // pair's table is 2 KB where the naive kernel reads 128 bytes per
+        // coupling, so couplings scattered one per block pair cost the
+        // blocked kernel more than the naive one, and wide models with them
+        // run naive. The kernel this picks was at most 12% slower than the
+        // other one, 0.15% on average. The two kernels add the same terms in
+        // different orders, so their scores can differ in the last bits; for
+        // odd W, rc() links a different set of block pairs, so the two
+        // strands of one model can run different kernels.
+        m_use_blocked = nlinked == npairs_blocks ||
+                        3 * nlinked + (std::size_t)m_nblocks < 2 * ((std::size_t)m_W + m_p1.size()) + 8;
     }
 
     int m_W = 0;
@@ -325,8 +345,11 @@ private:
 
     // Blocked-kernel tables, built by build_blocked_tables(). m_nblocks == 0
     // means "not built" (W too wide for MAX_BLOCKS) - blocked_available()
-    // reports this, and score_codes() then runs the naive kernel.
+    // reports this. m_use_blocked is the gate's per-model choice; the tables
+    // are built whenever W allows, so score_codes_blocked() stays callable for
+    // the equivalence test whichever kernel production runs.
     int m_nblocks = 0;
+    bool m_use_blocked = false;
     std::vector<double> m_block_table; // nblocks * 16, block b's at b * 16
     // The block pairs with a table - the linked ones, or every one from 80%
     // linked - in (u, v) order, and their 16 x 16 tables (pair k's at

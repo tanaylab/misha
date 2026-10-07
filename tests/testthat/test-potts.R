@@ -335,6 +335,10 @@ for (.W in c(20L, 21L)) {
             expect_true(max_diff < 1e-9,
                 info = sprintf("W=%d %s: max |naive - blocked| = %.3e over %d windows", .W, .npair_mode, max_diff, n)
             )
+            # The gate puts every one of these on the blocked kernel, both
+            # strands: an order-1 model, and models whose couplings are dense
+            # or local.
+            expect_equal(res$use_blocked, c(TRUE, TRUE))
         })
     }
 }
@@ -344,8 +348,9 @@ test_that("a model whose couplings link only some block pairs scores like the or
     # coupling links. Two bands of local couplings (positions 1-14 and 21-41,
     # at most 8 apart), a pair inside block 7 (positions 15-16) and a pair from
     # position 1 to the trailing size-1 block (41) link some of the 210 block
-    # pairs and leave blocks 6-9 linked to no later block. score_codes() runs
-    # the blocked kernel, so the gseq.potts() checks at the end go through it.
+    # pairs and leave blocks 6-9 linked to no later block. The gate picks the
+    # blocked kernel for both strands (use_blocked below), so the gseq.potts()
+    # checks at the end go through it.
     W <- 41L
     band <- function(from, to) {
         p <- t(utils::combn(from:to, 2))
@@ -384,6 +389,7 @@ test_that("a model whose couplings link only some block pairs scores like the or
         res <- .Call("C_potts_score_codes_cmp", params, codes)
         max_diff <- max(abs(res$naive - res$blocked))
         expect_true(max_diff < 1e-9, info = sprintf("max |naive - blocked| = %.3e over %d windows", max_diff, n))
+        expect_equal(res$use_blocked, c(TRUE, TRUE))
     }
 
     set.seed(53L)
@@ -438,7 +444,7 @@ test_that("the blocked kernel agrees with naive on both sides of 80% linked bloc
 })
 
 test_that("an odd-W window followed by an N, or by nothing, scores like the oracle", {
-    # potts_encode() packs each block code once per sequence. The trailing
+    # potts_block_codes() packs each block code once per window. The trailing
     # size-1 block of an odd W reads the base after the window, or 0 past the
     # end of the sequence or before an N, and its tables ignore that base.
     W <- 21L
@@ -483,6 +489,38 @@ test_that("a model wider than 256 runs the naive kernel and scores like the orac
             tolerance = 1e-9
         )
     }
+})
+
+test_that("couplings scattered one per block pair run the naive kernel", {
+    # Five diagonals of couplings at odd spacings (11, 31, 51, 71 and 91
+    # apart) at W = 128 put each of the 385 couplings in a block pair of its
+    # own. A linked block pair's table is 2 KB where the naive kernel reads
+    # 128 bytes per coupling, so the gate picks the naive kernel for both
+    # strands. The two kernels must still agree.
+    W <- 128L
+    pairs <- do.call(rbind, lapply(seq(11L, 91L, by = 20L), function(d) cbind(1:(W - d), (1:(W - d)) + d)))
+    pairs <- pairs[order(pairs[, 1], pairs[, 2]), , drop = FALSE]
+    storage.mode(pairs) <- "integer"
+    expect_equal(nrow(unique((pairs - 1L) %/% 2L)), nrow(pairs))
+    set.seed(81L)
+    m <- list(
+        e = matrix(round(rnorm(W * 4), 4), nrow = W, ncol = 4, dimnames = list(NULL, POTTS_BASES)),
+        J = lapply(seq_len(nrow(pairs)), function(k) matrix(round(rnorm(16), 4), 4L, 4L)),
+        pairs = pairs,
+        intercept = round(rnorm(1), 4)
+    )
+    params <- misha:::.potts_params(m,
+        bidirect = TRUE, extend = FALSE, strand = 1L, score.thresh = 0,
+        what = "scattered couplings test"
+    )
+    set.seed(82L)
+    n <- 5000L
+    codes <- matrix(sample(0:3, W * n, replace = TRUE), nrow = W, ncol = n)
+    storage.mode(codes) <- "integer"
+    res <- .Call("C_potts_score_codes_cmp", params, codes)
+    expect_equal(res$use_blocked, c(FALSE, FALSE))
+    max_diff <- max(abs(res$naive - res$blocked))
+    expect_true(max_diff < 1e-9, info = sprintf("max |naive - blocked| = %.3e over %d windows", max_diff, n))
 })
 
 test_that("a repeated pair contributes BOTH couplings, in both kernels", {
