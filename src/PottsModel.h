@@ -101,6 +101,11 @@ public:
     // it itself before calling score_codes_blocked() directly.
     bool blocked_available() const { return m_nblocks > 0; }
 
+    // Whether score_codes() runs the blocked kernel for this model - the
+    // gate in build_blocked_tables(). C_potts_score_codes_cmp reports it so
+    // that tests can check the gate rather than restate it.
+    bool use_blocked() const { return m_use_blocked; }
+
     // The reference kernel: one table lookup per single-site term and one per
     // pair term, in whatever order pairs were given. 1 + W + npair lookups.
     inline double score_codes_naive(const int8_t *c) const
@@ -154,7 +159,8 @@ public:
     // Production entry point - GseqPotts.cpp and PottsParams' consumers call
     // this and never the two kernels above directly. Runs the kernel that
     // build_blocked_tables()'s gate picked for THIS model, which is not
-    // always the one with fewer lookups - see the class comment.
+    // always the one with fewer lookups - see the gate in
+    // build_blocked_tables().
     inline double score_codes(const int8_t *c) const
     {
         return m_use_blocked ? score_codes_blocked(c) : score_codes_naive(c);
@@ -330,8 +336,8 @@ private:
 
         // The gate. In naive lookups, the blocked kernel costs about 2 per
         // block (packing two positions into a code, then the block table),
-        // 1 per block pair with a table and 4 more per anchor; the naive kernel
-        // costs 1 + W + npair. Fitted to gseq.potts() times of 169 models
+        // 1 per block pair with a table and 4 more per anchor; the naive
+        // kernel costs 1 + W + npair. Fitted to gseq.potts() times of 169 models
         // (W 6-64; order 1, bands, random, side-by-side blocks and full
         // pairwise; one strand and both): the kernel this picks was at most
         // 9% slower than the other one, 0.2% on average. As 2 * m_nblocks is
@@ -339,7 +345,9 @@ private:
         // about 4 couplings (npair - linked block pairs), and keeps an order-1
         // model, which the blocked kernel scores 1.2-1.6x slower, on naive.
         // The two kernels add the same terms in different orders, so their
-        // scores can differ in the last bits.
+        // scores can differ in the last bits. For odd W, rc() links a
+        // different set of block pairs, so the two strands of one model can
+        // run different kernels; each runs the one this rule picks for it.
         m_use_blocked = 2 * (std::size_t)m_nblocks + nlinked + 4 < 1 + (std::size_t)m_W + m_p1.size();
     }
 

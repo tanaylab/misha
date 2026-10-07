@@ -338,6 +338,11 @@ for (.W in c(20L, 21L)) {
             expect_true(max_diff < 1e-9,
                 info = sprintf("W=%d %s: max |naive - blocked| = %.3e over %d windows", .W, .npair_mode, max_diff, n)
             )
+            # The gate keeps an order-1 model on the naive kernel and puts a
+            # full pairwise one on the blocked kernel, on both strands.
+            if (.npair_mode != "sparse") {
+                expect_equal(res$use_blocked, rep(.npair_mode == "full", 2))
+            }
         })
     }
 }
@@ -348,7 +353,8 @@ test_that("a model whose couplings link only some block pairs scores like the or
     # at most 8 apart), a pair inside block 7 (positions 15-16) and a pair from
     # position 1 to the trailing size-1 block (41) link some of the 210 block
     # pairs and leave blocks 6-9 linked to no later block. The gate picks the
-    # blocked kernel for gseq.potts() on both strands.
+    # blocked kernel for both strands (use_blocked below), so the gseq.potts()
+    # checks at the end go through it.
     W <- 41L
     band <- function(from, to) {
         p <- t(utils::combn(from:to, 2))
@@ -372,7 +378,6 @@ test_that("a model whose couplings link only some block pairs scores like the or
     expect_lt(nrow(linked), choose(nb, 2))
     expect_false(any(6:9 %in% linked[, 1]))
     expect_true(any(linked[, 2] == nb - 1L))
-    expect_gt(1 + W + nrow(pairs), 2 * nb + nrow(linked) + 4)
 
     # Both kernels on the model and on its reverse complement, which (odd W
     # shifts the blocks) links a different set of block pairs.
@@ -388,6 +393,7 @@ test_that("a model whose couplings link only some block pairs scores like the or
         res <- .Call("C_potts_score_codes_cmp", params, codes)
         max_diff <- max(abs(res$naive - res$blocked))
         expect_true(max_diff < 1e-9, info = sprintf("max |naive - blocked| = %.3e over %d windows", max_diff, n))
+        expect_equal(res$use_blocked, c(TRUE, TRUE))
     }
 
     set.seed(53L)

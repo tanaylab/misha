@@ -170,7 +170,8 @@ SEXP C_gseq_potts(SEXP r_seqs, SEXP r_params, SEXP r_mode, SEXP r_envir)
 // window's W codes contiguously) with BOTH PottsModel kernels and returns
 // them side by side, so the test can assert score_codes_naive() and
 // score_codes_blocked() agree without going through a DNA string at all.
-// Not reachable from any exported R function.
+// Also returns use_blocked: which kernel score_codes() runs for the model and
+// for its reverse complement. Not reachable from any exported R function.
 SEXP C_potts_score_codes_cmp(SEXP r_params, SEXP r_codes)
 {
     try {
@@ -219,15 +220,23 @@ SEXP C_potts_score_codes_cmp(SEXP r_params, SEXP r_codes)
             blocked[i] = model.score_codes_blocked(win.data());
         }
 
-        SEXP res = rprotect_ptr(RSaneAllocVector(VECSXP, 2));
+        // Which kernel score_codes() runs, for the model and for its
+        // reverse-complement twin.
+        SEXP r_use_blocked = rprotect_ptr(RSaneAllocVector(LGLSXP, 2));
+        LOGICAL(r_use_blocked)[0] = model.use_blocked();
+        LOGICAL(r_use_blocked)[1] = model.rc().use_blocked();
+
+        SEXP res = rprotect_ptr(RSaneAllocVector(VECSXP, 3));
         SET_VECTOR_ELT(res, 0, r_naive);
         SET_VECTOR_ELT(res, 1, r_blocked);
-        SEXP names = rprotect_ptr(RSaneAllocVector(STRSXP, 2));
+        SET_VECTOR_ELT(res, 2, r_use_blocked);
+        SEXP names = rprotect_ptr(RSaneAllocVector(STRSXP, 3));
         SET_STRING_ELT(names, 0, RSaneMkChar("naive"));
         SET_STRING_ELT(names, 1, RSaneMkChar("blocked"));
+        SET_STRING_ELT(names, 2, RSaneMkChar("use_blocked"));
         Rf_setAttrib(res, R_NamesSymbol, names);
 
-        runprotect(4);
+        runprotect(5);
         return res;
     } catch (TGLException &e) {
         rerror("Error in C_potts_score_codes_cmp: %s", e.msg());
