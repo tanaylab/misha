@@ -50,7 +50,7 @@ SEXP C_gseq_potts(SEXP r_seqs, SEXP r_params, SEXP r_mode, SEXP r_envir)
         SEXP res = rprotect_ptr(RSaneAllocVector(REALSXP, n));
         double *out = REAL(res);
 
-        vector<int8_t> codes;
+        vector<int8_t> codes, block_codes;
         vector<int32_t> nbad;
 
         for (R_xlen_t r = 0; r < n; ++r) {
@@ -75,7 +75,7 @@ SEXP C_gseq_potts(SEXP r_seqs, SEXP r_params, SEXP r_mode, SEXP r_envir)
                 out[r] = NA_REAL;
                 continue;
             }
-            potts_encode(target, codes, nbad);
+            potts_encode(target, codes, nbad, block_codes);
             const size_t n_anchor = target.size() - (size_t)W + 1;
 
             double acc_lse = -numeric_limits<double>::infinity();
@@ -92,10 +92,11 @@ SEXP C_gseq_potts(SEXP r_seqs, SEXP r_params, SEXP r_mode, SEXP r_envir)
                 if (nbad[i + (size_t)W] - nbad[i] != 0)
                     continue;
                 const int8_t *c = &codes[i];
+                const int8_t *bc = &block_codes[i];
                 double f = -numeric_limits<double>::infinity();
                 double v = -numeric_limits<double>::infinity();
-                if (use_fwd) f = model.score_codes(c);
-                if (use_rev) v = rc.score_codes(c);
+                if (use_fwd) f = model.score_codes(c, bc);
+                if (use_rev) v = rc.score_codes(c, bc);
 
                 // The strand union: log-sum-exp for lse/max/count, maximum for
                 // pos, which has to name a strand. See the design doc's table -
@@ -200,23 +201,26 @@ SEXP C_potts_score_codes_cmp(SEXP r_params, SEXP r_codes)
         double *naive = REAL(r_naive);
         double *blocked = REAL(r_blocked);
 
-        vector<int8_t> win((size_t)W);
+        vector<int8_t> win((size_t)W), win_block_codes((size_t)W);
         for (int i = 0; i < n; ++i) {
             check_interrupt();
             const int *col = codes + (size_t)i * W;
             for (int j = 0; j < W; ++j) {
                 // Every other input to this function is checked, and a code
                 // outside 0..3 is not a wrong answer but an out-of-bounds
-                // read: score_codes_blocked() packs two of them into
-                // 4*c[p0] + c[p0+1], which for 100 wraps int8_t to -12 and
-                // indexes m_block_table at (size_t)(-12).
+                // read: a block code is 4*c[p] + c[p+1], which for 100 wraps
+                // int8_t to -12 and indexes m_block_table at (size_t)(-12).
                 if (col[j] < 0 || col[j] > 3)
                     rdb::verror("C_potts_score_codes_cmp: code at row %d of column %d is %d, outside 0..3",
                                 j + 1, i + 1, col[j]);
                 win[j] = (int8_t)col[j];
             }
+            // As potts_encode() builds them: past the window's end the
+            // second base counts as 0.
+            for (int j = 0; j < W; ++j)
+                win_block_codes[j] = (int8_t)(4 * win[j] + (j + 1 < W ? win[j + 1] : 0));
             naive[i] = model.score_codes_naive(win.data());
-            blocked[i] = model.score_codes_blocked(win.data());
+            blocked[i] = model.score_codes_blocked(win_block_codes.data());
         }
 
         SEXP res = rprotect_ptr(RSaneAllocVector(VECSXP, 2));
