@@ -286,12 +286,10 @@ test_that("gseq.potts mode = pos works on the reverse strand alone", {
 })
 
 test_that("the blocked kernel agrees with the naive one on 1e6 random windows at W = 20, full pairwise", {
-    # PottsModel.h's score_codes() only dispatches to score_codes_blocked()
-    # when build_blocked_tables()'s gate picks it for this model - a
-    # dense model like this one (W = 20, every pair present) is exactly the
-    # case that wins, measured well past the point where it's worth it,
-    # through gseq.potts() on an idle host. This is the equivalence check
-    # that decision was conditioned on, kept as a permanent regression test -
+    # PottsModel.h's score_codes() runs score_codes_blocked() for every
+    # model up to W = 256, so production scores come from the blocked kernel
+    # and the naive one is its reference. This is the equivalence check that
+    # rests on, kept as a permanent regression test -
     # C_potts_score_codes_cmp is a test-only entry point that scores an
     # integer code matrix with BOTH kernels directly, without a DNA string or
     # gseq.potts() in between.
@@ -315,10 +313,9 @@ test_that("the blocked kernel agrees with the naive one on 1e6 random windows at
 # The trailing size-1 block build_blocked_tables() uses for an odd W has no
 # coverage in the tests above - every W above (4, 6, 8, 20) is even.
 # Sweep W = 20/21 (even/odd) x every pairing density: score_codes_blocked()
-# must agree with score_codes_naive() at EVERY density, even the ones where
-# PottsModel.h's gate picks naive for production score_codes() - the
-# equivalence check goes through C_potts_score_codes_cmp, which calls both
-# kernels directly and does not go through that gate.
+# must agree with score_codes_naive() at EVERY density - the equivalence
+# check goes through C_potts_score_codes_cmp, which calls both kernels
+# directly.
 for (.W in c(20L, 21L)) {
     for (.npair_mode in c("full", "sparse", "none")) {
         test_that(sprintf("blocked kernel agrees with naive: W = %d, npair_mode = %s", .W, .npair_mode), {
@@ -347,8 +344,8 @@ test_that("a model whose couplings link only some block pairs scores like the or
     # coupling links. Two bands of local couplings (positions 1-14 and 21-41,
     # at most 8 apart), a pair inside block 7 (positions 15-16) and a pair from
     # position 1 to the trailing size-1 block (41) link some of the 210 block
-    # pairs and leave blocks 6-9 linked to no later block. With 210 pairs the
-    # gate picks the blocked kernel for gseq.potts() on both strands.
+    # pairs and leave blocks 6-9 linked to no later block. score_codes() runs
+    # the blocked kernel, so the gseq.potts() checks at the end go through it.
     W <- 41L
     band <- function(from, to) {
         p <- t(utils::combn(from:to, 2))
@@ -372,7 +369,6 @@ test_that("a model whose couplings link only some block pairs scores like the or
     expect_lt(nrow(linked), choose(nb, 2))
     expect_false(any(6:9 %in% linked[, 1]))
     expect_true(any(linked[, 2] == nb - 1L))
-    expect_gt(1 + W + nrow(pairs), nb + choose(nb, 2))
 
     # Both kernels on the model and on its reverse complement, which (odd W
     # shifts the blocks) links a different set of block pairs.
@@ -438,6 +434,32 @@ test_that("the blocked kernel agrees with naive on both sides of 80% linked bloc
         expect_true(max_diff < 1e-9,
             info = sprintf("%d linked: max |naive - blocked| = %.3e over %d windows", case$nlinked, max_diff, n)
         )
+    }
+})
+
+test_that("an odd-W window followed by an N, or by nothing, scores like the oracle", {
+    # potts_encode() packs each block code once per sequence. The trailing
+    # size-1 block of an odd W reads the base after the window, or 0 past the
+    # end of the sequence or before an N, and its tables ignore that base.
+    W <- 21L
+    m <- potts_ref_model(W = W, npair_mode = "full", seed = 7L)
+    ref_max <- function(s, model) {
+        v <- vapply(seq_len(nchar(s) - W + 1L), function(i) {
+            potts_ref_window(substr(s, i, i + W - 1L), model)
+        }, numeric(1))
+        if (all(is.na(v))) NA_real_ else max(v, na.rm = TRUE)
+    }
+    set.seed(71L)
+    w <- vapply(1:20, function(i) paste(sample(POTTS_BASES, W, replace = TRUE), collapse = ""), character(1))
+    for (tail in c("", "N", "ACGTN")) {
+        s <- paste0(w, tail)
+        for (strand in c(1L, -1L)) {
+            ref <- if (strand == 1L) m else potts_ref_rc(m)
+            expect_equal(gseq.potts(s, m, mode = "max", bidirect = FALSE, strand = strand),
+                as.numeric(vapply(s, ref_max, numeric(1), model = ref)),
+                tolerance = 1e-9
+            )
+        }
     }
 })
 

@@ -50,13 +50,13 @@ using namespace std;
 //                            models at W = 41 (253 pairs), 21 + 73 = 94
 //                            instead of 295.
 //
-// score_codes() picks one of the two per model (m_use_blocked, set once in
-// build_blocked_tables()), not the blocked kernel unconditionally: blocked
-// when ceil(W/2) + C(ceil(W/2), 2), counting every block pair whether linked
-// or not, is smaller than 1 + W + npair. The blocked kernel is ~3.4x faster
-// through gseq.potts() on a full pairwise model at W = 20 (190 pairs), but
-// slower on an order-1 model (no couplings at all) - see the gate in
-// build_blocked_tables().
+// score_codes() runs the blocked kernel whenever its tables are built. With
+// block codes packed once per sequence it was the faster one through
+// gseq.potts() on 169 models (W 6-64; order 1, bands, random, side-by-side
+// blocks and full pairwise; one strand and both) - at worst 4% slower, and
+// 0.56-1.00x of naive for order-1 models - and at most 9% slower on couplings
+// scattered so that each needs a block pair of its own. The naive kernel is
+// the fallback for W > 256 and the equivalence tests' reference.
 //
 // build_blocked_tables() generalizes to odd W (a trailing size-1 block) and
 // to sparse or absent pairs (a missing coupling contributes 0 to its block
@@ -145,19 +145,18 @@ public:
             }
         } else {
             for (std::size_t k = 0; k < m_pair_u.size(); ++k)
-                s += m_pair_table[k * 256 + (std::size_t)bc[2 * m_pair_u[k]] * 16 + (std::size_t)bc[2 * m_pair_v[k]]];
+                s += m_pair_table[k * 256 + (std::size_t)bc[m_pair_u[k]] * 16 + (std::size_t)bc[m_pair_v[k]]];
         }
         return s;
     }
 
     // Production entry point - GseqPotts.cpp and PottsParams' consumers call
-    // this and never the two kernels above directly. Runs the kernel that
-    // build_blocked_tables()'s gate picked for THIS model, which is not
-    // always the one with fewer lookups - see the class comment. c and bc are
-    // the window's codes and block codes from potts_encode().
+    // this and never the two kernels above directly. Runs the blocked kernel
+    // whenever its tables are built (W <= 256) - see the class comment. c and
+    // bc are the window's codes and block codes from potts_encode().
     inline double score_codes(const int8_t *c, const int8_t *bc) const
     {
-        return m_use_blocked ? score_codes_blocked(bc) : score_codes_naive(c);
+        return m_nblocks > 0 ? score_codes_blocked(bc) : score_codes_naive(c);
     }
 
     // The complemented twin: rc().score_codes(w) == score_codes(revcomp(w)).
@@ -294,8 +293,8 @@ private:
                 const int pv0 = 2 * v;
                 const int pv1 = (pv0 + 1 < m_W) ? pv0 + 1 : -1;
                 const std::size_t off = m_pair_u.size() * 256;
-                m_pair_u.push_back(u);
-                m_pair_v.push_back(v);
+                m_pair_u.push_back(2 * u);
+                m_pair_v.push_back(2 * v);
 
                 for (int cu = 0; cu < 16; ++cu) {
                     const int xu0 = cu >> 2, xu1 = cu & 3;
@@ -315,19 +314,6 @@ private:
                 }
             }
         }
-
-        // The gate: use the blocked kernel when m_nblocks + C(m_nblocks, 2),
-        // counting EVERY block pair whether linked or not, is smaller than
-        // the naive kernel's 1 + W + npair lookups. Counting only the linked
-        // block pairs would pick the blocked kernel for every model (there
-        // are at most npair of them, and m_nblocks < 1 + W), which is 7-22%
-        // slower than naive for an order-1 model at W = 20 (gseq.potts() and
-        // a potts.max vtrack). Changing the count would also change some
-        // models' scores in the last bits, since the two kernels add the
-        // same terms in different orders.
-        const std::size_t blocked_lookups = (std::size_t)m_nblocks + npairs_blocks;
-        const std::size_t naive_lookups = 1 + (std::size_t)m_W + m_p1.size();
-        m_use_blocked = blocked_lookups < naive_lookups;
     }
 
     int m_W = 0;
@@ -338,17 +324,15 @@ private:
 
     // Blocked-kernel tables, built by build_blocked_tables(). m_nblocks == 0
     // means "not built" (W too wide for MAX_BLOCKS) - blocked_available()
-    // reports this. m_use_blocked is the separate, per-model dispatch
-    // decision score_codes() acts on (see build_blocked_tables()'s gate) -
-    // the tables are always built when W allows, even when m_use_blocked is
-    // false, so score_codes_blocked() stays callable (and correct) for the
-    // equivalence test regardless of which kernel production picks.
+    // reports this, and score_codes() then runs the naive kernel.
     int m_nblocks = 0;
-    bool m_use_blocked = false;
     std::vector<double> m_block_table; // nblocks * 16, block b's at b * 16
     // The block pairs with a table - the linked ones, or every one from 80%
     // linked - in (u, v) order, and their 16 x 16 tables (pair k's at
-    // k * 256).
+    // k * 256). m_pair_u and m_pair_v hold each block's first position
+    // (2u, 2v), which indexes the block codes directly: storing the block
+    // index and doubling it per lookup took 14% longer through gseq.potts()
+    // on a W = 41 band of 8 (1.23 vs 1.08 s).
     std::vector<int> m_pair_u, m_pair_v;
     std::vector<double> m_pair_table;
 };

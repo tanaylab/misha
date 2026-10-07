@@ -1,6 +1,6 @@
 # misha 5.12.2
 
-* Potts models with many couplings score faster in the `potts` virtual tracks and `gseq.potts()`, most when the couplings link nearby positions, such as several models summed side by side. Values are unchanged.
+* Potts models score faster in the `potts` virtual tracks and `gseq.potts()`, most of all when their couplings link nearby positions, such as several models summed side by side. Some models' scores change in the last digits (relative difference below 1e-14; one float step in vtrack values), so a score exactly at a threshold or tied with another can come out the other way.
 
 # misha 5.12.1
 
