@@ -115,6 +115,9 @@ double PottsScorer::compute_position_result(size_t index, size_t target_length,
 double PottsScorer::score_direct(size_t i_min, size_t i_max, size_t motif_len, size_t tlen,
                                 bool fill_window)
 {
+    // The block codes of every window scored below.
+    potts_block_codes(m_codes, m_block_codes, i_min,
+                      m_model.blocked_available() ? i_max + motif_len : i_min);
     const bool union_max = (m_mode == MAX_LIKELIHOOD_POS);
     double acc = -std::numeric_limits<double>::infinity();
     bool have_acc = false;
@@ -384,6 +387,13 @@ double PottsScorer::try_slide_window(const GInterval &original_interval,
     // the ones just above i_min.
     const bool union_max = (m_mode == MAX_LIKELIHOOD_POS);
 
+    // The block codes of the `stride` arriving anchors' windows only.
+    const size_t first = slot_index(W - stride, i_min, i_max);
+    const size_t last = slot_index(W - 1, i_min, i_max);
+    const size_t lo = std::min(first, last);
+    potts_block_codes(m_codes, m_block_codes, lo,
+                      m_model.blocked_available() ? std::max(first, last) + motif_len : lo);
+
     switch (m_mode) {
     case TOTAL_LIKELIHOOD: {
         // Decided BEFORE the first pop, so the guarantee stated above holds:
@@ -623,7 +633,7 @@ double PottsScorer::score_interval(const GInterval &interval, const GenomeChromK
         if (i_min > i_max)
             i_min = 0;
 
-        potts_encode(target, m_codes, m_nbad, m_block_codes);
+        potts_encode(target, m_codes, m_nbad);
 
         return score_with_sliding_window(interval, expanded, i_min, i_max, motif_len, tlen);
     } catch (TGLException &e) {

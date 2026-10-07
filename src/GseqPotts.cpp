@@ -75,7 +75,8 @@ SEXP C_gseq_potts(SEXP r_seqs, SEXP r_params, SEXP r_mode, SEXP r_envir)
                 out[r] = NA_REAL;
                 continue;
             }
-            potts_encode(target, codes, nbad, block_codes);
+            potts_encode(target, codes, nbad);
+            potts_block_codes(codes, block_codes, 0, model.blocked_available() ? codes.size() : 0);
             const size_t n_anchor = target.size() - (size_t)W + 1;
 
             double acc_lse = -numeric_limits<double>::infinity();
@@ -215,10 +216,11 @@ SEXP C_potts_score_codes_cmp(SEXP r_params, SEXP r_codes)
                                 j + 1, i + 1, col[j]);
                 win[j] = (int8_t)col[j];
             }
-            // As potts_encode() builds them: past the window's end the
-            // second base counts as 0.
+            // As potts_block_codes() builds them. Past the window's end the
+            // second base is whatever follows, which the trailing block's
+            // tables must ignore: win[0] varies it from window to window.
             for (int j = 0; j < W; ++j)
-                win_block_codes[j] = (int8_t)(4 * win[j] + (j + 1 < W ? win[j + 1] : 0));
+                win_block_codes[j] = (int8_t)(4 * win[j] + (j + 1 < W ? win[j + 1] : win[0]));
             naive[i] = model.score_codes_naive(win.data());
             blocked[i] = model.score_codes_blocked(win_block_codes.data());
         }

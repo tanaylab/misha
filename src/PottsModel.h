@@ -31,15 +31,15 @@ using namespace std;
 // makes the reverse strand cost exactly what the forward strand costs, where
 // reverse-complementing per anchor would dominate the loop.
 //
-// score_codes() has two implementations, chosen once per model in
-// build_blocked_tables() rather than per anchor:
+// PottsModel has two kernels for the same score:
 //
 //   score_codes_naive()   - one table lookup per single-site term and one per
 //                            pair term: 1 + W + npair lookups.
 //   score_codes_blocked() - positions packed two at a time into a 0..15
-//                            "block code" (once per sequence, by
-//                            potts_encode()); one table per block folds its own
-//                            singles (and the pair within the block, if any)
+//                            "block code" (once per window, for both
+//                            strands, by potts_block_codes()); one table per
+//                            block folds its own singles (and the pair
+//                            within the block, if any)
 //                            into one lookup, and one table per BLOCK PAIR
 //                            that some coupling links (every block pair,
 //                            from 80% linked) folds its up to 4 cross-block
@@ -51,7 +51,7 @@ using namespace std;
 //                            instead of 295.
 //
 // score_codes() runs the blocked kernel whenever its tables are built. With
-// block codes packed once per sequence it was the faster one through
+// block codes built once per window it was the faster one through
 // gseq.potts() on 169 models (W 6-64; order 1, bands, random, side-by-side
 // blocks and full pairwise; one strand and both) - at worst 4% slower, and
 // 0.56-1.00x of naive for order-1 models - and at most 9% slower on couplings
@@ -61,8 +61,8 @@ using namespace std;
 // build_blocked_tables() generalizes to odd W (a trailing size-1 block) and
 // to sparse or absent pairs (a missing coupling contributes 0 to its block
 // pair's table, and a block pair that no coupling links has no table, or an
-// all-zero one from 80% linked),
-// so score_codes_blocked() agrees with score_codes_naive() for ANY
+// all-zero one from 80% linked), so score_codes_blocked() agrees with
+// score_codes_naive() for ANY
 // PottsModel - not only the dense, even-W case it is designed to win on. For
 // W > 256 (MAX_BLOCKS = 128), build_blocked_tables() leaves the blocked
 // tables unbuilt (blocked_available() is false) and score_codes() falls back
@@ -119,7 +119,7 @@ public:
     }
 
     // The dinucleotide-blocked kernel - see the class comment. bc points at
-    // the window's first block code from potts_encode(): block b's code is
+    // the window's first block code from potts_block_codes(): block b's code is
     // bc[2 * b]. The caller must guarantee blocked_available() (score_codes()
     // checks it; a direct caller, such as the equivalence test's
     // C_potts_score_codes_cmp, must check it itself).
@@ -153,7 +153,8 @@ public:
     // Production entry point - GseqPotts.cpp and PottsParams' consumers call
     // this and never the two kernels above directly. Runs the blocked kernel
     // whenever its tables are built (W <= 256) - see the class comment. c and
-    // bc are the window's codes and block codes from potts_encode().
+    // bc are the window's codes and block codes (potts_encode(),
+    // potts_block_codes()).
     inline double score_codes(const int8_t *c, const int8_t *bc) const
     {
         return m_nblocks > 0 ? score_codes_blocked(bc) : score_codes_naive(c);
@@ -343,8 +344,7 @@ private:
 // instead of re-walking W bases. nbad has size codes.size() + 1.
 inline void potts_encode(const std::string &target,
                          std::vector<int8_t> &codes,
-                         std::vector<int32_t> &nbad,
-                         std::vector<int8_t> &block_codes)
+                         std::vector<int32_t> &nbad)
 {
     const std::size_t n = target.size();
     codes.resize(n);
@@ -355,18 +355,34 @@ inline void potts_encode(const std::string &target,
         codes[p] = c;
         nbad[p + 1] = nbad[p] + (c < 0 ? 1 : 0);
     }
-    // block_codes[p] = 4 * codes[p] + codes[p + 1], the code of a block that
-    // starts at p - built once here, for every anchor and both strands,
-    // rather than by the blocked kernel per anchor. Past the end, or before
-    // a non-ACGT base, the second base counts as 0: a scorable window reads
-    // that only for the trailing size-1 block of an odd W, whose tables
-    // ignore the second base. A non-ACGT first base gives a negative code,
-    // never read, since a window with that base is not scored.
+}
+
+// block_codes[p] = 4 * codes[p] + codes[p + 1], the code of a block that
+// starts at p, for p in [lo, hi) - what score_codes_blocked() reads. Built
+// once per window for both strands rather than by the kernel per anchor, and
+// only over the windows about to be scored: a vtrack that slides by one base
+// encodes its whole target but scores one anchor, and a pass over the whole
+// target made that 35-55% slower. block_codes is sized to codes. Past the
+// end, or before a non-ACGT base, the second base counts as 0: a scorable
+// window reads that only for the trailing size-1 block of an odd W, whose
+// tables ignore the second base. A non-ACGT first base gives a negative code,
+// never read, since a window with that base is not scored.
+inline void potts_block_codes(const std::vector<int8_t> &codes,
+                              std::vector<int8_t> &block_codes,
+                              std::size_t lo, std::size_t hi)
+{
+    const std::size_t n = codes.size();
     block_codes.resize(n);
-    for (std::size_t p = 0; p < n; ++p) {
-        const int8_t next = (p + 1 < n && codes[p + 1] >= 0) ? codes[p + 1] : 0;
-        block_codes[p] = (int8_t)(4 * codes[p] + next);
+    if (hi > n)
+        hi = n;
+    // Every p but the last has a next base; the last gets 0.
+    const std::size_t end = (hi == n && lo < hi) ? hi - 1 : hi;
+    for (std::size_t p = lo; p < end; ++p) {
+        const int8_t next = codes[p + 1];
+        block_codes[p] = (int8_t)(4 * codes[p] + (next < 0 ? 0 : next));
     }
+    if (end < hi)
+        block_codes[end] = (int8_t)(4 * codes[end]);
 }
 
 #endif // POTTS_MODEL_H_

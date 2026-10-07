@@ -443,23 +443,45 @@ test_that("an odd-W window followed by an N, or by nothing, scores like the orac
     # end of the sequence or before an N, and its tables ignore that base.
     W <- 21L
     m <- potts_ref_model(W = W, npair_mode = "full", seed = 7L)
-    ref_max <- function(s, model) {
-        v <- vapply(seq_len(nchar(s) - W + 1L), function(i) {
-            potts_ref_window(substr(s, i, i + W - 1L), model)
-        }, numeric(1))
-        if (all(is.na(v))) NA_real_ else max(v, na.rm = TRUE)
-    }
     set.seed(71L)
     w <- vapply(1:20, function(i) paste(sample(POTTS_BASES, W, replace = TRUE), collapse = ""), character(1))
     for (tail in c("", "N", "ACGTN")) {
         s <- paste0(w, tail)
         for (strand in c(1L, -1L)) {
-            ref <- if (strand == 1L) m else potts_ref_rc(m)
             expect_equal(gseq.potts(s, m, mode = "max", bidirect = FALSE, strand = strand),
-                as.numeric(vapply(s, ref_max, numeric(1), model = ref)),
+                vapply(s, function(x) {
+                    max(potts_ref_anchors(x, m, bidirect = FALSE, strand = strand), na.rm = TRUE)
+                }, numeric(1), USE.NAMES = FALSE),
                 tolerance = 1e-9
             )
         }
+    }
+})
+
+test_that("a model wider than 256 runs the naive kernel and scores like the oracle", {
+    # build_blocked_tables() builds no blocked tables past W = 256, so
+    # score_codes() falls back to the naive kernel - the one place production
+    # still runs it.
+    W <- 257L
+    full <- t(utils::combn(W, 2))
+    pairs <- full[full[, 2] - full[, 1] <= 2L, , drop = FALSE]
+    storage.mode(pairs) <- "integer"
+    set.seed(91L)
+    m <- list(
+        e = matrix(round(rnorm(W * 4), 4), nrow = W, ncol = 4, dimnames = list(NULL, POTTS_BASES)),
+        J = lapply(seq_len(nrow(pairs)), function(k) matrix(round(rnorm(16), 4), 4L, 4L)),
+        pairs = pairs,
+        intercept = round(rnorm(1), 4)
+    )
+    set.seed(92L)
+    s <- vapply(1:5, function(i) paste(sample(POTTS_BASES, W + 3L, replace = TRUE), collapse = ""), character(1))
+    for (strand in c(1L, -1L)) {
+        expect_equal(gseq.potts(s, m, mode = "max", bidirect = FALSE, strand = strand),
+            vapply(s, function(x) {
+                max(potts_ref_anchors(x, m, bidirect = FALSE, strand = strand))
+            }, numeric(1), USE.NAMES = FALSE),
+            tolerance = 1e-9
+        )
     }
 })
 
