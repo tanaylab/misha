@@ -155,13 +155,24 @@ static size_t read_magic_bytes(const std::string &path, unsigned char *buf, size
 	return n;
 }
 
+// True if the decompressed stream starts with the BAM magic "BAM\1".
+static bool has_bam_payload(const std::string &path) {
+	gzFile gz = gzopen(path.c_str(), "rb");
+	if (!gz) return false;
+	char magic[4];
+	int n = gzread(gz, magic, 4);
+	gzclose(gz);
+	return n == 4 && !memcmp(magic, "BAM\1", 4);
+}
+
 static std::unique_ptr<ByteSource> open_source(const std::string &path) {
 	unsigned char magic[4] = {0, 0, 0, 0};
 	size_t n = read_magic_bytes(path, magic, 4);
 	// bgzip uses gzip magic with FLG.FEXTRA (0x04) and method 0x08; that
 	// distinguishes BAM/bgzip from plain gzip (which has FLG 0x00 or 0x08).
+	// A bgzipped text file (e.g. a 10x fragments.tsv.gz) is read with zlib.
 	if (n == 4 && magic[0] == 0x1f && magic[1] == 0x8b &&
-	              magic[2] == 0x08 && magic[3] == 0x04) {
+	              magic[2] == 0x08 && magic[3] == 0x04 && has_bam_payload(path)) {
 		return std::make_unique<PipeSource>("samtools view " + shellquote_single(path));
 	}
 	if (n >= 2 && magic[0] == 0x1f && magic[1] == 0x8b)
@@ -173,10 +184,15 @@ static std::unique_ptr<ByteSource> open_source(const std::string &path) {
 
 extern "C" {
 
-SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsize, SEXP _cols_order, SEXP _remove_dups, SEXP _envir)
+SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsize, SEXP _cols_order, SEXP _remove_dups,
+                            SEXP _paired, SEXP _min_mapq, SEXP _max_fraglen, SEXP _envir)
 {
-	enum { SEQ_COL, CHROM_COL, COORD_COL, STRAND_COL, NUM_COLS };
-	const char *COL_NAMES[NUM_COLS] = { "sequence", "chromosome", "coordinate", "strand" };
+	// The first NUM_USER_COLS columns are the ones cols.order positions; the rest are read only from SAM
+	// (MAPQ, PNEXT, TLEN) or from fragment files (END). A column with order 0 is not read.
+	enum { SEQ_COL, CHROM_COL, COORD_COL, STRAND_COL, NUM_USER_COLS, MAPQ_COL = NUM_USER_COLS, PNEXT_COL, TLEN_COL, END_COL, NUM_COLS };
+	const char *COL_NAMES[NUM_COLS] = { "sequence", "chromosome", "coordinate", "strand", "mapq", "pnext", "tlen", "end" };
+	// SAM flags: unmapped (0x4), secondary (0x100), QC fail (0x200) and supplementary (0x800) records are never imported
+	const uint64_t SAM_SKIP_FLAGS = 0x4 | 0x100 | 0x200 | 0x800;
 
 	try {
 		RdbInitializer rdb_init;
@@ -193,11 +209,11 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 		if (Rf_length(_binsize) != 1 || ((!Rf_isReal(_binsize) || REAL(_binsize)[0] != (int)REAL(_binsize)[0]) && !Rf_isInteger(_binsize)))
 			verror("Binsize argument is not an integer");
 
-		if (!Rf_isNull(_cols_order) && (Rf_length(_cols_order) != NUM_COLS || (!Rf_isReal(_cols_order) && !Rf_isInteger(_cols_order))))
-			verror("cols.order argument must be a vector with %d numeric values", NUM_COLS);
+		if (!Rf_isNull(_cols_order) && (Rf_length(_cols_order) != NUM_USER_COLS || (!Rf_isReal(_cols_order) && !Rf_isInteger(_cols_order))))
+			verror("cols.order argument must be a vector with %d numeric values", NUM_USER_COLS);
 
 		if (!Rf_isNull(_cols_order) && Rf_isReal(_cols_order)) {
-			for (int i = 0; i < NUM_COLS; i++) {
+			for (int i = 0; i < NUM_USER_COLS; i++) {
 				if (REAL(_cols_order)[i] != (int)REAL(_cols_order)[i])
 					verror("cols.order is not an integer");
 			}
@@ -206,36 +222,80 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 		if (Rf_length(_remove_dups) > 1 || !Rf_isLogical(_remove_dups))
 			verror("remove.dups argument must be a logical value");
 
+		if (Rf_length(_paired) != 1 || !Rf_isLogical(_paired) || LOGICAL(_paired)[0] == NA_LOGICAL)
+			verror("paired argument must be TRUE or FALSE");
+
+		if (Rf_length(_min_mapq) != 1 || ((!Rf_isReal(_min_mapq) || REAL(_min_mapq)[0] != (int)REAL(_min_mapq)[0]) && !Rf_isInteger(_min_mapq)))
+			verror("min.mapq argument is not an integer");
+
+		if (Rf_length(_max_fraglen) != 1 || ((!Rf_isReal(_max_fraglen) || REAL(_max_fraglen)[0] != (int64_t)REAL(_max_fraglen)[0]) && !Rf_isInteger(_max_fraglen)))
+			verror("max.fraglen argument is not an integer");
+
 		const char *track = CHAR(STRING_ELT(_track, 0));
 		const char *infilename = CHAR(STRING_ELT(_infile, 0));
 		int pileup = Rf_isReal(_pileup) ? (int)REAL(_pileup)[0] : INTEGER(_pileup)[0];
 		double binsize = Rf_isReal(_binsize) ? (int)REAL(_binsize)[0] : INTEGER(_binsize)[0];
-		int cols_order[NUM_COLS];
+		int cols_order[NUM_COLS] = { 0 };
 		bool remove_dups = LOGICAL(_remove_dups)[0];
+		bool paired = LOGICAL(_paired)[0];
+		int min_mapq = Rf_isReal(_min_mapq) ? (int)REAL(_min_mapq)[0] : INTEGER(_min_mapq)[0];
+		int64_t max_fraglen = Rf_isReal(_max_fraglen) ? (int64_t)REAL(_max_fraglen)[0] : INTEGER(_max_fraglen)[0];
 		bool is_sam_format = Rf_isNull(_cols_order);
+		// paired = TRUE on a non-SAM file: tab-delimited fragments, 0-based half-open chrom/start/end in columns 1-3
+		// (BED, 10x fragments.tsv.gz). Fragment files are taken as already deduplicated.
+		bool is_frag_format = paired && !is_sam_format;
 
 		if (is_sam_format) { // SAM format
 			cols_order[SEQ_COL] = 10;
 			cols_order[CHROM_COL] = 3;
 			cols_order[COORD_COL] = 4;
 			cols_order[STRAND_COL] = 2;
+			cols_order[MAPQ_COL] = 5;
+			cols_order[PNEXT_COL] = 8;
+			cols_order[TLEN_COL] = 9;
+		} else if (is_frag_format) {
+			cols_order[CHROM_COL] = 1;
+			cols_order[COORD_COL] = 2;
+			cols_order[END_COL] = 3;
 		} else {
-			for (int i = 0; i < NUM_COLS; i++)
+			for (int i = 0; i < NUM_USER_COLS; i++) {
 				cols_order[i] = Rf_isReal(_cols_order) ? (int)REAL(_cols_order)[i] : INTEGER(_cols_order)[i];
+				if (cols_order[i] <= 0)
+					verror("Invalid columns order: %s column's order is %d", COL_NAMES[i], cols_order[i]);
+			}
 		}
 
 		if (pileup < 0)
 			verror("Pileup cannot be negative");
 
-		if (pileup == 0 && binsize >= 0)
-			verror("Invalid binsize.\nSparse track is created when pileup is zero. Binsize must be set to -1 then.");
+		if (min_mapq < 0)
+			verror("min.mapq cannot be negative");
 
-		if (pileup > 0 && binsize <= 0)
-			verror("Invalid binsize.\nDense track is created when pileup is greater than zero. Binsize must be a positive integer then.");
+		if (min_mapq > 0 && !is_sam_format)
+			verror("min.mapq requires SAM or BAM input");
 
+		if (paired) {
+			if (pileup)
+				verror("pileup is not used with paired = TRUE: each fragment covers its own span. Set pileup to 0.");
+
+			if (binsize <= 0)
+				verror("Invalid binsize.\nA dense track is created when paired is TRUE. Binsize must be a positive integer then.");
+
+			if (max_fraglen <= 0)
+				verror("max.fraglen must be positive");
+		} else {
+			if (pileup == 0 && binsize >= 0)
+				verror("Invalid binsize.\nSparse track is created when pileup is zero. Binsize must be set to -1 then.");
+
+			if (pileup > 0 && binsize <= 0)
+				verror("Invalid binsize.\nDense track is created when pileup is greater than zero. Binsize must be a positive integer then.");
+		}
+
+		int num_used_cols = 0;
 		for (int i = 0; i < NUM_COLS; i++) {
-			if (cols_order[i] <= 0)
-				verror("Invalid columns order: %s column's order is %d", COL_NAMES[i], cols_order[i]);
+			if (!cols_order[i])
+				continue;
+			++num_used_cols;
 
 			for (int j = i + 1; j < NUM_COLS; j++) {
 				if (cols_order[i] == cols_order[j])
@@ -258,9 +318,13 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 		vector<unsigned> num_mapped(num_chroms, 0);
 		vector<unsigned> num_dups(num_chroms, 0);
 		vector< vector<int64_t> > coords(2 * num_chroms);
+		vector< vector< pair<int64_t, int64_t> > > frags(paired ? num_chroms : 0);
+		// lines starting with this char are headers / comments
+		int comment_char = is_sam_format ? '@' : is_frag_format ? '#' : 0;
 
 		string dirname = create_track_dir(_envir, track);
-		int total_unmapped = 0;
+		int64_t total_unmapped = 0;
+		int64_t total_filtered = 0;
 		std::unique_ptr<ByteSource> src = open_source(infilename);
 
 		int col = 1;
@@ -283,8 +347,8 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 		while (1) {
 			c = src->getc();
 
-			// in SAM file skip the lines that start with @
-			if (!pos && is_sam_format && c == '@') {
+			// skip SAM headers (@) and fragment file comments (#)
+			if (!pos && comment_char && c == comment_char) {
 				while (1) {
 					c = src->getc();
 					if (c == '\n' || c == EOF)
@@ -302,6 +366,8 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 				if (c == '\n' || c == EOF) {
 					int num_nonempty_strs = 0;
 					bool mapped = false;
+					bool filtered = false; // a valid record left out by a filter (flags, MAPQ, fragment length)
+					bool second_mate = false; // a paired SAM import counts each pair once, by its first mate
 
 					pos = 0;
 					for (int i = 0; i < NUM_COLS; i++) {
@@ -309,25 +375,91 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 							num_nonempty_strs++;
 					}
 
-					while (num_nonempty_strs == NUM_COLS) {
+					while (num_nonempty_strs == num_used_cols) {
 						unordered_map<string, int>::iterator istr2chrom;
 						int chrom_idx;
 						int64_t coord;
 						char *endptr;
+						uint64_t flag = 0;
+
+						if (is_sam_format) {
+							flag = strtoull(str[STRAND_COL].c_str(), &endptr, 0);
+							if (*endptr)
+								break;
+							if (paired && (flag & 0x1) && !(flag & 0x40)) {
+								second_mate = true;
+								break;
+							}
+						}
 
 						if ((istr2chrom = str2chrom.find(str[CHROM_COL])) == str2chrom.end())
 							break;
 						chrom_idx = istr2chrom->second;
+						int64_t chrom_end = all_genome_intervs[chrom_idx].end;
 
 						coord = strtoll(str[COORD_COL].c_str(), &endptr, 10);
-						if (*endptr || coord < 0 || coord >= all_genome_intervs[chrom_idx].end)
+						if (*endptr || coord < 0 || coord >= chrom_end)
 							break;
 
-						if (is_sam_format) {
-							uint64_t num = strtoll(str[STRAND_COL].c_str(), &endptr, 0);
-							if (*endptr)
+						if (is_frag_format) {
+							int64_t end = strtoll(str[END_COL].c_str(), &endptr, 10);
+							if (*endptr || end <= coord)
 								break;
-							str[STRAND_COL] = num & 0x10 ? "-" : "+";
+							if (end - coord > max_fraglen) {
+								filtered = true;
+								break;
+							}
+							frags[chrom_idx].emplace_back(coord, min(end, chrom_end));
+							mapped = true;
+							++num_mapped[chrom_idx];
+							break;
+						}
+
+						if (is_sam_format) {
+							if (flag & 0x4)
+								break;
+
+							if (flag & SAM_SKIP_FLAGS) {
+								filtered = true;
+								break;
+							}
+
+							if (min_mapq) {
+								long mapq = strtol(str[MAPQ_COL].c_str(), &endptr, 10);
+								if (*endptr)
+									break;
+								if (mapq < min_mapq) {
+									filtered = true;
+									break;
+								}
+							}
+
+							if (paired) {
+								// One fragment per proper pair, taken from the first mate (as MACS3 BAMPE does):
+								// [min(POS, PNEXT), + |TLEN|), SAM POS being 1-based. Unpaired reads are filtered.
+								if ((flag & 0x3) != 0x3 || (flag & 0x8)) {
+									filtered = true;
+									break;
+								}
+								int64_t pnext = strtoll(str[PNEXT_COL].c_str(), &endptr, 10);
+								if (*endptr)
+									break;
+								int64_t tlen = strtoll(str[TLEN_COL].c_str(), &endptr, 10);
+								if (*endptr)
+									break;
+								tlen = llabs(tlen);
+								int64_t start = min(coord, pnext) - 1;
+								if (!tlen || tlen > max_fraglen || start < 0) {
+									filtered = true;
+									break;
+								}
+								frags[chrom_idx].emplace_back(start, min(start + tlen, chrom_end));
+								mapped = true;
+								++num_mapped[chrom_idx];
+								break;
+							}
+
+							str[STRAND_COL] = flag & 0x10 ? "-" : "+";
 						}
 
 						if (str[STRAND_COL] == "+" || str[STRAND_COL] == "F")
@@ -342,7 +474,9 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 						break;
 					}
 
-					if (!mapped && num_nonempty_strs)
+					if (filtered)
+						total_filtered++;
+					else if (!mapped && !second_mate && num_nonempty_strs)
 						total_unmapped++;
 
 					if (c == EOF)
@@ -383,11 +517,42 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 			snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), iu.id2chrom(all_genome_intervs[ichrom].chromid).c_str());
 
 			// dense track
-			if (pileup) {
+			if (pileup || paired) {
 				GenomeTrackFixedBin gtrack;
 				gtrack.init_write(filename, (unsigned)binsize, all_genome_intervs[ichrom].chromid);
 
 				vector<float> trackvals((uint64_t)ceil(all_genome_intervs[ichrom].end / binsize), 0);
+
+				// adds the fraction of each bin covered by [from_coord, to_coord)
+				auto add_coverage = [&](int64_t from_coord, int64_t to_coord) {
+					int64_t from_bin = (int64_t)(from_coord / binsize);
+					int64_t to_bin = (int64_t)ceil(to_coord / binsize) - 1;
+
+					// If from/to bin equals to the last bin in the chromosome, then we should replace use the length of the tail rather than binsize;
+					// yet we don't want to introduce another "if" statement + complications. So let the last bin be inaccurate.
+					if (from_bin >= to_bin)
+						trackvals[from_bin] += (to_coord - from_coord) / binsize;
+					else {
+						trackvals[from_bin] += from_bin + 1 - from_coord / binsize;
+						trackvals[to_bin] += to_coord / binsize - to_bin;
+						for (int64_t bin = from_bin + 1; bin < to_bin; ++bin)
+							trackvals[bin]++;
+					}
+				};
+
+				if (paired) {
+					vector< pair<int64_t, int64_t> > &cur_frags = frags[ichrom];
+					sort(cur_frags.begin(), cur_frags.end());
+
+					for (auto ifrag = cur_frags.begin(); ifrag != cur_frags.end(); ++ifrag) {
+						if (remove_dups && !is_frag_format && ifrag != cur_frags.begin() && *ifrag == *(ifrag - 1)) {
+							++num_dups[ichrom];
+							continue;
+						}
+						add_coverage(ifrag->first, ifrag->second);
+					}
+					vector< pair<int64_t, int64_t> >().swap(cur_frags);
+				}
 
 				for (int strand = 0; strand < 2; strand++) {
 					vector<int64_t> &cur_coords = coords[strand * num_chroms + ichrom];
@@ -399,21 +564,8 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 							continue;
 						}
 
-						int64_t from_coord = max(strand ? *icoord - pileup : *icoord, (int64_t)0);
-						int64_t to_coord = min(strand ? *icoord : *icoord + pileup, all_genome_intervs[ichrom].end);
-						int64_t from_bin = (int64_t)(from_coord / binsize);
-						int64_t to_bin = (int64_t)ceil(to_coord / binsize) - 1;
-
-						// If from/to bin equals to the last bin in the chromosome, then we should replace use the length of the tail rather than binsize;
-						// yet we don't want to introduce another "if" statement + complications. So let the last bin be inaccurate.
-						if (from_bin >= to_bin)
-							trackvals[from_bin] += (to_coord - from_coord) / binsize;
-						else {
-							trackvals[from_bin] += from_bin + 1 - from_coord / binsize;
-							trackvals[to_bin] += to_coord / binsize - to_bin;
-							for (int64_t bin = from_bin + 1; bin < to_bin; ++bin)
-								trackvals[bin]++;
-						}
+						add_coverage(max(strand ? *icoord - pileup : *icoord, (int64_t)0),
+						             min(strand ? *icoord : *icoord + pileup, all_genome_intervs[ichrom].end));
 					}
 				}
 
@@ -509,16 +661,18 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
         Rf_setAttrib(chrom_stat, R_ClassSymbol, Rf_mkString("data.frame"));
         Rf_setAttrib(chrom_stat, R_RowNamesSymbol, row_names);
 
-		rprotect(total_stat = RSaneAllocVector(REALSXP, 4));
-		REAL(total_stat)[0] = total_mapped + total_unmapped + total_dups;
+		rprotect(total_stat = RSaneAllocVector(REALSXP, 5));
+		REAL(total_stat)[0] = total_mapped + total_unmapped + total_dups + total_filtered;
 		REAL(total_stat)[1] = total_mapped;
 		REAL(total_stat)[2] = total_unmapped;
 		REAL(total_stat)[3] = total_dups;
-		Rf_setAttrib(total_stat, R_NamesSymbol, RSaneAllocVector(STRSXP, 4));
+		REAL(total_stat)[4] = total_filtered;
+		Rf_setAttrib(total_stat, R_NamesSymbol, RSaneAllocVector(STRSXP, 5));
 		SET_STRING_ELT(Rf_getAttrib(total_stat, R_NamesSymbol), 0, Rf_mkChar("total"));
 		SET_STRING_ELT(Rf_getAttrib(total_stat, R_NamesSymbol), 1, Rf_mkChar("total.mapped"));
 		SET_STRING_ELT(Rf_getAttrib(total_stat, R_NamesSymbol), 2, Rf_mkChar("total.unmapped"));
 		SET_STRING_ELT(Rf_getAttrib(total_stat, R_NamesSymbol), 3, Rf_mkChar("total.dups"));
+		SET_STRING_ELT(Rf_getAttrib(total_stat, R_NamesSymbol), 4, Rf_mkChar("total.filtered"));
 
 		rprotect(answer = RSaneAllocVector(VECSXP, 2));
 

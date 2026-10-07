@@ -323,8 +323,17 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
         readBin(path, what = "raw", n = 4),
         error = function(e) raw(0)
     )
-    length(bytes) == 4L &&
-        identical(as.integer(bytes), c(0x1fL, 0x8bL, 0x08L, 0x04L))
+    if (length(bytes) != 4L || !identical(as.integer(bytes), c(0x1fL, 0x8bL, 0x08L, 0x04L))) {
+        return(FALSE)
+    }
+    # bgzip is also used for text (e.g. 10x fragments.tsv.gz): a BAM decompresses to "BAM\1"
+    read_payload <- function() {
+        con <- gzfile(path, "rb")
+        on.exit(close(con))
+        readBin(con, what = "raw", n = 4)
+    }
+    payload <- tryCatch(read_payload(), error = function(e) raw(0))
+    identical(payload, as.raw(c(0x42, 0x41, 0x4d, 0x01)))
 }
 
 #' Creates a track from a file of mapped sequences
@@ -362,6 +371,31 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
 #'
 #' If 'remove.dups' is 'TRUE' the duplicated coordinates are counted only once.
 #'
+#' For SAM and BAM input, unmapped, secondary, QC-failed and supplementary
+#' records (FLAG 0x4, 0x100, 0x200, 0x800) are never imported, and
+#' 'min.mapq' drops records with a lower MAPQ.
+#'
+#' If 'paired' is 'TRUE' each fragment covers its own span instead of being
+#' expanded by 'pileup' (which must be 0), and the track is dense with bins of
+#' 'binsize'. Each bin holds the mean number of fragments covering its bases.
+#' For SAM / BAM input ('cols.order = NULL', or any BAM) the fragment is read
+#' from the first mate of each proper pair (FLAG 0x1, 0x2 and 0x40 set, 0x8
+#' unset) as [min(POS, PNEXT), min(POS, PNEXT) + |TLEN|), the way MACS3 does
+#' with '-f BAMPE'. The input may be sorted in any order. 'min.mapq' is
+#' tested on the first mate only. With 'remove.dups' fragments with the same
+#' start and end are counted once. Any other input is read as a fragment file:
+#' tab-delimited, 0-based half-open chromosome, start and end in columns 1-3
+#' (BED, or a 10x 'fragments.tsv.gz'), lines starting with '#' skipped.
+#' Fragment files are taken as already deduplicated, so 'remove.dups' does not
+#' apply to them, and 'cols.order' must not be set. Fragments longer than
+#' 'max.fraglen' are skipped in both cases. With 'paired' the returned
+#' statistics count fragments: each pair is counted once, by its first mate.
+#'
+#' The statistics report 'total.mapped' (imported, duplicates included),
+#' 'total.unmapped' (unmapped, or on a chromosome missing from the database),
+#' 'total.dups' and 'total.filtered' (left out by the flag, MAPQ, proper-pair
+#' or fragment length filters).
+#'
 #' 'description' is added as a track attribute.
 #'
 #' 'gtrack.import_mappedseq' returns the statistics of the conversion process.
@@ -378,16 +412,28 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
 #' non-NULL `cols.order` with BAM input is an error.
 #' @param remove.dups if 'TRUE' the duplicated coordinates are counted only
 #' once.
+#' @param paired if 'TRUE' import paired-end fragments (see Description).
+#' @param min.mapq minimal MAPQ of an imported SAM / BAM record.
+#' @param max.fraglen maximal fragment length when 'paired' is 'TRUE'.
 #' @return A list of conversion process statistics.
 #' @seealso \code{\link{gtrack.rm}}, \code{\link{gtrack.info}},
 #' \code{\link{gdir.create}}
 #' @keywords ~mapped ~sequence ~track
 #' @export gtrack.import_mappedseq
-gtrack.import_mappedseq <- function(track = NULL, description = NULL, file = NULL, pileup = 0, binsize = -1, cols.order = c(9, 11, 13, 14), remove.dups = TRUE) {
+gtrack.import_mappedseq <- function(track = NULL, description = NULL, file = NULL, pileup = 0, binsize = -1, cols.order = c(9, 11, 13, 14), remove.dups = TRUE,
+                                    paired = FALSE, min.mapq = 0, max.fraglen = 2000) {
     if (is.null(substitute(track)) || is.null(description) || is.null(file)) {
-        stop("Usage: gtrack.import_mappedseq(track, description, file, pileup = 0, binsize = -1, cols.order = c(9, 11, 13, 14), remove.dups = TRUE)", call. = FALSE)
+        stop("Usage: gtrack.import_mappedseq(track, description, file, pileup = 0, binsize = -1, cols.order = c(9, 11, 13, 14), remove.dups = TRUE, paired = FALSE, min.mapq = 0, max.fraglen = 2000)", call. = FALSE)
     }
     .gcheckroot()
+
+    # paired fragment files have a fixed layout (chrom, start, end in columns 1-3)
+    if (isTRUE(paired) && !missing(cols.order) && !is.null(cols.order) && !.is_bam_file(file)) {
+        stop("cols.order is not used for fragment files: columns 1-3 must be chrom, start and end. ",
+            "Pass `cols.order = NULL` for a SAM file.",
+            call. = FALSE
+        )
+    }
 
     # BAM auto-detect: samtools view emits SAM-format payload, so cols.order
     # must be NULL. Honor the function-arg default (user didn't pass anything)
@@ -408,7 +454,7 @@ gtrack.import_mappedseq <- function(track = NULL, description = NULL, file = NUL
 
     retv <- NULL
     .gtrack.create_atomic(trackstr, function() {
-        retv <<- .gcall("gtrackimport_mappedseq", trackstr, file, pileup, binsize, cols.order, remove.dups, .misha_env())
+        retv <<- .gcall("gtrackimport_mappedseq", trackstr, file, pileup, binsize, cols.order, remove.dups, paired, min.mapq, max.fraglen, .misha_env())
     })
 
     final_dir <- .track_dir(trackstr)
@@ -418,7 +464,10 @@ gtrack.import_mappedseq <- function(track = NULL, description = NULL, file = NUL
             .gdb.add_track(trackstr)
             .gtrack.attr.set(
                 trackstr, "created.by",
-                sprintf("gtrack.import_mappedseq(%s, description, \"%s\", pileup=%d, binsize=%d, remove.dups=%s)", trackstr, file, pileup, binsize, remove.dups), TRUE
+                sprintf(
+                    "gtrack.import_mappedseq(%s, description, \"%s\", pileup=%d, binsize=%d, remove.dups=%s%s)", trackstr, file, pileup, binsize, remove.dups,
+                    if (isTRUE(paired) || min.mapq > 0) sprintf(", paired=%s, min.mapq=%d, max.fraglen=%d", paired, min.mapq, max.fraglen) else ""
+                ), TRUE
             )
             .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
             .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
@@ -437,6 +486,11 @@ gtrack.import_mappedseq <- function(track = NULL, description = NULL, file = NUL
             }
         }
     )
+    if (isTRUE(paired) && retv[[1]][["total.mapped"]] == 0) {
+        warning("No fragment was imported. A SAM file needs `cols.order = NULL`; other files are read as fragments (chrom, start, end).",
+            call. = FALSE
+        )
+    }
     retv
 }
 

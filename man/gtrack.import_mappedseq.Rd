@@ -11,7 +11,10 @@ gtrack.import_mappedseq(
   pileup = 0,
   binsize = -1,
   cols.order = c(9, 11, 13, 14),
-  remove.dups = TRUE
+  remove.dups = TRUE,
+  paired = FALSE,
+  min.mapq = 0,
+  max.fraglen = 2000
 )
 }
 \arguments{
@@ -33,6 +36,12 @@ non-NULL `cols.order` with BAM input is an error.}
 
 \item{remove.dups}{if 'TRUE' the duplicated coordinates are counted only
 once.}
+
+\item{paired}{if 'TRUE' import paired-end fragments (see Description).}
+
+\item{min.mapq}{minimal MAPQ of an imported SAM / BAM record.}
+
+\item{max.fraglen}{maximal fragment length when 'paired' is 'TRUE'.}
 }
 \value{
 A list of conversion process statistics.
@@ -71,6 +80,31 @@ than zero, the output track is in dense format. 'binsize' controls the bin
 size of the dense track.
 
 If 'remove.dups' is 'TRUE' the duplicated coordinates are counted only once.
+
+For SAM and BAM input, unmapped, secondary, QC-failed and supplementary
+records (FLAG 0x4, 0x100, 0x200, 0x800) are never imported, and
+'min.mapq' drops records with a lower MAPQ.
+
+If 'paired' is 'TRUE' each fragment covers its own span instead of being
+expanded by 'pileup' (which must be 0), and the track is dense with bins of
+'binsize'. Each bin holds the mean number of fragments covering its bases.
+For SAM / BAM input ('cols.order = NULL', or any BAM) the fragment is read
+from the first mate of each proper pair (FLAG 0x1, 0x2 and 0x40 set, 0x8
+unset) as [min(POS, PNEXT), min(POS, PNEXT) + |TLEN|), the way MACS3 does
+with '-f BAMPE'. The input may be sorted in any order. 'min.mapq' is
+tested on the first mate only. With 'remove.dups' fragments with the same
+start and end are counted once. Any other input is read as a fragment file:
+tab-delimited, 0-based half-open chromosome, start and end in columns 1-3
+(BED, or a 10x 'fragments.tsv.gz'), lines starting with '#' skipped.
+Fragment files are taken as already deduplicated, so 'remove.dups' does not
+apply to them, and 'cols.order' must not be set. Fragments longer than
+'max.fraglen' are skipped in both cases. With 'paired' the returned
+statistics count fragments: each pair is counted once, by its first mate.
+
+The statistics report 'total.mapped' (imported, duplicates included),
+'total.unmapped' (unmapped, or on a chromosome missing from the database),
+'total.dups' and 'total.filtered' (left out by the flag, MAPQ, proper-pair
+or fragment length filters).
 
 'description' is added as a track attribute.
 
