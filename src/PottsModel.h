@@ -40,21 +40,24 @@ using namespace std;
 //                            "block code"; one table per block folds its own
 //                            singles (and the pair within the block, if any)
 //                            into one lookup, and one table per BLOCK PAIR
-//                            folds the up to 4 cross-block couplings into one
-//                            lookup: ceil(W/2) + C(ceil(W/2), 2) lookups. At
+//                            that some coupling links folds its up to 4
+//                            cross-block couplings into one lookup:
+//                            ceil(W/2) + (linked block pairs) lookups. At
 //                            W = 20, full pairwise, that is 10 + 45 = 55
-//                            instead of 211.
+//                            instead of 211; for a sum of four side-by-side
+//                            models at W = 41 (253 pairs), 21 + 73 = 94
+//                            instead of 295.
 //
-// score_codes_blocked()'s lookup count does NOT depend on how many pairs the
-// model actually has (it is fixed by W alone), while score_codes_naive()'s
-// does. So the blocked kernel only wins when the model is dense enough that
-// 1 + W + npair exceeds ceil(W/2) + C(ceil(W/2), 2) - measured through
+// score_codes() picks one of the two per model (m_use_blocked, set once in
+// build_blocked_tables()), not the blocked kernel unconditionally: blocked
+// when ceil(W/2) + C(ceil(W/2), 2) - every block pair, linked or not - is
+// smaller than 1 + W + npair. That count is what the blocked kernel cost when
+// it looked up every block pair, and is kept so that no model changes kernel
+// (see the gate in build_blocked_tables()). Measured then through
 // gseq.potts() on an idle host at W = 20: ~3.4x faster full pairwise (190
-// pairs), a real but smaller win at 64 pairs, and 4-6x SLOWER at 0 pairs
-// (an order-1 model, i.e. one with no couplings at all), where it would spend 55
-// lookups computing what 21 could. score_codes() therefore picks whichever
-// kernel has the smaller lookup count for THIS model (m_use_blocked, set once
-// in build_blocked_tables()), not the blocked kernel unconditionally.
+// pairs), a real but smaller win at 64 pairs, and 4-6x SLOWER at 0 pairs (an
+// order-1 model, i.e. one with no couplings at all), where it spent 55
+// lookups computing what 21 could.
 //
 // build_blocked_tables() generalizes to odd W (a trailing size-1 block) and
 // to sparse or absent pairs (a missing coupling contributes 0 to its slot),
@@ -131,11 +134,14 @@ public:
         for (int b = 0; b < m_nblocks; ++b)
             s += m_block_table[m_block_offset[b] + (std::size_t)code[b]];
 
-        std::size_t pp = 0;
-        for (int u = 0; u < m_nblocks; ++u)
-            for (int v = u + 1; v < m_nblocks; ++v, ++pp)
-                s += m_pair_table[m_pair_offset[pp] +
-                                   (std::size_t)code[u] * (std::size_t)m_card[v] + (std::size_t)code[v]];
+        // Only the block pairs some coupling links, in (u, v) order, grouped
+        // by u so that block u's code is read once. Any other block pair's
+        // table would be all zeros, and adding 0 leaves the sum as it was.
+        for (std::size_t r = 0; r < m_pair_u.size(); ++r) {
+            const std::size_t cu = (std::size_t)code[m_pair_u[r]] * 16;
+            for (std::size_t k = m_pair_first[r]; k < m_pair_first[r + 1]; ++k)
+                s += m_pair_table[m_pair_offset[k] + cu + (std::size_t)code[m_pair_v[k]]];
+        }
         return s;
     }
 
@@ -247,25 +253,40 @@ private:
         }
 
         // Per-block-pair tables: up to 4 cross terms between the (1 or 2)
-        // positions of block u and the (1 or 2) positions of block v.
-        const int npairs_blocks = m_nblocks * (m_nblocks - 1) / 2;
-        m_pair_offset.assign((std::size_t)npairs_blocks + 1, 0);
-        {
-            int pp = 0;
-            for (int u = 0; u < m_nblocks; ++u)
-                for (int v = u + 1; v < m_nblocks; ++v, ++pp)
-                    m_pair_offset[pp + 1] =
-                        m_pair_offset[pp] + (std::size_t)m_card[u] * (std::size_t)m_card[v];
+        // positions of block u and the (1 or 2) positions of block v. Only a
+        // block pair that some coupling links (a position of u with a
+        // position of v) gets a table: any other block pair's table would be
+        // all zeros. A model whose couplings are local links few of its
+        // block pairs - a sum of four side-by-side models at W = 41 links 73
+        // of its 210 - and the zero tables were most of the kernel's lookups.
+        // Each table has 16 columns, whatever v's size, so the kernel can
+        // scale u's code by a constant; when v is the trailing size-1 block,
+        // columns 4..15 stay 0 and are never read.
+        vector<char> linked((std::size_t)m_nblocks * (std::size_t)m_nblocks, 0);
+        for (std::size_t k = 0; k < m_p1.size(); ++k) {
+            const int bu = m_p1[k] / 2, bv = m_p2[k] / 2;
+            if (bu != bv)
+                linked[(std::size_t)bu * m_nblocks + bv] = 1;
         }
-        m_pair_table.assign(m_pair_offset[npairs_blocks], 0.0);
 
-        int pp = 0;
+        m_pair_u.clear();
+        m_pair_first.assign(1, 0);
+        m_pair_v.clear();
+        m_pair_offset.clear();
+        m_pair_table.clear();
         for (int u = 0; u < m_nblocks; ++u) {
             const int pu0 = 2 * u;
             const int pu1 = (m_block_size[u] == 2) ? pu0 + 1 : -1;
-            for (int v = u + 1; v < m_nblocks; ++v, ++pp) {
+            for (int v = u + 1; v < m_nblocks; ++v) {
+                if (!linked[(std::size_t)u * m_nblocks + v])
+                    continue;
                 const int pv0 = 2 * v;
                 const int pv1 = (m_block_size[v] == 2) ? pv0 + 1 : -1;
+                const std::size_t off = m_pair_table.size();
+                m_pair_table.resize(off + (std::size_t)m_card[u] * 16, 0.0);
+                m_pair_v.push_back(v);
+                m_pair_offset.push_back(off);
+
                 for (int cu = 0; cu < m_card[u]; ++cu) {
                     const int xu0 = (pu1 >= 0) ? (cu >> 2) : cu;
                     const int xu1 = (pu1 >= 0) ? (cu & 3) : 0;
@@ -281,20 +302,29 @@ private:
                         if (pu1 >= 0 && pv1 >= 0)
                             s += pair_j(pu1, pv1, xu1, xv1);
 
-                        m_pair_table[m_pair_offset[pp] +
-                                      (std::size_t)cu * (std::size_t)m_card[v] + (std::size_t)cv] = s;
+                        m_pair_table[off + (std::size_t)cu * 16 + (std::size_t)cv] = s;
                     }
                 }
             }
+            if (m_pair_v.size() > m_pair_first.back()) {
+                m_pair_u.push_back(u);
+                m_pair_first.push_back(m_pair_v.size());
+            }
         }
 
-        // The gate: use the blocked kernel only when it actually has fewer
-        // lookups for THIS model. Its lookup count (m_nblocks + npairs_blocks)
-        // is fixed by W alone; the naive kernel's (1 + W + npair) shrinks with
-        // the model's pair count, so a sparse or order-1 model can make naive
-        // the faster choice even though blocked wins the dense case this
-        // kernel was designed for. See the class comment for measured numbers.
-        const std::size_t blocked_lookups = (std::size_t)m_nblocks + (std::size_t)npairs_blocks;
+        // The gate: use the blocked kernel only when it has fewer lookups
+        // than the naive one, counting EVERY block pair, linked or not
+        // (m_nblocks + C(m_nblocks, 2)). That is the count from before only
+        // the linked block pairs got tables, so each model runs the kernel it
+        // ran then and gets the same scores to the last bit. Counting only
+        // the linked block pairs would pick the blocked kernel for every
+        // model (there are at most npair of them, and m_nblocks < 1 + W).
+        // That was measured 7-22% slower than the naive kernel for an
+        // order-1 model at W = 20 (gseq.potts() and a potts.max vtrack), and
+        // a model that switches kernels gets scores that differ in the last
+        // bits, since the two kernels add the same terms in different orders.
+        const std::size_t npairs_blocks = (std::size_t)m_nblocks * (std::size_t)(m_nblocks - 1) / 2;
+        const std::size_t blocked_lookups = (std::size_t)m_nblocks + npairs_blocks;
         const std::size_t naive_lookups = 1 + (std::size_t)m_W + m_p1.size();
         m_use_blocked = blocked_lookups < naive_lookups;
     }
@@ -318,8 +348,14 @@ private:
     std::vector<int> m_card;            // per block, 4^size
     std::vector<double> m_block_table;
     std::vector<std::size_t> m_block_offset; // nblocks+1, prefix sums into m_block_table
+    // The linked block pairs, in (u, v) order: m_pair_u lists each block u
+    // linked to some later block, and m_pair_first[r]..m_pair_first[r + 1]
+    // indexes block m_pair_u[r]'s pairs in m_pair_v / m_pair_offset.
+    std::vector<int> m_pair_u;
+    std::vector<std::size_t> m_pair_first;  // m_pair_u.size() + 1
+    std::vector<int> m_pair_v;              // per linked block pair, block v
+    std::vector<std::size_t> m_pair_offset; // per linked block pair, where its card[u] x 16 table starts
     std::vector<double> m_pair_table;
-    std::vector<std::size_t> m_pair_offset;  // npairs_blocks+1, prefix sums into m_pair_table
 };
 
 // Encode a target once per interval. codes[p] is 0..3 or -1 for any non-ACGT

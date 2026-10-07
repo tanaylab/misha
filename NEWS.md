@@ -1,3 +1,7 @@
+# misha 5.12.2
+
+* A Potts model with many couplings that all link nearby positions, such as several models summed side by side, scores faster in the `potts` virtual tracks and `gseq.potts()`: about 2x for a 41 bp sum of four models. Values are unchanged.
+
 # misha 5.12.1
 
 * **Behavior fix:** `gcluster.run()` jobs run against the caller's database, working directory, datasets and virtual tracks, and load misha from the caller's library. They had used the example database unless the job called `gsetroot()` itself.

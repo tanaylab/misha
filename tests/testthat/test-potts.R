@@ -342,6 +342,64 @@ for (.W in c(20L, 21L)) {
     }
 }
 
+test_that("a model whose couplings link only some block pairs scores like the oracle", {
+    # build_blocked_tables() gives a table only to a block pair that some
+    # coupling links. Two bands of local couplings (positions 1-14 and 21-41,
+    # at most 8 apart), a pair inside block 7 (positions 15-16) and a pair from
+    # position 1 to the trailing size-1 block (41) link some of the 210 block
+    # pairs and leave blocks 6-9 linked to no later block. With 210 pairs the
+    # gate picks the blocked kernel for gseq.potts() on both strands.
+    W <- 41L
+    band <- function(from, to) {
+        p <- t(utils::combn(from:to, 2))
+        p[p[, 2] - p[, 1] <= 8L, , drop = FALSE]
+    }
+    pairs <- rbind(band(1L, 14L), c(15L, 16L), band(21L, 41L), c(1L, 41L))
+    pairs <- pairs[order(pairs[, 1], pairs[, 2]), , drop = FALSE]
+    storage.mode(pairs) <- "integer"
+    set.seed(51L)
+    m <- list(
+        e = matrix(round(rnorm(W * 4), 4), nrow = W, ncol = 4, dimnames = list(NULL, POTTS_BASES)),
+        J = lapply(seq_len(nrow(pairs)), function(k) matrix(round(rnorm(16), 4), 4L, 4L)),
+        pairs = pairs,
+        intercept = round(rnorm(1), 4)
+    )
+
+    # The fixture covers what the comment says it does.
+    nb <- (W + 1L) %/% 2L
+    blocks <- (pairs - 1L) %/% 2L
+    linked <- unique(blocks[blocks[, 1] != blocks[, 2], , drop = FALSE])
+    expect_lt(nrow(linked), choose(nb, 2))
+    expect_false(any(6:9 %in% linked[, 1]))
+    expect_true(any(linked[, 2] == nb - 1L))
+    expect_gt(1 + W + nrow(pairs), nb + choose(nb, 2))
+
+    params <- misha:::.potts_params(m,
+        bidirect = TRUE, extend = FALSE, strand = 1L, score.thresh = 0,
+        what = "linked block pairs test"
+    )
+    set.seed(52L)
+    n <- 20000L
+    codes <- matrix(sample(0:3, W * n, replace = TRUE), nrow = W, ncol = n)
+    storage.mode(codes) <- "integer"
+    res <- .Call("C_potts_score_codes_cmp", params, codes)
+    max_diff <- max(abs(res$naive - res$blocked))
+    expect_true(max_diff < 1e-9, info = sprintf("max |naive - blocked| = %.3e over %d windows", max_diff, n))
+
+    set.seed(53L)
+    seqs <- vapply(1:30, function(i) {
+        paste(sample(POTTS_BASES, W, replace = TRUE), collapse = "")
+    }, character(1))
+    expect_equal(gseq.potts(seqs, m, mode = "max", bidirect = FALSE, strand = 1L),
+        as.numeric(vapply(seqs, potts_ref_window, numeric(1), model = m)),
+        tolerance = 1e-6
+    )
+    expect_equal(gseq.potts(seqs, m, mode = "max", bidirect = FALSE, strand = -1L),
+        as.numeric(vapply(seqs, potts_ref_window, numeric(1), model = potts_ref_rc(m))),
+        tolerance = 1e-6
+    )
+})
+
 test_that("a repeated pair contributes BOTH couplings, in both kernels", {
     # .coerce_potts_model() rejects a duplicate (p1, p2), so this cannot be
     # reached through gseq.potts() or a vtrack. PottsParams::parse() is a
