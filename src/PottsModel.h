@@ -340,7 +340,7 @@ private:
         // kernel costs 1 + W + npair. Fitted to gseq.potts() times of 169 models
         // (W 6-64; order 1, bands, random, side-by-side blocks and full
         // pairwise; one strand and both): the kernel this picks was at most
-        // 9% slower than the other one, 0.2% on average. As 2 * m_nblocks is
+        // 13% slower than the other one, 0.3% on average. As 2 * m_nblocks is
         // about W, it picks the blocked kernel once that folds away more than
         // about 4 couplings (npair - linked block pairs), and keeps an order-1
         // model, which the blocked kernel scores 1.2-1.6x slower, on naive.
