@@ -347,8 +347,8 @@ test_that("a model whose couplings link only some block pairs scores like the or
     # coupling links. Two bands of local couplings (positions 1-14 and 21-41,
     # at most 8 apart), a pair inside block 7 (positions 15-16) and a pair from
     # position 1 to the trailing size-1 block (41) link some of the 210 block
-    # pairs and leave blocks 6-9 linked to no later block. With 210 pairs the
-    # gate picks the blocked kernel for gseq.potts() on both strands.
+    # pairs and leave blocks 6-9 linked to no later block. The gate picks the
+    # blocked kernel for gseq.potts() on both strands.
     W <- 41L
     band <- function(from, to) {
         p <- t(utils::combn(from:to, 2))
@@ -372,7 +372,7 @@ test_that("a model whose couplings link only some block pairs scores like the or
     expect_lt(nrow(linked), choose(nb, 2))
     expect_false(any(6:9 %in% linked[, 1]))
     expect_true(any(linked[, 2] == nb - 1L))
-    expect_gt(1 + W + nrow(pairs), nb + choose(nb, 2))
+    expect_gt(1 + W + nrow(pairs), 2 * nb + nrow(linked) + 4)
 
     # Both kernels on the model and on its reverse complement, which (odd W
     # shifts the blocks) links a different set of block pairs.

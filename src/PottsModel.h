@@ -49,12 +49,10 @@ using namespace std;
 //                            instead of 295.
 //
 // score_codes() picks one of the two per model (m_use_blocked, set once in
-// build_blocked_tables()), not the blocked kernel unconditionally: blocked
-// when ceil(W/2) + C(ceil(W/2), 2), counting every block pair whether linked
-// or not, is smaller than 1 + W + npair. The blocked kernel is ~3.4x faster
-// through gseq.potts() on a full pairwise model at W = 20 (190 pairs), but
-// slower on an order-1 model (no couplings at all) - see the gate in
-// build_blocked_tables().
+// build_blocked_tables()), not the blocked kernel unconditionally: the
+// blocked kernel is ~3.4x faster through gseq.potts() on a full pairwise
+// model at W = 20 (190 pairs), but slower on an order-1 model (no couplings
+// at all) - see the gate in build_blocked_tables().
 //
 // build_blocked_tables() generalizes to odd W (a trailing size-1 block) and
 // to sparse or absent pairs (a missing coupling contributes 0 to its block
@@ -330,18 +328,19 @@ private:
             }
         }
 
-        // The gate: use the blocked kernel when m_nblocks + C(m_nblocks, 2),
-        // counting EVERY block pair whether linked or not, is smaller than
-        // the naive kernel's 1 + W + npair lookups. Counting only the linked
-        // block pairs would pick the blocked kernel for every model (there
-        // are at most npair of them, and m_nblocks < 1 + W), which is 7-22%
-        // slower than naive for an order-1 model at W = 20 (gseq.potts() and
-        // a potts.max vtrack). Changing the count would also change some
-        // models' scores in the last bits, since the two kernels add the
-        // same terms in different orders.
-        const std::size_t blocked_lookups = (std::size_t)m_nblocks + npairs_blocks;
-        const std::size_t naive_lookups = 1 + (std::size_t)m_W + m_p1.size();
-        m_use_blocked = blocked_lookups < naive_lookups;
+        // The gate. In naive lookups, the blocked kernel costs about 2 per
+        // block (packing two positions into a code, then the block table),
+        // 1 per block pair with a table and 4 more per anchor; the naive kernel
+        // costs 1 + W + npair. Fitted to gseq.potts() times of 169 models
+        // (W 6-64; order 1, bands, random, side-by-side blocks and full
+        // pairwise; one strand and both): the kernel this picks was at most
+        // 9% slower than the other one, 0.2% on average. As 2 * m_nblocks is
+        // about W, it picks the blocked kernel once that folds away more than
+        // about 4 couplings (npair - linked block pairs), and keeps an order-1
+        // model, which the blocked kernel scores 1.2-1.6x slower, on naive.
+        // The two kernels add the same terms in different orders, so their
+        // scores can differ in the last bits.
+        m_use_blocked = 2 * (std::size_t)m_nblocks + nlinked + 4 < 1 + (std::size_t)m_W + m_p1.size();
     }
 
     int m_W = 0;
