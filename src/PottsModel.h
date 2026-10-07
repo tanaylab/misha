@@ -40,9 +40,10 @@ using namespace std;
 //                            "block code"; one table per block folds its own
 //                            singles (and the pair within the block, if any)
 //                            into one lookup, and one table per BLOCK PAIR
-//                            that some coupling links folds its up to 4
-//                            cross-block couplings into one lookup:
-//                            ceil(W/2) + (linked block pairs) lookups. At
+//                            that some coupling links (every block pair,
+//                            from 80% linked) folds its up to 4 cross-block
+//                            couplings into one lookup: ceil(W/2) + (block
+//                            pairs with a table) lookups. At
 //                            W = 20, full pairwise, that is 10 + 45 = 55
 //                            instead of 211; for a sum of four side-by-side
 //                            models at W = 41 (253 pairs), 21 + 73 = 94
@@ -58,7 +59,8 @@ using namespace std;
 //
 // build_blocked_tables() generalizes to odd W (a trailing size-1 block) and
 // to sparse or absent pairs (a missing coupling contributes 0 to its block
-// pair's table, and a block pair that no coupling links has no table),
+// pair's table, and a block pair that no coupling links has no table, or an
+// all-zero one from 80% linked),
 // so score_codes_blocked() agrees with score_codes_naive() for ANY
 // PottsModel - not only the dense, even-W case it is designed to win on. For
 // a W wide enough that ceil(W/2) would overflow the fixed block-code scratch
@@ -363,8 +365,9 @@ private:
     std::vector<int> m_card;            // per block, 4^size
     std::vector<double> m_block_table;
     std::vector<std::size_t> m_block_offset; // nblocks+1, prefix sums into m_block_table
-    // The linked block pairs, in (u, v) order, and their 16 x 16 tables
-    // (pair k's at k * 256).
+    // The block pairs with a table - the linked ones, or every one from 80%
+    // linked - in (u, v) order, and their 16 x 16 tables (pair k's at
+    // k * 256).
     std::vector<int> m_pair_u, m_pair_v;
     std::vector<double> m_pair_table;
 };
