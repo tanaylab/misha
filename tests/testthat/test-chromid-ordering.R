@@ -116,7 +116,8 @@ test_that("the chrom sort key orders names as order() does under ICU root collat
         paste(sample(printable, sample(1:12, 1), replace = TRUE), collapse = "")
     }, character(1))))
 
-    withr::defer(icuSetCollate(locale = "default"))
+    old_collate <- icuGetCollate()
+    withr::defer(icuSetCollate(locale = if (identical(old_collate, "ICU not in use")) "ASCII" else old_collate))
     icuSetCollate(locale = "root")
     expect_equal(names[order(misha:::.gdb.chrom_sort_key(names), method = "radix")], names[order(names)])
 })

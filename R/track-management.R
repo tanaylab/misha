@@ -600,10 +600,25 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
 
     src_indexed <- file.exists(file.path(src_dir, "track.idx"))
     dest_indexed <- .gdb.is_indexed_at(dest_db)
-    src_chroms <- .gdb.chrom_names_at(src_db)
-    dest_chroms <- .gdb.chrom_names_at(dest_db)
-
     info <- gtrack.info(srcname)
+
+    # An indexed track is keyed by chrom ids and a 2D copy needs one order on both sides, so
+    # those take the orders (.gdb.chrom_names_at() stops for a database that cannot show its
+    # own). A per-chromosome 1D copy maps files by chromosome name and does with the names alone.
+    if (src_indexed || dest_indexed || info$type %in% c("rectangles", "points")) {
+        src_chroms <- .gdb.chrom_names_at(src_db)
+        dest_chroms <- .gdb.chrom_names_at(dest_db)
+    } else {
+        names_at <- function(db) {
+            tryCatch(.gdb.chrom_names_at(db), error = function(e) {
+                utils::read.csv(file.path(db, "chrom_sizes.txt"),
+                    sep = "\t", header = FALSE, colClasses = c("character", "numeric")
+                )[[1]]
+            })
+        }
+        src_chroms <- names_at(src_db)
+        dest_chroms <- names_at(dest_db)
+    }
 
     # 2D track guard
     if (info$type %in% c("rectangles", "points") &&

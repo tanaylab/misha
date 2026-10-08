@@ -50,6 +50,10 @@
 #' order and interval IDs stay the same. In a per-chromosome database whose chrom_sizes.txt names
 #' lack the "chr" prefix of its .seq files, that order is the sorted chromosome names, not the
 #' chrom_sizes.txt order, and chrom_sizes.txt is rewritten in it.
+#' The conversion stops, leaving the database as it was, unless the indexed sequence holds exactly
+#' the chromosomes of chrom_sizes.txt: a chromosome name with a character other than a letter,
+#' digit, '_', '-' or '.' (which the index would replace with '_'), or a .seq file whose length
+#' differs from chrom_sizes.txt, stops it.
 #'
 #' The conversion process:
 #' \enumerate{
@@ -334,6 +338,23 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
     genome_seq_path <- setup_info$genome_seq_path
     chrom_sizes_path <- setup_info$chrom_sizes_path
 
+    # genome.idx is written last, under a temporary name, and renamed into place only after
+    # chrom_sizes.txt holds the new order: a database with genome.idx counts as converted (and the
+    # sequence readers use the index), so a conversion stopped before that point leaves a
+    # consistent per-chromosome database that the next run converts again.
+    index_path_tmp <- paste0(index_path, ".tmp")
+    # chrom_sizes.txt may be a symlink to a parent database's (gdb.create_linked), whose seq/ then
+    # receives genome.seq and genome.idx: the parent's chrom_sizes.txt is the one to replace. The
+    # original is kept to put back if the conversion fails after replacing it.
+    chrom_sizes_target <- normalizePath(chrom_sizes_path, mustWork = TRUE)
+    chrom_sizes_tmp <- paste0(chrom_sizes_target, ".tmp")
+    original_chrom_sizes <- readLines(chrom_sizes_target)
+    chrom_sizes_replaced <- FALSE
+    # R reports a failed write (a full disk, say) as a warning; here it stops the conversion
+    as_error <- function(expr) {
+        withCallingHandlers(expr, warning = function(w) stop(conditionMessage(w), call. = FALSE))
+    }
+
     if (verbose) message("Converting database to indexed format...")
 
     # Create temporary FASTA file from .seq files
@@ -342,48 +363,52 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
 
     tryCatch(
         {
-            # Write multi-FASTA file
-            if (verbose) message("Creating temporary multi-FASTA file...")
-            fasta_con <- file(temp_fasta, "wb") # Use binary mode for faster writes
-
-            for (i in seq_len(nrow(chrom_sizes))) {
-                chrom <- chrom_sizes$chrom[i]
-                seq_file <- seq_files[i]
-
-                # Write header
-                writeBin(charToRaw(sprintf(">%s\n", chrom)), fasta_con)
-
-                # Copy sequence file directly - no line breaking needed
-                # The C++ parser handles long lines just fine
-                seq_con <- file(seq_file, "rb")
-
-
-                repeat {
-                    chunk <- readBin(seq_con, "raw", n = chunk_size)
-                    if (length(chunk) == 0) break
-                    writeBin(chunk, fasta_con)
-                }
-
-                close(seq_con)
-
-                # Write newline after sequence
-                writeBin(charToRaw("\n"), fasta_con)
-
-                if ((i %% 10) == 0 || i == nrow(chrom_sizes)) {
-                    if (verbose) message(sprintf("  Processed %d/%d chromosomes", i, nrow(chrom_sizes)))
-                }
+            # Files of an interrupted conversion: a genome.idx left next to the genome.seq written
+            # below would be read with it, so it goes first (an index alone counts as indexed).
+            # genome.seq is also the .seq file of a chromosome named "genome", which stays.
+            unlink(c(index_path, index_path_tmp))
+            if (!(normalizePath(genome_seq_path, mustWork = FALSE) %in% normalizePath(seq_files, mustWork = FALSE))) {
+                unlink(genome_seq_path)
             }
 
-            close(fasta_con)
+            # Write multi-FASTA file
+            if (verbose) message("Creating temporary multi-FASTA file...")
+            as_error({
+                fasta_con <- file(temp_fasta, "wb") # Use binary mode for faster writes
+
+                for (i in seq_len(nrow(chrom_sizes))) {
+                    chrom <- chrom_sizes$chrom[i]
+                    seq_file <- seq_files[i]
+
+                    # Write header
+                    writeBin(charToRaw(sprintf(">%s\n", chrom)), fasta_con)
+
+                    # Copy sequence file directly - no line breaking needed
+                    # The C++ parser handles long lines just fine
+                    seq_con <- file(seq_file, "rb")
+
+                    repeat {
+                        chunk <- readBin(seq_con, "raw", n = chunk_size)
+                        if (length(chunk) == 0) break
+                        writeBin(chunk, fasta_con)
+                    }
+
+                    close(seq_con)
+
+                    # Write newline after sequence
+                    writeBin(charToRaw("\n"), fasta_con)
+
+                    if ((i %% 10) == 0 || i == nrow(chrom_sizes)) {
+                        if (verbose) message(sprintf("  Processed %d/%d chromosomes", i, nrow(chrom_sizes)))
+                    }
+                }
+
+                close(fasta_con)
+            })
 
             # Call C++ import function
             # Use sort=FALSE to keep the chrom id order set up by validate_and_setup
             if (verbose) message("Creating indexed format...")
-            # genome.idx is written last, under a temporary name, and renamed into place only after
-            # chrom_sizes.txt holds the new order: a database with genome.idx counts as converted
-            # (and the sequence readers use the index), so a conversion killed before that point
-            # leaves a consistent per-chromosome database that the next run converts again.
-            index_path_tmp <- paste0(index_path, ".tmp")
             contig_info <- .gcall(
                 "gseq_multifasta_import",
                 temp_fasta,
@@ -393,26 +418,47 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
                 .misha_env()
             )
 
+            # The index has to hold the chromosomes of chrom_sizes.txt, names, sizes and chrom id
+            # order, before anything is replaced or removed. A short temporary FASTA (a full disk),
+            # a .seq file of another length, or a name the import changes (it replaces characters
+            # other than letters, digits, '_', '-' and '.') would renumber or rename chromosomes.
+            expected <- sprintf("%s (%.0f bp)", chrom_sizes$chrom, as.numeric(chrom_sizes$size))
+            imported <- sprintf("%s (%.0f bp)", contig_info$name, as.numeric(contig_info$size))
+            if (!identical(imported, expected)) {
+                k <- seq_len(max(length(expected), length(imported)))
+                i <- which(is.na(expected[k]) | is.na(imported[k]) | expected[k] != imported[k])[1]
+                stop(sprintf(
+                    "chromosome %d of chrom_sizes.txt, %s, was imported as %s",
+                    i, if (is.na(expected[i])) "none" else expected[i], if (is.na(imported[i])) "nothing" else imported[i]
+                ), call. = FALSE)
+            }
+            seq_bytes <- as.numeric(file.info(genome_seq_path)$size)
+            if (!identical(seq_bytes, sum(as.numeric(chrom_sizes$size)))) {
+                stop(sprintf(
+                    "genome.seq has %.0f bytes, not the %.0f of chrom_sizes.txt",
+                    seq_bytes, sum(as.numeric(chrom_sizes$size))
+                ), call. = FALSE)
+            }
+
             if (verbose) message("Index created successfully")
 
-            # Update chrom_sizes.txt with the canonical chromosome names from the index
-            # This ensures consistency between chrom_sizes.txt and genome.idx
-            # contig_info is now in FASTA order (same as our input order) since C++ no longer sorts
+            # chrom_sizes.txt in chrom id order, as the index has it
             if (verbose) message("Updating chrom_sizes.txt with canonical chromosome names...")
 
             updated_chrom_sizes <- data.frame(
-                chrom = contig_info$name,
-                size = contig_info$size,
+                chrom = chrom_sizes$chrom,
+                size = as.numeric(chrom_sizes$size),
                 stringsAsFactors = FALSE
             )
 
-            chrom_sizes_tmp <- paste0(chrom_sizes_path, ".tmp")
-            .gwith_umask(write.table(updated_chrom_sizes, chrom_sizes_tmp,
+            as_error(.gwith_umask(write.table(updated_chrom_sizes, chrom_sizes_tmp,
                 quote = FALSE, sep = "\t", col.names = FALSE, row.names = FALSE
-            ))
-            if (!file.rename(chrom_sizes_tmp, chrom_sizes_path)) {
-                stop(sprintf("Failed to replace %s", chrom_sizes_path), call. = FALSE)
+            )))
+            suppressWarnings(Sys.chmod(chrom_sizes_tmp, file.info(chrom_sizes_target)$mode, use_umask = FALSE))
+            if (!file.rename(chrom_sizes_tmp, chrom_sizes_target)) {
+                stop(sprintf("Failed to replace %s", chrom_sizes_target), call. = FALSE)
             }
+            chrom_sizes_replaced <- TRUE
             if (!file.rename(index_path_tmp, index_path)) {
                 stop(sprintf("Failed to move %s into place", index_path), call. = FALSE)
             }
@@ -485,14 +531,15 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
             if (verbose) message(sprintf("Database sequence conversion complete: %s", groot))
         },
         error = function(e) {
-            # Clean up partial files on error
-            if (file.exists(genome_seq_path)) {
-                unlink(genome_seq_path)
+            # Clean up partial files on error: genome.idx before genome.seq, since an index alone
+            # counts as indexed, and the original chrom_sizes.txt back if it was replaced
+            unlink(c(index_path, index_path_tmp))
+            unlink(genome_seq_path)
+            unlink(chrom_sizes_tmp)
+            if (chrom_sizes_replaced) {
+                writeLines(original_chrom_sizes, chrom_sizes_tmp)
+                file.rename(chrom_sizes_tmp, chrom_sizes_target)
             }
-            if (file.exists(index_path)) {
-                unlink(index_path)
-            }
-            unlink(paste0(index_path, ".tmp"))
             stop(sprintf("Conversion failed: %s", conditionMessage(e)), call. = FALSE)
         }
     )

@@ -706,18 +706,20 @@ gdb.mark_cache_dirty <- function() {
     if (is.null(groot) || !nzchar(groot)) {
         return(FALSE)
     }
-    seq_dir <- file.path(groot, "seq")
-    if (file.exists(file.path(seq_dir, "genome.idx")) && file.exists(file.path(seq_dir, "genome.seq"))) {
-        return(TRUE)
-    }
     # A loaded dataset with no sequence of its own (its seq/ link gone, or an empty folder) is in
     # the loaded database's format; a dataset that is a database in its own right keeps its own
     loaded <- c(get0("GROOT", envir = .misha, ifnotfound = NULL), get0("GDATASETS", envir = .misha, ifnotfound = NULL))
-    if (!length(list.files(seq_dir)) && normalizePath(groot, mustWork = FALSE) %in% normalizePath(loaded, mustWork = FALSE)) {
-        working_seq <- file.path(get("GROOT", envir = .misha), "seq")
-        return(file.exists(file.path(working_seq, "genome.idx")) && file.exists(file.path(working_seq, "genome.seq")))
+    if (length(loaded) && normalizePath(groot, mustWork = FALSE) %in% normalizePath(loaded, mustWork = FALSE)) {
+        first_chrom <- as.character(get("ALLGENOME", envir = .misha)[[1]]$chrom[1])
+        own_seq <- file.exists(file.path(groot, "seq", "genome.seq")) ||
+            file.exists(file.path(groot, "seq", paste0(first_chrom, ".seq"))) ||
+            file.exists(file.path(groot, "seq", paste0(sub("^chr", "", first_chrom), ".seq")))
+        if (!own_seq) {
+            groot <- get("GROOT", envir = .misha)
+        }
     }
-    FALSE
+    seq_dir <- file.path(groot, "seq")
+    file.exists(file.path(seq_dir, "genome.idx")) && file.exists(file.path(seq_dir, "genome.seq"))
 }
 
 # The chromosome names of the database at groot in chrom id order, as gsetroot() gives
@@ -726,10 +728,11 @@ gdb.mark_cache_dirty <- function() {
 # and follow the sorted names, not the chrom_sizes.txt order. The loaded database and its
 # loaded datasets (gdataset.load() requires the same chrom_sizes.txt) take the order gsetroot()
 # gave, held in ALLGENOME, rather than probe seq/: a dataset's seq/ link may be gone or empty.
-# Any other database is read from disk, without loading it.
+# Any other database is read from disk, without loading it; one whose seq/ holds no sequence
+# cannot show which order its names take, and is an error rather than a guess.
 .gdb.chrom_names_at <- function(groot) {
     loaded <- c(get0("GROOT", envir = .misha, ifnotfound = NULL), get0("GDATASETS", envir = .misha, ifnotfound = NULL))
-    if (normalizePath(groot, mustWork = FALSE) %in% normalizePath(loaded, mustWork = FALSE)) {
+    if (length(loaded) && normalizePath(groot, mustWork = FALSE) %in% normalizePath(loaded, mustWork = FALSE)) {
         return(as.character(get("ALLGENOME", envir = .misha)[[1]]$chrom))
     }
     cs <- file.path(groot, "chrom_sizes.txt")
@@ -742,5 +745,20 @@ gdb.mark_cache_dirty <- function() {
         sep = "\t", header = FALSE, col.names = c("chrom", "size"), colClasses = c("character", "numeric")
     )
     chrom_order <- .gdb.chrom_order(groot, chromsizes)
+    # Names mostly without the "chr" prefix are sorted in a per-chromosome database and kept in
+    # chrom_sizes.txt order in an indexed one (.is_per_chromosome_db); a seq/ with neither
+    # genome.idx nor the first chromosome's .seq file cannot tell which
+    seq_dir <- file.path(groot, "seq")
+    first_chrom <- chromsizes$chrom[1]
+    no_seq <- !file.exists(file.path(seq_dir, "genome.idx")) && !file.exists(file.path(seq_dir, "genome.seq")) &&
+        !file.exists(file.path(seq_dir, paste0(first_chrom, ".seq"))) &&
+        !file.exists(file.path(seq_dir, paste0("chr", first_chrom, ".seq")))
+    if (!chrom_order$per_chromosome && nrow(chromsizes) && no_seq &&
+        mean(!startsWith(chromsizes$chrom, "chr")) >= 0.8) {
+        stop(sprintf(
+            "The chromosome order of %s cannot be told: its chrom_sizes.txt names lack the \"chr\" prefix, which makes the order the sorted names in a per-chromosome database and the chrom_sizes.txt order in an indexed one, and its seq/ holds neither. Restore its seq/, or load it with gdataset.load() as a dataset of its database.",
+            groot
+        ), call. = FALSE)
+    }
     chrom_order$names[chrom_order$id_order]
 }

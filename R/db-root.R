@@ -145,10 +145,27 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
     # ~5M strings on a million-contig database.
     all_chrom_names <- names(alias_map)
 
-    # Validate genome.idx if it exists (indexed format)
+    # Validate genome.idx if it exists (indexed format). The sequence of chrom id i is looked up
+    # as the index's contig i, so its names have to be the database's, in chrom id order (up to
+    # the "chr" prefix, as above). They are not when seq/ is a link to a database converted after
+    # this one was made from it (or the reverse), or when an older conversion renamed chromosomes
+    # it could not store; every chromosome would then read another one's sequence.
     idx_path <- file.path(groot, "seq", "genome.idx")
     if (file.exists(idx_path)) {
-        .gcall("gseq_validate_index", file.path(groot, "seq"), .misha_env())
+        idx_names <- .gcall("gseq_validate_index", file.path(groot, "seq"), .misha_env())
+        db_names <- canonical_names[chrom_order$id_order]
+        if (!identical(idx_names, db_names)) {
+            unprefixed <- function(x) sub("^chr", "", x)
+            k <- seq_len(max(length(idx_names), length(db_names)))
+            i <- which(is.na(idx_names[k]) | is.na(db_names[k]) | unprefixed(idx_names[k]) != unprefixed(db_names[k]))
+            if (length(i)) {
+                i <- i[1]
+                stop(sprintf(
+                    "%s does not match chrom_sizes.txt in %s: chromosome %d is %s in the index and %s in chrom_sizes.txt, so each chromosome would read another's sequence.",
+                    idx_path, groot, i, if (is.na(idx_names[i])) "missing" else idx_names[i], if (is.na(db_names[i])) "missing" else db_names[i]
+                ), call. = FALSE)
+            }
+        }
     }
 
     intervals <- data.frame(

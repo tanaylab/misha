@@ -431,37 +431,141 @@ test_that("a genome.idx left without genome.seq does not make a per-chromosome d
     expect_equal(readLines(file.path(db, "chrom_sizes.txt")), readLines(file.path(ref, "chrom_sizes.txt")))
 })
 
-test_that("a conversion killed right after the sequence import leaves a database the next run converts", {
-    skip_on_cran()
-    skip_on_os("windows")
-    skip_if_not_installed("callr")
-    skip_if_not_installed("pkgload")
-    root <- normalizePath(test_path("..", ".."), mustWork = FALSE)
-    skip_if_not(file.exists(file.path(root, "DESCRIPTION")), "needs the package source")
+# The bases of create_db_with_unsorted_chrom_sizes()'s chromosomes, by name
+unsorted_db_bases <- c(chr1 = "G", chr1_KI270706v1_random = "N", chr10 = "C", chr2 = "A", chrX = "T")
+first_bases <- function() {
+    vapply(names(unsorted_db_bases), function(chrom) toupper(gseq.extract(gintervals(chrom, 0, 1))), character(1))
+}
+
+for (.kill_at in c("import", "rename")) {
+    test_that(sprintf("a conversion killed at its %s leaves a database the next run converts", .kill_at), {
+        skip_on_cran()
+        skip_on_os("windows")
+        local_db_state()
+        td <- withr::local_tempdir()
+        db <- create_db_with_unsorted_chrom_sizes(file.path(td, "db"))
+        seq_dir <- file.path(db, "seq")
+        original_chrom_sizes <- readLines(file.path(db, "chrom_sizes.txt"))
+        # an index left by an earlier, interrupted conversion
+        writeBin(as.raw(1:64), file.path(seq_dir, "genome.idx"))
+        fastas <- list.files(tempdir(), pattern = "\\.fasta$", full.names = TRUE)
+
+        # SIGKILL in a forked child, as a killed job: no R error handler runs
+        kill_at <- .kill_at
+        job <- parallel::mcparallel({
+            if (kill_at == "import") {
+                gcall <- misha:::.gcall
+                utils::assignInNamespace(".gcall", function(...) {
+                    res <- gcall(...)
+                    if (identical(..1, "gseq_multifasta_import")) {
+                        tools::pskill(Sys.getpid(), tools::SIGKILL)
+                    }
+                    res
+                }, "misha")
+            } else {
+                # between replacing chrom_sizes.txt and moving genome.idx into place
+                rename <- base::file.rename
+                unlockBinding("file.rename", .BaseNamespaceEnv)
+                assign("file.rename", function(from, to) {
+                    if (basename(to) == "genome.idx") {
+                        tools::pskill(Sys.getpid(), tools::SIGKILL)
+                    }
+                    rename(from, to)
+                }, envir = .BaseNamespaceEnv)
+            }
+            suppressMessages(gdb.convert_to_indexed(groot = db, force = TRUE, validate = FALSE))
+        })
+        # the child was killed: it delivers no result
+        expect_warning(parallel::mccollect(job), "did not deliver a result")
+        unlink(setdiff(list.files(tempdir(), pattern = "\\.fasta$", full.names = TRUE), fastas))
+
+        # the child got as far as the import; genome.idx is not in place, the stale one included
+        expect_true(all(c("genome.seq", "genome.idx.tmp") %in% list.files(seq_dir)))
+        expect_false(file.exists(file.path(seq_dir, "genome.idx")))
+        chrom_sizes <- readLines(file.path(db, "chrom_sizes.txt"))
+        if (kill_at == "import") {
+            expect_equal(chrom_sizes, original_chrom_sizes)
+        } else {
+            # chrom_sizes.txt is replaced before genome.idx is moved into place
+            expect_equal(sub("\t.*", "", chrom_sizes), names(unsorted_db_bases))
+        }
+
+        suppressMessages(gdb.convert_to_indexed(groot = db, force = TRUE, validate = FALSE))
+        expect_true(file.exists(file.path(seq_dir, "genome.idx")))
+        expect_false(file.exists(file.path(seq_dir, "genome.idx.tmp")))
+        gsetroot(db)
+        expect_equal(first_bases(), unsorted_db_bases)
+    })
+}
+
+test_that("gdb.convert_to_indexed stops, leaving the database as it was, when the import does not match chrom_sizes.txt", {
+    local_db_state()
+    td <- withr::local_tempdir()
+    state <- function(db) list(chrom_sizes = readLines(file.path(db, "chrom_sizes.txt")), seq = sort(list.files(file.path(db, "seq"))))
+
+    # a .seq file shorter than chrom_sizes.txt says; its .seq files are kept although asked to go
+    db <- create_db_with_unsorted_chrom_sizes(file.path(td, "db"))
+    writeBin(charToRaw(strrep("G", 900)), file.path(db, "seq", "chr1.seq"))
+    before <- state(db)
+    expect_error(
+        suppressMessages(gdb.convert_to_indexed(groot = db, force = TRUE, validate = FALSE, remove_old_files = TRUE)),
+        "chr1 \\(1000 bp\\), was imported as chr1 \\(900 bp\\)"
+    )
+    expect_equal(state(db), before)
+
+    # a chromosome name the index cannot store as it is
+    db2 <- file.path(td, "db2")
+    dir.create(file.path(db2, "seq"), recursive = TRUE)
+    dir.create(file.path(db2, "tracks"))
+    writeBin(charToRaw(strrep("A", 100)), file.path(db2, "seq", "chr1.seq"))
+    writeBin(charToRaw(strrep("C", 100)), file.path(db2, "seq", "HLA-A*01:01.seq"))
+    writeLines(c("chr1\t100", "HLA-A*01:01\t100"), file.path(db2, "chrom_sizes.txt"))
+    before <- state(db2)
+    expect_error(suppressMessages(gdb.convert_to_indexed(groot = db2, force = TRUE, validate = FALSE)), "was imported as HLA-A_01_01")
+    expect_equal(state(db2), before)
+})
+
+test_that("gdb.convert_to_indexed of a linked database converts its parent and keeps the link", {
+    local_db_state()
+    td <- withr::local_tempdir()
+    parent <- create_db_with_unsorted_chrom_sizes(file.path(td, "parent"))
+    linked <- file.path(td, "linked")
+    gdb.create_linked(linked, parent)
+
+    suppressMessages(gdb.convert_to_indexed(groot = linked, force = TRUE, validate = FALSE))
+    expect_true(nzchar(Sys.readlink(file.path(linked, "chrom_sizes.txt"))))
+    expect_true(file.exists(file.path(parent, "seq", "genome.idx")))
+    for (db in c(parent, linked)) {
+        gsetroot(db)
+        expect_equal(first_bases(), unsorted_db_bases, info = db)
+    }
+})
+
+test_that("gsetroot stops when seq/genome.idx does not match chrom_sizes.txt", {
+    local_db_state()
+    td <- withr::local_tempdir()
+    parent <- create_db_with_unsorted_chrom_sizes(file.path(td, "parent"))
+    # a database made from parent with its own chrom_sizes.txt and a link to its seq/
+    child <- file.path(td, "child")
+    dir.create(file.path(child, "tracks"), recursive = TRUE)
+    expect_true(file.copy(file.path(parent, "chrom_sizes.txt"), child))
+    expect_true(file.symlink(file.path(parent, "seq"), file.path(child, "seq")))
+
+    # parent converted afterwards: its index follows its own, rewritten chrom_sizes.txt
+    suppressMessages(gdb.convert_to_indexed(groot = parent, force = TRUE, validate = FALSE))
+    expect_error(gsetroot(child), "does not match chrom_sizes.txt")
+    gsetroot(parent)
+    expect_equal(first_bases(), unsorted_db_bases)
+})
+
+test_that(".gdb.chrom_names_at and .gdb.is_indexed_at work with no database loaded", {
     local_db_state()
     td <- withr::local_tempdir()
     db <- create_db_with_unsorted_chrom_sizes(file.path(td, "db"))
-
-    # SIGKILL right after gseq_multifasta_import, as a killed job: no R error handler runs
-    try(callr::r(function(root, db) {
-        pkgload::load_all(root, compile = FALSE, quiet = TRUE)
-        gcall <- misha:::.gcall
-        utils::assignInNamespace(".gcall", function(...) {
-            res <- gcall(...)
-            if (identical(..1, "gseq_multifasta_import")) {
-                tools::pskill(Sys.getpid(), tools::SIGKILL)
-            }
-            res
-        }, "misha")
-        suppressMessages(gdb.convert_to_indexed(groot = db, force = TRUE, validate = FALSE))
-    }, args = list(root, db)), silent = TRUE)
-
-    # not converted yet, so the next run converts it
-    expect_false(file.exists(file.path(db, "seq", "genome.idx")))
-    suppressMessages(gdb.convert_to_indexed(groot = db, force = TRUE, validate = FALSE))
-    expect_true(file.exists(file.path(db, "seq", "genome.idx")))
-    gsetroot(db)
-    expected <- c(chr1 = "G", chr1_KI270706v1_random = "N", chr10 = "C", chr2 = "A", chrX = "T")
-    got <- vapply(names(expected), function(chrom) toupper(gseq.extract(gintervals(chrom, 0, 1))), character(1))
-    expect_equal(got, expected)
+    empty <- file.path(td, "empty")
+    dir.create(file.path(empty, "seq"), recursive = TRUE)
+    gdb.unload()
+    expect_equal(.gdb.chrom_names_at(db), names(unsorted_db_bases))
+    expect_false(.gdb.is_indexed_at(db))
+    expect_false(.gdb.is_indexed_at(empty))
 })

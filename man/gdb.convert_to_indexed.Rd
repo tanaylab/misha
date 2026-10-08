@@ -58,6 +58,10 @@ whether or not it is the loaded database, so its indexed tracks and interval set
 order and interval IDs stay the same. In a per-chromosome database whose chrom_sizes.txt names
 lack the "chr" prefix of its .seq files, that order is the sorted chromosome names, not the
 chrom_sizes.txt order, and chrom_sizes.txt is rewritten in it.
+The conversion stops, leaving the database as it was, unless the indexed sequence holds exactly
+the chromosomes of chrom_sizes.txt: a chromosome name with a character other than a letter,
+digit, '_', '-' or '.' (which the index would replace with '_'), or a .seq file whose length
+differs from chrom_sizes.txt, stops it.
 
 The conversion process:
 \enumerate{
