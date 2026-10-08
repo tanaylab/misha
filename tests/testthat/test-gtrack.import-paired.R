@@ -231,6 +231,17 @@ test_that("a pair record with neither mate flag is taken as the first mate", {
     expect_equal(bins_at(res$track, c(100, 150)), c(1, 1))
 })
 
+test_that("a SAM fragment past the chromosome end is clipped", {
+    chr1_end <- gintervals.all()$end[gintervals.all()$chrom == "chr1"]
+    start <- (chr1_end %/% 50) * 50 - 100 # two full bins before the chromosome's last bin
+    sam <- paired_sam_file(c(
+        sam_rec("e", 99, start + 1, 40, start + 61, 500), sam_rec("e", 147, start + 61, 40, start + 1, -500)
+    ))
+    res <- import_tmp(sam, binsize = 50, cols.order = NULL, paired = TRUE)
+    expect_equal(res$stats[[1]][["total.mapped"]], 1)
+    expect_equal(bins_at(res$track, c(start, start + 50)), c(1, 1))
+})
+
 test_that("fragments past the chromosome end are clipped", {
     chr1_end <- gintervals.all()$end[gintervals.all()$chrom == "chr1"]
     start <- (chr1_end %/% 50) * 50 - 100 # two full bins before the chromosome's last bin

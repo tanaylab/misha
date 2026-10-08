@@ -453,8 +453,8 @@ gtrack.import_mappedseq <- function(track = NULL, description = NULL, file = NUL
     if (sam_input) {
         if (!missing(cols.order) && !is.null(cols.order)) {
             stop(
-                "BAM input forces SAM column layout. Pass `cols.order = NULL` ",
-                "or omit the argument.",
+                "BAM input forces SAM column layout (without `paired`, any bgzipped file is read as SAM). ",
+                "Pass `cols.order = NULL` or omit the argument; for a bgzipped fragment file pass `paired = TRUE`.",
                 call. = FALSE
             )
         }
