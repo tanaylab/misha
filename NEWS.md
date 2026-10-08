@@ -1,5 +1,9 @@
 # misha (development version)
 
+* **Behavior fix:** `gtrack.import_mappedseq()` places SAM/BAM reads at their 0-based 5' base. SAM's 1-based `POS` was used as a 0-based coordinate, so every read sat 1bp to the right; the end of a reverse read came from the length of its sequence rather than its CIGAR, which also moved reads with soft clips, indels or splices; and in a sparse track a reverse read was recorded 2bp past its 5' base. This has been so since SAM support was added. Re-importing a SAM/BAM file now gives the corrected placement; tracks built before are not changed. A SAM read on the last base of a chromosome is imported (it was counted as unmapped), and a reverse read whose 5' end falls past the chromosome end is counted as unmapped.
+
+* New `one.based` argument of `gtrack.import_mappedseq()` for tab-delimited files (`cols.order`): with `TRUE` the coordinate is read as 1-based and reverse reads are placed at their 5' base, as for SAM. The default `FALSE` keeps the previous placement. Illumina export files (the default `cols.order` layout) are 1-based.
+
 * `gtrack.import_mappedseq()` imports paired-end data with `paired = TRUE`: each proper pair adds the whole span of its fragment to a dense track, instead of each mate being extended by a fixed `pileup`. The fragment is read from the first mate as `[min(POS, PNEXT), +|TLEN|)`, as MACS3 does with `-f BAMPE`. With `remove.dups` fragments with the same start and end count once, and `max.fraglen` (default 2000) drops longer ones. With `paired = TRUE` any non-SAM file is read as fragments (chrom, start, end in columns 1-3, e.g. a 10x `fragments.tsv.gz`), taken as already deduplicated.
 
 * New `min.mapq` argument of `gtrack.import_mappedseq()` drops SAM/BAM records with a lower MAPQ (default 0: no filter). For pairs it is tested on the first mate.

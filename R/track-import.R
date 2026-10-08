@@ -365,6 +365,18 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
 #' prefix 'chr' e.g. 'chr1'. Valid strand values are '+' or 'F' for forward
 #' strand and '-' or 'R' for the reverse strand.
 #'
+#' Coordinates. SAM / BAM 'POS' is 1-based, as the SAM specification defines
+#' it, and is converted to the 0-based leftmost aligned base. The 5' end of a
+#' reverse-strand read is its rightmost aligned base, from the CIGAR (or from
+#' the length of the sequence when the CIGAR is '*'). In a tab-delimited file
+#' the coordinate is the leftmost base of the read, and the 5' end of a
+#' reverse read is found from the length of the sequence. The coordinate is
+#' taken as 0-based unless 'one.based' is 'TRUE'; Illumina export files (the
+#' default 'cols.order' layout) are 1-based and need 'one.based = TRUE'. With
+#' 'one.based = FALSE' a tab-delimited file keeps the placement of earlier
+#' misha versions: the coordinate is used as is and a reverse read is
+#' recorded one base past its 5' end.
+#'
 #' Each read at given coordinate can be "expanded" to cover an interval rather
 #' than a single point. The length of the interval is controlled by 'pileup'
 #' argument. The direction of expansion depends on the strand value. If
@@ -420,15 +432,17 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
 #' @param paired if 'TRUE' import paired-end fragments (see Description).
 #' @param min.mapq minimal MAPQ of an imported SAM / BAM record.
 #' @param max.fraglen maximal fragment length when 'paired' is 'TRUE'.
+#' @param one.based if 'TRUE' the coordinates of a tab-delimited file are
+#' 1-based (see Description). Not used for SAM / BAM, which are always 1-based.
 #' @return A list of conversion process statistics.
 #' @seealso \code{\link{gtrack.rm}}, \code{\link{gtrack.info}},
 #' \code{\link{gdir.create}}
 #' @keywords ~mapped ~sequence ~track
 #' @export gtrack.import_mappedseq
 gtrack.import_mappedseq <- function(track = NULL, description = NULL, file = NULL, pileup = 0, binsize = -1, cols.order = c(9, 11, 13, 14), remove.dups = TRUE,
-                                    paired = FALSE, min.mapq = 0, max.fraglen = 2000) {
+                                    paired = FALSE, min.mapq = 0, max.fraglen = 2000, one.based = FALSE) {
     if (is.null(substitute(track)) || is.null(description) || is.null(file)) {
-        stop("Usage: gtrack.import_mappedseq(track, description, file, pileup = 0, binsize = -1, cols.order = c(9, 11, 13, 14), remove.dups = TRUE, paired = FALSE, min.mapq = 0, max.fraglen = 2000)", call. = FALSE)
+        stop("Usage: gtrack.import_mappedseq(track, description, file, pileup = 0, binsize = -1, cols.order = c(9, 11, 13, 14), remove.dups = TRUE, paired = FALSE, min.mapq = 0, max.fraglen = 2000, one.based = FALSE)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -463,7 +477,7 @@ gtrack.import_mappedseq <- function(track = NULL, description = NULL, file = NUL
 
     retv <- NULL
     .gtrack.create_atomic(trackstr, function() {
-        retv <<- .gcall("gtrackimport_mappedseq", trackstr, file, pileup, binsize, cols.order, remove.dups, paired, min.mapq, max.fraglen, .misha_env())
+        retv <<- .gcall("gtrackimport_mappedseq", trackstr, file, pileup, binsize, cols.order, remove.dups, paired, min.mapq, max.fraglen, one.based, .misha_env())
     })
 
     final_dir <- .track_dir(trackstr)
@@ -474,8 +488,9 @@ gtrack.import_mappedseq <- function(track = NULL, description = NULL, file = NUL
             .gtrack.attr.set(
                 trackstr, "created.by",
                 sprintf(
-                    "gtrack.import_mappedseq(%s, description, \"%s\", pileup=%d, binsize=%d, remove.dups=%s%s)", trackstr, file, pileup, binsize, remove.dups,
-                    if (isTRUE(paired) || min.mapq > 0) sprintf(", paired=%s, min.mapq=%s, max.fraglen=%s", paired, min.mapq, max.fraglen) else ""
+                    "gtrack.import_mappedseq(%s, description, \"%s\", pileup=%d, binsize=%d, remove.dups=%s%s%s)", trackstr, file, pileup, binsize, remove.dups,
+                    if (isTRUE(paired) || min.mapq > 0) sprintf(", paired=%s, min.mapq=%s, max.fraglen=%s", paired, min.mapq, max.fraglen) else "",
+                    if (isTRUE(one.based)) ", one.based=TRUE" else ""
                 ), TRUE
             )
             .gtrack.attr.set(trackstr, "created.date", date(), TRUE)

@@ -14,7 +14,8 @@ gtrack.import_mappedseq(
   remove.dups = TRUE,
   paired = FALSE,
   min.mapq = 0,
-  max.fraglen = 2000
+  max.fraglen = 2000,
+  one.based = FALSE
 )
 }
 \arguments{
@@ -42,6 +43,9 @@ once.}
 \item{min.mapq}{minimal MAPQ of an imported SAM / BAM record.}
 
 \item{max.fraglen}{maximal fragment length when 'paired' is 'TRUE'.}
+
+\item{one.based}{if 'TRUE' the coordinates of a tab-delimited file are
+1-based (see Description). Not used for SAM / BAM, which are always 1-based.}
 }
 \value{
 A list of conversion process statistics.
@@ -70,6 +74,18 @@ sequence is expected to be found at column number 9, chromosome - at column
 are 1-based, i.e. the first column is referenced by 1. Chromosome needs a
 prefix 'chr' e.g. 'chr1'. Valid strand values are '+' or 'F' for forward
 strand and '-' or 'R' for the reverse strand.
+
+Coordinates. SAM / BAM 'POS' is 1-based, as the SAM specification defines
+it, and is converted to the 0-based leftmost aligned base. The 5' end of a
+reverse-strand read is its rightmost aligned base, from the CIGAR (or from
+the length of the sequence when the CIGAR is '*'). In a tab-delimited file
+the coordinate is the leftmost base of the read, and the 5' end of a
+reverse read is found from the length of the sequence. The coordinate is
+taken as 0-based unless 'one.based' is 'TRUE'; Illumina export files (the
+default 'cols.order' layout) are 1-based and need 'one.based = TRUE'. With
+'one.based = FALSE' a tab-delimited file keeps the placement of earlier
+misha versions: the coordinate is used as is and a reverse read is
+recorded one base past its 5' end.
 
 Each read at given coordinate can be "expanded" to cover an interval rather
 than a single point. The length of the interval is controlled by 'pileup'

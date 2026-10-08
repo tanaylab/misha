@@ -196,9 +196,17 @@ test_that("total counts each record once", {
 
 test_that("a reverse read past the chromosome end does not overflow the dense track", {
     chr1_end <- gintervals.all()$end[gintervals.all()$chrom == "chr1"]
+    # tab-delimited (sequence, chromosome, coordinate, strand): the read is kept and ends past the chromosome
+    tab <- tempfile(fileext = ".tsv")
+    writeLines(paste(strrep("A", 151), "chr1", chr1_end - 10, "R", sep = "\t"), tab)
+    res <- import_tmp(tab, cols.order = 1:4, pileup = 100, binsize = 20)
+    expect_equal(res$stats[[1]][["total.mapped"]], 1)
+    expect_equal(sum(gextract(res$track, gintervals("chr1", chr1_end - 200, chr1_end), iterator = 20, colnames = "v")$v), 0)
+
+    # a SAM read whose 5' end is past the chromosome is not imported
     sam <- tempfile(fileext = ".sam")
     writeLines(paste("r1", 16, "chr1", chr1_end - 10, 30, "151M", "*", 0, 0, strrep("A", 151), "*", sep = "\t"), sam)
     res <- import_tmp(sam, cols.order = NULL, pileup = 100, binsize = 20)
-    expect_equal(res$stats[[1]][["total.mapped"]], 1)
-    expect_equal(sum(gextract(res$track, gintervals("chr1", chr1_end - 200, chr1_end), iterator = 20, colnames = "v")$v), 0)
+    expect_equal(res$stats[[1]][["total.mapped"]], 0)
+    expect_equal(res$stats[[1]][["total.unmapped"]], 1)
 })
