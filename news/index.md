@@ -2,6 +2,34 @@
 
 ## misha (development version)
 
+- **Behavior fix:**
+  [`gtrack.import_mappedseq()`](https://tanaylab.github.io/misha/reference/gtrack.import_mappedseq.md)
+  places SAM/BAM reads at their 0-based 5’ base. SAM’s 1-based `POS` was
+  used as a 0-based coordinate, so every read sat 1bp to the right; the
+  end of a reverse read came from the length of its sequence rather than
+  its CIGAR, which also moved reads with soft clips, indels or splices;
+  and in a sparse track a reverse read was recorded 2bp past its 5’
+  base. This has been so since SAM support was added. Re-importing a
+  SAM/BAM file now gives the corrected placement; tracks built before
+  are not changed. A SAM read on the last base of a chromosome is
+  imported (it was counted as unmapped; with `paired` such a first mate
+  was dropped too), a reverse read whose 5’ end falls past the
+  chromosome end is counted as unmapped, and so is a mapped SAM record
+  without a CIGAR (`*`), as htslib does, or with a malformed one. With
+  `paired`, a record with `POS` 0 is now counted as unmapped instead of
+  filtered.
+
+- **Bug fix:** in a sparse track, a tab-delimited reverse read ending at
+  or past the end of a chromosome wrote a point outside the chromosome.
+  It is now counted as unmapped.
+
+- New `one.based` argument of
+  [`gtrack.import_mappedseq()`](https://tanaylab.github.io/misha/reference/gtrack.import_mappedseq.md)
+  for tab-delimited files (`cols.order`): with `TRUE` the coordinate is
+  read as 1-based and reverse reads are placed at their 5’ base, as for
+  SAM. The default `FALSE` keeps the previous placement. Illumina export
+  files (the default `cols.order` layout) are 1-based.
+
 - [`gtrack.import_mappedseq()`](https://tanaylab.github.io/misha/reference/gtrack.import_mappedseq.md)
   imports paired-end data with `paired = TRUE`: each proper pair adds
   the whole span of its fragment to a dense track, instead of each mate
