@@ -366,6 +366,20 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
 #' prefix 'chr' e.g. 'chr1'. Valid strand values are '+' or 'F' for forward
 #' strand and '-' or 'R' for the reverse strand.
 #'
+#' Coordinates. SAM / BAM 'POS' is 1-based, as the SAM specification defines
+#' it, and is converted to the 0-based leftmost aligned base. The 5' end of a
+#' reverse-strand read is its rightmost aligned base, from the CIGAR. A mapped
+#' SAM record without a CIGAR ('*'), or with a malformed one, is counted as
+#' unmapped, as htslib does. In a tab-delimited file the coordinate is the
+#' leftmost base of the read, and the 5' end of a reverse read is found from
+#' the length of the sequence. With 'one.based = TRUE' the coordinate is read
+#' as 1-based and reads are placed as for SAM; Illumina export files (the
+#' default 'cols.order' layout) are 1-based. With the default
+#' 'one.based = FALSE' a tab-delimited file keeps the placement of earlier
+#' misha versions: the coordinate is used as is, which places dense coverage
+#' correctly for a 0-based file, but in a sparse track a reverse read is
+#' recorded one base past its 5' end.
+#'
 #' Each read at given coordinate can be "expanded" to cover an interval rather
 #' than a single point. The length of the interval is controlled by 'pileup'
 #' argument. The direction of expansion depends on the strand value. If
@@ -399,8 +413,9 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
 #' second mates are not counted in the returned statistics.
 #'
 #' The statistics report 'total' records, 'total.mapped' (imported,
-#' duplicates included), 'total.unmapped' (unmapped, unparsable, or outside
-#' the chromosomes of the database), 'total.dups' and 'total.filtered' (left out by
+#' duplicates included), 'total.unmapped' (unmapped, unparsable, with an
+#' unusable CIGAR, or with its 5' end outside the chromosomes of the
+#' database), 'total.dups' and 'total.filtered' (left out by
 #' the flag, MAPQ, proper-pair or fragment length filters).
 #'
 #' 'description' is added as a track attribute.
@@ -423,15 +438,17 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
 #' @param min.mapq minimal MAPQ of an imported SAM / BAM record.
 #' @param max.fraglen maximal fragment length when 'paired' is 'TRUE' ('Inf'
 #' for no limit).
+#' @param one.based if 'TRUE' the coordinates of a tab-delimited file are
+#' 1-based (see Description). Not used for SAM / BAM, which are always 1-based.
 #' @return A list of conversion process statistics.
 #' @seealso \code{\link{gtrack.rm}}, \code{\link{gtrack.info}},
 #' \code{\link{gdir.create}}
 #' @keywords ~mapped ~sequence ~track
 #' @export gtrack.import_mappedseq
 gtrack.import_mappedseq <- function(track = NULL, description = NULL, file = NULL, pileup = 0, binsize = -1, cols.order = c(9, 11, 13, 14), remove.dups = TRUE,
-                                    paired = FALSE, min.mapq = 0, max.fraglen = 2000) {
+                                    paired = FALSE, min.mapq = 0, max.fraglen = 2000, one.based = FALSE) {
     if (is.null(substitute(track)) || is.null(description) || is.null(file)) {
-        stop("Usage: gtrack.import_mappedseq(track, description, file, pileup = 0, binsize = -1, cols.order = c(9, 11, 13, 14), remove.dups = TRUE, paired = FALSE, min.mapq = 0, max.fraglen = 2000)", call. = FALSE)
+        stop("Usage: gtrack.import_mappedseq(track, description, file, pileup = 0, binsize = -1, cols.order = c(9, 11, 13, 14), remove.dups = TRUE, paired = FALSE, min.mapq = 0, max.fraglen = 2000, one.based = FALSE)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -468,7 +485,7 @@ gtrack.import_mappedseq <- function(track = NULL, description = NULL, file = NUL
     .gtrack.create_atomic(trackstr, function() {
         retv <<- .gcall(
             "gtrackimport_mappedseq", trackstr, file, pileup, binsize, cols.order, remove.dups, paired, min.mapq,
-            if (identical(max.fraglen, Inf)) 2^62 else max.fraglen, .misha_env()
+            if (identical(max.fraglen, Inf)) 2^62 else max.fraglen, one.based, .misha_env()
         )
     })
 
@@ -480,8 +497,9 @@ gtrack.import_mappedseq <- function(track = NULL, description = NULL, file = NUL
             .gtrack.attr.set(
                 trackstr, "created.by",
                 sprintf(
-                    "gtrack.import_mappedseq(%s, description, \"%s\", pileup=%d, binsize=%d, remove.dups=%s%s)", trackstr, file, pileup, binsize, remove.dups,
-                    if (isTRUE(paired) || min.mapq > 0) sprintf(", paired=%s, min.mapq=%s, max.fraglen=%s", paired, min.mapq, max.fraglen) else ""
+                    "gtrack.import_mappedseq(%s, description, \"%s\", pileup=%d, binsize=%d, remove.dups=%s%s%s)", trackstr, file, pileup, binsize, remove.dups,
+                    if (isTRUE(paired) || min.mapq > 0) sprintf(", paired=%s, min.mapq=%s, max.fraglen=%s", paired, min.mapq, max.fraglen) else "",
+                    if (isTRUE(one.based)) ", one.based=TRUE" else ""
                 ), TRUE
             )
             .gtrack.attr.set(trackstr, "created.date", date(), TRUE)

@@ -33,10 +33,11 @@ test_that("gtrack.import_mappedseq imports BAM as dense pileup", {
     )
     expect_equal(stats[[1]][["total.mapped"]], 2)
 
-    intervs <- gintervals("chr1", c(100, 200), c(110, 210))
+    intervs <- gintervals("chr1", c(90, 100, 190, 200), c(100, 110, 200, 210))
     r <- gextract(tmptrack, intervs, iterator = 10, colnames = "v")
-    # Each read covers exactly its bin -> v == 1.
-    expect_equal(as.numeric(r$v), c(1, 1))
+    # POS 100 / 200 are 1-based: the forward read covers [99, 109), the reverse
+    # read (5' end at 208) covers [199, 209).
+    expect_equal(as.numeric(r$v), c(0.1, 0.9, 0.1, 0.9), tolerance = 1e-6)
 })
 
 test_that("gtrack.import_mappedseq auto-switches default cols.order for BAM", {

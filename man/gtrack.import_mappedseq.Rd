@@ -14,7 +14,8 @@ gtrack.import_mappedseq(
   remove.dups = TRUE,
   paired = FALSE,
   min.mapq = 0,
-  max.fraglen = 2000
+  max.fraglen = 2000,
+  one.based = FALSE
 )
 }
 \arguments{
@@ -43,6 +44,9 @@ once.}
 
 \item{max.fraglen}{maximal fragment length when 'paired' is 'TRUE' ('Inf'
 for no limit).}
+
+\item{one.based}{if 'TRUE' the coordinates of a tab-delimited file are
+1-based (see Description). Not used for SAM / BAM, which are always 1-based.}
 }
 \value{
 A list of conversion process statistics.
@@ -72,6 +76,20 @@ sequence is expected to be found at column number 9, chromosome - at column
 are 1-based, i.e. the first column is referenced by 1. Chromosome needs a
 prefix 'chr' e.g. 'chr1'. Valid strand values are '+' or 'F' for forward
 strand and '-' or 'R' for the reverse strand.
+
+Coordinates. SAM / BAM 'POS' is 1-based, as the SAM specification defines
+it, and is converted to the 0-based leftmost aligned base. The 5' end of a
+reverse-strand read is its rightmost aligned base, from the CIGAR. A mapped
+SAM record without a CIGAR ('*'), or with a malformed one, is counted as
+unmapped, as htslib does. In a tab-delimited file the coordinate is the
+leftmost base of the read, and the 5' end of a reverse read is found from
+the length of the sequence. With 'one.based = TRUE' the coordinate is read
+as 1-based and reads are placed as for SAM; Illumina export files (the
+default 'cols.order' layout) are 1-based. With the default
+'one.based = FALSE' a tab-delimited file keeps the placement of earlier
+misha versions: the coordinate is used as is, which places dense coverage
+correctly for a 0-based file, but in a sparse track a reverse read is
+recorded one base past its 5' end.
 
 Each read at given coordinate can be "expanded" to cover an interval rather
 than a single point. The length of the interval is controlled by 'pileup'
@@ -106,8 +124,9 @@ apply to them, and 'cols.order' must not be set. Fragments longer than
 second mates are not counted in the returned statistics.
 
 The statistics report 'total' records, 'total.mapped' (imported,
-duplicates included), 'total.unmapped' (unmapped, unparsable, or outside
-the chromosomes of the database), 'total.dups' and 'total.filtered' (left out by
+duplicates included), 'total.unmapped' (unmapped, unparsable, with an
+unusable CIGAR, or with its 5' end outside the chromosomes of the
+database), 'total.dups' and 'total.filtered' (left out by
 the flag, MAPQ, proper-pair or fragment length filters).
 
 'description' is added as a track attribute.

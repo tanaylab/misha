@@ -180,17 +180,45 @@ static std::unique_ptr<ByteSource> open_source(const std::string &path) {
 	return std::make_unique<PlainSource>(path);
 }
 
+// Reference length of a CIGAR (M, D, N, = and X operations); -1 for "*", a malformed CIGAR or an absurd length.
+static int64_t cigar_ref_span(const std::string &cigar) {
+	const int64_t MAX_LEN = (int64_t)1 << 40; // keeps len and span far from overflow
+	int64_t span = 0, len = 0;
+	bool has_len = false;
+	for (char ch : cigar) {
+		if (ch >= '0' && ch <= '9') {
+			len = len * 10 + (ch - '0');
+			if (len >= MAX_LEN)
+				return -1;
+			has_len = true;
+			continue;
+		}
+		if (!has_len)
+			return -1;
+		if (ch == 'M' || ch == 'D' || ch == 'N' || ch == '=' || ch == 'X') {
+			span += len;
+			if (span >= MAX_LEN)
+				return -1;
+		}
+		else if (ch != 'I' && ch != 'S' && ch != 'H' && ch != 'P')
+			return -1;
+		len = 0;
+		has_len = false;
+	}
+	return has_len ? -1 : span;
+}
+
 }  // namespace
 
 extern "C" {
 
 SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsize, SEXP _cols_order, SEXP _remove_dups,
-                            SEXP _paired, SEXP _min_mapq, SEXP _max_fraglen, SEXP _envir)
+                            SEXP _paired, SEXP _min_mapq, SEXP _max_fraglen, SEXP _one_based, SEXP _envir)
 {
 	// The first NUM_USER_COLS columns are the ones cols.order positions; the rest are read only from SAM
-	// (MAPQ, PNEXT, TLEN) or from fragment files (END). A column with order 0 is not read.
-	enum { SEQ_COL, CHROM_COL, COORD_COL, STRAND_COL, NUM_USER_COLS, MAPQ_COL = NUM_USER_COLS, PNEXT_COL, TLEN_COL, END_COL, NUM_COLS };
-	const char *COL_NAMES[NUM_COLS] = { "sequence", "chromosome", "coordinate", "strand", "mapq", "pnext", "tlen", "end" };
+	// (MAPQ, CIGAR, PNEXT, TLEN) or from fragment files (END). A column with order 0 is not read.
+	enum { SEQ_COL, CHROM_COL, COORD_COL, STRAND_COL, NUM_USER_COLS, MAPQ_COL = NUM_USER_COLS, CIGAR_COL, PNEXT_COL, TLEN_COL, END_COL, NUM_COLS };
+	const char *COL_NAMES[NUM_COLS] = { "sequence", "chromosome", "coordinate", "strand", "mapq", "cigar", "pnext", "tlen", "end" };
 	// SAM flags: unmapped (0x4), secondary (0x100), QC fail (0x200) and supplementary (0x800) records are never imported
 	const uint64_t SAM_SKIP_FLAGS = 0x4 | 0x100 | 0x200 | 0x800;
 
@@ -231,6 +259,9 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 		if (Rf_length(_max_fraglen) != 1 || ((!Rf_isReal(_max_fraglen) || REAL(_max_fraglen)[0] != (int64_t)REAL(_max_fraglen)[0]) && !Rf_isInteger(_max_fraglen)))
 			verror("max.fraglen argument is not an integer");
 
+		if (Rf_length(_one_based) != 1 || !Rf_isLogical(_one_based) || LOGICAL(_one_based)[0] == NA_LOGICAL)
+			verror("one.based argument must be TRUE or FALSE");
+
 		const char *track = CHAR(STRING_ELT(_track, 0));
 		const char *infilename = CHAR(STRING_ELT(_infile, 0));
 		int pileup = Rf_isReal(_pileup) ? (int)REAL(_pileup)[0] : INTEGER(_pileup)[0];
@@ -244,6 +275,15 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 		// paired = TRUE on a non-SAM file: tab-delimited fragments, 0-based half-open chrom/start/end in columns 1-3
 		// (BED, 10x fragments.tsv.gz). Fragment files are taken as already deduplicated.
 		bool is_frag_format = paired && !is_sam_format;
+		// SAM POS is 1-based by the spec; a tab-delimited coordinate is 1-based only when one.based is set
+		bool one_based = is_sam_format || LOGICAL(_one_based)[0];
+		// Tab-delimited files without one.based keep the historical placement: the coordinate is taken as is,
+		// and a reverse read is recorded one base past its 5' end (its end-exclusive coordinate).
+		bool legacy = !is_sam_format && !is_frag_format && !one_based;
+		int64_t rev_end_off = legacy ? 0 : 1; // recorded reverse-read coordinate + rev_end_off = end-exclusive coordinate
+
+		if (is_frag_format && LOGICAL(_one_based)[0])
+			verror("one.based is not used for fragment files: their coordinates are 0-based, half-open");
 
 		if (is_sam_format) { // SAM format
 			cols_order[SEQ_COL] = 10;
@@ -251,6 +291,7 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 			cols_order[COORD_COL] = 4;
 			cols_order[STRAND_COL] = 2;
 			cols_order[MAPQ_COL] = 5;
+			cols_order[CIGAR_COL] = 6;
 			cols_order[PNEXT_COL] = 8;
 			cols_order[TLEN_COL] = 9;
 		} else if (is_frag_format) {
@@ -385,6 +426,7 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 						int64_t coord;
 						char *endptr;
 						uint64_t flag = 0;
+						int64_t span = -1; // reference span of a SAM read, from its CIGAR
 
 						if (is_sam_format) {
 							flag = strtoull(str[STRAND_COL].c_str(), &endptr, 0);
@@ -402,7 +444,11 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 						int64_t chrom_end = all_genome_intervs[chrom_idx].end;
 
 						coord = strtoll(str[COORD_COL].c_str(), &endptr, 10);
-						if (*endptr || coord < 0 || coord >= chrom_end)
+						if (*endptr || coord < (one_based ? 1 : 0)) // SAM POS 0 means no position
+							break;
+						if (one_based)
+							--coord; // 0-based leftmost base
+						if (coord >= chrom_end)
 							break;
 
 						if (is_frag_format) {
@@ -438,9 +484,14 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 								}
 							}
 
+							// htslib (and so a BAM import) takes a mapped record without a CIGAR ('*') as unmapped;
+							// a malformed CIGAR, or one with no aligned reference base, is unusable too
+							if ((span = cigar_ref_span(str[CIGAR_COL])) <= 0)
+								break;
+
 							if (paired) {
 								// One fragment per proper pair, taken from the first mate (as MACS3 BAMPE does):
-								// [min(POS, PNEXT), + |TLEN|), SAM POS being 1-based. Unpaired reads are filtered.
+								// [min(POS, PNEXT), + |TLEN|) in 1-based POS terms. Unpaired reads are filtered.
 								if ((flag & 0x3) != 0x3 || (flag & 0x8)) {
 									filtered = true;
 									break;
@@ -452,7 +503,7 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 								if (*endptr)
 									break;
 								tlen = llabs(tlen);
-								int64_t start = min(coord, pnext) - 1;
+								int64_t start = min(coord, pnext - 1);
 								if (!tlen || tlen > max_fraglen || start < 0) {
 									filtered = true;
 									break;
@@ -468,9 +519,16 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 
 						if (str[STRAND_COL] == "+" || str[STRAND_COL] == "F")
 							coords[chrom_idx].push_back(coord);
-						else if (str[STRAND_COL] == "-" || str[STRAND_COL] == "R")
-							coords[num_chroms + chrom_idx].push_back(coord + str[SEQ_COL].size());
-						else
+						else if (str[STRAND_COL] == "-" || str[STRAND_COL] == "R") {
+							// the 5' end of a reverse read is its rightmost aligned base (one past it in legacy mode)
+							if (span <= 0) // a tab-delimited file: no CIGAR
+								span = str[SEQ_COL].size();
+							// the recorded point must lie on the chromosome; a legacy dense track clips the read instead
+							int64_t room = chrom_end - coord;
+							if (legacy ? !pileup && span >= room : span > room)
+								break;
+							coords[num_chroms + chrom_idx].push_back(coord + span - rev_end_off);
+						} else
 							break;
 
 						mapped = true;
@@ -571,8 +629,8 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 							continue;
 						}
 
-						add_coverage(max(strand ? *icoord - pileup : *icoord, (int64_t)0),
-						             min(strand ? *icoord : *icoord + pileup, all_genome_intervs[ichrom].end));
+						int64_t end_coord = strand ? *icoord + rev_end_off : *icoord + pileup;
+						add_coverage(max(end_coord - pileup, (int64_t)0), min(end_coord, all_genome_intervs[ichrom].end));
 					}
 				}
 
