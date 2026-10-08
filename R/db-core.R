@@ -274,7 +274,8 @@
 # compared by their primary weights, then by their tertiary weights. A byte outside ASCII
 # sorts after every ASCII character, by its value: ICU's order of non-ASCII characters is
 # not reproduced, so a name with one may sort differently than order() sorts it in an
-# en_US.UTF-8 session. pymisha's r_collate_less (src/PMDb.cpp) uses the same rule.
+# en_US.UTF-8 session. pymisha's r_collate_less (src/PMDb.cpp) uses the same rule, as of
+# commit e6c52e9 on its chrom-names-r-order branch; released pymisha does not yet.
 .gdb.chrom_sort_key <- function(names) {
     punct_digits <- utf8ToInt(" _-,;:!?.'\"()[]{}@*/\\&#%`^+<=>|~$0123456789")
     primary <- rep(NA_integer_, 256) # by byte value + 1; NA: ignored

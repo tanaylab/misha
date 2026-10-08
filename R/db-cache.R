@@ -723,6 +723,15 @@ gdb.mark_cache_dirty <- function() {
     if (!file.exists(cs)) {
         stop(sprintf("chrom_sizes.txt missing in %s", groot), call. = FALSE)
     }
+    # A dataset whose seq/ link is gone (or that never had one) cannot show that its database is
+    # per-chromosome. gdataset.load() requires its chrom_sizes.txt to be the working database's,
+    # so it takes the working database's order; a database always has seq/.
+    working <- get0("GROOT", envir = .misha, ifnotfound = NULL)
+    if (!file.exists(file.path(groot, "seq")) && !is.null(working) &&
+        identical(unname(tools::md5sum(cs)), unname(tools::md5sum(file.path(working, "chrom_sizes.txt"))))) {
+        cs <- file.path(working, "chrom_sizes.txt")
+        groot <- working
+    }
     # read as gsetroot() reads it
     chromsizes <- utils::read.csv(
         cs,

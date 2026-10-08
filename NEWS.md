@@ -1,5 +1,11 @@
 # misha 5.12.2
 
+* **Behavior fix:** `gdb.convert_to_indexed()` renumbered the chromosomes of a per-chromosome database that was not loaded, if its `chrom_sizes.txt` was unsorted and unprefixed. Recreate the indexed tracks and interval sets of a database converted that way.
+
+* **Behavior fix:** `gtrack.copy()` of an indexed track out of a per-chromosome database with an unsorted, unprefixed `chrom_sizes.txt`, or out of a dataset of one, put values on the wrong chromosomes. Re-copy such tracks.
+
+* **Behavior fix:** a per-chromosome database with an unprefixed `chrom_sizes.txt` gets the same chromosome order in every session. A C locale or an R built without ICU had numbered its chromosomes differently: recreate indexed tracks and interval sets converted in such a session.
+
 * Potts models score faster in the `potts` virtual tracks and `gseq.potts()`, most of all when their couplings link nearby positions, such as several models summed side by side; wide models with many scattered couplings keep their speed. Some models' scores change in the last digits, so a score exactly at a threshold or tied with another can come out the other way.
 
 # misha 5.12.1
