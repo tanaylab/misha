@@ -400,7 +400,18 @@ gtrack.create_dense("atac.es",
 
 Preferred path for any read-intervals-in-R source.
 
-**Mapped reads from a SAM-style text file.**
+**Paired-end BAM → fragment coverage (misha ≥ 5.13.0).** Each proper pair covers its own fragment; there is no `pileup`. The same call with a fragment file (chrom/start/end, e.g. 10x `fragments.tsv.gz`) streams it without loading it into R.
+
+```r
+gtrack.import_mappedseq("chip.oct4",
+                        description = "Oct4 ChIP fragment coverage",
+                        file        = "oct4.bam",
+                        binsize     = 20,
+                        paired      = TRUE,
+                        min.mapq    = 30)
+```
+
+**Single-end reads from an Illumina export file.** `pileup` is the fragment length (200 when unknown). Export coordinates are 1-based.
 
 ```r
 gtrack.import_mappedseq("atac.es",
@@ -409,6 +420,7 @@ gtrack.import_mappedseq("atac.es",
                         pileup      = 200,
                         binsize     = 20,
                         cols.order  = c(9, 11, 13, 14),
+                        one.based   = TRUE,
                         remove.dups = TRUE)
 ```
 
