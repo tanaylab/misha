@@ -272,7 +272,7 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 			verror("min.mapq cannot be negative");
 
 		if (min_mapq > 0 && !is_sam_format)
-			verror("min.mapq requires SAM or BAM input");
+			verror("min.mapq requires SAM or BAM input (a SAM file needs cols.order = NULL)");
 
 		if (paired) {
 			if (pileup)
@@ -390,7 +390,7 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 							flag = strtoull(str[STRAND_COL].c_str(), &endptr, 0);
 							if (*endptr)
 								break;
-							if (paired && (flag & 0x1) && !(flag & 0x40)) {
+							if (paired && (flag & 0x1) && (flag & 0x80)) {
 								second_mate = true;
 								break;
 							}

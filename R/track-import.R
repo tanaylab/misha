@@ -347,8 +347,9 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
 #' This function creates a track from a file of mapped sequences. The file can
 #' be in SAM format, in a general TAB delimited text format where each line
 #' describes a single read, in gzipped variants of either (`.sam.gz`,
-#' `.tsv.gz`), or in BAM format (auto-detected by bgzip magic; requires
-#' `samtools` on `PATH`).
+#' `.tsv.gz`), or in BAM format (detected from its content; requires
+#' `samtools` on `PATH`). Without 'paired', any bgzipped file is read as SAM.
+#' An import that brings in no read at all gives a warning.
 #'
 #' For a SAM file 'cols.order' must be set to 'NULL'. For BAM input the
 #' default `cols.order = c(9, 11, 13, 14)` is treated as SAM mode because
@@ -381,24 +382,25 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
 #'
 #' If 'paired' is 'TRUE' each fragment covers its own span instead of being
 #' expanded by 'pileup' (which must be 0), and the track is dense with bins of
-#' 'binsize'. Each bin holds the mean number of fragments covering its bases.
+#' 'binsize'. Each bin holds the mean number of fragments covering its bases
+#' (the last, partial bin of a chromosome is also divided by 'binsize').
 #' For SAM / BAM input ('cols.order = NULL', or any BAM) the fragment is read
-#' from the first mate of each proper pair (FLAG 0x1, 0x2 and 0x40 set, 0x8
-#' unset) as [min(POS, PNEXT), min(POS, PNEXT) + |TLEN|), the way MACS3 does
-#' with '-f BAMPE'. The input may be sorted in any order. 'min.mapq' is
+#' from each proper pair (FLAG 0x1 and 0x2 set, 0x8 unset) by its first mate,
+#' as [min(POS, PNEXT), min(POS, PNEXT) + |TLEN|), the way MACS3 does with
+#' '-f BAMPE': records of second mates (FLAG 0x80) are skipped. The input may be sorted in any order. 'min.mapq' is
 #' tested on the first mate only. With 'remove.dups' fragments with the same
-#' start and end are counted once. Any other input is read as a fragment file:
+#' start and end are counted once. Any other input (not a BAM, and
+#' 'cols.order' not set to 'NULL') is read as a fragment file:
 #' tab-delimited, 0-based half-open chromosome, start and end in columns 1-3
 #' (BED, or a 10x 'fragments.tsv.gz'), lines starting with '#' skipped.
 #' Fragment files are taken as already deduplicated, so 'remove.dups' does not
 #' apply to them, and 'cols.order' must not be set. Fragments longer than
-#' 'max.fraglen' are skipped in both cases. With 'paired' the returned
-#' statistics count the records of first mates only; second mates are not
-#' counted.
+#' 'max.fraglen' are skipped in both cases. With 'paired' the records of
+#' second mates are not counted in the returned statistics.
 #'
 #' The statistics report 'total' records, 'total.mapped' (imported,
-#' duplicates included), 'total.unmapped' (unmapped, or on a chromosome
-#' missing from the database), 'total.dups' and 'total.filtered' (left out by
+#' duplicates included), 'total.unmapped' (unmapped, unparsable, or outside
+#' the chromosomes of the database), 'total.dups' and 'total.filtered' (left out by
 #' the flag, MAPQ, proper-pair or fragment length filters).
 #'
 #' 'description' is added as a track attribute.
@@ -419,7 +421,8 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
 #' once.
 #' @param paired if 'TRUE' import paired-end fragments (see Description).
 #' @param min.mapq minimal MAPQ of an imported SAM / BAM record.
-#' @param max.fraglen maximal fragment length when 'paired' is 'TRUE'.
+#' @param max.fraglen maximal fragment length when 'paired' is 'TRUE' ('Inf'
+#' for no limit).
 #' @return A list of conversion process statistics.
 #' @seealso \code{\link{gtrack.rm}}, \code{\link{gtrack.info}},
 #' \code{\link{gdir.create}}
@@ -463,7 +466,10 @@ gtrack.import_mappedseq <- function(track = NULL, description = NULL, file = NUL
 
     retv <- NULL
     .gtrack.create_atomic(trackstr, function() {
-        retv <<- .gcall("gtrackimport_mappedseq", trackstr, file, pileup, binsize, cols.order, remove.dups, paired, min.mapq, max.fraglen, .misha_env())
+        retv <<- .gcall(
+            "gtrackimport_mappedseq", trackstr, file, pileup, binsize, cols.order, remove.dups, paired, min.mapq,
+            if (identical(max.fraglen, Inf)) 2^62 else max.fraglen, .misha_env()
+        )
     })
 
     final_dir <- .track_dir(trackstr)
@@ -495,9 +501,11 @@ gtrack.import_mappedseq <- function(track = NULL, description = NULL, file = NUL
             }
         }
     )
-    if (isTRUE(paired) && retv[[1]][["total.mapped"]] == 0) {
+    if (retv[[1]][["total.mapped"]] == 0) {
         warning(
-            if (is.null(cols.order)) {
+            if (!isTRUE(paired)) {
+                "No read was imported. A SAM file needs `cols.order = NULL`, a fragment file `paired = TRUE`, and a tab-delimited file a matching `cols.order`."
+            } else if (is.null(cols.order)) {
                 "No fragment was imported: no record was the first mate of a proper pair that passed the filters."
             } else {
                 "No fragment was imported. A SAM file needs `cols.order = NULL`; other files are read as fragments (chrom, start, end)."

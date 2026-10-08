@@ -31,6 +31,13 @@ paired_sam_text <- function() {
     )
 }
 
+# plain SAM, so that the tests do not need samtools
+paired_sam_file <- function(lines = paired_sam_text()) {
+    sam <- tempfile(fileext = ".sam")
+    writeLines(lines, sam)
+    sam
+}
+
 bins_at <- function(track, starts, binsize = 50) {
     r <- gextract(track, gintervals("chr1", starts, starts + binsize), iterator = binsize, colnames = "v")
     as.numeric(r$v)
@@ -44,9 +51,8 @@ import_tmp <- function(file, ...) {
     list(track = track, stats = stats)
 }
 
-test_that("paired BAM: one fragment per proper pair, from the first mate", {
-    bam <- make_test_bam(paired_sam_text())
-    res <- import_tmp(bam, binsize = 50, paired = TRUE)
+test_that("paired SAM: one fragment per proper pair, from the first mate", {
+    res <- import_tmp(paired_sam_file(), binsize = 50, cols.order = NULL, paired = TRUE)
 
     expect_equal(bins_at(res$track, c(100, 150, 200, 250)), rep(1, 4))
     expect_equal(bins_at(res$track, c(1000, 1050, 1100)), rep(1, 3))
@@ -63,17 +69,17 @@ test_that("paired BAM: one fragment per proper pair, from the first mate", {
 })
 
 test_that("paired import keeps duplicates when asked and filters by MAPQ and length", {
-    bam <- make_test_bam(paired_sam_text())
+    sam <- paired_sam_file()
 
-    res <- import_tmp(bam, binsize = 50, paired = TRUE, remove.dups = FALSE)
+    res <- import_tmp(sam, binsize = 50, cols.order = NULL, paired = TRUE, remove.dups = FALSE)
     expect_equal(bins_at(res$track, c(100, 250)), c(2, 2))
 
-    res <- import_tmp(bam, binsize = 50, paired = TRUE, min.mapq = 30)
+    res <- import_tmp(sam, binsize = 50, cols.order = NULL, paired = TRUE, min.mapq = 30)
     expect_equal(bins_at(res$track, c(2000, 2100)), c(0, 0))
     expect_equal(bins_at(res$track, 100), 1)
     expect_equal(res$stats[[1]][["total.filtered"]], 4)
 
-    res <- import_tmp(bam, binsize = 50, paired = TRUE, max.fraglen = 6000)
+    res <- import_tmp(sam, binsize = 50, cols.order = NULL, paired = TRUE, max.fraglen = 6000)
     expect_equal(bins_at(res$track, c(5000, 9900)), c(1, 1))
     expect_equal(res$stats[[1]][["total.filtered"]], 2)
 })
@@ -172,8 +178,7 @@ test_that("a bgzipped SAM is read as SAM with the default cols.order", {
 })
 
 test_that("a large max.fraglen is recorded without failing the import", {
-    bam <- make_test_bam(paired_sam_text())
-    res <- import_tmp(bam, binsize = 50, paired = TRUE, max.fraglen = 1e10)
+    res <- import_tmp(paired_sam_file(), binsize = 50, cols.order = NULL, paired = TRUE, max.fraglen = 1e10)
     expect_equal(bins_at(res$track, c(5000, 9900)), c(1, 1))
     expect_true(grepl("max.fraglen=1e+10", gtrack.attr.get(res$track, "created.by"), fixed = TRUE))
 })
@@ -187,8 +192,7 @@ test_that("fragment files with CRLF line endings are read", {
 })
 
 test_that("total counts each record once", {
-    bam <- make_test_bam(paired_sam_text())
-    s <- import_tmp(bam, binsize = 50, paired = TRUE)$stats[[1]]
+    s <- import_tmp(paired_sam_file(), binsize = 50, cols.order = NULL, paired = TRUE)$stats[[1]]
     # first mates p1-p8 and the unmapped u1
     expect_equal(s[["total"]], 9)
     expect_equal(s[["total"]], s[["total.mapped"]] + s[["total.unmapped"]] + s[["total.filtered"]])
@@ -201,4 +205,62 @@ test_that("a reverse read past the chromosome end does not overflow the dense tr
     res <- import_tmp(sam, cols.order = NULL, pileup = 100, binsize = 20)
     expect_equal(res$stats[[1]][["total.mapped"]], 1)
     expect_equal(sum(gextract(res$track, gintervals("chr1", chr1_end - 200, chr1_end), iterator = 20, colnames = "v")$v), 0)
+})
+
+test_that("a paired BAM gives the same track as the SAM", {
+    bam <- make_test_bam(paired_sam_text())
+    from_bam <- import_tmp(bam, binsize = 50, paired = TRUE)
+    from_sam <- import_tmp(paired_sam_file(), binsize = 50, cols.order = NULL, paired = TRUE)
+    expect_equal(from_bam$stats, from_sam$stats)
+    expect_equal(bins_at(from_bam$track, seq(0, 10000, 50)), bins_at(from_sam$track, seq(0, 10000, 50)))
+})
+
+test_that("duplicates are fragments with the same start and end, not the same start", {
+    sam <- paired_sam_file(c(
+        sam_rec("a", 99, 101, 40, 251, 200), sam_rec("a", 147, 251, 40, 101, -200), # [100, 300)
+        sam_rec("b", 99, 101, 40, 151, 100), sam_rec("b", 147, 151, 40, 101, -100) # [100, 200)
+    ))
+    res <- import_tmp(sam, binsize = 50, cols.order = NULL, paired = TRUE)
+    expect_equal(res$stats[[1]][["total.dups"]], 0)
+    expect_equal(bins_at(res$track, c(100, 150, 200, 250)), c(2, 2, 1, 1))
+})
+
+test_that("a pair record with neither mate flag is taken as the first mate", {
+    # FLAG 3 = paired + proper pair, no 0x40 / 0x80 (MACS3 keeps such records too)
+    res <- import_tmp(paired_sam_file(sam_rec("x", 3, 101, 40, 151, 100)), binsize = 50, cols.order = NULL, paired = TRUE)
+    expect_equal(bins_at(res$track, c(100, 150)), c(1, 1))
+})
+
+test_that("fragments past the chromosome end are clipped", {
+    chr1_end <- gintervals.all()$end[gintervals.all()$chrom == "chr1"]
+    start <- (chr1_end %/% 50) * 50 - 100 # two full bins before the chromosome's last bin
+    frag <- tempfile(fileext = ".bed")
+    writeLines(paste("chr1", start, chr1_end + 500, sep = "\t"), frag)
+    res <- import_tmp(frag, binsize = 50, paired = TRUE)
+    expect_equal(res$stats[[1]][["total.mapped"]], 1)
+    expect_equal(bins_at(res$track, c(start, start + 50)), c(1, 1))
+})
+
+test_that("max.fraglen = Inf means no limit", {
+    res <- import_tmp(paired_sam_file(), binsize = 50, cols.order = NULL, paired = TRUE, max.fraglen = Inf)
+    expect_equal(bins_at(res$track, c(5000, 9900)), c(1, 1))
+    expect_true(grepl("max.fraglen=Inf", gtrack.attr.get(res$track, "created.by"), fixed = TRUE))
+})
+
+test_that("a single-end import that brings in nothing warns", {
+    skip_if(!nzchar(Sys.which("bgzip")), "bgzip not on PATH")
+    frag <- tempfile(fileext = ".tsv")
+    writeLines(fragment_lines(), frag)
+    system2("bgzip", frag)
+    # a bgzipped fragment file without paired = TRUE is read as SAM
+    expect_warning(import_tmp(paste0(frag, ".gz")), "No read was imported")
+})
+
+test_that("the min.mapq error names cols.order = NULL for SAM files", {
+    track <- random_track_name("test")
+    withr::defer(gtrack.rm(track, force = TRUE))
+    expect_error(
+        gtrack.import_mappedseq(track, "x", paired_sam_file(), binsize = 50, paired = TRUE, min.mapq = 30),
+        "cols.order = NULL"
+    )
 })
