@@ -138,7 +138,7 @@ test_that("paired: a first mate on the last base is imported and POS 0 is unmapp
     chr1_end <- gintervals.all()$end[gintervals.all()$chrom == "chr1"]
     pair <- function(name, pos, pnext, tlen, flag1 = 83, flag2 = 163) {
         c(
-            paste(name, flag1, "chr1", pos, 30, "10M", "=", pnext, -tlen, strrep("A", 10), "*", sep = "\t"),
+            paste(name, flag1, "chr1", pos, 30, "1M", "=", pnext, -tlen, "A", "*", sep = "\t"),
             paste(name, flag2, "chr1", pnext, 30, "10M", "=", pos, tlen, strrep("A", 10), "*", sep = "\t")
         )
     }
