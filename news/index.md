@@ -2,6 +2,13 @@
 
 ## misha (development version)
 
+- **Bug fix:**
+  [`gtrack.import_mappedseq()`](https://tanaylab.github.io/misha/reference/gtrack.import_mappedseq.md)
+  hung on a named pipe (FIFO), as used by
+  `misha.ext::gtrack.import_mappedseq_bam()`, since BAM detection was
+  added in 5.8.0. A FIFO is now read as a stream of SAM or text (pass
+  `cols.order = NULL` for SAM); BAM through a pipe gives an error.
+
 - **Behavior fix:**
   [`gtrack.import_mappedseq()`](https://tanaylab.github.io/misha/reference/gtrack.import_mappedseq.md)
   places SAM/BAM reads at their 0-based 5’ base. SAM’s 1-based `POS` was
