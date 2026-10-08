@@ -508,9 +508,20 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
     dest_db <- .gtrack.copy.resolve_dest_db(db)
     .gcheck_write_permission(file.path(dest_db, "tracks"), "copy track to")
 
+    # The destination, once for all tracks: its chrom order (or why it cannot be told, which stops
+    # only the tracks that need it), and its format. A loaded dataset with no sequence of its own is
+    # in its database's format (.gdb.is_indexed_at), which an indexed track is copied in; any other
+    # track goes into it as it is, by its own seq/ (none: per-chromosome).
+    dest <- list(
+        db = dest_db,
+        chroms = tryCatch(.gdb.chrom_names_at(dest_db), error = function(e) e),
+        indexed = .gdb.is_indexed_at(dest_db),
+        seq_indexed = all(file.exists(file.path(dest_db, "seq", c("genome.idx", "genome.seq"))))
+    )
+
     created <- character(0)
     for (i in seq_along(srcnames)) {
-        created <- c(created, .gtrack.copy.one(srcnames[i], destnames[i], dest_db, overwrite))
+        created <- c(created, .gtrack.copy.one(srcnames[i], destnames[i], dest, overwrite))
     }
 
     invisible(created)
@@ -558,7 +569,8 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
 }
 
 # Copy a single track. Returns the destination track name on success.
-.gtrack.copy.one <- function(srcname, destname, dest_db, overwrite) {
+.gtrack.copy.one <- function(srcname, destname, dest, overwrite) {
+    dest_db <- dest$db
     if (!(srcname %in% get("GTRACKS", envir = .misha))) {
         stop(sprintf("Track %s does not exist", srcname), call. = FALSE)
     }
@@ -599,22 +611,22 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
     }
 
     src_indexed <- file.exists(file.path(src_dir, "track.idx"))
-    dest_indexed <- .gdb.is_indexed_at(dest_db)
+    dest_indexed <- if (src_indexed) dest$indexed else dest$seq_indexed
     info <- gtrack.info(srcname)
 
     # The source is loaded: its order is the one gsetroot() gave. The destination's order matters
     # where it is indexed (its track.idx is keyed by its chrom ids) and for a 2D copy, which needs
-    # one order on both sides; .gdb.chrom_names_at() stops for a database that cannot show its own.
-    # Otherwise the copy maps per-chromosome files by name, so its chrom_sizes.txt names do.
+    # one order on both sides. Otherwise the copy maps per-chromosome files by name, so its
+    # chrom_sizes.txt names do.
     src_chroms <- .gdb.chrom_names_at(src_db)
-    dest_chroms <- if (dest_indexed || info$type %in% c("rectangles", "points")) {
-        .gdb.chrom_names_at(dest_db)
-    } else {
-        tryCatch(.gdb.chrom_names_at(dest_db), error = function(e) {
-            utils::read.csv(file.path(dest_db, "chrom_sizes.txt"),
-                sep = "\t", header = FALSE, colClasses = c("character", "numeric")
-            )[[1]]
-        })
+    dest_chroms <- dest$chroms
+    if (inherits(dest_chroms, "error")) {
+        if (dest_indexed || info$type %in% c("rectangles", "points")) {
+            stop(dest_chroms)
+        }
+        dest_chroms <- utils::read.csv(file.path(dest_db, "chrom_sizes.txt"),
+            sep = "\t", header = FALSE, colClasses = c("character", "numeric")
+        )[[1]]
     }
 
     # 2D track guard

@@ -517,6 +517,10 @@ test_that("a dataset of an indexed db without its seq/ link is indexed as the db
     dir.create(td)
     withr::defer(unlink(td, recursive = TRUE))
     db <- create_db_with_unsorted_chrom_sizes(file.path(td, "db"))
+    gsetroot(db)
+    # tracks in per-chromosome and per-pair files, made before the database was converted
+    gtrack.create_sparse("v2", "x", gintervals(c("chr1", "chr2"), 0, 100), c(7, 8))
+    gtrack.2d.create("r2", "x", data.frame(chrom1 = "chr1", start1 = 10, end1 = 15, chrom2 = "chr2", start2 = 30, end2 = 35), 7)
     suppressMessages(gdb.convert_to_indexed(groot = db, force = TRUE, validate = FALSE))
     gsetroot(db)
     expect_true(.gdb.is_indexed_at(db))
@@ -530,10 +534,16 @@ test_that("a dataset of an indexed db without its seq/ link is indexed as the db
     suppressMessages(gdataset.load(ds))
     expect_true(.gdb.is_indexed_at(ds))
 
+    # an indexed track is copied in the database's format; other tracks go in as they are
     gtrack.create_sparse("v1", "x", iv, c(5, 6))
-    gtrack.copy("v1", "v1c", db = ds)
-    expect_equal(gtrack.info("v1c")$format, "indexed")
-    expect_equal(gextract("v1c", iv)$v1c, c(5, 6))
+    suppressMessages(gtrack.convert_to_indexed("v1"))
+    gtrack.copy(c("v1", "v2", "r2"), "c", db = ds)
+    expect_equal(gtrack.info("c.v1")$format, "indexed")
+    expect_false(file.exists(file.path(ds, "tracks", "c", "v2.track", "track.idx")))
+    expect_false(file.exists(file.path(ds, "tracks", "c", "r2.track", "track.idx")))
+    expect_equal(gextract("c.v1", iv)$c.v1, c(5, 6))
+    expect_equal(gextract("c.v2", iv)$c.v2, c(7, 8))
+    expect_equal(gextract("c.r2", gintervals.2d.all())$c.r2, 7)
 })
 
 test_that("an unloaded database whose seq/ holds no sequence gives no chrom order to guess from", {
@@ -559,6 +569,11 @@ test_that("an unloaded database whose seq/ holds no sequence gives no chrom orde
     dir.create(src)
     expect_error(misha:::.gtrack.liftover.src_chroms(src), "cannot be told")
     unlink(src, recursive = TRUE)
+    # a genome.idx without genome.seq is no sequence either
+    dir.create(file.path(other, "seq"))
+    writeBin(raw(16), file.path(other, "seq", "genome.idx"))
+    expect_error(.gdb.chrom_names_at(other), "cannot be told")
+    unlink(file.path(other, "seq"), recursive = TRUE)
 
     # copies into it go by chromosome name: the source's order is known, as it is loaded
     gtrack.copy("sp", "sp_copy", db = other)

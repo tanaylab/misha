@@ -747,16 +747,16 @@ gdb.mark_cache_dirty <- function() {
     chrom_order <- .gdb.chrom_order(groot, chromsizes)
     # Names mostly without the "chr" prefix are sorted in a per-chromosome database and kept in
     # chrom_sizes.txt order in an indexed one (.is_per_chromosome_db); a seq/ with neither
-    # genome.idx nor the first chromosome's .seq file cannot tell which
+    # genome.idx and genome.seq nor the first chromosome's .seq file cannot tell which
     seq_dir <- file.path(groot, "seq")
     first_chrom <- chromsizes$chrom[1]
-    no_seq <- !file.exists(file.path(seq_dir, "genome.idx")) && !file.exists(file.path(seq_dir, "genome.seq")) &&
+    no_seq <- !(file.exists(file.path(seq_dir, "genome.idx")) && file.exists(file.path(seq_dir, "genome.seq"))) &&
         !file.exists(file.path(seq_dir, paste0(first_chrom, ".seq"))) &&
         !file.exists(file.path(seq_dir, paste0("chr", first_chrom, ".seq")))
     if (!chrom_order$per_chromosome && nrow(chromsizes) && no_seq &&
         mean(!startsWith(chromsizes$chrom, "chr")) >= 0.8) {
         stop(sprintf(
-            "The chromosome order of %s cannot be told: its chrom_sizes.txt names lack the \"chr\" prefix, which makes the order the sorted names in a per-chromosome database and the chrom_sizes.txt order in an indexed one, and its seq/ holds neither. Restore its seq/, or load it with gdataset.load() as a dataset of its database.",
+            "The chromosome order of %s cannot be told: its chrom_sizes.txt names lack the \"chr\" prefix, so its indexed tracks are keyed by the sorted names if it is a per-chromosome database and by the chrom_sizes.txt order if it is indexed, and its seq/ has no sequence to show which (as in a copy of a database's tracks without its seq/). Put back its seq/ (a link to the original database's seq/ will do), or load it with gdataset.load() as a dataset of its database.",
             groot
         ), call. = FALSE)
     }

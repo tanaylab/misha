@@ -6,7 +6,11 @@
 
 * **Breaking:** a per-chromosome database with an unprefixed `chrom_sizes.txt` gets the same chromosome order in every session. A C locale or an R built without ICU had numbered its chromosomes differently: recreate indexed tracks and interval sets converted in such a session.
 
-* **Behavior fix:** `gdb.convert_to_indexed()` leaves the database as it was when it cannot convert it exactly (a full disk, a `.seq` file of another length, a chromosome name the index cannot store, a chromosome named `genome`), and an interrupted conversion can be run again. It stops for a database whose `seq/` belongs to another database (a dataset saved with `copy_seq = FALSE`, a `gdb.create_linked()` database): convert that one. `gsetroot()` stops if the sizes or order in `seq/genome.idx` do not match `chrom_sizes.txt`, and warns if only names differ.
+* **Behavior fix:** `gdb.convert_to_indexed()` leaves the database as it was when it cannot convert it exactly (a full disk, a `.seq` file of another length, a chromosome name the index cannot store, a chromosome named `genome`), and an interrupted conversion can be run again.
+
+* **Breaking:** `gdb.convert_to_indexed()` stops for a database whose `seq/` or `chrom_sizes.txt` is another database's (a dataset saved with `copy_seq = FALSE`, a `gdb.create_linked()` database): convert that database instead.
+
+* **Breaking:** `gsetroot()` stops when `seq/genome.idx` does not match `chrom_sizes.txt` in sizes or chromosome order, which made chromosomes read other chromosomes' sequence, and warns when only names differ.
 
 * Potts models score faster in the `potts` virtual tracks and `gseq.potts()`, most of all when their couplings link nearby positions, such as several models summed side by side; wide models with many scattered couplings keep their speed. Some models' scores change in the last digits, so a score exactly at a threshold or tied with another can come out the other way.
 

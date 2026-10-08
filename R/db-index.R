@@ -56,7 +56,10 @@
 #' differs from chrom_sizes.txt, stops it, and so does a chromosome named 'genome' (its genome.seq
 #' would be overwritten). A database whose seq/ or chrom_sizes.txt is in another database, such as a
 #' dataset saved with \code{copy_seq = FALSE} or a \code{gdb.create_linked()} database, is not
-#' converted: convert the database that owns them.
+#' converted: convert that database. A seq/ linked to storage of its own elsewhere is converted there.
+#' The database loaded before the conversion is loaded again after it; if it no longer loads (its
+#' seq/ is the converted database's, with a chrom_sizes.txt of its own), a warning says so, and its
+#' session is kept while it still reads its own sequence, or nothing is loaded.
 #'
 #' The conversion process:
 #' \enumerate{
@@ -121,11 +124,47 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
         return(invisible(NULL))
     }
 
+    # Get user confirmation
+    if (!setup_info$already_indexed &&
+        !.gdb.convert_to_indexed.get_confirmation(setup_info$groot, setup_info$chrom_sizes, remove_old_files, force)) {
+        return(invisible(NULL))
+    }
+
+    # The steps below load the database being converted (to validate it, and to list its tracks and
+    # interval sets); the database loaded before is loaded again at the end. If it no longer loads
+    # (its seq/ is this database's, with a chrom_sizes.txt of its own), the conversion stands, and
+    # its session is put back as it was while it still reads its own sequence, or nothing is loaded.
+    old_session <- as.list(.misha, all.names = TRUE)
+    old_groot <- old_session$GROOT
+    if (!is.null(old_groot) && nzchar(old_groot) &&
+        ((validate && !setup_info$already_indexed) || convert_tracks || convert_intervals)) {
+        on.exit(
+            tryCatch(suppressMessages(gdb.init(old_groot)), error = function(e) {
+                rm(list = ls(.misha, all.names = TRUE), envir = .misha)
+                list2env(old_session, envir = .misha)
+                genome <- get("ALLGENOME", envir = .misha)[[1]]
+                kept <- tryCatch(
+                    {
+                        .gdb.check_genome_idx(old_groot, as.character(genome$chrom), genome$end)
+                        TRUE
+                    },
+                    warning = function(w) TRUE,
+                    error = function(e) FALSE
+                )
+                if (!kept) {
+                    gdb.unload()
+                }
+                warning(sprintf(
+                    "%s was converted, and %s, loaded before, does not load now: %s %s",
+                    setup_info$groot, old_groot, conditionMessage(e),
+                    if (kept) "Its session is kept as it was, as it still reads its own sequence." else "No database is loaded."
+                ), call. = FALSE)
+            }),
+            add = TRUE
+        )
+    }
+
     if (!setup_info$already_indexed) {
-        # Get user confirmation
-        if (!.gdb.convert_to_indexed.get_confirmation(setup_info$groot, setup_info$chrom_sizes, remove_old_files, force)) {
-            return(invisible(NULL))
-        }
         # Convert genome sequences
         .gdb.convert_to_indexed.genome(setup_info, validate, remove_old_files, verbose = verbose, chunk_size = chunk_size)
     }
@@ -248,15 +287,16 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
     }
 
     # The conversion writes seq/ and rewrites chrom_sizes.txt. In a dataset saved without copy_seq,
-    # or a database made by gdb.create_linked(), they are links into another database, which the
-    # conversion would change for every database that shares it.
+    # or a database made by gdb.create_linked(), they are links into another database (a directory
+    # with a chrom_sizes.txt), which the conversion would change for every database that shares it.
+    # A seq/ linked to storage of its own elsewhere is converted there.
     groot_real <- normalizePath(groot, mustWork = TRUE)
     for (path in c(seq_dir, chrom_sizes_path)) {
-        real <- normalizePath(path, mustWork = TRUE)
-        if (!startsWith(real, paste0(groot_real, "/"))) {
+        owner <- dirname(normalizePath(path, mustWork = TRUE))
+        if (owner != groot_real && file.exists(file.path(owner, "chrom_sizes.txt"))) {
             stop(sprintf(
-                "%s is %s, outside %s: convert the database that owns it instead.",
-                path, real, groot
+                "%s is in the database %s: convert that database instead.",
+                path, owner
             ), call. = FALSE)
         }
     }
@@ -370,19 +410,26 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
     # sequence readers use the index), so a conversion stopped before that point leaves a
     # consistent per-chromosome database that the next run converts again.
     index_path_tmp <- paste0(index_path, ".tmp")
-    # chrom_sizes.txt is in the database (validate_and_setup refuses a link out of it). The original
-    # is kept, same bytes and mode (a hard link, or a copy where links are not supported), to put back
-    # if the conversion fails after replacing it.
+    # chrom_sizes.txt is replaced through a temporary file next to it, and the original is kept, to
+    # put back if the conversion fails after replacing it: a hard link, or where that is refused (a
+    # file of another user under fs.protected_hardlinks), a copy with its mode and bytes. Both get
+    # names no other file has.
     chrom_sizes_target <- normalizePath(chrom_sizes_path, mustWork = TRUE)
-    chrom_sizes_tmp <- paste0(chrom_sizes_target, ".tmp")
-    chrom_sizes_orig <- paste0(chrom_sizes_target, ".orig")
-    unlink(chrom_sizes_orig)
-    if (!suppressWarnings(file.link(chrom_sizes_target, chrom_sizes_orig)) &&
-        !file.copy(chrom_sizes_target, chrom_sizes_orig, copy.mode = TRUE)) {
-        stop(sprintf("Failed to keep a copy of %s", chrom_sizes_target), call. = FALSE)
+    chrom_sizes_tmp <- tempfile("chrom_sizes.txt.", tmpdir = dirname(chrom_sizes_target))
+    chrom_sizes_orig <- tempfile("chrom_sizes.txt.", tmpdir = dirname(chrom_sizes_target))
+    if (!suppressWarnings(file.link(chrom_sizes_target, chrom_sizes_orig))) {
+        if (!file.copy(chrom_sizes_target, chrom_sizes_orig) ||
+            !Sys.chmod(chrom_sizes_orig, file.info(chrom_sizes_target)$mode, use_umask = FALSE) ||
+            !identical(
+                readBin(chrom_sizes_orig, "raw", file.size(chrom_sizes_orig)),
+                readBin(chrom_sizes_target, "raw", file.size(chrom_sizes_target))
+            )) {
+            unlink(chrom_sizes_orig)
+            stop(sprintf("Failed to keep a copy of %s", chrom_sizes_target), call. = FALSE)
+        }
     }
     chrom_sizes_replaced <- FALSE
-    # R reports a failed write (a full disk, say) as a warning; here it stops the conversion
+    # R reports a failed write or close (a full disk, say) as a warning; here it stops the conversion
     as_error <- function(expr) {
         withCallingHandlers(expr, warning = function(w) stop(conditionMessage(w), call. = FALSE))
     }
@@ -405,40 +452,38 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
 
             # Write multi-FASTA file
             if (verbose) message("Creating temporary multi-FASTA file...")
-            as_error({
-                fasta_con <- file(temp_fasta, "wb") # Use binary mode for faster writes
+            fasta_con <- file(temp_fasta, "wb") # Use binary mode for faster writes
 
-                for (i in seq_len(nrow(chrom_sizes))) {
-                    chrom <- chrom_sizes$chrom[i]
-                    seq_file <- seq_files[i]
+            for (i in seq_len(nrow(chrom_sizes))) {
+                chrom <- chrom_sizes$chrom[i]
+                seq_file <- seq_files[i]
 
-                    # Write header
-                    writeBin(charToRaw(sprintf(">%s\n", chrom)), fasta_con)
+                # Write header
+                as_error(writeBin(charToRaw(sprintf(">%s\n", chrom)), fasta_con))
 
-                    # Copy sequence file directly - no line breaking needed
-                    # The C++ parser handles long lines just fine
-                    seq_con <- file(seq_file, "rb")
-                    tryCatch(
-                        repeat {
-                            chunk <- readBin(seq_con, "raw", n = chunk_size)
-                            if (length(chunk) == 0) break
-                            writeBin(chunk, fasta_con)
-                        },
-                        finally = close(seq_con)
-                    )
+                # Copy sequence file directly - no line breaking needed
+                # The C++ parser handles long lines just fine
+                seq_con <- file(seq_file, "rb")
+                tryCatch(
+                    repeat {
+                        chunk <- readBin(seq_con, "raw", n = chunk_size)
+                        if (length(chunk) == 0) break
+                        as_error(writeBin(chunk, fasta_con))
+                    },
+                    finally = close(seq_con)
+                )
 
-                    # Write newline after sequence
-                    writeBin(charToRaw("\n"), fasta_con)
+                # Write newline after sequence
+                as_error(writeBin(charToRaw("\n"), fasta_con))
 
-                    if ((i %% 10) == 0 || i == nrow(chrom_sizes)) {
-                        if (verbose) message(sprintf("  Processed %d/%d chromosomes", i, nrow(chrom_sizes)))
-                    }
+                if ((i %% 10) == 0 || i == nrow(chrom_sizes)) {
+                    if (verbose) message(sprintf("  Processed %d/%d chromosomes", i, nrow(chrom_sizes)))
                 }
+            }
 
-                con <- fasta_con
-                fasta_con <- NULL
-                close(con)
-            })
+            con <- fasta_con
+            fasta_con <- NULL
+            as_error(close(con))
 
             # Call C++ import function
             # Use sort=FALSE to keep the chrom id order set up by validate_and_setup
@@ -485,7 +530,7 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
                 stringsAsFactors = FALSE
             )
 
-            as_error(.gwith_umask(write.table(updated_chrom_sizes, chrom_sizes_tmp,
+            .gwith_umask(as_error(write.table(updated_chrom_sizes, chrom_sizes_tmp,
                 quote = FALSE, sep = "\t", col.names = FALSE, row.names = FALSE
             )))
             suppressWarnings(Sys.chmod(chrom_sizes_tmp, file.info(chrom_sizes_target)$mode, use_umask = FALSE))
@@ -501,17 +546,12 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
             if (validate) {
                 if (verbose) message("Validating conversion...")
 
-                # Save current state before validation
-                old_groot <- NULL
-                if (exists("GROOT", envir = .misha, inherits = FALSE)) {
-                    old_groot <- get("GROOT", envir = .misha)
-                }
-
                 # Sample validation: check first 100 bases of each chromosome
                 validation_failed <- FALSE
 
-                tryCatch({
-                    # Init the converted database once for all validations
+                # The converted database is loaded for the validation (gdb.convert_to_indexed()
+                # loads the database loaded before again)
+                {
                     suppressMessages(gdb.init(groot))
 
                     for (i in seq_len(min(10, nrow(chrom_sizes)))) { # Check first 10 chroms
@@ -539,15 +579,7 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
                             message(sprintf("  [OK] %s validated successfully", chrom_name))
                         }
                     }
-                }, finally = {
-                    # Restore old state once after all validations. A database that links to this
-                    # seq/ with a chrom_sizes.txt of its own may not load now; the conversion stands.
-                    if (!is.null(old_groot) && old_groot != "") {
-                        tryCatch(suppressMessages(gdb.init(old_groot)), error = function(e) {
-                            warning(sprintf("%s is loaded: loading %s again failed: %s", groot, old_groot, conditionMessage(e)), call. = FALSE)
-                        })
-                    }
-                })
+                }
 
                 if (validation_failed) {
                     stop("Validation failed! Conversion may be corrupted. Old files have NOT been removed.", call. = FALSE)
@@ -590,13 +622,9 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
 .gdb.convert_to_indexed.tracks <- function(groot, verbose = FALSE, threads = 1L) {
     if (verbose) message("\n=== Converting Tracks ===")
 
-    # Temporarily init the database to get track list
-    old_groot <- NULL
-    if (exists("GROOT", envir = .misha, inherits = FALSE)) {
-        old_groot <- get("GROOT", envir = .misha)
-    }
-
-    tryCatch({
+    # Init the database to get track list (gdb.convert_to_indexed() loads the database loaded
+    # before again)
+    {
         suppressMessages(gdb.init(groot))
 
         all_tracks <- gtrack.ls()
@@ -732,27 +760,16 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
                 ))
             }
         }
-    }, finally = {
-        # Restore old state
-        if (!is.null(old_groot) && old_groot != "") {
-            tryCatch(suppressMessages(gdb.init(old_groot)), error = function(e) {
-                warning(sprintf("%s is loaded: loading %s again failed: %s", groot, old_groot, conditionMessage(e)), call. = FALSE)
-            })
-        }
-    })
+    }
 }
 
 # Helper function to convert interval sets to indexed format
 .gdb.convert_to_indexed.intervals <- function(groot, remove_old_files = FALSE, verbose = FALSE, threads = 1L) {
     if (verbose) message("\n=== Converting Interval Sets ===")
 
-    # Temporarily init the database to get interval list
-    old_groot <- NULL
-    if (exists("GROOT", envir = .misha, inherits = FALSE)) {
-        old_groot <- get("GROOT", envir = .misha)
-    }
-
-    tryCatch({
+    # Init the database to get interval list (gdb.convert_to_indexed() loads the database loaded
+    # before again)
+    {
         suppressMessages(gdb.init(groot))
 
         all_intervals <- gintervals.ls()
@@ -897,14 +914,7 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
                 ), call. = FALSE)
             }
         }
-    }, finally = {
-        # Restore old state
-        if (!is.null(old_groot) && old_groot != "") {
-            tryCatch(suppressMessages(gdb.init(old_groot)), error = function(e) {
-                warning(sprintf("%s is loaded: loading %s again failed: %s", groot, old_groot, conditionMessage(e)), call. = FALSE)
-            })
-        }
-    })
+    }
 }
 
 

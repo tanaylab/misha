@@ -266,10 +266,12 @@
 
 # An indexed seq/ (genome.idx and genome.seq) is read by chrom id: the index's contig i holds the
 # sequence of chrom id i. Stop unless its contig lengths are the database's chromosome sizes in chrom
-# id order (names, sizes: the database's, in chrom id order), as otherwise chromosomes read other
+# id order (names, sizes: the database's, in chrom id order), and unless every name the two share
+# (up to the "chr" prefix) is at the same chrom id in both, as otherwise chromosomes read other
 # chromosomes' sequence: a seq/ linked to a database converted after this one was made from it, or
-# the reverse. Contigs named differently with the same sizes (as after an interrupted chromosome
-# rename) still read right, and are a warning.
+# the reverse. Contigs named differently at the same chrom ids with the same sizes (another naming
+# of the same assembly, as tgdb/evo/Phylo241/NZW_T2T) are a warning: the index cannot show whether
+# they are the same contigs.
 .gdb.check_genome_idx <- function(groot, names, sizes) {
     seq_dir <- file.path(groot, "seq")
     if (!file.exists(file.path(seq_dir, "genome.idx")) || !file.exists(file.path(seq_dir, "genome.seq"))) {
@@ -277,19 +279,40 @@
     }
     idx <- .gcall("gseq_validate_index", seq_dir, .misha_env())
     sizes <- as.numeric(sizes)
+    mismatch <- function(what) {
+        # a seq/ that is another database's: that database's chrom_sizes.txt is the one to match
+        owner <- dirname(normalizePath(seq_dir))
+        hint <- if (owner != normalizePath(groot) && file.exists(file.path(owner, "chrom_sizes.txt"))) {
+            sprintf(" Its seq/ is in %s: if that database was converted after this one was made from it, copy %s into %s.", owner, file.path(owner, "chrom_sizes.txt"), groot)
+        } else {
+            ""
+        }
+        stop(sprintf(
+            "%s/genome.idx does not match chrom_sizes.txt in %s: %s, so chromosomes would read other chromosomes' sequence.%s",
+            seq_dir, groot, what, hint
+        ), call. = FALSE)
+    }
     if (!identical(idx$length, sizes)) {
         k <- seq_len(max(length(idx$length), length(sizes)))
         i <- which(is.na(idx$length[k]) | is.na(sizes[k]) | idx$length[k] != sizes[k])[1]
         describe <- function(name, size) if (is.na(size)) "missing" else sprintf("%s (%.0f bp)", name, size)
-        stop(sprintf(
-            "%s/genome.idx does not match chrom_sizes.txt in %s: chrom id %d is %s in the index and %s in chrom_sizes.txt, so chromosomes would read other chromosomes' sequence.",
-            seq_dir, groot, i - 1L, describe(idx$name[i], idx$length[i]), describe(names[i], sizes[i])
-        ), call. = FALSE)
+        mismatch(sprintf("chrom id %d is %s in the index and %s in chrom_sizes.txt", i - 1L, describe(idx$name[i], idx$length[i]), describe(names[i], sizes[i])))
     }
-    differ <- which(sub("^chr", "", idx$name) != sub("^chr", "", names))
+    # the prefix is dropped only from the names that differ (millions of contigs in some databases)
+    differ <- which(idx$name != names)
+    idx_names <- sub("^chr", "", idx$name[differ])
+    db_names <- sub("^chr", "", names[differ])
+    keep <- idx_names != db_names
+    differ <- differ[keep]
     if (length(differ)) {
+        # a name of chrom_sizes.txt at another chrom id in the index
+        moved <- match(db_names[keep], idx_names[keep])
+        i <- which(!is.na(moved))[1]
+        if (!is.na(i)) {
+            mismatch(sprintf("%s is chrom id %d in chrom_sizes.txt and %d in the index", names[differ[i]], differ[i] - 1L, differ[moved[i]] - 1L))
+        }
         warning(sprintf(
-            "%s/genome.idx names %d of its %d contigs differently from chrom_sizes.txt in %s (chrom id %d is %s in the index and %s in chrom_sizes.txt); their sizes and order agree, so they read right.",
+            "%s/genome.idx names %d of its %d contigs differently from chrom_sizes.txt in %s (chrom id %d is %s in the index and %s in chrom_sizes.txt). Sequence is read by chrom id and the sizes agree, so each chromosome reads the index contig at its chrom id; unless that is the same contig under another name, its sequence is wrong.",
             seq_dir, length(differ), length(names), groot, differ[1] - 1L, idx$name[differ[1]], names[differ[1]]
         ), call. = FALSE)
     }

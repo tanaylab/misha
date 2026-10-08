@@ -533,7 +533,7 @@ test_that("gdb.convert_to_indexed refuses a database whose seq/ is another datab
         list(seq = sort(list.files(file.path(parent, "seq"))), chrom_sizes = readLines(file.path(parent, "chrom_sizes.txt")))
     }
     before <- parent_state()
-    refused <- "convert the database that owns it"
+    refused <- "is in the database .*: convert that database instead"
 
     # a database made by gdb.create_linked(), its parent not loaded and loaded
     linked <- file.path(td, "linked")
@@ -548,6 +548,17 @@ test_that("gdb.convert_to_indexed refuses a database whose seq/ is another datab
     suppressMessages(gdataset.save(ds, "d", tracks = "sp"))
     expect_error(suppressMessages(gdb.convert_to_indexed(groot = ds, force = TRUE, validate = FALSE)), refused)
     expect_equal(parent_state(), before)
+
+    # a seq/ linked to storage of its own elsewhere (no chrom_sizes.txt there) is converted there
+    own <- create_db_with_unsorted_chrom_sizes(file.path(td, "own"))
+    storage <- file.path(td, "storage")
+    dir.create(storage)
+    expect_true(file.rename(file.path(own, "seq"), file.path(storage, "seq")))
+    expect_true(file.symlink(file.path(storage, "seq"), file.path(own, "seq")))
+    suppressMessages(gdb.convert_to_indexed(groot = own, force = TRUE, validate = FALSE))
+    expect_true(all(file.exists(file.path(storage, "seq", c("genome.idx", "genome.seq")))))
+    gsetroot(own)
+    expect_equal(first_bases(), unsorted_db_bases)
 })
 
 test_that("gdb.convert_to_indexed stops for a chromosome whose sequence file is seq/genome.seq", {
@@ -575,11 +586,39 @@ test_that("gdb.convert_to_indexed stops on a failed write, leaving the database 
     db <- create_db_with_unsorted_chrom_sizes(file.path(td, "db"))
     cs <- file.path(db, "chrom_sizes.txt")
     before <- list(chrom_sizes = readBin(cs, "raw", 10000), seq = sort(list.files(file.path(db, "seq"))))
-    # writing chrom_sizes.txt fails as on a full disk
-    expect_true(file.symlink("/dev/full", paste0(cs, ".tmp")))
-    expect_error(suppressMessages(gdb.convert_to_indexed(groot = db, force = TRUE, validate = FALSE)), "Conversion failed")
+    # writing genome.idx.tmp fails as on a full disk; only closing it shows it, and validate = FALSE
+    # reads nothing back
+    gcall <- misha:::.gcall
+    local_mocked_bindings(.gcall = function(...) {
+        if (identical(..1, "gseq_multifasta_import")) {
+            file.symlink("/dev/full", ..4)
+        }
+        gcall(...)
+    }, .package = "misha")
+    expect_error(
+        suppressMessages(gdb.convert_to_indexed(groot = db, force = TRUE, validate = FALSE)),
+        "genome.idx.tmp: No space left on device"
+    )
     expect_identical(list(chrom_sizes = readBin(cs, "raw", 10000), seq = sort(list.files(file.path(db, "seq")))), before)
-    expect_false(file.exists(paste0(cs, ".tmp")))
+})
+
+test_that("a warning that is not from a write does not stop gdb.convert_to_indexed", {
+    local_db_state()
+    td <- withr::local_tempdir()
+    db <- create_db_with_unsorted_chrom_sizes(file.path(td, "db"))
+    gwith_umask <- misha:::.gwith_umask
+    # as a finalizer's, raised while chrom_sizes.txt is written
+    local_mocked_bindings(.gwith_umask = function(expr) {
+        warning("closing unused connection 3")
+        gwith_umask(expr)
+    }, .package = "misha")
+    expect_warning(
+        suppressMessages(gdb.convert_to_indexed(groot = db, force = TRUE, validate = FALSE)),
+        "closing unused connection"
+    )
+    expect_true(all(file.exists(file.path(db, "seq", c("genome.idx", "genome.seq")))))
+    gsetroot(db)
+    expect_equal(first_bases(), unsorted_db_bases)
 })
 
 test_that("gdb.convert_to_indexed stops when genome.seq is not the size of chrom_sizes.txt", {
@@ -603,20 +642,49 @@ test_that("gdb.convert_to_indexed stops when genome.seq is not the size of chrom
     expect_false(any(c("genome.seq", "genome.idx", "genome.idx.tmp") %in% list.files(file.path(db, "seq"))))
 })
 
-test_that("a conversion that fails after replacing chrom_sizes.txt puts back the same bytes and mode", {
+for (.backup in c("hard link", "copy")) {
+    test_that(sprintf("a conversion that fails after replacing chrom_sizes.txt puts back the same bytes and mode (%s)", .backup), {
+        local_db_state()
+        td <- withr::local_tempdir()
+        db <- create_db_with_unsorted_chrom_sizes(file.path(td, "db"))
+        cs <- file.path(db, "chrom_sizes.txt")
+        # no newline at the end, and group-writable
+        writeBin(charToRaw("2\t2000\n10\t1500\n1\t1000\nX\t1200\n1_KI270706v1_random\t500"), cs)
+        Sys.chmod(cs, "664", use_umask = FALSE)
+        before <- list(bytes = readBin(cs, "raw", 10000), mode = file.info(cs)$mode)
+        if (.backup == "copy") {
+            # hard links refused, as for another user's file under fs.protected_hardlinks
+            trace("file.link", quote(to <- file.path(tempdir(), "no", "such", "dir", "x")), print = FALSE, where = baseenv())
+            withr::defer(untrace("file.link", where = baseenv()))
+        }
+        # genome.idx cannot be moved into place: a directory has its name
+        dir.create(file.path(db, "seq", "genome.idx"))
+        old_umask <- Sys.umask("077")
+        withr::defer(Sys.umask(old_umask))
+        expect_error(
+            suppressWarnings(suppressMessages(gdb.convert_to_indexed(groot = db, force = TRUE, validate = FALSE))),
+            "genome.idx into place"
+        )
+        expect_identical(list(bytes = readBin(cs, "raw", 10000), mode = file.info(cs)$mode), before)
+        expect_equal(list.files(db), c("chrom_sizes.txt", "seq", "tracks"))
+    })
+}
+
+test_that("gdb.convert_to_indexed leaves the user's files next to chrom_sizes.txt alone", {
     local_db_state()
     td <- withr::local_tempdir()
-    db <- create_db_with_unsorted_chrom_sizes(file.path(td, "db"))
-    cs <- file.path(db, "chrom_sizes.txt")
-    # no newline at the end, and group-writable
-    writeBin(charToRaw("2\t2000\n10\t1500\n1\t1000\nX\t1200\n1_KI270706v1_random\t500"), cs)
-    Sys.chmod(cs, "664", use_umask = FALSE)
-    before <- list(bytes = readBin(cs, "raw", 10000), mode = file.info(cs)$mode)
-    # genome.idx cannot be moved into place: a directory has its name
-    dir.create(file.path(db, "seq", "genome.idx"))
-    expect_error(suppressWarnings(suppressMessages(gdb.convert_to_indexed(groot = db, force = TRUE, validate = FALSE))), "genome.idx into place")
-    expect_identical(list(bytes = readBin(cs, "raw", 10000), mode = file.info(cs)$mode), before)
-    expect_false(file.exists(paste0(cs, ".orig")))
+    mine <- c(chrom_sizes.txt.orig = "my backup", chrom_sizes.txt.tmp = "my notes")
+    for (fail in c(TRUE, FALSE)) {
+        db <- create_db_with_unsorted_chrom_sizes(file.path(td, paste0("db", fail)))
+        for (f in names(mine)) writeLines(mine[[f]], file.path(db, f))
+        if (fail) {
+            dir.create(file.path(db, "seq", "genome.idx"))
+        }
+        r <- tryCatch(suppressWarnings(suppressMessages(gdb.convert_to_indexed(groot = db, force = TRUE, validate = FALSE))), error = function(e) "failed")
+        expect_equal(identical(r, "failed"), fail)
+        for (f in names(mine)) expect_equal(readLines(file.path(db, f)), mine[[f]])
+        expect_equal(list.files(db), sort(c("chrom_sizes.txt", names(mine), "seq", "tracks")))
+    }
 })
 
 test_that("gsetroot stops when seq/genome.idx does not match chrom_sizes.txt, keeping the loaded database", {
@@ -630,16 +698,60 @@ test_that("gsetroot stops when seq/genome.idx does not match chrom_sizes.txt, ke
     expect_true(file.symlink(file.path(parent, "seq"), file.path(child, "seq")))
 
     # parent converted afterwards, with child loaded: its index follows its own, rewritten
-    # chrom_sizes.txt, so child does not load again after the validation
+    # chrom_sizes.txt, so child does not load again after the validation. Its session is kept, as
+    # its chrom ids are still those of the index.
     gsetroot(child)
     expect_warning(
         suppressMessages(gdb.convert_to_indexed(groot = parent, force = TRUE)),
-        "loading .*child again failed: .*does not match chrom_sizes.txt"
+        "child, loaded before, does not load now: .*does not match chrom_sizes.txt.*copy .*parent/chrom_sizes.txt into .*child.*Its session is kept"
     )
-    expect_equal(get("GROOT", envir = misha:::.misha), normalizePath(parent))
-    expect_error(gsetroot(child), "does not match chrom_sizes.txt")
-    expect_equal(get("GROOT", envir = misha:::.misha), normalizePath(parent))
+    expect_equal(get("GROOT", envir = misha:::.misha), normalizePath(child))
     expect_equal(first_bases(), unsorted_db_bases)
+    gtrack.create_sparse("written", "x", gintervals("chr1", 0, 10), 1)
+    expect_true(dir.exists(file.path(child, "tracks", "written.track")))
+    expect_false(dir.exists(file.path(parent, "tracks", "written.track")))
+
+    expect_error(gsetroot(child), "does not match chrom_sizes.txt.*copy .*parent/chrom_sizes.txt into")
+    expect_equal(get("GROOT", envir = misha:::.misha), normalizePath(child))
+
+    # copying the converted parent's chrom_sizes.txt fixes it
+    expect_true(file.copy(file.path(parent, "chrom_sizes.txt"), child, overwrite = TRUE))
+    gsetroot(child)
+    expect_equal(first_bases(), unsorted_db_bases)
+})
+
+test_that("a database that does not load after a conversion and no longer reads its own sequence is unloaded", {
+    local_db_state()
+    td <- withr::local_tempdir()
+    parent <- create_db_with_unsorted_chrom_sizes(file.path(td, "parent"))
+    # a database on parent's seq/ with prefixed names in chrom_sizes.txt order: its chrom ids are
+    # not those of the sorted index the conversion writes
+    child <- file.path(td, "child")
+    dir.create(file.path(child, "tracks"), recursive = TRUE)
+    writeLines(sub("^", "chr", readLines(file.path(parent, "chrom_sizes.txt"))), file.path(child, "chrom_sizes.txt"))
+    expect_true(file.symlink(file.path(parent, "seq"), file.path(child, "seq")))
+    gsetroot(child)
+    expect_equal(as.character(gintervals.all()$chrom)[1], "chr2")
+    expect_warning(suppressMessages(gdb.convert_to_indexed(groot = parent, force = TRUE)), "does not load now: .*No database is loaded")
+    expect_null(get0("GROOT", envir = misha:::.misha))
+})
+
+test_that("gsetroot stops when seq/genome.idx has the chromosomes of chrom_sizes.txt in another order", {
+    local_db_state()
+    td <- withr::local_tempdir()
+    # equal sizes: only the names tell the order
+    parent <- file.path(td, "parent")
+    dir.create(file.path(parent, "tracks"), recursive = TRUE)
+    dir.create(file.path(parent, "seq"))
+    for (i in 1:3) writeBin(charToRaw(strrep(c("A", "C", "G")[i], 1000)), file.path(parent, "seq", paste0("chr", c("2", "10", "1")[i], ".seq")))
+    writeLines(paste(c("2", "10", "1"), 1000, sep = "\t"), file.path(parent, "chrom_sizes.txt"))
+    gsetroot(parent)
+    gtrack.create_sparse("s", "x", gintervals("chr1", 0, 10), 1)
+    ds <- file.path(td, "ds")
+    suppressMessages(gdataset.save(ds, "d", tracks = "s"))
+    gdb.unload()
+    suppressMessages(gdb.convert_to_indexed(groot = parent))
+    expect_error(gsetroot(ds), "2 is chrom id 0 in chrom_sizes.txt and 2 in the index")
 })
 
 test_that("gsetroot warns when only the names in seq/genome.idx differ from chrom_sizes.txt", {
