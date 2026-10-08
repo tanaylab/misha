@@ -44,9 +44,10 @@ Convention used throughout: `binsize > 0` produces a dense fixed-bin track (one 
 | R-computed values via TSV (chrom/start/end/value) | `gtrack.import(name, desc, file, binsize)` | run `options(scipen = 20)` BEFORE `write.table` — scientific-notation coords parse as malformed |
 | Directory or URL-with-wildcards of WIG/bigWig files | `gtrack.import_set(description, path, binsize, track.prefix = "", defval = NaN)` | bulk import; `path` may be a glob (`/data/*.bw`) or an `ftp://` URL; continues on per-file errors and returns successes/failures |
 | ChIP/ATAC pileup from read intervals (data.frame in R) | `gtrack.create_dense(name, desc, intervals = reads, values = rep(1, nrow(reads)), binsize = 20, defval = 0, func = "coverage")` | one-call replacement for the old `gtrack.import_mappedseq` route when reads are already in R |
-| Mapped reads (SAM, tab-delimited, or gzipped `.sam.gz` / `.tsv.gz`) | `gtrack.import_mappedseq(name, desc, file, pileup, binsize, cols.order = c(9, 11, 13, 14), remove.dups = TRUE)` | for SAM pass `cols.order = NULL`; gzip is auto-detected by magic bytes (misha ≥ 5.8.0); the default `remove.dups = TRUE` is correct for ChIP/ATAC/CUT&RUN |
-| Single BAM file, no pre-filter (misha ≥ 5.8.0) | `gtrack.import_mappedseq(name, desc, "<file>.bam", pileup, binsize, remove.dups = TRUE)` | bgzip magic auto-detected; misha spawns `samtools view` internally so `samtools` must be on `PATH`. `cols.order` is forced to SAM mode; passing a non-NULL `cols.order` is an error |
-| Multi-BAM concat or MAPQ-filtered BAM | `misha.ext::gtrack.import_mappedseq_bam(bam_files, track, min_mapq = NULL, ...)` | misha.ext wrapper: stages `samtools view` (with `samtools cat` for multi-BAM) through a named fifo into `gtrack.import_mappedseq`. Use this when you need MAPQ filtering or multiple BAMs concatenated; for a single unfiltered BAM the misha 5.8.0+ native path above is simpler |
+| Single-end reads (SAM, BAM, tab-delimited, `.sam.gz` / `.tsv.gz`) | `gtrack.import_mappedseq(name, desc, file, pileup = 200, binsize = 20, remove.dups = TRUE, min.mapq = 30)` | each read is extended `pileup` bp from its 5' end, so set `pileup` to the fragment length (cross-correlation estimate; 200 when unknown, as MACS and nf-core use). SAM needs `cols.order = NULL`; BAM is detected from its content and needs `samtools` on `PATH`. `min.mapq` (5.13.0+) drops multimappers. Tab-delimited input is 0-based unless `one.based = TRUE` (Illumina export files are 1-based) |
+| Paired-end BAM / SAM (misha ≥ 5.13.0) | `gtrack.import_mappedseq(name, desc, "<file>.bam", binsize = 20, paired = TRUE, min.mapq = 30)` | each proper pair covers its own fragment, read from the first mate as MACS3 `-f BAMPE` does; no `pileup`. Fragments are deduplicated on (start, end); `max.fraglen` (default 2000) drops longer ones. Never import paired-end data as single-end with a fixed `pileup` |
+| Fragment file (BED-like chrom/start/end, 10x `fragments.tsv.gz`, plain or bgzipped; misha ≥ 5.13.0) | `gtrack.import_mappedseq(name, desc, file, binsize = 20, paired = TRUE)` | streamed, so the file never has to fit in R; 0-based half-open; `#` lines skipped; never deduplicated (10x files already are, per cell) |
+| Several BAMs at once | `misha.ext::gtrack.import_mappedseq_bam(bam_files, track, ...)` | streams `samtools cat` + `samtools view` through a FIFO into `gtrack.import_mappedseq`; pass `paired = TRUE` etc. through `...`. Needs misha ≥ 5.13.0 (earlier versions hang on the FIFO). For one BAM, call `gtrack.import_mappedseq` directly with `min.mapq` |
 | 2D Hi-C / capture-C contacts (per-contact adj + fends) | `gtrack.2d.import_contacts(name, desc, contacts, fends = "<redb>/<RE>.fends", allow.duplicates = TRUE)` | `contacts =` accepts a vector (shaman per-rect scores, scHi-C per-core stagings - see "scHi-C pooling" below). `allow.duplicates = TRUE` (the default) sums repeated fend pairs; use `allow.duplicates = FALSE` only for pre-scored shaman per-rectangle outputs where any duplicate is an upstream bug |
 | Restriction-enzyme fragment + fend prerequisites (any new 4C/Hi-C bootstrap) | `gtrack.import('redb.<RE>_flen', flen_file, 0)` + `gtrack.import('redb.<RE>_gc', gc_file, 0)` + `gtrack.create('redb.<RE>_map', mapab_track, iterator = 'redb.<RE>_flen')` | per-fragment iterator promotes a per-base mapability track to per-fragment mean. See "RE fragment-track bootstrap" below |
 | Pooled multi-cell scHi-C track | `gtrack.2d.import_contacts(pool_name, desc, contacts = c(stage_1, ..., stage_N), fends = "<redb>/<RE>.fends")` | parallel-stage per-cell `gextract`s to N TSVs, then a single pool call. See "scHi-C pooling" below |
@@ -61,9 +62,13 @@ Convention used throughout: `binsize > 0` produces a dense fixed-bin track (one 
 | Track from another assembly (liftover via chain) | `gtrack.liftover(track, desc, src.track.dir, chain, multi_target_agg = "mean")` | requires a chain (`gintervals.load_chain`); aggregation policy controls how multiple source bins folded into one target bin combine — pick deliberately. Much less used in the lab than the intervals-side liftover above |
 | Intervals (BED / GFF / GTF / VCF) as an interval set, not a track | `gintervals.import_bed` / `gintervals.import_genes` / `gintervals.import_gff` / `gintervals.import_vcf` | for a sparse-track route instead, build the data frame in R and pass to `gtrack.create_sparse` |
 
-## Pileup tracks: prefer the in-R path
+## Pileup tracks: which route
 
-For ChIP/ATAC/CUT&Tag pileup tracks, prefer `gtrack.create_dense(..., func = "coverage")` over the legacy `gtrack.import_mappedseq` round-trip. With `values = rep(1, nrow(reads))`, bin value = `sum(overlap_i) / binsize` = average per-base read count — exactly the ChIP-seq pileup definition, in one C++ pass over the data frame. Use `gtrack.import_mappedseq` only when reads are too large to load into R or when you specifically want the `pileup =` read-extension feature.
+- **Paired-end BAM / SAM, or a fragment file** (misha ≥ 5.13.0): `gtrack.import_mappedseq(..., binsize = 20, paired = TRUE)`. Each fragment covers its real span, and the file is streamed, so it never has to fit in R. This is what nf-core, MACS3 `-f BAMPE` and deepTools do for paired-end data.
+- **Single-end reads:** `gtrack.import_mappedseq(..., pileup = <fragment length>, binsize = 20)`. A `pileup` shorter than the fragments leaves the + and - strand reads in two humps with a dip at the binding site; use the cross-correlation estimate, or 200 when unknown.
+- **Reads or fragments already in R:** `gtrack.create_dense(..., func = "coverage")` with `values = rep(1, nrow(reads))`. Bin value = `sum(overlap_i) / binsize` = average per-base coverage, the ChIP-seq pileup definition, in one C++ pass over the data frame.
+
+Bin values from all three routes are mean coverage per base, so tracks built either way are on the same scale.
 
 `gtrack.create_dense` `func` choices (5.6.31+): `"weighted.mean"` (default), `"weighted.sum"`, `"coverage"`, `"max"`, `"min"`, `"median"`, `"count"`. Note that 5.6.32 fixed a bug where overlapping intervals of mixed lengths in the same bin gave plausible-looking but wrong means under the old default — re-import affected tracks if they predate 5.6.32.
 
@@ -392,7 +397,7 @@ gtrack.attr.set(track, "protein",     "Oct4")                 # for chip-seq / c
 gtrack.attr.set(track, "PMID",        "28212747")
 gtrack.attr.set(track, "data_link",   "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSM1910646")
 gtrack.attr.set(track, "liftover",    "mm9")                  # source assembly if lifted
-gtrack.attr.set(track, "pileup",      200)                    # for BAM/mappedseq imports
+gtrack.attr.set(track, "pileup",      200)                    # single-end mappedseq imports (created.by records paired / min.mapq)
 ```
 
 `created.by` and `created.date` are populated automatically. List everything attached to a track with `gtrack.attr.export(track)`; query one with `gtrack.attr.get`.
@@ -410,6 +415,10 @@ Use `gtrack.var.set(track, var, value)` (not `attr.set`) when you need to attach
 | `func argument is not a string` (BED + `binsize`, misha < 5.7.1) | Internal BED-to-dense path missed a required arg | Upgrade to misha ≥ 5.7.1 |
 | Import succeeds, `gextract` returns all 0 or all NaN | Chrom names didn't match gdb (silent skip); or `defval = 0` with uncovered bases on a continuous-signal source | Precondition; use `defval = NaN` for continuous signal |
 | `gtrack.import_mappedseq` track gives 5–20× expected counts at peaks | Legacy call site explicitly passed `remove.dups = FALSE` (current default is `TRUE`) | Drop the explicit `FALSE`; rely on the safe default |
+| Paired-end ChIP peaks have a dip at the summit, with humps on either side | Paired-end BAM imported as single-end with a `pileup` shorter than the fragments | Re-import with `paired = TRUE` (misha ≥ 5.13.0) |
+| SAM/BAM-derived track sits 1bp right of other tools' output | Imported with misha < 5.13.0, which used the 1-based SAM `POS` as 0-based | Re-import with misha ≥ 5.13.0 |
+| `paired = TRUE` import warns "No fragment was imported" | A SAM text file passed without `cols.order = NULL` (read as a fragment file), or no proper pairs passed the filters | Pass `cols.order = NULL`; check the flags and `min.mapq` |
+| `misha.ext::gtrack.import_mappedseq_bam` never returns | misha 5.8.0 - 5.12.x hang on FIFO input | Upgrade to misha ≥ 5.13.0 |
 | TSV import errors with non-numeric / parse error on coords | R serialized large coordinates in scientific notation | `options(scipen = 20)` BEFORE `write.table` |
 | Re-imports under the same name behave inconsistently | Importer doesn't fully overwrite | `gtrack.rm(name, force = TRUE)` before re-import |
 | `gtrack.create_dense` `func = "coverage"` returns implausibly large values (misha < 5.6.32) | Overlapping intervals of mixed lengths inflated the per-bin coverage | Upgrade to misha ≥ 5.6.32 |
@@ -422,6 +431,8 @@ Use `gtrack.var.set(track, var, value)` (not `attr.set`) when you need to attach
 - Mistaking `gtrack.import_set` (current bulk importer) for the legacy `gtrack.import.wigs` name. The dot-form is not an exported function in current misha — calls fail at the R level. Use `gtrack.import_set(description, path, binsize, track.prefix)`.
 - Round-tripping data already in R through a temp TSV. `gtrack.create_dense` / `gtrack.create_sparse` take the data.frame directly — faster and avoids `scipen` traps.
 - Using `gtrack.import_mappedseq` for reads already loaded in R, instead of `gtrack.create_dense(..., func = "coverage")`. The latter is the modern one-call path.
+- Importing paired-end BAMs as single-end reads with a fixed `pileup`. Use `paired = TRUE`; each mate extended by a fixed length throws away the real fragment span and counts every fragment twice.
+- A single-end `pileup` copied from an old script rather than set to the fragment length (100 is too short for typical 150-300bp ChIP fragments).
 - Using `defval = 0` for continuous signal (phyloP, normalized ratios). Downstream `is.na` filters become useless; everything looks like "data".
 - Skipping post-import sampling because the function returned without error. The most common silent failure is chrom-name mismatch → all-NaN track.
 - Treating `gtrack.copy` as a same-DB-only operation. It supports cross-DB copy via `db = "/other/groot"` (5.6.28+), including format conversion.
