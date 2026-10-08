@@ -533,6 +533,11 @@ test_that("a dataset of an indexed db without its seq/ link is indexed as the db
     gtrack.rm("t1", force = TRUE)
     suppressMessages(gdataset.load(ds))
     expect_true(.gdb.is_indexed_at(ds))
+    # nor does a genome.seq without genome.idx make a sequence of its own
+    dir.create(file.path(ds, "seq"))
+    file.create(file.path(ds, "seq", "genome.seq"))
+    expect_true(.gdb.is_indexed_at(ds))
+    unlink(file.path(ds, "seq"), recursive = TRUE)
 
     # an indexed track is copied in the database's format; other tracks go in as they are
     gtrack.create_sparse("v1", "x", iv, c(5, 6))
@@ -581,6 +586,37 @@ test_that("an unloaded database whose seq/ holds no sequence gives no chrom orde
     suppressMessages(gdataset.load(other))
     expect_equal(gextract("sp_copy", iv)$sp_copy, c(1, 2))
     expect_equal(gextract("spi_copy", iv)$spi_copy, c(3, 4))
+})
+
+test_that("gtrack.copy into a database whose order cannot be told copies per-pair 2D tracks by name, and checks before overwriting", {
+    local_db_state()
+    td <- withr::local_tempdir()
+    db <- create_db_with_unsorted_chrom_sizes(file.path(td, "db"))
+    gsetroot(db)
+    pairs <- data.frame(chrom1 = c("chr1", "chr10"), start1 = 10, end1 = 15, chrom2 = c("chr2", "chrX"), start2 = 30, end2 = 35)
+    gtrack.2d.create("r2", "x", pairs, c(12, 1023))
+    gtrack.2d.create("r2i", "x", pairs, c(5, 6))
+    suppressMessages(gtrack.2d.convert_to_indexed("r2i"))
+    # a tracks-only copy of the database: no seq/, unprefixed names
+    other <- file.path(td, "other")
+    dir.create(file.path(other, "tracks"), recursive = TRUE)
+    expect_true(file.copy(file.path(db, "chrom_sizes.txt"), other))
+
+    gtrack.copy("r2", "r2c", db = other)
+    old <- sort(list.files(file.path(other, "tracks", "r2c.track")))
+    # an indexed 2D track needs the order: it stops before the existing track is touched
+    expect_error(gtrack.copy("r2i", "r2c", db = other, overwrite = TRUE), "cannot be told")
+    expect_equal(sort(list.files(file.path(other, "tracks", "r2c.track"))), old)
+    suppressMessages(gdataset.load(other))
+    expect_equal(gextract("r2c", gintervals.2d.all())$r2c, c(12, 1023))
+
+    # a chr-prefixed first name and a .seq file without the prefix still show the order
+    gdb.unload()
+    third <- file.path(td, "third")
+    dir.create(file.path(third, "seq"), recursive = TRUE)
+    writeLines(c("chrA\t10", paste0(c("B", "C", "D", "E"), "\t10")), file.path(third, "chrom_sizes.txt"))
+    writeBin(charToRaw(strrep("A", 10)), file.path(third, "seq", "A.seq"))
+    expect_equal(.gdb.chrom_names_at(third)[1], "chrA")
 })
 
 test_that("an unloaded database whose linked seq/ was converted since does not give a stale order", {

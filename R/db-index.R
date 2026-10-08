@@ -56,10 +56,11 @@
 #' differs from chrom_sizes.txt, stops it, and so does a chromosome named 'genome' (its genome.seq
 #' would be overwritten). A database whose seq/ or chrom_sizes.txt is in another database, such as a
 #' dataset saved with \code{copy_seq = FALSE} or a \code{gdb.create_linked()} database, is not
-#' converted: convert that database. A seq/ linked to storage of its own elsewhere is converted there.
-#' The database loaded before the conversion is loaded again after it; if it no longer loads (its
-#' seq/ is the converted database's, with a chrom_sizes.txt of its own), a warning says so, and its
-#' session is kept while it still reads its own sequence, or nothing is loaded.
+#' converted: convert that database. A seq/ or chrom_sizes.txt linked to storage of its own elsewhere
+#' is converted there. The session loaded before the conversion is put back as it was after it. If
+#' the conversion changed the sequence it reads (its seq/ is the converted database's, with a
+#' chrom_sizes.txt of its own), a warning says so, and nothing is loaded when its chromosomes would
+#' read other chromosomes' sequence.
 #'
 #' The conversion process:
 #' \enumerate{
@@ -131,35 +132,53 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
     }
 
     # The steps below load the database being converted (to validate it, and to list its tracks and
-    # interval sets); the database loaded before is loaded again at the end. If it no longer loads
-    # (its seq/ is this database's, with a chrom_sizes.txt of its own), the conversion stands, and
-    # its session is put back as it was while it still reads its own sequence, or nothing is loaded.
+    # interval sets). The session loaded before is put back as it was at the end, its datasets and
+    # working directory included, with the directory caches dropped, as tracks may have changed
+    # format under the same paths. If the conversion changed the sequence it reads (its seq/ is the
+    # converted one, with a chrom_sizes.txt of its own), it is unloaded when its chrom ids no longer
+    # match the index, and a warning says so; one that still reads right but that gsetroot() would
+    # not load now gets a warning too.
     old_session <- as.list(.misha, all.names = TRUE)
     old_groot <- old_session$GROOT
-    if (!is.null(old_groot) && nzchar(old_groot) &&
-        ((validate && !setup_info$already_indexed) || convert_tracks || convert_intervals)) {
+    if (!is.null(old_groot) && nzchar(old_groot)) {
         on.exit(
-            tryCatch(suppressMessages(gdb.init(old_groot)), error = function(e) {
+            {
                 rm(list = ls(.misha, all.names = TRUE), envir = .misha)
                 list2env(old_session, envir = .misha)
+                .gdb.clear_all_dir_caches()
                 genome <- get("ALLGENOME", envir = .misha)[[1]]
-                kept <- tryCatch(
-                    {
-                        .gdb.check_genome_idx(old_groot, as.character(genome$chrom), genome$end)
-                        TRUE
-                    },
-                    warning = function(w) TRUE,
-                    error = function(e) FALSE
+                problem <- tryCatch(
+                    .gdb.check_genome_idx(old_groot, as.character(genome$chrom), genome$end),
+                    warning = function(w) NULL,
+                    error = conditionMessage
                 )
-                if (!kept) {
+                if (!is.null(problem)) {
                     gdb.unload()
+                    warning(sprintf(
+                        "%s, loaded before the conversion, no longer reads its own sequence: %s No database is loaded.",
+                        old_groot, problem
+                    ), call. = FALSE)
+                } else {
+                    # as gsetroot() checks it
+                    problem <- tryCatch(
+                        {
+                            chromsizes <- utils::read.csv(file.path(old_groot, "chrom_sizes.txt"),
+                                sep = "\t", header = FALSE, col.names = c("chrom", "size"), colClasses = c("character", "numeric")
+                            )
+                            chrom_order <- .gdb.chrom_order(old_groot, chromsizes)
+                            .gdb.check_genome_idx(old_groot, chrom_order$names[chrom_order$id_order], chromsizes$size[chrom_order$id_order])
+                        },
+                        warning = function(w) NULL,
+                        error = conditionMessage
+                    )
+                    if (!is.null(problem)) {
+                        warning(sprintf(
+                            "%s is loaded as before the conversion, but gsetroot() would not load it now: %s",
+                            old_groot, problem
+                        ), call. = FALSE)
+                    }
                 }
-                warning(sprintf(
-                    "%s was converted, and %s, loaded before, does not load now: %s %s",
-                    setup_info$groot, old_groot, conditionMessage(e),
-                    if (kept) "Its session is kept as it was, as it still reads its own sequence." else "No database is loaded."
-                ), call. = FALSE)
-            }),
+            },
             add = TRUE
         )
     }
@@ -288,12 +307,14 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
 
     # The conversion writes seq/ and rewrites chrom_sizes.txt. In a dataset saved without copy_seq,
     # or a database made by gdb.create_linked(), they are links into another database (a directory
-    # with a chrom_sizes.txt), which the conversion would change for every database that shares it.
-    # A seq/ linked to storage of its own elsewhere is converted there.
+    # with tracks/, seq/ or chrom_sizes.txt besides them), which the conversion would change for
+    # every database that shares it. A seq/ or chrom_sizes.txt linked to storage of its own
+    # elsewhere is converted there.
     groot_real <- normalizePath(groot, mustWork = TRUE)
     for (path in c(seq_dir, chrom_sizes_path)) {
-        owner <- dirname(normalizePath(path, mustWork = TRUE))
-        if (owner != groot_real && file.exists(file.path(owner, "chrom_sizes.txt"))) {
+        real <- normalizePath(path, mustWork = TRUE)
+        owner <- dirname(real)
+        if (owner != groot_real && any(file.exists(setdiff(file.path(owner, c("tracks", "seq", "chrom_sizes.txt")), real)))) {
             stop(sprintf(
                 "%s is in the database %s: convert that database instead.",
                 path, owner
@@ -357,8 +378,8 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
     }
 
     # The indexed format's sequence file is seq/genome.seq, so a chromosome whose own file has that
-    # name would lose its sequence to the conversion
-    genome_chrom <- chrom_sizes$chrom[basename(seq_files) == "genome.seq"]
+    # name (in any case: macOS file systems ignore it) would lose its sequence to the conversion
+    genome_chrom <- chrom_sizes$chrom[tolower(basename(seq_files)) == "genome.seq"]
     if (length(genome_chrom)) {
         stop(sprintf(
             "The sequence file of chromosome %s is seq/genome.seq, the name of the indexed format's sequence file; rename the chromosome before converting.",
@@ -429,6 +450,10 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
         }
     }
     chrom_sizes_replaced <- FALSE
+    # The backup goes once the conversion is done (genome.idx in place) or if chrom_sizes.txt was not
+    # replaced, also after an interrupt. It stays when putting the original back failed (the error
+    # names it) and when stopped between the two renames.
+    on.exit(if (!chrom_sizes_replaced || file.exists(index_path)) unlink(chrom_sizes_orig), add = TRUE)
     # R reports a failed write or close (a full disk, say) as a warning; here it stops the conversion
     as_error <- function(expr) {
         withCallingHandlers(expr, warning = function(w) stop(conditionMessage(w), call. = FALSE))
@@ -506,6 +531,13 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
             if (!identical(imported, expected)) {
                 k <- seq_len(max(length(expected), length(imported)))
                 i <- which(is.na(expected[k]) | is.na(imported[k]) | expected[k] != imported[k])[1]
+                if (identical(chrom_sizes$chrom[i], contig_info$name[i]) &&
+                    file.size(seq_files[i]) != as.numeric(chrom_sizes$size[i])) {
+                    stop(sprintf(
+                        "seq/%s has %.0f bytes and chrom_sizes.txt says %.0f; they must agree before converting",
+                        basename(seq_files[i]), file.size(seq_files[i]), as.numeric(chrom_sizes$size[i])
+                    ), call. = FALSE)
+                }
                 stop(sprintf(
                     "chromosome %d of chrom_sizes.txt, %s, was imported as %s",
                     i, if (is.na(expected[i])) "none" else expected[i], if (is.na(imported[i])) "nothing" else imported[i]
@@ -550,34 +582,32 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
                 validation_failed <- FALSE
 
                 # The converted database is loaded for the validation (gdb.convert_to_indexed()
-                # loads the database loaded before again)
-                {
-                    suppressMessages(gdb.init(groot))
+                # puts the session loaded before back)
+                suppressMessages(gdb.init(groot))
 
-                    for (i in seq_len(min(10, nrow(chrom_sizes)))) { # Check first 10 chroms
-                        chrom_name <- updated_chrom_sizes$chrom[i]
-                        seq_file <- seq_files[i]
+                for (i in seq_len(min(10, nrow(chrom_sizes)))) { # Check first 10 chroms
+                    chrom_name <- updated_chrom_sizes$chrom[i]
+                    seq_file <- seq_files[i]
 
-                        # Read from old file
-                        old_con <- file(seq_file, "rb")
-                        old_seq <- toupper(rawToChar(readBin(old_con, "raw", n = 100)))
-                        close(old_con)
+                    # Read from old file
+                    old_con <- file(seq_file, "rb")
+                    old_seq <- toupper(rawToChar(readBin(old_con, "raw", n = 100)))
+                    close(old_con)
 
-                        # Extract from indexed format
-                        new_seq <- toupper(gseq.extract(gintervals(chrom_name, 0, min(100, updated_chrom_sizes$size[i]))))
+                    # Extract from indexed format
+                    new_seq <- toupper(gseq.extract(gintervals(chrom_name, 0, min(100, updated_chrom_sizes$size[i]))))
 
-                        if (old_seq != new_seq) {
-                            if (verbose) {
-                                message(sprintf("\nValidation mismatch for %s:", chrom_name))
-                                message(sprintf("  Old (first 60): %s", substr(old_seq, 1, 60)))
-                                message(sprintf("  New (first 60): %s", substr(new_seq, 1, 60)))
-                                message(sprintf("  Seq file: %s", seq_file))
-                            }
-                            warning(sprintf("Validation failed for chromosome %s", chrom_name))
-                            validation_failed <- TRUE
-                        } else if (verbose && i <= 3) {
-                            message(sprintf("  [OK] %s validated successfully", chrom_name))
+                    if (old_seq != new_seq) {
+                        if (verbose) {
+                            message(sprintf("\nValidation mismatch for %s:", chrom_name))
+                            message(sprintf("  Old (first 60): %s", substr(old_seq, 1, 60)))
+                            message(sprintf("  New (first 60): %s", substr(new_seq, 1, 60)))
+                            message(sprintf("  Seq file: %s", seq_file))
                         }
+                        warning(sprintf("Validation failed for chromosome %s", chrom_name))
+                        validation_failed <- TRUE
+                    } else if (verbose && i <= 3) {
+                        message(sprintf("  [OK] %s validated successfully", chrom_name))
                     }
                 }
 
@@ -597,7 +627,6 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
                 if (verbose) message(sprintf("Removed %d old .seq files", length(seq_files)))
             }
 
-            unlink(chrom_sizes_orig)
             if (verbose) message(sprintf("Database sequence conversion complete: %s", groot))
         },
         error = function(e) {
@@ -612,7 +641,6 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
                     conditionMessage(e), chrom_sizes_orig
                 ), call. = FALSE)
             }
-            unlink(chrom_sizes_orig)
             stop(sprintf("Conversion failed: %s", conditionMessage(e)), call. = FALSE)
         }
     )
@@ -622,143 +650,141 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
 .gdb.convert_to_indexed.tracks <- function(groot, verbose = FALSE, threads = 1L) {
     if (verbose) message("\n=== Converting Tracks ===")
 
-    # Init the database to get track list (gdb.convert_to_indexed() loads the database loaded
-    # before again)
-    {
-        suppressMessages(gdb.init(groot))
+    # Init the database to get track list (gdb.convert_to_indexed() puts the session loaded before
+    # back)
+    suppressMessages(gdb.init(groot))
 
-        all_tracks <- gtrack.ls()
+    all_tracks <- gtrack.ls()
 
-        if (length(all_tracks) == 0) {
-            if (verbose) message("No tracks found in database")
-            return(invisible(NULL))
+    if (length(all_tracks) == 0) {
+        if (verbose) message("No tracks found in database")
+        return(invisible(NULL))
+    }
+
+    if (verbose) message(sprintf("Found %d tracks in database", length(all_tracks)))
+
+    # Classification (parallel): gtrack.info per track is independent.
+    # Each worker returns the per-track verdict; main process aggregates.
+    classify_one <- function(track) {
+        info <- tryCatch(gtrack.info(track), error = function(e) NULL)
+        if (is.null(info)) {
+            return(list(track = track, verdict = "skip", reason = "failed to get info"))
         }
 
-        if (verbose) message(sprintf("Found %d tracks in database", length(all_tracks)))
-
-        # Classification (parallel): gtrack.info per track is independent.
-        # Each worker returns the per-track verdict; main process aggregates.
-        classify_one <- function(track) {
-            info <- tryCatch(gtrack.info(track), error = function(e) NULL)
-            if (is.null(info)) {
-                return(list(track = track, verdict = "skip", reason = "failed to get info"))
-            }
-
-            is_1d <- info$type %in% c("dense", "sparse", "array")
-            is_2d <- info$type %in% c("rectangles", "points")
-            if (!is_1d && !is_2d) {
-                return(list(
-                    track = track, verdict = "skip",
-                    reason = sprintf("unsupported type (%s)", info$type)
-                ))
-            }
-
-            trackstr <- gsub("\\.", "/", track)
-            trackdir <- sprintf("%s.track", paste(groot, "tracks", trackstr, sep = "/"))
-            if (!dir.exists(trackdir)) {
-                return(list(track = track, verdict = "skip", reason = "single-file format"))
-            }
-            if (file.exists(file.path(trackdir, "track.idx"))) {
-                return(list(track = track, verdict = "skip", reason = "already converted"))
-            }
-
-            list(track = track, verdict = if (is_1d) "1d" else "2d")
+        is_1d <- info$type %in% c("dense", "sparse", "array")
+        is_2d <- info$type %in% c("rectangles", "points")
+        if (!is_1d && !is_2d) {
+            return(list(
+                track = track, verdict = "skip",
+                reason = sprintf("unsupported type (%s)", info$type)
+            ))
         }
 
-        classify_results <- .gdb.convert_to_indexed.parallel_apply(
-            all_tracks, classify_one, threads
+        trackstr <- gsub("\\.", "/", track)
+        trackdir <- sprintf("%s.track", paste(groot, "tracks", trackstr, sep = "/"))
+        if (!dir.exists(trackdir)) {
+            return(list(track = track, verdict = "skip", reason = "single-file format"))
+        }
+        if (file.exists(file.path(trackdir, "track.idx"))) {
+            return(list(track = track, verdict = "skip", reason = "already converted"))
+        }
+
+        list(track = track, verdict = if (is_1d) "1d" else "2d")
+    }
+
+    classify_results <- .gdb.convert_to_indexed.parallel_apply(
+        all_tracks, classify_one, threads
+    )
+
+    convertible_1d_tracks <- character(0)
+    convertible_2d_tracks <- character(0)
+    skipped_tracks <- list()
+
+    for (r in classify_results) {
+        track <- r$item
+        if (r$status == "error") {
+            skipped_tracks[[track]] <- sprintf("classification error: %s", r$error)
+            next
+        }
+        v <- r$value
+        if (v$verdict == "skip") {
+            skipped_tracks[[track]] <- v$reason
+        } else if (v$verdict == "1d") {
+            convertible_1d_tracks <- c(convertible_1d_tracks, track)
+        } else if (v$verdict == "2d") {
+            convertible_2d_tracks <- c(convertible_2d_tracks, track)
+        }
+    }
+
+    total_convertible <- length(convertible_1d_tracks) + length(convertible_2d_tracks)
+
+    if (total_convertible > 0) {
+        if (verbose) {
+            message(sprintf(
+                "  Convertible: %d tracks (%d 1D, %d 2D)",
+                total_convertible, length(convertible_1d_tracks), length(convertible_2d_tracks)
+            ))
+            if (threads > 1L) {
+                message(sprintf("  Running with %d parallel workers", threads))
+            }
+        }
+    } else {
+        if (verbose) message("  No tracks need conversion")
+    }
+
+    if (length(skipped_tracks) > 0) {
+        if (verbose) message(sprintf("  Skipped: %d tracks", length(skipped_tracks)))
+        for (track in names(skipped_tracks)) {
+            if (verbose) message(sprintf("    - %s: %s", track, skipped_tracks[[track]]))
+        }
+    }
+
+    # Convert tracks in parallel; per-track failures are captured as
+    # warnings without aborting the batch. mclapply children fork from
+    # this process so they inherit GROOT/GTRACKS/GWD - no need to gdb.init
+    # inside each worker.
+    convert_1d <- function(track) {
+        if (verbose) message(sprintf("  Converting 1D track: %s", track))
+        gtrack.convert_to_indexed(track)
+        track
+    }
+    convert_2d <- function(track) {
+        if (verbose) message(sprintf("  Converting 2D track: %s", track))
+        gtrack.2d.convert_to_indexed(track, remove.old = TRUE)
+        track
+    }
+
+    results_1d <- .gdb.convert_to_indexed.parallel_apply(
+        convertible_1d_tracks, convert_1d, threads
+    )
+    results_2d <- .gdb.convert_to_indexed.parallel_apply(
+        convertible_2d_tracks, convert_2d, threads
+    )
+
+    all_results <- c(results_1d, results_2d)
+    converted_count <- sum(vapply(all_results, function(r) r$status == "ok", logical(1)))
+    failed <- Filter(function(r) r$status == "error", all_results)
+
+    for (r in failed) {
+        warning(sprintf("Failed to convert track %s: %s", r$item, r$error),
+            call. = FALSE
         )
+    }
 
-        convertible_1d_tracks <- character(0)
-        convertible_2d_tracks <- character(0)
-        skipped_tracks <- list()
-
-        for (r in classify_results) {
-            track <- r$item
-            if (r$status == "error") {
-                skipped_tracks[[track]] <- sprintf("classification error: %s", r$error)
-                next
-            }
-            v <- r$value
-            if (v$verdict == "skip") {
-                skipped_tracks[[track]] <- v$reason
-            } else if (v$verdict == "1d") {
-                convertible_1d_tracks <- c(convertible_1d_tracks, track)
-            } else if (v$verdict == "2d") {
-                convertible_2d_tracks <- c(convertible_2d_tracks, track)
-            }
+    if (total_convertible > 0) {
+        if (verbose) message(sprintf("Successfully converted %d/%d tracks", converted_count, total_convertible))
+        if (length(failed) > 0) {
+            warning(sprintf(
+                "Failed to convert %d tracks: %s",
+                length(failed),
+                paste(vapply(failed, function(r) r$item, character(1)), collapse = ", ")
+            ), call. = FALSE)
         }
-
-        total_convertible <- length(convertible_1d_tracks) + length(convertible_2d_tracks)
-
-        if (total_convertible > 0) {
-            if (verbose) {
-                message(sprintf(
-                    "  Convertible: %d tracks (%d 1D, %d 2D)",
-                    total_convertible, length(convertible_1d_tracks), length(convertible_2d_tracks)
-                ))
-                if (threads > 1L) {
-                    message(sprintf("  Running with %d parallel workers", threads))
-                }
-            }
-        } else {
-            if (verbose) message("  No tracks need conversion")
-        }
-
-        if (length(skipped_tracks) > 0) {
-            if (verbose) message(sprintf("  Skipped: %d tracks", length(skipped_tracks)))
-            for (track in names(skipped_tracks)) {
-                if (verbose) message(sprintf("    - %s: %s", track, skipped_tracks[[track]]))
-            }
-        }
-
-        # Convert tracks in parallel; per-track failures are captured as
-        # warnings without aborting the batch. mclapply children fork from
-        # this process so they inherit GROOT/GTRACKS/GWD - no need to gdb.init
-        # inside each worker.
-        convert_1d <- function(track) {
-            if (verbose) message(sprintf("  Converting 1D track: %s", track))
-            gtrack.convert_to_indexed(track)
-            track
-        }
-        convert_2d <- function(track) {
-            if (verbose) message(sprintf("  Converting 2D track: %s", track))
-            gtrack.2d.convert_to_indexed(track, remove.old = TRUE)
-            track
-        }
-
-        results_1d <- .gdb.convert_to_indexed.parallel_apply(
-            convertible_1d_tracks, convert_1d, threads
-        )
-        results_2d <- .gdb.convert_to_indexed.parallel_apply(
-            convertible_2d_tracks, convert_2d, threads
-        )
-
-        all_results <- c(results_1d, results_2d)
-        converted_count <- sum(vapply(all_results, function(r) r$status == "ok", logical(1)))
-        failed <- Filter(function(r) r$status == "error", all_results)
-
-        for (r in failed) {
-            warning(sprintf("Failed to convert track %s: %s", r$item, r$error),
-                call. = FALSE
-            )
-        }
-
-        if (total_convertible > 0) {
-            if (verbose) message(sprintf("Successfully converted %d/%d tracks", converted_count, total_convertible))
-            if (length(failed) > 0) {
-                warning(sprintf(
-                    "Failed to convert %d tracks: %s",
-                    length(failed),
-                    paste(vapply(failed, function(r) r$item, character(1)), collapse = ", ")
-                ), call. = FALSE)
-            }
-            if (verbose) {
-                message(sprintf(
-                    "Track conversion summary: %d succeeded, %d failed",
-                    converted_count, length(failed)
-                ))
-            }
+        if (verbose) {
+            message(sprintf(
+                "Track conversion summary: %d succeeded, %d failed",
+                converted_count, length(failed)
+            ))
         }
     }
 }
@@ -767,152 +793,150 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
 .gdb.convert_to_indexed.intervals <- function(groot, remove_old_files = FALSE, verbose = FALSE, threads = 1L) {
     if (verbose) message("\n=== Converting Interval Sets ===")
 
-    # Init the database to get interval list (gdb.convert_to_indexed() loads the database loaded
-    # before again)
-    {
-        suppressMessages(gdb.init(groot))
+    # Init the database to get interval list (gdb.convert_to_indexed() puts the session loaded before
+    # back)
+    suppressMessages(gdb.init(groot))
 
-        all_intervals <- gintervals.ls()
+    all_intervals <- gintervals.ls()
 
-        if (length(all_intervals) == 0) {
-            if (verbose) message("No interval sets found in database")
-            return(invisible(NULL))
+    if (length(all_intervals) == 0) {
+        if (verbose) message("No interval sets found in database")
+        return(invisible(NULL))
+    }
+
+    if (verbose) message(sprintf("Found %d interval sets in database", length(all_intervals)))
+
+    # Classify each interval set (parallel-safe: each call only reads
+    # filesystem metadata for its own directory).
+    classify_one <- function(intervset) {
+        path <- gsub("\\.", "/", intervset)
+        intervset_path <- paste0(groot, "/tracks/", path, ".interv")
+
+        if (!file.exists(intervset_path)) {
+            return(list(verdict = "skip", reason = "does not exist"))
+        }
+        if (!dir.exists(intervset_path)) {
+            return(list(verdict = "skip", reason = "single-file format"))
         }
 
-        if (verbose) message(sprintf("Found %d interval sets in database", length(all_intervals)))
+        idx_path_1d <- file.path(intervset_path, "intervals.idx")
+        idx_path_2d <- file.path(intervset_path, "intervals2d.idx")
+        pair_files <- list.files(intervset_path, pattern = "-")
+        has_2d <- length(pair_files) > 0
 
-        # Classify each interval set (parallel-safe: each call only reads
-        # filesystem metadata for its own directory).
-        classify_one <- function(intervset) {
-            path <- gsub("\\.", "/", intervset)
-            intervset_path <- paste0(groot, "/tracks/", path, ".interv")
-
-            if (!file.exists(intervset_path)) {
-                return(list(verdict = "skip", reason = "does not exist"))
-            }
-            if (!dir.exists(intervset_path)) {
-                return(list(verdict = "skip", reason = "single-file format"))
-            }
-
-            idx_path_1d <- file.path(intervset_path, "intervals.idx")
-            idx_path_2d <- file.path(intervset_path, "intervals2d.idx")
-            pair_files <- list.files(intervset_path, pattern = "-")
-            has_2d <- length(pair_files) > 0
-
-            if (has_2d) {
-                if (file.exists(idx_path_2d)) {
-                    list(verdict = "skip", reason = "already converted (2D)")
-                } else {
-                    list(verdict = "2d")
-                }
+        if (has_2d) {
+            if (file.exists(idx_path_2d)) {
+                list(verdict = "skip", reason = "already converted (2D)")
             } else {
-                if (file.exists(idx_path_1d)) {
-                    list(verdict = "skip", reason = "already converted (1D)")
-                } else {
-                    list(verdict = "1d")
-                }
+                list(verdict = "2d")
+            }
+        } else {
+            if (file.exists(idx_path_1d)) {
+                list(verdict = "skip", reason = "already converted (1D)")
+            } else {
+                list(verdict = "1d")
             }
         }
+    }
 
-        classify_results <- .gdb.convert_to_indexed.parallel_apply(
-            all_intervals, classify_one, threads
+    classify_results <- .gdb.convert_to_indexed.parallel_apply(
+        all_intervals, classify_one, threads
+    )
+
+    convertible_1d <- character(0)
+    convertible_2d <- character(0)
+    skipped_intervals <- list()
+
+    for (r in classify_results) {
+        intervset <- r$item
+        if (r$status == "error") {
+            skipped_intervals[[intervset]] <- sprintf("classification error: %s", r$error)
+            next
+        }
+        v <- r$value
+        if (v$verdict == "skip") {
+            skipped_intervals[[intervset]] <- v$reason
+        } else if (v$verdict == "1d") {
+            convertible_1d <- c(convertible_1d, intervset)
+        } else if (v$verdict == "2d") {
+            convertible_2d <- c(convertible_2d, intervset)
+        }
+    }
+
+    # Report what we found
+    if (length(convertible_1d) > 0) {
+        if (verbose) message(sprintf("  Convertible 1D: %d interval sets", length(convertible_1d)))
+    }
+    if (length(convertible_2d) > 0) {
+        if (verbose) message(sprintf("  Convertible 2D: %d interval sets", length(convertible_2d)))
+    }
+    if (length(convertible_1d) == 0 && length(convertible_2d) == 0) {
+        if (verbose) message("  No interval sets need conversion")
+    } else if (verbose && threads > 1L) {
+        message(sprintf("  Running with %d parallel workers", threads))
+    }
+
+    if (length(skipped_intervals) > 0) {
+        if (verbose) message(sprintf("  Skipped: %d interval sets", length(skipped_intervals)))
+        for (intervset in names(skipped_intervals)) {
+            if (verbose) message(sprintf("    - %s: %s", intervset, skipped_intervals[[intervset]]))
+        }
+    }
+
+    # Convert in parallel; per-set failures captured as warnings.
+    convert_1d <- function(intervset) {
+        if (verbose) message(sprintf("  Converting 1D interval set: %s", intervset))
+        gintervals.convert_to_indexed(intervset, remove.old = remove_old_files)
+        intervset
+    }
+    convert_2d <- function(intervset) {
+        if (verbose) message(sprintf("  Converting 2D interval set: %s", intervset))
+        gintervals.2d.convert_to_indexed(intervset, remove.old = remove_old_files)
+        intervset
+    }
+
+    results_1d <- .gdb.convert_to_indexed.parallel_apply(
+        convertible_1d, convert_1d, threads
+    )
+    results_2d <- .gdb.convert_to_indexed.parallel_apply(
+        convertible_2d, convert_2d, threads
+    )
+
+    converted_1d_count <- sum(vapply(results_1d, function(r) r$status == "ok", logical(1)))
+    converted_2d_count <- sum(vapply(results_2d, function(r) r$status == "ok", logical(1)))
+    failed_1d <- Filter(function(r) r$status == "error", results_1d)
+    failed_2d <- Filter(function(r) r$status == "error", results_2d)
+
+    for (r in c(failed_1d, failed_2d)) {
+        warning(sprintf("Failed to convert interval set %s: %s", r$item, r$error),
+            call. = FALSE
         )
+    }
 
-        convertible_1d <- character(0)
-        convertible_2d <- character(0)
-        skipped_intervals <- list()
+    total_converted <- converted_1d_count + converted_2d_count
+    total_convertible <- length(convertible_1d) + length(convertible_2d)
 
-        for (r in classify_results) {
-            intervset <- r$item
-            if (r$status == "error") {
-                skipped_intervals[[intervset]] <- sprintf("classification error: %s", r$error)
-                next
-            }
-            v <- r$value
-            if (v$verdict == "skip") {
-                skipped_intervals[[intervset]] <- v$reason
-            } else if (v$verdict == "1d") {
-                convertible_1d <- c(convertible_1d, intervset)
-            } else if (v$verdict == "2d") {
-                convertible_2d <- c(convertible_2d, intervset)
-            }
+    if (total_convertible > 0) {
+        if (verbose) {
+            message(sprintf(
+                "Successfully converted %d/%d interval sets (%d 1D, %d 2D)",
+                total_converted,
+                total_convertible,
+                converted_1d_count,
+                converted_2d_count
+            ))
         }
 
-        # Report what we found
-        if (length(convertible_1d) > 0) {
-            if (verbose) message(sprintf("  Convertible 1D: %d interval sets", length(convertible_1d)))
-        }
-        if (length(convertible_2d) > 0) {
-            if (verbose) message(sprintf("  Convertible 2D: %d interval sets", length(convertible_2d)))
-        }
-        if (length(convertible_1d) == 0 && length(convertible_2d) == 0) {
-            if (verbose) message("  No interval sets need conversion")
-        } else if (verbose && threads > 1L) {
-            message(sprintf("  Running with %d parallel workers", threads))
-        }
-
-        if (length(skipped_intervals) > 0) {
-            if (verbose) message(sprintf("  Skipped: %d interval sets", length(skipped_intervals)))
-            for (intervset in names(skipped_intervals)) {
-                if (verbose) message(sprintf("    - %s: %s", intervset, skipped_intervals[[intervset]]))
-            }
-        }
-
-        # Convert in parallel; per-set failures captured as warnings.
-        convert_1d <- function(intervset) {
-            if (verbose) message(sprintf("  Converting 1D interval set: %s", intervset))
-            gintervals.convert_to_indexed(intervset, remove.old = remove_old_files)
-            intervset
-        }
-        convert_2d <- function(intervset) {
-            if (verbose) message(sprintf("  Converting 2D interval set: %s", intervset))
-            gintervals.2d.convert_to_indexed(intervset, remove.old = remove_old_files)
-            intervset
-        }
-
-        results_1d <- .gdb.convert_to_indexed.parallel_apply(
-            convertible_1d, convert_1d, threads
-        )
-        results_2d <- .gdb.convert_to_indexed.parallel_apply(
-            convertible_2d, convert_2d, threads
-        )
-
-        converted_1d_count <- sum(vapply(results_1d, function(r) r$status == "ok", logical(1)))
-        converted_2d_count <- sum(vapply(results_2d, function(r) r$status == "ok", logical(1)))
-        failed_1d <- Filter(function(r) r$status == "error", results_1d)
-        failed_2d <- Filter(function(r) r$status == "error", results_2d)
-
-        for (r in c(failed_1d, failed_2d)) {
-            warning(sprintf("Failed to convert interval set %s: %s", r$item, r$error),
-                call. = FALSE
+        if (length(failed_1d) > 0 || length(failed_2d) > 0) {
+            all_failed_names <- c(
+                vapply(failed_1d, function(r) r$item, character(1)),
+                vapply(failed_2d, function(r) r$item, character(1))
             )
-        }
-
-        total_converted <- converted_1d_count + converted_2d_count
-        total_convertible <- length(convertible_1d) + length(convertible_2d)
-
-        if (total_convertible > 0) {
-            if (verbose) {
-                message(sprintf(
-                    "Successfully converted %d/%d interval sets (%d 1D, %d 2D)",
-                    total_converted,
-                    total_convertible,
-                    converted_1d_count,
-                    converted_2d_count
-                ))
-            }
-
-            if (length(failed_1d) > 0 || length(failed_2d) > 0) {
-                all_failed_names <- c(
-                    vapply(failed_1d, function(r) r$item, character(1)),
-                    vapply(failed_2d, function(r) r$item, character(1))
-                )
-                warning(sprintf(
-                    "Failed to convert %d interval sets: %s",
-                    length(all_failed_names),
-                    paste(all_failed_names, collapse = ", ")
-                ), call. = FALSE)
-            }
+            warning(sprintf(
+                "Failed to convert %d interval sets: %s",
+                length(all_failed_names),
+                paste(all_failed_names, collapse = ", ")
+            ), call. = FALSE)
         }
     }
 }

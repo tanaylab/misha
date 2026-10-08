@@ -64,10 +64,11 @@ digit, '_', '-' or '.' (which the index would replace with '_'), or a .seq file 
 differs from chrom_sizes.txt, stops it, and so does a chromosome named 'genome' (its genome.seq
 would be overwritten). A database whose seq/ or chrom_sizes.txt is in another database, such as a
 dataset saved with \code{copy_seq = FALSE} or a \code{gdb.create_linked()} database, is not
-converted: convert that database. A seq/ linked to storage of its own elsewhere is converted there.
-The database loaded before the conversion is loaded again after it; if it no longer loads (its
-seq/ is the converted database's, with a chrom_sizes.txt of its own), a warning says so, and its
-session is kept while it still reads its own sequence, or nothing is loaded.
+converted: convert that database. A seq/ or chrom_sizes.txt linked to storage of its own elsewhere
+is converted there. The session loaded before the conversion is put back as it was after it. If
+the conversion changed the sequence it reads (its seq/ is the converted database's, with a
+chrom_sizes.txt of its own), a warning says so, and nothing is loaded when its chromosomes would
+read other chromosomes' sequence.
 
 The conversion process:
 \enumerate{

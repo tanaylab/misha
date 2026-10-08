@@ -271,7 +271,8 @@
 # chromosomes' sequence: a seq/ linked to a database converted after this one was made from it, or
 # the reverse. Contigs named differently at the same chrom ids with the same sizes (another naming
 # of the same assembly, as tgdb/evo/Phylo241/NZW_T2T) are a warning: the index cannot show whether
-# they are the same contigs.
+# they are the same contigs. A chrom_sizes.txt may list only the index's first contigs (trimmed by
+# hand), with their names and sizes.
 .gdb.check_genome_idx <- function(groot, names, sizes) {
     seq_dir <- file.path(groot, "seq")
     if (!file.exists(file.path(seq_dir, "genome.idx")) || !file.exists(file.path(seq_dir, "genome.seq"))) {
@@ -292,13 +293,15 @@
             seq_dir, groot, what, hint
         ), call. = FALSE)
     }
-    if (!identical(idx$length, sizes)) {
-        k <- seq_len(max(length(idx$length), length(sizes)))
+    n <- length(sizes)
+    if (n > length(idx$length) || !identical(idx$length[seq_len(n)], sizes)) {
+        k <- seq_len(max(length(idx$length), n))
         i <- which(is.na(idx$length[k]) | is.na(sizes[k]) | idx$length[k] != sizes[k])[1]
         describe <- function(name, size) if (is.na(size)) "missing" else sprintf("%s (%.0f bp)", name, size)
         mismatch(sprintf("chrom id %d is %s in the index and %s in chrom_sizes.txt", i - 1L, describe(idx$name[i], idx$length[i]), describe(names[i], sizes[i])))
     }
     # the prefix is dropped only from the names that differ (millions of contigs in some databases)
+    idx$name <- idx$name[seq_len(n)]
     differ <- which(idx$name != names)
     idx_names <- sub("^chr", "", idx$name[differ])
     db_names <- sub("^chr", "", names[differ])
@@ -310,6 +313,12 @@
         i <- which(!is.na(moved))[1]
         if (!is.na(i)) {
             mismatch(sprintf("%s is chrom id %d in chrom_sizes.txt and %d in the index", names[differ[i]], differ[i] - 1L, differ[moved[i]] - 1L))
+        }
+        if (n < length(idx$length)) {
+            mismatch(sprintf(
+                "chrom_sizes.txt lists %d of the index's %d contigs, which have to be its first ones, and chrom id %d is %s in the index and %s in chrom_sizes.txt",
+                n, length(idx$length), differ[1] - 1L, idx$name[differ[1]], names[differ[1]]
+            ))
         }
         warning(sprintf(
             "%s/genome.idx names %d of its %d contigs differently from chrom_sizes.txt in %s (chrom id %d is %s in the index and %s in chrom_sizes.txt). Sequence is read by chrom id and the sizes agree, so each chromosome reads the index contig at its chrom id; unless that is the same contig under another name, its sequence is wrong.",
