@@ -321,6 +321,11 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
     if (!is.character(path) || length(path) != 1L || is.na(path) || !file.exists(path)) {
         return(FALSE)
     }
+    # a FIFO (size 0) must not be read here: that would consume its stream
+    size <- file.info(path, extra_cols = FALSE)$size
+    if (is.na(size) || size == 0) {
+        return(FALSE)
+    }
     bytes <- tryCatch(
         readBin(path, what = "raw", n = 4),
         error = function(e) raw(0)
@@ -349,7 +354,10 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
 #' describes a single read, in gzipped variants of either (`.sam.gz`,
 #' `.tsv.gz`), or in BAM format (detected from its content; requires
 #' `samtools` on `PATH`). Without 'paired', any bgzipped file is read as SAM.
-#' An import that brings in no read at all gives a warning.
+#' 'file' may also be a named pipe (FIFO) carrying SAM or text, plain or
+#' gzipped, but not BAM. A pipe is not inspected, so the BAM and bgzip rules
+#' above do not apply to it: pass 'cols.order = NULL' for SAM. An import that
+#' brings in no read at all gives a warning.
 #'
 #' For a SAM file 'cols.order' must be set to 'NULL'. For BAM input the
 #' default `cols.order = c(9, 11, 13, 14)` is treated as SAM mode because

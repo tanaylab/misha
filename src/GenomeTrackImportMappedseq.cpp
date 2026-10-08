@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <zlib.h>
 
@@ -56,6 +57,8 @@ public:
 
 class GzipSource : public ByteSource {
 	gzFile gz_;
+	std::string head_; // bytes read ahead by peek(), served before the rest of the stream
+	size_t head_pos_ = 0;
 public:
 	explicit GzipSource(const std::string &path) : gz_(nullptr) {
 		gz_ = gzopen(path.c_str(), "rb");
@@ -63,7 +66,14 @@ public:
 			TGLError("Failed to open gzipped %s: %s", path.c_str(), strerror(errno));
 	}
 	~GzipSource() override { if (gz_) gzclose(gz_); }
-	int getc() override { return gzgetc(gz_); }
+	int getc() override { return head_pos_ < head_.size() ? (unsigned char)head_[head_pos_++] : gzgetc(gz_); }
+	// The first n (decompressed) bytes, without consuming them; works on a pipe.
+	const std::string &peek(size_t n) {
+		int c;
+		while (head_.size() < n && (c = gzgetc(gz_)) != EOF)
+			head_.push_back((char)c);
+		return head_;
+	}
 	bool error() const override {
 		if (!gz_) return true;
 		int err = 0;
@@ -166,6 +176,17 @@ static bool has_bam_payload(const std::string &path) {
 }
 
 static std::unique_ptr<ByteSource> open_source(const std::string &path) {
+	// A FIFO or other non-regular file (e.g. misha.ext's samtools pipe) cannot be sniffed: reading its first
+	// bytes consumes them and closes the only reader. zlib reads plain or gzipped text from it as a stream.
+	struct stat st;
+	if (::stat(path.c_str(), &st) == 0 && !S_ISREG(st.st_mode)) {
+		auto src = std::make_unique<GzipSource>(path);
+		if (src->peek(4) == std::string("BAM\1", 4))
+			TGLError("%s is a pipe carrying BAM, which misha reads only from a regular file. "
+			         "Send SAM through the pipe instead (samtools view -h).", path.c_str());
+		return src;
+	}
+
 	unsigned char magic[4] = {0, 0, 0, 0};
 	size_t n = read_magic_bytes(path, magic, 4);
 	// bgzip uses gzip magic with FLG.FEXTRA (0x04) and method 0x08; that
