@@ -355,8 +355,9 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
 #' `.tsv.gz`), or in BAM format (detected from its content; requires
 #' `samtools` on `PATH`). Without 'paired', any bgzipped file is read as SAM.
 #' 'file' may also be a named pipe (FIFO) carrying SAM or text, plain or
-#' gzipped, but not BAM. An import that brings in no read at all gives a
-#' warning.
+#' gzipped, but not BAM. A pipe is not inspected, so the BAM and bgzip rules
+#' above do not apply to it: pass 'cols.order = NULL' for SAM. An import that
+#' brings in no read at all gives a warning.
 #'
 #' For a SAM file 'cols.order' must be set to 'NULL'. For BAM input the
 #' default `cols.order = c(9, 11, 13, 14)` is treated as SAM mode because
