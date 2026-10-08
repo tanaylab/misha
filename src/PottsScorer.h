@@ -63,10 +63,10 @@ public:
     double get_last_max_score() const { return m_last_max_score; }
 
 private:
-    // The per-anchor value in the ORIGINAL genome's orientation. `union_max`
-    // picks the strand union: false is log-sum-exp (TOTAL_LIKELIHOOD,
-    // MAX_LIKELIHOOD, MOTIF_COUNT), true is the maximum (MAX_LIKELIHOOD_POS,
-    // which has to name a strand). Same asymmetry as the pwm family, and as
+    // The value of the anchor at m_codes[i], in the ORIGINAL genome's
+    // orientation. `union_max` picks the strand union: false is log-sum-exp
+    // (TOTAL_LIKELIHOOD, MAX_LIKELIHOOD, MOTIF_COUNT), true is the maximum
+    // (MAX_LIKELIHOOD_POS, which has to name a strand). Same asymmetry as the pwm family, and as
     // C_gseq_potts, on purpose.
     //
     // Always finite for a scorable anchor: .coerce_potts_model() rejects a
@@ -74,7 +74,7 @@ private:
     // |intercept| - does not fit in a float, so no anchor can overflow the
     // float this returns through and -inf out of the aggregators below can
     // only mean "no scorable anchor".
-    double anchor_value(const int8_t *c, bool union_max, int &dir) const;
+    double anchor_value(size_t i, bool union_max, int &dir) const;
 
     // 1-based position of `index`, in forward-strand orientation, signed by
     // `direction` when bidirect. Transliterated from
@@ -192,6 +192,7 @@ private:
     // Scratch, reused across calls so a per-bp iterator does not reallocate.
     std::vector<int8_t> m_codes;
     std::vector<int32_t> m_nbad;
+    std::vector<int8_t> m_block_codes;
 
     SlideCache m_slide;
     // Seed scratch in window-slot order: the value for every mode but
