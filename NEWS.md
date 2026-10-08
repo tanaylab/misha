@@ -14,6 +14,8 @@
 
 * **Bug fix:** `gtrack.import_mappedseq()` could crash R when a reverse read ended past the end of a chromosome (e.g. chrM), and could write sparse points outside the chromosome.
 
+* **Bug fix:** `gtrack.import_mappedseq()` hung when reading a named pipe (FIFO), as `misha.ext::gtrack.import_mappedseq_bam()` does. A pipe is read as SAM (pass `cols.order = NULL`) or text; BAM through a pipe gives an error.
+
 * `gtrack.import_mappedseq()` reads bgzipped text and CRLF line endings, and warns when nothing was imported.
 
 * Potts models score faster in the `potts` virtual tracks and `gseq.potts()`, most of all when their couplings link nearby positions, such as several models summed side by side; wide models with many scattered couplings keep their speed. Some models' scores change in the last digits, so a score exactly at a threshold or tied with another can come out the other way.
