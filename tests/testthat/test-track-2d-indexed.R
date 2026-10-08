@@ -494,8 +494,8 @@ test_that("gdb.convert_to_indexed converts 2D tracks when convert_tracks=TRUE", 
     local_db_state()
 
     tmp_root <- withr::local_tempdir()
-    test_fasta <- file.path(tmp_root, "genome.fasta")
-    cat(">genome\n", paste0(rep("A", 20000), collapse = ""), "\n",
+    test_fasta <- file.path(tmp_root, "chrG.fasta")
+    cat(">chrG\n", paste0(rep("A", 20000), collapse = ""), "\n",
         sep = "", file = test_fasta
     )
 
@@ -506,10 +506,10 @@ test_that("gdb.convert_to_indexed converts 2D tracks when convert_tracks=TRUE", 
 
         # Create a 2D track in per-pair format (single chrom pair: genome-genome)
         intervs <- gintervals.2d(
-            chroms1 = c("genome", "genome"),
+            chroms1 = c("chrG", "chrG"),
             starts1 = c(100, 200),
             ends1 = c(150, 250),
-            chroms2 = c("genome", "genome"),
+            chroms2 = c("chrG", "chrG"),
             starts2 = c(300, 400),
             ends2 = c(350, 450)
         )
@@ -520,7 +520,7 @@ test_that("gdb.convert_to_indexed converts 2D tracks when convert_tracks=TRUE", 
         expect_false(file.exists(file.path(trackdir, "track.idx")))
 
         # Extract before conversion
-        before <- gextract("test_batch_2d", gintervals.2d("genome"))
+        before <- gextract("test_batch_2d", gintervals.2d("chrG"))
 
         # Run full DB conversion including tracks (keep old files so seq still works)
         gdb.convert_to_indexed(
@@ -541,7 +541,7 @@ test_that("gdb.convert_to_indexed converts 2D tracks when convert_tracks=TRUE", 
         )
 
         # Verify data integrity
-        after <- gextract("test_batch_2d", gintervals.2d("genome"))
+        after <- gextract("test_batch_2d", gintervals.2d("chrG"))
         rownames(before) <- NULL
         rownames(after) <- NULL
         expect_equal(before, after, info = "Data should be identical after batch conversion")

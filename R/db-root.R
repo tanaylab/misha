@@ -105,6 +105,12 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
         stop("chrom_sizes.txt file does not contain any chromosomes", call. = FALSE)
     }
 
+    # The chromosome names and chrom id order (for per-chromosome databases, the names get the "chr"
+    # prefix of the seq files and are sorted), and an indexed seq/ checked against them, before the
+    # session state is cleared: a database that fails leaves the loaded one loaded
+    chrom_order <- .gdb.chrom_order(groot, chromsizes)
+    .gdb.check_genome_idx(groot, chrom_order$names[chrom_order$id_order], chromsizes$size[chrom_order$id_order])
+
     # Drop the process-static index caches. They are keyed by absolute track /
     # interval-set directory, so pointing the session at a database whose
     # contents changed under the same paths (a rebuilt db, gdb.init_examples()
@@ -123,8 +129,6 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
     assign("GINTERVALS_DATASET", NULL, envir = .misha)
     assign("GDATASETS", character(0), envir = .misha)
 
-    # For per-chromosome databases, the names get the "chr" prefix of the seq files
-    chrom_order <- .gdb.chrom_order(groot, chromsizes)
     is_per_chromosome <- chrom_order$per_chromosome
     assign("DB_IS_PER_CHROMOSOME", is_per_chromosome, envir = .misha)
 
@@ -144,29 +148,6 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
     # names(alias_map))) without the ~1 s cost of allocating + uniqueing
     # ~5M strings on a million-contig database.
     all_chrom_names <- names(alias_map)
-
-    # Validate genome.idx if it exists (indexed format). The sequence of chrom id i is looked up
-    # as the index's contig i, so its names have to be the database's, in chrom id order (up to
-    # the "chr" prefix, as above). They are not when seq/ is a link to a database converted after
-    # this one was made from it (or the reverse), or when an older conversion renamed chromosomes
-    # it could not store; every chromosome would then read another one's sequence.
-    idx_path <- file.path(groot, "seq", "genome.idx")
-    if (file.exists(idx_path)) {
-        idx_names <- .gcall("gseq_validate_index", file.path(groot, "seq"), .misha_env())
-        db_names <- canonical_names[chrom_order$id_order]
-        if (!identical(idx_names, db_names)) {
-            unprefixed <- function(x) sub("^chr", "", x)
-            k <- seq_len(max(length(idx_names), length(db_names)))
-            i <- which(is.na(idx_names[k]) | is.na(db_names[k]) | unprefixed(idx_names[k]) != unprefixed(db_names[k]))
-            if (length(i)) {
-                i <- i[1]
-                stop(sprintf(
-                    "%s does not match chrom_sizes.txt in %s: chromosome %d is %s in the index and %s in chrom_sizes.txt, so each chromosome would read another's sequence.",
-                    idx_path, groot, i, if (is.na(idx_names[i])) "missing" else idx_names[i], if (is.na(db_names[i])) "missing" else db_names[i]
-                ), call. = FALSE)
-            }
-        }
-    }
 
     intervals <- data.frame(
         chrom = canonical_names,

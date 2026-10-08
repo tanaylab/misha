@@ -61,7 +61,10 @@ chrom_sizes.txt order, and chrom_sizes.txt is rewritten in it.
 The conversion stops, leaving the database as it was, unless the indexed sequence holds exactly
 the chromosomes of chrom_sizes.txt: a chromosome name with a character other than a letter,
 digit, '_', '-' or '.' (which the index would replace with '_'), or a .seq file whose length
-differs from chrom_sizes.txt, stops it.
+differs from chrom_sizes.txt, stops it, and so does a chromosome named 'genome' (its genome.seq
+would be overwritten). A database whose seq/ or chrom_sizes.txt is in another database, such as a
+dataset saved with \code{copy_seq = FALSE} or a \code{gdb.create_linked()} database, is not
+converted: convert the database that owns them.
 
 The conversion process:
 \enumerate{

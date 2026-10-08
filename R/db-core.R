@@ -264,6 +264,38 @@
     list(names = names, id_order = order(.gdb.chrom_sort_key(names), method = "radix"), per_chromosome = TRUE)
 }
 
+# An indexed seq/ (genome.idx and genome.seq) is read by chrom id: the index's contig i holds the
+# sequence of chrom id i. Stop unless its contig lengths are the database's chromosome sizes in chrom
+# id order (names, sizes: the database's, in chrom id order), as otherwise chromosomes read other
+# chromosomes' sequence: a seq/ linked to a database converted after this one was made from it, or
+# the reverse. Contigs named differently with the same sizes (as after an interrupted chromosome
+# rename) still read right, and are a warning.
+.gdb.check_genome_idx <- function(groot, names, sizes) {
+    seq_dir <- file.path(groot, "seq")
+    if (!file.exists(file.path(seq_dir, "genome.idx")) || !file.exists(file.path(seq_dir, "genome.seq"))) {
+        return(invisible())
+    }
+    idx <- .gcall("gseq_validate_index", seq_dir, .misha_env())
+    sizes <- as.numeric(sizes)
+    if (!identical(idx$length, sizes)) {
+        k <- seq_len(max(length(idx$length), length(sizes)))
+        i <- which(is.na(idx$length[k]) | is.na(sizes[k]) | idx$length[k] != sizes[k])[1]
+        describe <- function(name, size) if (is.na(size)) "missing" else sprintf("%s (%.0f bp)", name, size)
+        stop(sprintf(
+            "%s/genome.idx does not match chrom_sizes.txt in %s: chrom id %d is %s in the index and %s in chrom_sizes.txt, so chromosomes would read other chromosomes' sequence.",
+            seq_dir, groot, i - 1L, describe(idx$name[i], idx$length[i]), describe(names[i], sizes[i])
+        ), call. = FALSE)
+    }
+    differ <- which(sub("^chr", "", idx$name) != sub("^chr", "", names))
+    if (length(differ)) {
+        warning(sprintf(
+            "%s/genome.idx names %d of its %d contigs differently from chrom_sizes.txt in %s (chrom id %d is %s in the index and %s in chrom_sizes.txt); their sizes and order agree, so they read right.",
+            seq_dir, length(differ), length(names), groot, differ[1] - 1L, idx$name[differ[1]], names[differ[1]]
+        ), call. = FALSE)
+    }
+    invisible()
+}
+
 # Keys that sort by bytes as the names sort under ICU's root collation, which is how order()
 # sorts a character vector in an R built with ICU and run in an en_US.UTF-8 session, the
 # lab's setting when per-chromosome databases got their chrom ids. order() on the names

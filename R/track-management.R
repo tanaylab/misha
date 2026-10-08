@@ -602,22 +602,19 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
     dest_indexed <- .gdb.is_indexed_at(dest_db)
     info <- gtrack.info(srcname)
 
-    # An indexed track is keyed by chrom ids and a 2D copy needs one order on both sides, so
-    # those take the orders (.gdb.chrom_names_at() stops for a database that cannot show its
-    # own). A per-chromosome 1D copy maps files by chromosome name and does with the names alone.
-    if (src_indexed || dest_indexed || info$type %in% c("rectangles", "points")) {
-        src_chroms <- .gdb.chrom_names_at(src_db)
-        dest_chroms <- .gdb.chrom_names_at(dest_db)
+    # The source is loaded: its order is the one gsetroot() gave. The destination's order matters
+    # where it is indexed (its track.idx is keyed by its chrom ids) and for a 2D copy, which needs
+    # one order on both sides; .gdb.chrom_names_at() stops for a database that cannot show its own.
+    # Otherwise the copy maps per-chromosome files by name, so its chrom_sizes.txt names do.
+    src_chroms <- .gdb.chrom_names_at(src_db)
+    dest_chroms <- if (dest_indexed || info$type %in% c("rectangles", "points")) {
+        .gdb.chrom_names_at(dest_db)
     } else {
-        names_at <- function(db) {
-            tryCatch(.gdb.chrom_names_at(db), error = function(e) {
-                utils::read.csv(file.path(db, "chrom_sizes.txt"),
-                    sep = "\t", header = FALSE, colClasses = c("character", "numeric")
-                )[[1]]
-            })
-        }
-        src_chroms <- names_at(src_db)
-        dest_chroms <- names_at(dest_db)
+        tryCatch(.gdb.chrom_names_at(dest_db), error = function(e) {
+            utils::read.csv(file.path(dest_db, "chrom_sizes.txt"),
+                sep = "\t", header = FALSE, colClasses = c("character", "numeric")
+            )[[1]]
+        })
     }
 
     # 2D track guard

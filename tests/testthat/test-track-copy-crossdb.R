@@ -554,14 +554,35 @@ test_that("an unloaded database whose seq/ holds no sequence gives no chrom orde
     expect_true(file.copy(file.path(db, "chrom_sizes.txt"), other))
     expect_error(.gdb.chrom_names_at(other), "cannot be told")
 
-    # a per-chromosome track copies into it by chromosome name; an indexed one needs the order
-    gtrack.copy("sp", "sp_copy", db = other)
-    expect_true(dir.exists(file.path(other, "tracks", "sp_copy.track")))
-    expect_error(gtrack.copy("spi", "spi_copy", db = other), "cannot be told")
-
-    # and so does a liftover of an indexed source track out of it
-    src <- file.path(other, "tracks", "spi.track")
+    # a liftover of an indexed source track out of it needs the order
+    src <- file.path(other, "tracks", "lift.track")
     dir.create(src)
-    expect_true(all(file.copy(list.files(file.path(db, "tracks", "spi.track"), full.names = TRUE), src)))
     expect_error(misha:::.gtrack.liftover.src_chroms(src), "cannot be told")
+    unlink(src, recursive = TRUE)
+
+    # copies into it go by chromosome name: the source's order is known, as it is loaded
+    gtrack.copy("sp", "sp_copy", db = other)
+    gtrack.copy("spi", "spi_copy", db = other)
+    suppressMessages(gdataset.load(other))
+    expect_equal(gextract("sp_copy", iv)$sp_copy, c(1, 2))
+    expect_equal(gextract("spi_copy", iv)$spi_copy, c(3, 4))
+})
+
+test_that("an unloaded database whose linked seq/ was converted since does not give a stale order", {
+    local_db_state()
+    td <- tempfile("stale_")
+    dir.create(td)
+    withr::defer(unlink(td, recursive = TRUE))
+    parent <- create_db_with_unsorted_chrom_sizes(file.path(td, "parent"))
+    # a database made from parent with its own chrom_sizes.txt and a link to its seq/
+    child <- file.path(td, "child")
+    dir.create(file.path(child, "tracks", "t1.track"), recursive = TRUE)
+    expect_true(file.copy(file.path(parent, "chrom_sizes.txt"), child))
+    expect_true(file.symlink(file.path(parent, "seq"), file.path(child, "seq")))
+    expect_equal(.gdb.chrom_names_at(child), c("chr1", "chr1_KI270706v1_random", "chr10", "chr2", "chrX"))
+
+    suppressMessages(gdb.convert_to_indexed(groot = parent, force = TRUE, validate = FALSE))
+    gsetroot(parent)
+    expect_error(.gdb.chrom_names_at(child), "does not match chrom_sizes.txt")
+    expect_error(misha:::.gtrack.liftover.src_chroms(file.path(child, "tracks", "t1.track")), "does not match chrom_sizes.txt")
 })

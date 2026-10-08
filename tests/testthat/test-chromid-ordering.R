@@ -110,7 +110,7 @@ test_that("the chrom sort key orders names as order() does under ICU root collat
         "super-scaffold_1", "Super_Scaffold_1", "MT", "mt", "contig#2", "contig@2", "contig(2)"
     )
     # and random printable-ASCII names
-    set.seed(5)
+    withr::local_seed(5)
     printable <- intToUtf8(32:126, multiple = TRUE)
     names <- unique(c(names, vapply(1:500, function(i) {
         paste(sample(printable, sample(1:12, 1), replace = TRUE), collapse = "")

@@ -760,5 +760,8 @@ gdb.mark_cache_dirty <- function() {
             groot
         ), call. = FALSE)
     }
+    # as gsetroot() checks it: an indexed seq/ linked to a database converted since gives the order
+    # of chrom_sizes.txt, not of the index its tracks would be read with
+    .gdb.check_genome_idx(groot, chrom_order$names[chrom_order$id_order], chromsizes$size[chrom_order$id_order])
     chrom_order$names[chrom_order$id_order]
 }
