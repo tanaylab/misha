@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">misha</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.12.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.12.2</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -36,9 +36,13 @@
   <main id="main" class="col-md-9"><div class="page-header">
 
       <h1>Changelog</h1>
-      <small>Source: <a href="https://github.com/tanaylab/misha/blob/v5.12.1/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
+      <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="5.12.2" id="misha-5122">misha 5.12.2<a class="anchor" aria-label="anchor" href="#misha-5122"></a></h2>
+<ul><li>Potts models score faster in the <code>potts</code> virtual tracks and <code><a href="../reference/gseq.potts.html">gseq.potts()</a></code>, most of all when their couplings link nearby positions, such as several models summed side by side; wide models with many scattered couplings keep their speed. Some models’ scores change in the last digits, so a score exactly at a threshold or tied with another can come out the other way.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="5.12.1" id="misha-5121">misha 5.12.1<a class="anchor" aria-label="anchor" href="#misha-5121"></a></h2>
 <ul><li><p><strong>Behavior fix:</strong> <code><a href="../reference/gcluster.run.html">gcluster.run()</a></code> jobs run against the caller’s database, working directory, datasets and virtual tracks, and load misha from the caller’s library. They had used the example database unless the job called <code><a href="../reference/gdb.init.html">gsetroot()</a></code> itself.</p></li>

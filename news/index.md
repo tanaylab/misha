@@ -1,5 +1,15 @@
 # Changelog
 
+## misha 5.12.2
+
+- Potts models score faster in the `potts` virtual tracks and
+  [`gseq.potts()`](https://tanaylab.github.io/misha/reference/gseq.potts.md),
+  most of all when their couplings link nearby positions, such as
+  several models summed side by side; wide models with many scattered
+  couplings keep their speed. Some models’ scores change in the last
+  digits, so a score exactly at a threshold or tied with another can
+  come out the other way.
+
 ## misha 5.12.1
 
 - **Behavior fix:**
