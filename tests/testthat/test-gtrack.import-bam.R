@@ -147,22 +147,25 @@ test_that("gtrack.import_mappedseq reads SAM from a named pipe", {
     close(con)
 
     for (gz in c(FALSE, TRUE)) {
-        fifo <- tempfile()
-        system2("mkfifo", fifo)
-        stop_writer <- start_fifo_writer(fifo, if (gz) sam_gz else sam)
-        stop_watchdog <- start_fifo_watchdog(fifo)
-        withr::defer({
-            stop_writer()
-            stop_watchdog()
-            unlink(fifo)
-        })
+        # local(): each iteration's deferred cleanup must see its own writer, watchdog, pipe and track
+        local({
+            fifo <- tempfile()
+            system2("mkfifo", fifo)
+            stop_writer <- start_fifo_writer(fifo, if (gz) sam_gz else sam)
+            stop_watchdog <- start_fifo_watchdog(fifo)
+            withr::defer({
+                stop_writer()
+                stop_watchdog()
+                unlink(fifo)
+            })
 
-        tmptrack <- random_track_name("test")
-        withr::defer(gtrack.rm(tmptrack, force = TRUE))
-        stats <- gtrack.import_mappedseq(tmptrack, "FIFO", fifo, cols.order = NULL)
-        expect_equal(stats[[1]][["total.mapped"]], 2, info = paste("gzipped:", gz))
-        expect_equal(stats[[1]][["total.unmapped"]], 1, info = paste("gzipped:", gz))
-        expect_true(gtrack.exists(tmptrack))
+            tmptrack <- random_track_name("test")
+            withr::defer(gtrack.rm(tmptrack, force = TRUE))
+            stats <- gtrack.import_mappedseq(tmptrack, "FIFO", fifo, cols.order = NULL)
+            expect_equal(stats[[1]][["total.mapped"]], 2, info = paste("gzipped:", gz))
+            expect_equal(stats[[1]][["total.unmapped"]], 1, info = paste("gzipped:", gz))
+            expect_true(gtrack.exists(tmptrack))
+        })
     }
 })
 
