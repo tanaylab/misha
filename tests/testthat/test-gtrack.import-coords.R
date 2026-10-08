@@ -26,10 +26,12 @@ test_that("SAM reads are placed at their 0-based 5' base", {
         sam_line("r3", 16, 400, "5M2D5M", 10), # 399 + 12 - 1 = 410
         sam_line("r4", 16, 500, "5M2I3M", 10), # 499 + 8 - 1 = 506
         sam_line("r5", 16, 600, "5M100N5M", 10), # 599 + 110 - 1 = 708
-        sam_line("r6", 16, 900, "*", 10) # no CIGAR: sequence length, 908
+        sam_line("r6", 16, 900, "*", 10), # no CIGAR: unmapped, as in htslib
+        sam_line("r7", 16, 1100, "2H3S5=2X1P2M", 10), # H, S and P take no reference: 1099 + 9 - 1 = 1107
+        sam_line("f3", 0, 1201, "*", 10) # no CIGAR: unmapped
     ), sam)
     p <- import_points(sam, cols.order = NULL)
-    expect_equal(as.numeric(names(p)), c(99, 208, 305, 410, 506, 708, 908, 1000))
+    expect_equal(as.numeric(names(p)), c(99, 208, 305, 410, 506, 708, 1000, 1107))
     expect_equal(as.numeric(p), rep(1, 8))
 })
 
@@ -100,7 +102,57 @@ test_that("a tab-delimited reverse read ending at the chromosome end is not writ
     track <- random_track_name("test")
     withr::defer(gtrack.rm(track, force = TRUE))
     # legacy sparse: the point would be chr1_end itself
-    stats <- gtrack.import_mappedseq(track, "end", tab, cols.order = 1:4)
+    expect_warning(stats <- gtrack.import_mappedseq(track, "end", tab, cols.order = 1:4), "No read was imported")
     expect_equal(stats[[1]][["total.mapped"]], 0)
     expect_null(gextract(track, gintervals("chr1", chr1_end - 100, chr1_end)))
+})
+
+test_that("reverse reads with the same 5' end are duplicates whatever their POS", {
+    sam <- tempfile(fileext = ".sam")
+    writeLines(c(
+        sam_line("a", 16, 101, "10M", 10), # 5' base 109
+        sam_line("b", 16, 103, "8M", 8), # 102 + 8 - 1 = 109
+        sam_line("c", 16, 101, "8M2S", 10) # soft clip at the 5' end: 100 + 8 - 1 = 107
+    ), sam)
+    track <- random_track_name("test")
+    withr::defer(gtrack.rm(track, force = TRUE))
+    stats <- gtrack.import_mappedseq(track, "dups", sam, cols.order = NULL, remove.dups = TRUE)
+    expect_equal(stats[[1]][["total.dups"]], 1)
+    r <- gextract(track, gintervals("chr1", 0, 1000))
+    expect_equal(r$start, c(107, 109))
+})
+
+test_that("SAM and BAM place reads the same way", {
+    lines <- c(
+        "@SQ\tSN:chr1\tLN:247249719",
+        sam_line("f1", 0, 100, "10M", 10), sam_line("r1", 16, 200, "3S7M", 10),
+        sam_line("r2", 16, 400, "5M2D5M", 10), sam_line("r3", 16, 600, "5M100N5M", 10)
+    )
+    bam <- make_test_bam(lines)
+    sam <- tempfile(fileext = ".sam")
+    writeLines(lines, sam)
+    expect_equal(import_points(bam), import_points(sam, cols.order = NULL))
+})
+
+test_that("paired: a first mate on the last base is imported and POS 0 is unmapped", {
+    chr1_end <- gintervals.all()$end[gintervals.all()$chrom == "chr1"]
+    pair <- function(name, pos, pnext, tlen, flag1 = 83, flag2 = 163) {
+        c(
+            paste(name, flag1, "chr1", pos, 30, "10M", "=", pnext, -tlen, strrep("A", 10), "*", sep = "\t"),
+            paste(name, flag2, "chr1", pnext, 30, "10M", "=", pos, tlen, strrep("A", 10), "*", sep = "\t")
+        )
+    }
+    sam <- tempfile(fileext = ".sam")
+    writeLines(c(
+        pair("last", chr1_end, chr1_end - 49, 50), # fragment [chr1_end - 50, chr1_end)
+        paste("zero", 67, "chr1", 0, 30, "10M", "=", 100, 0, strrep("A", 10), "*", sep = "\t")
+    ), sam)
+    track <- random_track_name("test")
+    withr::defer(gtrack.rm(track, force = TRUE))
+    stats <- gtrack.import_mappedseq(track, "last", sam, cols.order = NULL, paired = TRUE, binsize = 50)
+    expect_equal(stats[[1]][["total.mapped"]], 1)
+    expect_equal(stats[[1]][["total.unmapped"]], 1)
+    last_bin <- (chr1_end - 50) %/% 50 * 50
+    v <- gextract(track, gintervals("chr1", last_bin - 50, chr1_end), iterator = 50, colnames = "v")$v
+    expect_equal(sum(v) * 50, 50, tolerance = 1e-5)
 })

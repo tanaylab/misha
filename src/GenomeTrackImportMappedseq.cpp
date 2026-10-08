@@ -313,7 +313,7 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 			verror("min.mapq cannot be negative");
 
 		if (min_mapq > 0 && !is_sam_format)
-			verror("min.mapq requires SAM or BAM input");
+			verror("min.mapq requires SAM or BAM input (a SAM file needs cols.order = NULL)");
 
 		if (paired) {
 			if (pileup)
@@ -432,7 +432,7 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 							flag = strtoull(str[STRAND_COL].c_str(), &endptr, 0);
 							if (*endptr)
 								break;
-							if (paired && (flag & 0x1) && !(flag & 0x40)) {
+							if (paired && (flag & 0x1) && (flag & 0x80)) {
 								second_mate = true;
 								break;
 							}
@@ -444,11 +444,11 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 						int64_t chrom_end = all_genome_intervs[chrom_idx].end;
 
 						coord = strtoll(str[COORD_COL].c_str(), &endptr, 10);
-						if (*endptr)
+						if (*endptr || coord < (one_based ? 1 : 0)) // SAM POS 0 means no position
 							break;
 						if (one_based)
-							--coord; // 0-based leftmost base (SAM POS 0 means no position)
-						if (coord < 0 || coord >= chrom_end)
+							--coord; // 0-based leftmost base
+						if (coord >= chrom_end)
 							break;
 
 						if (is_frag_format) {
@@ -484,6 +484,11 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 								}
 							}
 
+							// htslib (and so a BAM import) takes a mapped record without a CIGAR ('*') as unmapped;
+							// a malformed CIGAR, or one with no aligned reference base, is unusable too
+							if ((span = cigar_ref_span(str[CIGAR_COL])) <= 0)
+								break;
+
 							if (paired) {
 								// One fragment per proper pair, taken from the first mate (as MACS3 BAMPE does):
 								// [min(POS, PNEXT), + |TLEN|) in 1-based POS terms. Unpaired reads are filtered.
@@ -509,10 +514,6 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 								break;
 							}
 
-							// a malformed CIGAR, or one with no aligned reference base, makes the record unusable
-							if (str[CIGAR_COL] != "*" && (span = cigar_ref_span(str[CIGAR_COL])) <= 0)
-								break;
-
 							str[STRAND_COL] = flag & 0x10 ? "-" : "+";
 						}
 
@@ -520,7 +521,7 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 							coords[chrom_idx].push_back(coord);
 						else if (str[STRAND_COL] == "-" || str[STRAND_COL] == "R") {
 							// the 5' end of a reverse read is its rightmost aligned base (one past it in legacy mode)
-							if (span <= 0) // CIGAR '*', or a tab-delimited file
+							if (span <= 0) // a tab-delimited file: no CIGAR
 								span = str[SEQ_COL].size();
 							// the recorded point must lie on the chromosome; a legacy dense track clips the read instead
 							int64_t room = chrom_end - coord;

@@ -1,12 +1,12 @@
 # misha (development version)
 
-* **Behavior fix:** `gtrack.import_mappedseq()` places SAM/BAM reads at their 0-based 5' base. SAM's 1-based `POS` was used as a 0-based coordinate, so every read sat 1bp to the right; the end of a reverse read came from the length of its sequence rather than its CIGAR, which also moved reads with soft clips, indels or splices; and in a sparse track a reverse read was recorded 2bp past its 5' base. This has been so since SAM support was added. Re-importing a SAM/BAM file now gives the corrected placement; tracks built before are not changed. A SAM read on the last base of a chromosome is imported (it was counted as unmapped; with `paired` such a first mate was dropped too), a reverse read whose 5' end falls past the chromosome end is counted as unmapped, and so is a SAM record with a malformed CIGAR or one with no aligned reference base. With `paired`, a record with `POS` 0 is now counted as unmapped instead of filtered.
+* **Behavior fix:** `gtrack.import_mappedseq()` places SAM/BAM reads at their 0-based 5' base. SAM's 1-based `POS` was used as a 0-based coordinate, so every read sat 1bp to the right; the end of a reverse read came from the length of its sequence rather than its CIGAR, which also moved reads with soft clips, indels or splices; and in a sparse track a reverse read was recorded 2bp past its 5' base. This has been so since SAM support was added. Re-importing a SAM/BAM file now gives the corrected placement; tracks built before are not changed. A SAM read on the last base of a chromosome is imported (it was counted as unmapped; with `paired` such a first mate was dropped too), a reverse read whose 5' end falls past the chromosome end is counted as unmapped, and so is a mapped SAM record without a CIGAR (`*`), as htslib does, or with a malformed one. With `paired`, a record with `POS` 0 is now counted as unmapped instead of filtered.
 
 * **Bug fix:** in a sparse track, a tab-delimited reverse read ending at or past the end of a chromosome wrote a point outside the chromosome. It is now counted as unmapped.
 
 * New `one.based` argument of `gtrack.import_mappedseq()` for tab-delimited files (`cols.order`): with `TRUE` the coordinate is read as 1-based and reverse reads are placed at their 5' base, as for SAM. The default `FALSE` keeps the previous placement. Illumina export files (the default `cols.order` layout) are 1-based.
 
-* `gtrack.import_mappedseq()` imports paired-end data with `paired = TRUE`: each proper pair adds the whole span of its fragment to a dense track, instead of each mate being extended by a fixed `pileup`. The fragment is read from the first mate as `[min(POS, PNEXT), +|TLEN|)`, as MACS3 does with `-f BAMPE`. With `remove.dups` fragments with the same start and end count once, and `max.fraglen` (default 2000) drops longer ones. With `paired = TRUE` any non-SAM file is read as fragments (chrom, start, end in columns 1-3, e.g. a 10x `fragments.tsv.gz`), taken as already deduplicated.
+* `gtrack.import_mappedseq()` imports paired-end data with `paired = TRUE`: each proper pair adds the whole span of its fragment to a dense track, instead of each mate being extended by a fixed `pileup`. The fragment is read from the first mate as `[min(POS, PNEXT), +|TLEN|)`, as MACS3 does with `-f BAMPE`. With `remove.dups` fragments with the same start and end count once, and `max.fraglen` (default 2000) drops longer ones. With `paired = TRUE` a file that is neither a BAM nor a SAM read with `cols.order = NULL` is read as fragments (chrom, start, end in columns 1-3, e.g. a 10x `fragments.tsv.gz`), taken as already deduplicated.
 
 * New `min.mapq` argument of `gtrack.import_mappedseq()` drops SAM/BAM records with a lower MAPQ (default 0: no filter). For pairs it is tested on the first mate.
 
@@ -18,7 +18,11 @@
 
 * **Behavior fix:** `gtrack.import_mappedseq()` no longer imports unmapped, secondary, QC-failed or supplementary SAM/BAM records (FLAG 0x4, 0x100, 0x200, 0x800). An unmapped mate placed at its partner's position was counted as a mapped read, and supplementary alignments (e.g. from BWA) as extra reads. Re-import tracks built from such files if exact counts matter.
 
-* `gtrack.import_mappedseq()` reads a bgzipped text file with zlib instead of passing it to `samtools view` as if it were a BAM, so bgzipped fragment files work. A bgzipped SAM is still read as SAM.
+* `gtrack.import_mappedseq()` reads a bgzipped text file with zlib instead of passing it to `samtools view` as if it were a BAM, so bgzipped fragment files work. Without `paired` any bgzipped file is still read as SAM. An import that brings in no read now warns: a bgzipped file that is not SAM used to fail in `samtools view`, and would otherwise create an empty track silently.
+
+# misha 5.12.2
+
+* Potts models score faster in the `potts` virtual tracks and `gseq.potts()`, most of all when their couplings link nearby positions, such as several models summed side by side; wide models with many scattered couplings keep their speed. Some models' scores change in the last digits, so a score exactly at a threshold or tied with another can come out the other way.
 
 # misha 5.12.1
 
