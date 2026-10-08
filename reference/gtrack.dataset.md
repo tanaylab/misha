@@ -38,5 +38,5 @@ for each track.
 
 gdb.init_examples()
 gtrack.dataset("dense_track")
-#> [1] "/tmp/Rtmpa7tgWZ/trackdb/test"
+#> [1] "/tmp/RtmppI4mjn/trackdb/test"
 ```
