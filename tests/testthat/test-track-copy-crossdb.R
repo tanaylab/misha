@@ -474,34 +474,64 @@ test_that("gtrack.copy splits an indexed track of a per-chromosome db by the chr
     })
 })
 
-test_that("a dataset of a per-chromosome db without its seq/ link numbers chromosomes as the db does", {
+for (.seq_state in c("missing", "empty")) {
+    test_that(sprintf("a dataset of a per-chromosome db with its seq/ %s numbers chromosomes as the db does", .seq_state), {
+        local_db_state()
+        td <- tempfile("ds_order_")
+        dir.create(td)
+        withr::defer(unlink(td, recursive = TRUE))
+        db <- create_db_with_unsorted_chrom_sizes(file.path(td, "db"))
+        gsetroot(db)
+
+        iv <- gintervals(c("chr1", "chr2", "chr10", "chrX"), 0, 100)
+        gtrack.create_sparse("t1", "x", iv, c(1, 2, 10, 23))
+        suppressMessages(gtrack.convert_to_indexed("t1"))
+        gtrack.2d.create("r2", "x", data.frame(chrom1 = "chr1", start1 = 10, end1 = 15, chrom2 = "chr2", start2 = 30, end2 = 35), 7)
+        expected <- gextract("t1", gintervals.all())
+        expected2d <- gextract("r2", gintervals.2d.all())
+
+        ds <- file.path(td, "ds")
+        suppressMessages(gdataset.save(ds, "d", tracks = "t1"))
+        # a dataset moved away from its db, copied without its seq/ link or assembled by hand
+        unlink(file.path(ds, "seq"))
+        if (.seq_state == "empty") {
+            dir.create(file.path(ds, "seq"))
+        }
+        gtrack.rm("t1", force = TRUE)
+        suppressMessages(gdataset.load(ds))
+        expect_equal(.gdb.chrom_names_at(ds), .gdb.chrom_names_at(db))
+
+        # an indexed track copied out of the dataset keeps its values on their chromosomes
+        gtrack.copy("t1", "t1c")
+        expect_equal(gextract("t1c", gintervals.all())$t1c, expected$t1)
+
+        # a 2D track copied into the dataset
+        gtrack.copy("r2", "r2c", db = ds)
+        expect_equal(gextract("r2c", gintervals.2d.all())$r2c, expected2d$r2)
+    })
+}
+
+test_that("a dataset of an indexed db without its seq/ link is indexed as the db is", {
     local_db_state()
-    td <- tempfile("ds_order_")
+    td <- tempfile("ds_indexed_")
     dir.create(td)
     withr::defer(unlink(td, recursive = TRUE))
     db <- create_db_with_unsorted_chrom_sizes(file.path(td, "db"))
+    suppressMessages(gdb.convert_to_indexed(groot = db, force = TRUE, validate = FALSE))
     gsetroot(db)
+    expect_true(.gdb.is_indexed_at(db))
 
-    iv <- gintervals(c("chr1", "chr2", "chr10", "chrX"), 0, 100)
-    gtrack.create_sparse("t1", "x", iv, c(1, 2, 10, 23))
-    suppressMessages(gtrack.convert_to_indexed("t1"))
-    gtrack.2d.create("r2", "x", data.frame(chrom1 = "chr1", start1 = 10, end1 = 15, chrom2 = "chr2", start2 = 30, end2 = 35), 7)
-    expected <- gextract("t1", gintervals.all())
-    expected2d <- gextract("r2", gintervals.2d.all())
-
+    iv <- gintervals(c("chr1", "chr2"), 0, 100)
+    gtrack.create_sparse("t1", "x", iv, c(1, 2))
     ds <- file.path(td, "ds")
     suppressMessages(gdataset.save(ds, "d", tracks = "t1"))
-    # a dataset moved away from its db, or assembled by hand, has no usable seq/
     unlink(file.path(ds, "seq"))
     gtrack.rm("t1", force = TRUE)
     suppressMessages(gdataset.load(ds))
-    expect_equal(.gdb.chrom_names_at(ds), .gdb.chrom_names_at(db))
+    expect_true(.gdb.is_indexed_at(ds))
 
-    # an indexed track copied out of the dataset keeps its values on their chromosomes
-    gtrack.copy("t1", "t1c")
-    expect_equal(gextract("t1c", gintervals.all())$t1c, expected$t1)
-
-    # a 2D track copied into the dataset
-    gtrack.copy("r2", "r2c", db = ds)
-    expect_equal(gextract("r2c", gintervals.2d.all())$r2c, expected2d$r2)
+    gtrack.create_sparse("v1", "x", iv, c(5, 6))
+    gtrack.copy("v1", "v1c", db = ds)
+    expect_equal(gtrack.info("v1c")$format, "indexed")
+    expect_equal(gextract("v1c", iv)$v1c, c(5, 6))
 })

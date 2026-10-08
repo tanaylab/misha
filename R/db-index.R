@@ -379,11 +379,16 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
             # Call C++ import function
             # Use sort=FALSE to keep the chrom id order set up by validate_and_setup
             if (verbose) message("Creating indexed format...")
+            # genome.idx is written last, under a temporary name, and renamed into place only after
+            # chrom_sizes.txt holds the new order: a database with genome.idx counts as converted
+            # (and the sequence readers use the index), so a conversion killed before that point
+            # leaves a consistent per-chromosome database that the next run converts again.
+            index_path_tmp <- paste0(index_path, ".tmp")
             contig_info <- .gcall(
                 "gseq_multifasta_import",
                 temp_fasta,
                 genome_seq_path,
-                index_path,
+                index_path_tmp,
                 FALSE, # sort=FALSE: keep the chrom id order
                 .misha_env()
             )
@@ -401,9 +406,16 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
                 stringsAsFactors = FALSE
             )
 
-            .gwith_umask(write.table(updated_chrom_sizes, chrom_sizes_path,
+            chrom_sizes_tmp <- paste0(chrom_sizes_path, ".tmp")
+            .gwith_umask(write.table(updated_chrom_sizes, chrom_sizes_tmp,
                 quote = FALSE, sep = "\t", col.names = FALSE, row.names = FALSE
             ))
+            if (!file.rename(chrom_sizes_tmp, chrom_sizes_path)) {
+                stop(sprintf("Failed to replace %s", chrom_sizes_path), call. = FALSE)
+            }
+            if (!file.rename(index_path_tmp, index_path)) {
+                stop(sprintf("Failed to move %s into place", index_path), call. = FALSE)
+            }
 
             # Validate if requested
             if (validate) {
@@ -480,6 +492,7 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
             if (file.exists(index_path)) {
                 unlink(index_path)
             }
+            unlink(paste0(index_path, ".tmp"))
             stop(sprintf("Conversion failed: %s", conditionMessage(e)), call. = FALSE)
         }
     )

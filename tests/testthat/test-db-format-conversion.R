@@ -413,3 +413,55 @@ test_that("gdb.convert_to_indexed keeps the chrom ids of a per-chromosome databa
         expect_identical(read_bytes(unloaded_db), read_bytes(loaded_db), info = f)
     }
 })
+
+test_that("a genome.idx left without genome.seq does not make a per-chromosome db count as indexed", {
+    local_db_state()
+    td <- withr::local_tempdir()
+    db <- create_db_with_unsorted_chrom_sizes(file.path(td, "db"))
+    ref <- create_db_with_unsorted_chrom_sizes(file.path(td, "ref"))
+    file.create(file.path(db, "seq", "genome.idx"))
+    cs <- utils::read.csv(file.path(db, "chrom_sizes.txt"),
+        sep = "\t", header = FALSE, col.names = c("chrom", "size"), colClasses = c("character", "numeric")
+    )
+    expect_true(misha:::.gdb.chrom_order(db, cs)$per_chromosome)
+
+    # it converts to the order a clean copy of the database converts to
+    suppressMessages(gdb.convert_to_indexed(groot = db, force = TRUE, validate = FALSE))
+    suppressMessages(gdb.convert_to_indexed(groot = ref, force = TRUE, validate = FALSE))
+    expect_equal(readLines(file.path(db, "chrom_sizes.txt")), readLines(file.path(ref, "chrom_sizes.txt")))
+})
+
+test_that("a conversion killed right after the sequence import leaves a database the next run converts", {
+    skip_on_cran()
+    skip_on_os("windows")
+    skip_if_not_installed("callr")
+    skip_if_not_installed("pkgload")
+    root <- normalizePath(test_path("..", ".."), mustWork = FALSE)
+    skip_if_not(file.exists(file.path(root, "DESCRIPTION")), "needs the package source")
+    local_db_state()
+    td <- withr::local_tempdir()
+    db <- create_db_with_unsorted_chrom_sizes(file.path(td, "db"))
+
+    # SIGKILL right after gseq_multifasta_import, as a killed job: no R error handler runs
+    try(callr::r(function(root, db) {
+        pkgload::load_all(root, compile = FALSE, quiet = TRUE)
+        gcall <- misha:::.gcall
+        utils::assignInNamespace(".gcall", function(...) {
+            res <- gcall(...)
+            if (identical(..1, "gseq_multifasta_import")) {
+                tools::pskill(Sys.getpid(), tools::SIGKILL)
+            }
+            res
+        }, "misha")
+        suppressMessages(gdb.convert_to_indexed(groot = db, force = TRUE, validate = FALSE))
+    }, args = list(root, db)), silent = TRUE)
+
+    # not converted yet, so the next run converts it
+    expect_false(file.exists(file.path(db, "seq", "genome.idx")))
+    suppressMessages(gdb.convert_to_indexed(groot = db, force = TRUE, validate = FALSE))
+    expect_true(file.exists(file.path(db, "seq", "genome.idx")))
+    gsetroot(db)
+    expected <- c(chr1 = "G", chr1_KI270706v1_random = "N", chr10 = "C", chr2 = "A", chrX = "T")
+    got <- vapply(names(expected), function(chrom) toupper(gseq.extract(gintervals(chrom, 0, 1))), character(1))
+    expect_equal(got, expected)
+})

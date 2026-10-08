@@ -707,30 +707,34 @@ gdb.mark_cache_dirty <- function() {
         return(FALSE)
     }
     seq_dir <- file.path(groot, "seq")
-    if (!dir.exists(seq_dir)) {
-        return(FALSE)
+    if (file.exists(file.path(seq_dir, "genome.idx")) && file.exists(file.path(seq_dir, "genome.seq"))) {
+        return(TRUE)
     }
-    file.exists(file.path(seq_dir, "genome.idx")) &&
-        file.exists(file.path(seq_dir, "genome.seq"))
+    # A loaded dataset with no sequence of its own (its seq/ link gone, or an empty folder) is in
+    # the loaded database's format; a dataset that is a database in its own right keeps its own
+    loaded <- c(get0("GROOT", envir = .misha, ifnotfound = NULL), get0("GDATASETS", envir = .misha, ifnotfound = NULL))
+    if (!length(list.files(seq_dir)) && normalizePath(groot, mustWork = FALSE) %in% normalizePath(loaded, mustWork = FALSE)) {
+        working_seq <- file.path(get("GROOT", envir = .misha), "seq")
+        return(file.exists(file.path(working_seq, "genome.idx")) && file.exists(file.path(working_seq, "genome.seq")))
+    }
+    FALSE
 }
 
 # The chromosome names of the database at groot in chrom id order, as gsetroot() gives
-# them (.gdb.chrom_order), without loading it: chrom id i (0-based) is element i + 1. An
-# indexed track of the database is keyed by these ids. In a per-chromosome database the
-# names get the "chr" prefix and follow the sorted names, not the chrom_sizes.txt order.
+# them (.gdb.chrom_order): chrom id i (0-based) is element i + 1. An indexed track of the
+# database is keyed by these ids. In a per-chromosome database the names get the "chr" prefix
+# and follow the sorted names, not the chrom_sizes.txt order. The loaded database and its
+# loaded datasets (gdataset.load() requires the same chrom_sizes.txt) take the order gsetroot()
+# gave, held in ALLGENOME, rather than probe seq/: a dataset's seq/ link may be gone or empty.
+# Any other database is read from disk, without loading it.
 .gdb.chrom_names_at <- function(groot) {
+    loaded <- c(get0("GROOT", envir = .misha, ifnotfound = NULL), get0("GDATASETS", envir = .misha, ifnotfound = NULL))
+    if (normalizePath(groot, mustWork = FALSE) %in% normalizePath(loaded, mustWork = FALSE)) {
+        return(as.character(get("ALLGENOME", envir = .misha)[[1]]$chrom))
+    }
     cs <- file.path(groot, "chrom_sizes.txt")
     if (!file.exists(cs)) {
         stop(sprintf("chrom_sizes.txt missing in %s", groot), call. = FALSE)
-    }
-    # A dataset whose seq/ link is gone (or that never had one) cannot show that its database is
-    # per-chromosome. gdataset.load() requires its chrom_sizes.txt to be the working database's,
-    # so it takes the working database's order; a database always has seq/.
-    working <- get0("GROOT", envir = .misha, ifnotfound = NULL)
-    if (!file.exists(file.path(groot, "seq")) && !is.null(working) &&
-        identical(unname(tools::md5sum(cs)), unname(tools::md5sum(file.path(working, "chrom_sizes.txt"))))) {
-        cs <- file.path(working, "chrom_sizes.txt")
-        groot <- working
     }
     # read as gsetroot() reads it
     chromsizes <- utils::read.csv(

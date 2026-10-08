@@ -98,3 +98,25 @@ test_that("a per-chromosome database gets the same chrom ids in a C and an en_US
     skip_if(!length(en_us), "no en_US.UTF-8 locale")
     expect_equal(chroms_by_id(en_us[[1]]), in_c)
 })
+
+test_that("the chrom sort key orders names as order() does under ICU root collation", {
+    skip_if_not(capabilities("ICU"), "R built without ICU")
+    names <- c(
+        "chr1", "chr10", "chr1_KI270706v1_random", "chr2", "chrX", "chrY", "chrM", "chrEBV",
+        "chrUn_GL000220v1", "chrUn_KI270302v1", "chr6_GL000250v2_alt", "chr2_KI270894v1_alt",
+        "HLA-A*01:01:01:01", "HLA-A*01:01:01:02N", "HLA-B*07:02:01", "HLA-DRB1*15:01:01:01",
+        "NC_000001.11", "NC_000010.11", "NT_187361.1", "chr1.1", "chr1-1", "chr1_1", "chr1 1",
+        "Chr1", "CHR1", "chr1a", "chr1A", "scaffold_10", "scaffold-10", "scaffold.10", "Scaffold_9",
+        "super-scaffold_1", "Super_Scaffold_1", "MT", "mt", "contig#2", "contig@2", "contig(2)"
+    )
+    # and random printable-ASCII names
+    set.seed(5)
+    printable <- intToUtf8(32:126, multiple = TRUE)
+    names <- unique(c(names, vapply(1:500, function(i) {
+        paste(sample(printable, sample(1:12, 1), replace = TRUE), collapse = "")
+    }, character(1))))
+
+    withr::defer(icuSetCollate(locale = "default"))
+    icuSetCollate(locale = "root")
+    expect_equal(names[order(misha:::.gdb.chrom_sort_key(names), method = "radix")], names[order(names)])
+})

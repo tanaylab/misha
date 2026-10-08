@@ -202,7 +202,9 @@
 }
 
 .is_per_chromosome_db <- function(groot, chromsizes) {
-    if (file.exists(file.path(groot, "seq", "genome.idx"))) {
+    # indexed as gdb.convert_to_indexed() and the sequence readers see it: genome.idx and
+    # genome.seq both, not a genome.idx left over from an interrupted conversion
+    if (file.exists(file.path(groot, "seq", "genome.idx")) && file.exists(file.path(groot, "seq", "genome.seq"))) {
         return(FALSE)
     }
 
@@ -274,7 +276,8 @@
 # compared by their primary weights, then by their tertiary weights. A byte outside ASCII
 # sorts after every ASCII character, by its value: ICU's order of non-ASCII characters is
 # not reproduced, so a name with one may sort differently than order() sorts it in an
-# en_US.UTF-8 session. pymisha's r_collate_less (src/PMDb.cpp) uses the same rule, as of
+# en_US.UTF-8 session. TAB, LF and CR are not ignored by ICU either (it sorts them before the
+# space), so a name with one of them sorts differently too. pymisha's r_collate_less (src/PMDb.cpp) uses the same rule, as of
 # commit e6c52e9 on its chrom-names-r-order branch; released pymisha does not yet.
 .gdb.chrom_sort_key <- function(names) {
     punct_digits <- utf8ToInt(" _-,;:!?.'\"()[]{}@*/\\&#%`^+<=>|~$0123456789")
