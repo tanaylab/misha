@@ -182,17 +182,24 @@ void GTrackIntervalsFetcher::create_track_meta(const char *track_name, const Int
 			// O(num files) rather than O(N*N), which is the only tractable
 			// choice when N is large. A pair named by several files (aliases of
 			// its chromosomes) is read once, from the file the readers use.
-			vector<string> filenames;
-			rdb::get_chrom_files(trackpath.c_str(), filenames, true);
+			// The directory is read as is: this is also the fallback when a track.idx could not
+			// be loaded, and get_chrom_files lists nothing next to a track.idx.
 			set<pair<int, int>> listed;
-			for (const string &filename : filenames) {
-				try {
-					const auto ilisted = listed.insert(GenomeTrack::get_chromid_2d(iu.get_chromkey(), filename));
-					if (ilisted.second)
-						pairs.emplace_back((uint64_t)ilisted.first->first, (uint64_t)ilisted.first->second);
-				} catch (TGLException &) {
-					continue;  // not a chrom-pair file (attributes, etc.)
+			DIR *d = opendir(trackpath.c_str());
+			if (d) {
+				struct dirent *de;
+				while ((de = readdir(d)) != NULL) {
+					if (de->d_name[0] == '.')
+						continue;
+					try {
+						const auto ilisted = listed.insert(GenomeTrack::get_chromid_2d(iu.get_chromkey(), de->d_name));
+						if (ilisted.second)
+							pairs.emplace_back((uint64_t)ilisted.first->first, (uint64_t)ilisted.first->second);
+					} catch (TGLException &) {
+						continue;  // not a chrom-pair file (attributes, etc.)
+					}
 				}
+				closedir(d);
 			}
 		}
 

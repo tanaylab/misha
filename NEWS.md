@@ -1,12 +1,14 @@
 # misha 5.12.2
 
-* **Behavior fix:** `gdb.convert_to_indexed()` converts a database that is not loaded as it does the loaded one. It had renumbered the chromosomes of a per-chromosome database with an unsorted, unprefixed `chrom_sizes.txt`, so its existing indexed tracks and interval sets read the wrong chromosomes; recreate those in a database converted that way.
+* **Behavior fix:** `gdb.convert_to_indexed()` renumbered the chromosomes of a per-chromosome database that was not loaded, if its `chrom_sizes.txt` was unsorted and unprefixed. Recreate the indexed tracks and interval sets of a database converted that way.
 
-* **Behavior fix:** `gtrack.copy()` of an indexed track out of a per-chromosome database with an unsorted, unprefixed `chrom_sizes.txt` put values on the wrong chromosomes. Re-copy such tracks.
+* **Behavior fix:** `gtrack.copy()` of an indexed track out of a per-chromosome database with an unsorted, unprefixed `chrom_sizes.txt`, or out of a dataset of one, put values on the wrong chromosomes. Re-copy such tracks.
 
-* **Behavior fix:** a per-chromosome database with an unprefixed `chrom_sizes.txt` gets the same chromosome order in every locale: a session in a C locale now numbers its chromosomes as an en_US session does (on hg38 they differed). Indexed tracks and interval sets converted in a C-locale session in such a database read the wrong chromosomes and have to be recreated: `gtrack.convert_to_indexed()` leaves an indexed track as it is.
+* **Behavior fix:** a per-chromosome database with an unprefixed `chrom_sizes.txt` gets the same chromosome order in every session. A C locale or an R built without ICU had numbered its chromosomes differently: recreate indexed tracks and interval sets converted in such a session.
 
-* **Behavior fix:** files named by chromosome aliases (`1` for `chr1`, `1-2` for `chr1` and `chr2`, as earlier pymisha wrote them) are found in 2D tracks, big interval sets and `gtrack.liftover()` source tracks, as in 1D tracks. Such 2D tracks had read as empty and such sources lifted to empty tracks, with no error. If such a 2D track was used as an intervals set, delete the `.meta` file in its directory. Where a pair has both a canonically named and an alias-named file, the canonical one is read, and `gtrack.2d.convert_to_indexed()` and `gintervals.2d.convert_to_indexed()` pack only that one (with `remove.old = TRUE` they remove both).
+* **Behavior fix:** files named by chromosome aliases (`1-2` for `chr1` and `chr2`, as earlier pymisha wrote them) are found in 2D tracks, big interval sets and `gtrack.liftover()` sources, which had read as empty. Delete the `.meta` file of such a 2D track used as an intervals set.
+
+* **Behavior fix:** when a chromosome pair has both a canonically named and an alias-named file, `gtrack.2d.convert_to_indexed()` and `gintervals.2d.convert_to_indexed()` pack the canonical one, which the readers use; `remove.old = TRUE` removes both.
 
 * Potts models score faster in the `potts` virtual tracks and `gseq.potts()`, most of all when their couplings link nearby positions, such as several models summed side by side; wide models with many scattered couplings keep their speed. Some models' scores change in the last digits, so a score exactly at a threshold or tied with another can come out the other way.
 

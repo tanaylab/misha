@@ -87,3 +87,30 @@ test_that("gintervals.2d.convert_to_indexed packs the file the readers use when 
     expect_false(any(c("chr1-chr2", "1-2") %in% list.files(set_dir)))
     expect_equal(gintervals.load("dupset"), expected)
 })
+
+test_that("gintervals.convert_to_indexed finds a per-chromosome file named by a chromosome alias", {
+    local_db_state()
+    withr::local_options(list(gmulticontig.indexed_format = FALSE))
+    td <- tempfile("bigset_mt_")
+    dir.create(td)
+    withr::defer(unlink(td, recursive = TRUE))
+    db <- file.path(td, "db")
+    dir.create(file.path(db, "tracks"), recursive = TRUE)
+    dir.create(file.path(db, "seq"))
+    for (chrom in c("1", "M")) {
+        writeBin(charToRaw(strrep("A", 1000)), file.path(db, "seq", paste0("chr", chrom, ".seq")))
+    }
+    writeLines(paste(c("1", "M"), 1000, sep = "\t"), file.path(db, "chrom_sizes.txt"))
+    gsetroot(db)
+
+    withr::with_options(list(gmax.data.size = 1), gintervals.save("mtset", gintervals(c("chr1", "chrM"), c(0, 10), c(100, 20))))
+    set_dir <- file.path(db, "tracks", "mtset.interv")
+    # chrM's file named by its alias MT
+    expect_true(file.rename(file.path(set_dir, "chrM"), file.path(set_dir, "MT")))
+    expected <- gintervals.load("mtset")
+    expect_equal(as.character(expected$chrom), c("chr1", "chrM"))
+
+    suppressMessages(gintervals.convert_to_indexed("mtset"))
+    expect_true(file.exists(file.path(set_dir, "intervals.idx")))
+    expect_equal(gintervals.load("mtset"), expected)
+})

@@ -96,10 +96,22 @@ test_that("a symlinked pair file counts, whether canonical or named by aliases",
     expect_equal(gextract("linked", scope), expected)
     expect_equal(gintervals.load("linked", chrom1 = "chr1", chrom2 = "chr2"), expected_load)
 
-    # a symlink to a file that is not a pair file is not taken for one
-    writeLines("x", file.path(td, "notes.txt"))
+    # a symlink to a file that is not a pair file is not taken for one, even when it sorts
+    # before the pair files and reads as a dense track file (any text does)
+    writeLines("Notes on this track", file.path(td, "notes.txt"))
     expect_true(file.symlink(file.path(td, "notes.txt"), file.path(track_dir, "notes")))
+    expect_true(file.symlink(file.path(td, "notes.txt"), file.path(track_dir, "README")))
+    gdb.reload()
+    expect_equal(gtrack.info("linked")$type, "rectangles")
     expect_equal(gextract("linked", scope), expected)
+
+    # the same for a 1D track
+    gtrack.create_sparse("sp", "x", gintervals(c("chr1", "chr2"), 0, 100), c(1, 2))
+    expected_sp <- gextract("sp", gintervals.all())
+    expect_true(file.symlink(file.path(td, "notes.txt"), file.path(db, "tracks", "sp.track", "README")))
+    gdb.reload()
+    expect_equal(gtrack.info("sp")$type, "sparse")
+    expect_equal(gextract("sp", gintervals.all()), expected_sp)
 })
 
 test_that("a canonical pair file wins over an alias-named one read before it appeared", {

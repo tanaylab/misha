@@ -201,33 +201,11 @@ SEXP ginterv_convert(SEXP _intervset, SEXP _remove_old, SEXP _envir) {
         for (int chromid = 0; chromid < (int)chromkey.get_num_chroms(); chromid++) {
             string chrom_name = chromkey.id2chrom(chromid);
 
-            // Try to find the chromosome file, handling chr prefix mismatch
-            string chr_file;
-            bool found = false;
-
-            // Try 1: chromosome name as-is
-            string candidate = intervset_dir + "/" + chrom_name;
+            // The chromosome's file as the readers find it: its name, the chr-toggled name or an
+            // alias of the chromosome (GenomeTrack::find_existing_1d_filename)
+            string chr_file = intervset_dir + "/" + GenomeTrack::find_existing_1d_filename(chromkey, intervset_dir, chromid);
             struct stat st;
-            if (stat(candidate.c_str(), &st) == 0) {
-                chr_file = candidate;
-                found = true;
-            } else {
-                // Try 2: with "chr" prefix if not already present
-                if (chrom_name.substr(0, 3) != "chr") {
-                    candidate = intervset_dir + "/chr" + chrom_name;
-                    if (stat(candidate.c_str(), &st) == 0) {
-                        chr_file = candidate;
-                        found = true;
-                    }
-                } else {
-                    // Try 3: without "chr" prefix if present
-                    candidate = intervset_dir + "/" + chrom_name.substr(3);
-                    if (stat(candidate.c_str(), &st) == 0) {
-                        chr_file = candidate;
-                        found = true;
-                    }
-                }
-            }
+            bool found = stat(chr_file.c_str(), &st) == 0;
 
             IntervalsContigEntry entry;
             entry.chrom_id = chromid;

@@ -229,8 +229,7 @@ GenomeTrack::Type GenomeTrack::get_type(const char *track_dir, const GenomeChrom
 		}
 	}
 
-	// Fall back to per-chromosome probing (per-chrom files, symlinked ones too: a file that is
-	// not track data is skipped below)
+	// Fall back to per-chromosome probing (per-chrom files, symlinked ones too)
 	vector<string> filenames;
 	rdb::get_chrom_files(track_dir, filenames, true);
 
@@ -239,6 +238,20 @@ GenomeTrack::Type GenomeTrack::get_type(const char *track_dir, const GenomeChrom
 	for (const string &fname : filenames) {
 		string fullpath = string(track_dir) + "/" + fname;
 		bool is_2d = fname.find('-') != string::npos;
+
+		// A symlink counts only when it is named as a chrom or pair file: s_read_type reads most
+		// text (a linked README, say) as a dense track file
+		struct stat lst;
+		if (!lstat(fullpath.c_str(), &lst) && S_ISLNK(lst.st_mode)) {
+			try {
+				if (is_2d)
+					get_chromid_2d(chromkey, fname);
+				else
+					chromkey.chrom2id(fname);
+			} catch (TGLException &) {
+				continue;
+			}
+		}
 
 		try {
 			Type type = s_read_type(fullpath.c_str());
