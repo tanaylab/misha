@@ -46,8 +46,10 @@ void PottsScorer::invalidate_cache()
     std::vector<uint8_t>().swap(m_win_hit);
 }
 
-double PottsScorer::anchor_value(const int8_t *c, bool union_max, int &dir) const
+double PottsScorer::anchor_value(size_t i, bool union_max, int &dir) const
 {
+    const int8_t *c = &m_codes[i];
+    const int8_t *bc = &m_block_codes[i];
     // When m_strand == -1 the fetched target is already reverse-complemented,
     // so the ORIGINAL forward strand is what the twin reads off it, and vice
     // versa. Same inversion as PWMScorer's score_{forward,reverse}_original().
@@ -57,9 +59,9 @@ double PottsScorer::anchor_value(const int8_t *c, bool union_max, int &dir) cons
     double f = -std::numeric_limits<double>::infinity();
     double r = -std::numeric_limits<double>::infinity();
     if (check_fwd)
-        f = (m_strand == -1) ? m_rc.score_codes(c) : m_model.score_codes(c);
+        f = (m_strand == -1) ? m_rc.score_codes(c, bc) : m_model.score_codes(c, bc);
     if (check_rev)
-        r = (m_strand == -1) ? m_model.score_codes(c) : m_rc.score_codes(c);
+        r = (m_strand == -1) ? m_model.score_codes(c, bc) : m_rc.score_codes(c, bc);
 
     dir = 1;
     if (check_fwd && check_rev) {
@@ -113,6 +115,8 @@ double PottsScorer::compute_position_result(size_t index, size_t target_length,
 double PottsScorer::score_direct(size_t i_min, size_t i_max, size_t motif_len, size_t tlen,
                                 bool fill_window)
 {
+    // The block codes of every window scored below.
+    potts_block_codes(m_codes, m_block_codes, i_min, i_max + motif_len);
     const bool union_max = (m_mode == MAX_LIKELIHOOD_POS);
     double acc = -std::numeric_limits<double>::infinity();
     bool have_acc = false;
@@ -171,7 +175,7 @@ double PottsScorer::score_direct(size_t i_min, size_t i_max, size_t motif_len, s
         if (m_nbad[i + motif_len] - m_nbad[i] != 0)
             continue;
         int dir = 1;
-        const double u = anchor_value(&m_codes[i], union_max, dir);
+        const double u = anchor_value(i, union_max, dir);
         const size_t s = (m_strand == -1) ? (i_max - i) : (i - i_min);
         if (u > best)
             best = u;
@@ -382,6 +386,12 @@ double PottsScorer::try_slide_window(const GInterval &original_interval,
     // the ones just above i_min.
     const bool union_max = (m_mode == MAX_LIKELIHOOD_POS);
 
+    // The block codes of the `stride` arriving anchors' windows only.
+    const size_t first = slot_index(W - stride, i_min, i_max);
+    const size_t last = slot_index(W - 1, i_min, i_max);
+    const size_t lo = std::min(first, last);
+    potts_block_codes(m_codes, m_block_codes, lo, std::max(first, last) + motif_len);
+
     switch (m_mode) {
     case TOTAL_LIKELIHOOD: {
         // Decided BEFORE the first pop, so the guarantee stated above holds:
@@ -425,7 +435,7 @@ double PottsScorer::try_slide_window(const GInterval &original_interval,
             int dir = 1;
             const bool bad = (m_nbad[i + motif_len] - m_nbad[i] != 0);
             m_slide.rlse.push(bad ? -std::numeric_limits<float>::infinity()
-                                  : (float)anchor_value(&m_codes[i], union_max, dir));
+                                  : (float)anchor_value(i, union_max, dir));
         }
         break;
     }
@@ -438,7 +448,7 @@ double PottsScorer::try_slide_window(const GInterval &original_interval,
             int dir = 1;
             const bool bad = (m_nbad[i + motif_len] - m_nbad[i] != 0);
             const float v = bad ? -std::numeric_limits<float>::infinity()
-                                : (float)anchor_value(&m_codes[i], union_max, dir);
+                                : (float)anchor_value(i, union_max, dir);
             m_slide.rmax.push(v, dir, m_slide.win_lo_key + int64_t(W) + int64_t(k));
         }
         break;
@@ -456,7 +466,7 @@ double PottsScorer::try_slide_window(const GInterval &original_interval,
             // score_direct(), so a cached count and a re-seeded one cannot
             // differ over an anchor sitting on the threshold.
             const uint8_t hit =
-                (!bad && anchor_value(&m_codes[i], union_max, dir) >= m_score_thresh) ? 1
+                (!bad && anchor_value(i, union_max, dir) >= m_score_thresh) ? 1
                                                                                      : 0;
             m_slide.hits.push_back(hit);
             m_slide.hit_count += hit;

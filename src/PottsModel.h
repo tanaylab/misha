@@ -31,39 +31,42 @@ using namespace std;
 // makes the reverse strand cost exactly what the forward strand costs, where
 // reverse-complementing per anchor would dominate the loop.
 //
-// score_codes() has two implementations, chosen once per model in
-// build_blocked_tables() rather than per anchor:
+// PottsModel has two kernels for the same score:
 //
 //   score_codes_naive()   - one table lookup per single-site term and one per
 //                            pair term: 1 + W + npair lookups.
 //   score_codes_blocked() - positions packed two at a time into a 0..15
-//                            "block code"; one table per block folds its own
-//                            singles (and the pair within the block, if any)
+//                            "block code" (once per window, for both
+//                            strands, by potts_block_codes()); one table per
+//                            block folds its own singles (and the pair
+//                            within the block, if any)
 //                            into one lookup, and one table per BLOCK PAIR
-//                            folds the up to 4 cross-block couplings into one
-//                            lookup: ceil(W/2) + C(ceil(W/2), 2) lookups. At
+//                            that some coupling links (every block pair,
+//                            from 80% linked) folds its up to 4 cross-block
+//                            couplings into one lookup: ceil(W/2) + (block
+//                            pairs with a table) lookups. At
 //                            W = 20, full pairwise, that is 10 + 45 = 55
-//                            instead of 211.
+//                            instead of 211; for a sum of four side-by-side
+//                            models at W = 41 (253 pairs), 21 + 73 = 94
+//                            instead of 295.
 //
-// score_codes_blocked()'s lookup count does NOT depend on how many pairs the
-// model actually has (it is fixed by W alone), while score_codes_naive()'s
-// does. So the blocked kernel only wins when the model is dense enough that
-// 1 + W + npair exceeds ceil(W/2) + C(ceil(W/2), 2) - measured through
-// gseq.potts() on an idle host at W = 20: ~3.4x faster full pairwise (190
-// pairs), a real but smaller win at 64 pairs, and 4-6x SLOWER at 0 pairs
-// (an order-1 model, i.e. one with no couplings at all), where it would spend 55
-// lookups computing what 21 could. score_codes() therefore picks whichever
-// kernel has the smaller lookup count for THIS model (m_use_blocked, set once
-// in build_blocked_tables()), not the blocked kernel unconditionally.
+// score_codes() picks one of the two per model (m_use_blocked, set once in
+// build_blocked_tables()). The blocked kernel is 2-5x faster on a model whose
+// couplings are local or dense, and faster on an order-1 model, but up to
+// 1.5x slower on a wide model whose couplings are scattered so that each
+// needs a block pair of its own - see the gate in build_blocked_tables().
+// The naive kernel is also the fallback for W > 256 and the equivalence
+// tests' reference.
 //
 // build_blocked_tables() generalizes to odd W (a trailing size-1 block) and
-// to sparse or absent pairs (a missing coupling contributes 0 to its slot),
-// so score_codes_blocked() agrees with score_codes_naive() for ANY
+// to sparse or absent pairs (a missing coupling contributes 0 to its block
+// pair's table, and a block pair that no coupling links has no table, or an
+// all-zero one from 80% linked), so score_codes_blocked() agrees with
+// score_codes_naive() for ANY
 // PottsModel - not only the dense, even-W case it is designed to win on. For
-// a W wide enough that ceil(W/2) would overflow the fixed block-code scratch
-// array (MAX_BLOCKS = 128, i.e. W > 256), build_blocked_tables() leaves the
-// blocked tables unbuilt (blocked_available() is false) and score_codes()
-// falls back to the naive kernel.
+// W > 256 (MAX_BLOCKS = 128), build_blocked_tables() leaves the blocked
+// tables unbuilt (blocked_available() is false) and score_codes() falls back
+// to the naive kernel.
 class PottsModel {
 public:
     PottsModel() = default;
@@ -102,6 +105,11 @@ public:
     // it itself before calling score_codes_blocked() directly.
     bool blocked_available() const { return m_nblocks > 0; }
 
+    // Whether score_codes() runs the blocked kernel for this model - the
+    // gate in build_blocked_tables(). C_potts_score_codes_cmp reports it so
+    // that tests can check the gate rather than restate it.
+    bool use_blocked() const { return m_use_blocked; }
+
     // The reference kernel: one table lookup per single-site term and one per
     // pair term, in whatever order pairs were given. 1 + W + npair lookups.
     inline double score_codes_naive(const int8_t *c) const
@@ -115,36 +123,45 @@ public:
         return s;
     }
 
-    // The dinucleotide-blocked kernel - see the class comment. The caller
-    // must guarantee blocked_available() (score_codes() checks it; a direct
-    // caller, such as the equivalence test's C_potts_score_codes_cmp, must
-    // check it itself).
-    inline double score_codes_blocked(const int8_t *c) const
+    // The dinucleotide-blocked kernel - see the class comment. bc points at
+    // the window's first block code from potts_block_codes(): block b's code is
+    // bc[2 * b]. The caller must guarantee blocked_available() (score_codes()
+    // checks it; a direct caller, such as the equivalence test's
+    // C_potts_score_codes_cmp, must check it itself).
+    inline double score_codes_blocked(const int8_t *bc) const
     {
-        int8_t code[MAX_BLOCKS];
-        for (int b = 0; b < m_nblocks; ++b) {
-            const int p0 = 2 * b;
-            code[b] = (m_block_size[b] == 2) ? (int8_t)(4 * c[p0] + c[p0 + 1]) : c[p0];
-        }
-
         double s = m_intercept;
         for (int b = 0; b < m_nblocks; ++b)
-            s += m_block_table[m_block_offset[b] + (std::size_t)code[b]];
+            s += m_block_table[(std::size_t)b * 16 + (std::size_t)bc[2 * b]];
 
-        std::size_t pp = 0;
-        for (int u = 0; u < m_nblocks; ++u)
-            for (int v = u + 1; v < m_nblocks; ++v, ++pp)
-                s += m_pair_table[m_pair_offset[pp] +
-                                   (std::size_t)code[u] * (std::size_t)m_card[v] + (std::size_t)code[v]];
+        // Only the block pairs some coupling links, in (u, v) order; pair k's
+        // 16 x 16 table starts at k * 256. Any other block pair's table would
+        // be all zeros, and adding 0 leaves the sum as it was. When every
+        // block pair has a table (see build_blocked_tables()), u and v come
+        // from the loop counters instead of m_pair_u / m_pair_v - the same
+        // terms in the same order, and measured 6-30% faster on full
+        // pairwise models (W = 20 to 64).
+        if (m_pair_u.size() == (std::size_t)m_nblocks * (std::size_t)(m_nblocks - 1) / 2) {
+            std::size_t k = 0;
+            for (int u = 0; u < m_nblocks; ++u) {
+                const std::size_t cu = (std::size_t)bc[2 * u] * 16;
+                for (int v = u + 1; v < m_nblocks; ++v, ++k)
+                    s += m_pair_table[k * 256 + cu + (std::size_t)bc[2 * v]];
+            }
+        } else {
+            for (std::size_t k = 0; k < m_pair_u.size(); ++k)
+                s += m_pair_table[k * 256 + (std::size_t)bc[m_pair_u[k]] * 16 + (std::size_t)bc[m_pair_v[k]]];
+        }
         return s;
     }
 
     // Production entry point - GseqPotts.cpp and PottsParams' consumers call
-    // this and never the two kernels above directly. Picks whichever kernel
-    // has the smaller lookup count for THIS model - see the class comment.
-    inline double score_codes(const int8_t *c) const
+    // this and never the two kernels above directly. Runs the kernel that
+    // build_blocked_tables()'s gate picked for THIS model. c and bc are the
+    // window's codes and block codes (potts_encode(), potts_block_codes()).
+    inline double score_codes(const int8_t *c, const int8_t *bc) const
     {
-        return m_use_blocked ? score_codes_blocked(c) : score_codes_naive(c);
+        return m_use_blocked ? score_codes_blocked(bc) : score_codes_naive(c);
     }
 
     // The complemented twin: rc().score_codes(w) == score_codes(revcomp(w)).
@@ -184,10 +201,10 @@ public:
 
 private:
     // Supports W up to 256. build_blocked_tables() disables the blocked
-    // kernel rather than overflow the score_codes_blocked() scratch array if
-    // ceil(W/2) exceeds this - no PottsModel using it today gets remotely
-    // close (test widths top out at 21; a realistic motif width tops out
-    // well under 100).
+    // kernel beyond that rather than build tables that grow as W^2 (jsum
+    // below is 8 MB at W = 256) - no PottsModel using it today gets remotely
+    // close (every test width, and a realistic motif width, is well under
+    // 100).
     static constexpr int MAX_BLOCKS = 128;
 
     void build_blocked_tables()
@@ -196,13 +213,6 @@ private:
         if (m_nblocks == 0 || m_nblocks > MAX_BLOCKS) {
             m_nblocks = 0; // blocked_available() is false; score_codes() uses naive
             return;
-        }
-
-        m_block_size.assign(m_nblocks, 2);
-        m_card.assign(m_nblocks, 16);
-        if (m_W % 2 == 1) {
-            m_block_size.back() = 1;
-            m_card.back() = 4;
         }
 
         // Sum every k's 4x4 block into jsum[(i*W+j)*16 + b*4+a], i < j. A
@@ -223,55 +233,78 @@ private:
             return jsum[((std::size_t)i * m_W + j) * 16 + (std::size_t)xj * 4 + xi];
         };
 
-        // Per-block tables: the block's own single-site terms, plus the
-        // within-block pair if the model has one.
-        m_block_offset.assign((std::size_t)m_nblocks + 1, 0);
-        for (int b = 0; b < m_nblocks; ++b)
-            m_block_offset[b + 1] = m_block_offset[b] + (std::size_t)m_card[b];
-        m_block_table.assign(m_block_offset[m_nblocks], 0.0);
-
+        // Per-block tables, 16 entries each: the block's own single-site
+        // terms, plus the within-block pair if the model has one. A block
+        // code is 4 * (first base) + (second base). The trailing block of an
+        // odd W has one position, and its table ignores the second base
+        // (whatever follows the window, or 0 - see potts_block_codes()).
+        m_block_table.assign((std::size_t)m_nblocks * 16, 0.0);
         for (int b = 0; b < m_nblocks; ++b) {
             const int p0 = 2 * b;
-            const bool paired = m_block_size[b] == 2;
-            const int p1_ = paired ? p0 + 1 : -1;
-            for (int code = 0; code < m_card[b]; ++code) {
-                const int x0 = paired ? (code >> 2) : code;
-                const int x1 = paired ? (code & 3) : 0;
+            const bool paired = p0 + 1 < m_W;
+            for (int code = 0; code < 16; ++code) {
+                const int x0 = code >> 2, x1 = code & 3;
                 double v = m_e[(std::size_t)p0 * 4 + x0];
                 if (paired) {
-                    v += m_e[(std::size_t)p1_ * 4 + x1];
-                    v += pair_j(p0, p1_, x0, x1);
+                    v += m_e[(std::size_t)(p0 + 1) * 4 + x1];
+                    v += pair_j(p0, p0 + 1, x0, x1);
                 }
-                m_block_table[m_block_offset[b] + (std::size_t)code] = v;
+                m_block_table[(std::size_t)b * 16 + (std::size_t)code] = v;
             }
         }
 
         // Per-block-pair tables: up to 4 cross terms between the (1 or 2)
-        // positions of block u and the (1 or 2) positions of block v.
-        const int npairs_blocks = m_nblocks * (m_nblocks - 1) / 2;
-        m_pair_offset.assign((std::size_t)npairs_blocks + 1, 0);
-        {
-            int pp = 0;
-            for (int u = 0; u < m_nblocks; ++u)
-                for (int v = u + 1; v < m_nblocks; ++v, ++pp)
-                    m_pair_offset[pp + 1] =
-                        m_pair_offset[pp] + (std::size_t)m_card[u] * (std::size_t)m_card[v];
+        // positions of block u and the (1 or 2) positions of block v. Unless
+        // most block pairs are linked (below), only a block pair that some
+        // coupling links (a position of u with a position of v) gets a
+        // table: any other block pair's table would be all zeros. A model
+        // whose couplings are local links few of its block pairs - a sum of
+        // four side-by-side models at W = 41 links 73 of its 210 - and the
+        // zero tables were most of the kernel's lookups. Every table is
+        // 16 x 16; when v is the trailing size-1 block, its column ignores
+        // the second base, as the block table does.
+        vector<char> linked((std::size_t)m_nblocks * (std::size_t)m_nblocks, 0);
+        std::size_t nlinked = 0;
+        for (std::size_t k = 0; k < m_p1.size(); ++k) {
+            const int bu = m_p1[k] / 2, bv = m_p2[k] / 2;
+            char &l = linked[(std::size_t)bu * m_nblocks + bv];
+            if (bu != bv && !l) {
+                l = 1;
+                ++nlinked;
+            }
         }
-        m_pair_table.assign(m_pair_offset[npairs_blocks], 0.0);
+        // Once most block pairs are linked, every block pair gets a table
+        // (all zeros for an unlinked one) so that the kernel takes u and v
+        // from its loop counters. Reading them from m_pair_u / m_pair_v costs
+        // more per lookup, and from about 80% linked down, the fewer lookups
+        // no longer make up for it (measured at W = 20, 41 and 64).
+        const std::size_t npairs_blocks = (std::size_t)m_nblocks * (std::size_t)(m_nblocks - 1) / 2;
+        if (5 * nlinked >= 4 * npairs_blocks) {
+            for (int u = 0; u < m_nblocks; ++u)
+                for (int v = u + 1; v < m_nblocks; ++v)
+                    linked[(std::size_t)u * m_nblocks + v] = 1;
+            nlinked = npairs_blocks;
+        }
 
-        int pp = 0;
+        m_pair_u.clear();
+        m_pair_v.clear();
+        m_pair_table.assign(nlinked * 256, 0.0);
         for (int u = 0; u < m_nblocks; ++u) {
             const int pu0 = 2 * u;
-            const int pu1 = (m_block_size[u] == 2) ? pu0 + 1 : -1;
-            for (int v = u + 1; v < m_nblocks; ++v, ++pp) {
+            const int pu1 = (pu0 + 1 < m_W) ? pu0 + 1 : -1;
+            for (int v = u + 1; v < m_nblocks; ++v) {
+                if (!linked[(std::size_t)u * m_nblocks + v])
+                    continue;
                 const int pv0 = 2 * v;
-                const int pv1 = (m_block_size[v] == 2) ? pv0 + 1 : -1;
-                for (int cu = 0; cu < m_card[u]; ++cu) {
-                    const int xu0 = (pu1 >= 0) ? (cu >> 2) : cu;
-                    const int xu1 = (pu1 >= 0) ? (cu & 3) : 0;
-                    for (int cv = 0; cv < m_card[v]; ++cv) {
-                        const int xv0 = (pv1 >= 0) ? (cv >> 2) : cv;
-                        const int xv1 = (pv1 >= 0) ? (cv & 3) : 0;
+                const int pv1 = (pv0 + 1 < m_W) ? pv0 + 1 : -1;
+                const std::size_t off = m_pair_u.size() * 256;
+                m_pair_u.push_back(2 * u);
+                m_pair_v.push_back(2 * v);
+
+                for (int cu = 0; cu < 16; ++cu) {
+                    const int xu0 = cu >> 2, xu1 = cu & 3;
+                    for (int cv = 0; cv < 16; ++cv) {
+                        const int xv0 = cv >> 2, xv1 = cv & 3;
 
                         double s = pair_j(pu0, pv0, xu0, xv0);
                         if (pv1 >= 0)
@@ -281,22 +314,29 @@ private:
                         if (pu1 >= 0 && pv1 >= 0)
                             s += pair_j(pu1, pv1, xu1, xv1);
 
-                        m_pair_table[m_pair_offset[pp] +
-                                      (std::size_t)cu * (std::size_t)m_card[v] + (std::size_t)cv] = s;
+                        m_pair_table[off + (std::size_t)cu * 16 + (std::size_t)cv] = s;
                     }
                 }
             }
         }
 
-        // The gate: use the blocked kernel only when it actually has fewer
-        // lookups for THIS model. Its lookup count (m_nblocks + npairs_blocks)
-        // is fixed by W alone; the naive kernel's (1 + W + npair) shrinks with
-        // the model's pair count, so a sparse or order-1 model can make naive
-        // the faster choice even though blocked wins the dense case this
-        // kernel was designed for. See the class comment for measured numbers.
-        const std::size_t blocked_lookups = (std::size_t)m_nblocks + (std::size_t)npairs_blocks;
-        const std::size_t naive_lookups = 1 + (std::size_t)m_W + m_p1.size();
-        m_use_blocked = blocked_lookups < naive_lookups;
+        // The gate, in naive lookups: blocked when a * nlinked + 0.5 *
+        // m_nblocks - 4 < W + npair, where nlinked counts the block pairs with
+        // a table and a block pair's lookup costs a = 1 in the loop over every
+        // block pair, 1.5 through the m_pair_u / m_pair_v list. A block pair's
+        // table is 2 KB where the naive kernel reads 128 bytes per coupling,
+        // so couplings scattered one per block pair cost the blocked kernel
+        // more than the naive one, and wide models with them run naive.
+        // Fitted to gseq.potts() times of both kernels on 245 models (W 6-256;
+        // order 1, bands, random, side-by-side blocks, full pairwise and
+        // scattered couplings, some at 81% of block pairs; one strand and
+        // both): the kernel this picks was at most 12% slower than the other
+        // one, 0.15% on average. The two kernels add the same terms in
+        // different orders, so their scores can differ in the last bits; for
+        // odd W, rc() links a different set of block pairs, so the two
+        // strands of one model can run different kernels.
+        const std::size_t a2 = (nlinked == npairs_blocks) ? 2 : 3; // 2a
+        m_use_blocked = a2 * nlinked + (std::size_t)m_nblocks < 2 * ((std::size_t)m_W + m_p1.size()) + 8;
     }
 
     int m_W = 0;
@@ -307,19 +347,20 @@ private:
 
     // Blocked-kernel tables, built by build_blocked_tables(). m_nblocks == 0
     // means "not built" (W too wide for MAX_BLOCKS) - blocked_available()
-    // reports this. m_use_blocked is the separate, per-model dispatch
-    // decision score_codes() acts on (see build_blocked_tables()'s gate) -
-    // the tables are always built when W allows, even when m_use_blocked is
-    // false, so score_codes_blocked() stays callable (and correct) for the
-    // equivalence test regardless of which kernel production picks.
+    // reports this. m_use_blocked is the gate's per-model choice; the tables
+    // are built whenever W allows, so score_codes_blocked() stays callable for
+    // the equivalence test whichever kernel production runs.
     int m_nblocks = 0;
     bool m_use_blocked = false;
-    std::vector<int> m_block_size;      // per block, 1 or 2 positions
-    std::vector<int> m_card;            // per block, 4^size
-    std::vector<double> m_block_table;
-    std::vector<std::size_t> m_block_offset; // nblocks+1, prefix sums into m_block_table
+    std::vector<double> m_block_table; // nblocks * 16, block b's at b * 16
+    // The block pairs with a table - the linked ones, or every one from 80%
+    // linked - in (u, v) order, and their 16 x 16 tables (pair k's at
+    // k * 256). m_pair_u and m_pair_v hold each block's first position
+    // (2u, 2v), which indexes the block codes directly: storing the block
+    // index and doubling it per lookup took 14% longer through gseq.potts()
+    // on a W = 41 band of 8 (1.23 vs 1.08 s).
+    std::vector<int> m_pair_u, m_pair_v;
     std::vector<double> m_pair_table;
-    std::vector<std::size_t> m_pair_offset;  // npairs_blocks+1, prefix sums into m_pair_table
 };
 
 // Encode a target once per interval. codes[p] is 0..3 or -1 for any non-ACGT
@@ -339,6 +380,34 @@ inline void potts_encode(const std::string &target,
         codes[p] = c;
         nbad[p + 1] = nbad[p] + (c < 0 ? 1 : 0);
     }
+}
+
+// block_codes[p] = 4 * codes[p] + codes[p + 1], the code of a block that
+// starts at p, for p in [lo, hi) - what score_codes_blocked() reads. Built
+// once per window for both strands rather than by the kernel per anchor, and
+// only over the windows about to be scored: a vtrack that slides by one base
+// encodes its whole target but scores one anchor, and a pass over the whole
+// target made that 35-55% slower. block_codes is sized to codes. Past the
+// end, or before a non-ACGT base, the second base counts as 0: a scorable
+// window reads that only for the trailing size-1 block of an odd W, whose
+// tables ignore the second base. A non-ACGT first base gives a negative code,
+// never read, since a window with that base is not scored.
+inline void potts_block_codes(const std::vector<int8_t> &codes,
+                              std::vector<int8_t> &block_codes,
+                              std::size_t lo, std::size_t hi)
+{
+    const std::size_t n = codes.size();
+    block_codes.resize(n);
+    if (hi > n)
+        hi = n;
+    // Every p but the last has a next base; the last gets 0.
+    const std::size_t end = (hi == n && lo < hi) ? hi - 1 : hi;
+    for (std::size_t p = lo; p < end; ++p) {
+        const int8_t next = codes[p + 1];
+        block_codes[p] = (int8_t)(4 * codes[p] + (next < 0 ? 0 : next));
+    }
+    if (end < hi)
+        block_codes[end] = (int8_t)(4 * codes[end]);
 }
 
 #endif // POTTS_MODEL_H_
