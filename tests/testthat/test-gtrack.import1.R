@@ -22,16 +22,16 @@ test_that("import and extract from sample-small.sam", {
     reads <- read.table(pipe(paste("grep -v '^@'", sam, "| cut -f2-4,6")),
         sep = "\t", col.names = c("flag", "chrom", "pos", "cigar"), stringsAsFactors = FALSE
     )
-    reads <- reads[bitwAnd(reads$flag, 0x904) == 0, ]
+    reads <- reads[bitwAnd(reads$flag, 0xB04) == 0, ]
     ops <- regmatches(reads$cigar, gregexpr("[0-9]+[MDN=X]", reads$cigar))
     span <- vapply(ops, function(o) sum(as.numeric(sub("[MDN=X]", "", o))), numeric(1))
     reverse <- bitwAnd(reads$flag, 0x10) != 0
-    point <- ifelse(reverse, reads$pos - 1 + span - 1, reads$pos - 1)
+    reads$start <- ifelse(reverse, reads$pos - 1 + span - 1, reads$pos - 1)
+    reads$Freq <- 1
     chroms <- gintervals.all()
-    expected <- as.data.frame(table(chrom = reads$chrom, start = point), stringsAsFactors = FALSE)
-    expected <- expected[expected$Freq > 0 & expected$chrom %in% chroms$chrom, ]
-    expected$start <- as.numeric(expected$start)
-    expected <- expected[expected$start < chroms$end[match(expected$chrom, chroms$chrom)], ]
+    reads <- reads[reads$chrom %in% chroms$chrom, ]
+    reads <- reads[reads$start < chroms$end[match(reads$chrom, chroms$chrom)], ]
+    expected <- aggregate(Freq ~ chrom + start, data = reads, FUN = sum)
     expected <- expected[order(expected$chrom, expected$start), ]
 
     got <- data.frame(chrom = as.character(r$chrom), start = r$start, v = r$v, stringsAsFactors = FALSE)

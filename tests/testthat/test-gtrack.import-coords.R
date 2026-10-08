@@ -76,3 +76,31 @@ test_that("one.based is rejected for fragment files", {
     withr::defer(gtrack.rm(track, force = TRUE))
     expect_error(gtrack.import_mappedseq(track, "x", frag, binsize = 50, paired = TRUE, one.based = TRUE), "one.based is not used")
 })
+
+test_that("SAM records with a malformed or absurd CIGAR are not imported", {
+    sam <- tempfile(fileext = ".sam")
+    cigars <- c("10S", "5I5S", "0M", "10Q", "M10", "10M5", "10m", "9223372036854775807M")
+    writeLines(c(
+        mapply(sam_line, paste0("r", seq_along(cigars)), 16, 100, cigars, 10),
+        sam_line("f1", 0, 200, "10Q", 10),
+        sam_line("ok", 16, 300, "10M", 10)
+    ), sam)
+    track <- random_track_name("test")
+    withr::defer(gtrack.rm(track, force = TRUE))
+    stats <- gtrack.import_mappedseq(track, "bad cigar", sam, cols.order = NULL)
+    expect_equal(stats[[1]][["total.mapped"]], 1)
+    expect_equal(stats[[1]][["total.unmapped"]], length(cigars) + 1)
+    expect_equal(gextract(track, gintervals("chr1", 0, 1000))$start, 308)
+})
+
+test_that("a tab-delimited reverse read ending at the chromosome end is not written past it", {
+    chr1_end <- gintervals.all()$end[gintervals.all()$chrom == "chr1"]
+    tab <- tempfile(fileext = ".tsv")
+    writeLines(paste(strrep("A", 10), "chr1", chr1_end - 10, "R", sep = "\t"), tab)
+    track <- random_track_name("test")
+    withr::defer(gtrack.rm(track, force = TRUE))
+    # legacy sparse: the point would be chr1_end itself
+    stats <- gtrack.import_mappedseq(track, "end", tab, cols.order = 1:4)
+    expect_equal(stats[[1]][["total.mapped"]], 0)
+    expect_null(gextract(track, gintervals("chr1", chr1_end - 100, chr1_end)))
+})

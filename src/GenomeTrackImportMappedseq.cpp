@@ -180,20 +180,26 @@ static std::unique_ptr<ByteSource> open_source(const std::string &path) {
 	return std::make_unique<PlainSource>(path);
 }
 
-// Reference length of a CIGAR (M, D, N, = and X operations); -1 for "*" or a malformed CIGAR.
+// Reference length of a CIGAR (M, D, N, = and X operations); -1 for "*", a malformed CIGAR or an absurd length.
 static int64_t cigar_ref_span(const std::string &cigar) {
+	const int64_t MAX_LEN = (int64_t)1 << 40; // keeps len and span far from overflow
 	int64_t span = 0, len = 0;
 	bool has_len = false;
 	for (char ch : cigar) {
 		if (ch >= '0' && ch <= '9') {
 			len = len * 10 + (ch - '0');
+			if (len >= MAX_LEN)
+				return -1;
 			has_len = true;
 			continue;
 		}
 		if (!has_len)
 			return -1;
-		if (ch == 'M' || ch == 'D' || ch == 'N' || ch == '=' || ch == 'X')
+		if (ch == 'M' || ch == 'D' || ch == 'N' || ch == '=' || ch == 'X') {
 			span += len;
+			if (span >= MAX_LEN)
+				return -1;
+		}
 		else if (ch != 'I' && ch != 'S' && ch != 'H' && ch != 'P')
 			return -1;
 		len = 0;
@@ -420,6 +426,7 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 						int64_t coord;
 						char *endptr;
 						uint64_t flag = 0;
+						int64_t span = -1; // reference span of a SAM read, from its CIGAR
 
 						if (is_sam_format) {
 							flag = strtoull(str[STRAND_COL].c_str(), &endptr, 0);
@@ -502,6 +509,10 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 								break;
 							}
 
+							// a malformed CIGAR, or one with no aligned reference base, makes the record unusable
+							if (str[CIGAR_COL] != "*" && (span = cigar_ref_span(str[CIGAR_COL])) <= 0)
+								break;
+
 							str[STRAND_COL] = flag & 0x10 ? "-" : "+";
 						}
 
@@ -509,13 +520,13 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 							coords[chrom_idx].push_back(coord);
 						else if (str[STRAND_COL] == "-" || str[STRAND_COL] == "R") {
 							// the 5' end of a reverse read is its rightmost aligned base (one past it in legacy mode)
-							int64_t span = is_sam_format ? cigar_ref_span(str[CIGAR_COL]) : -1;
-							if (span <= 0)
+							if (span <= 0) // CIGAR '*', or a tab-delimited file
 								span = str[SEQ_COL].size();
-							int64_t rev_coord = coord + span - rev_end_off;
-							if (!legacy && rev_coord >= chrom_end)
+							// the recorded point must lie on the chromosome; a legacy dense track clips the read instead
+							int64_t room = chrom_end - coord;
+							if (legacy ? !pileup && span >= room : span > room)
 								break;
-							coords[num_chroms + chrom_idx].push_back(rev_coord);
+							coords[num_chroms + chrom_idx].push_back(coord + span - rev_end_off);
 						} else
 							break;
 
