@@ -320,21 +320,23 @@ private:
             }
         }
 
-        // The gate. Fitted to gseq.potts() times of both kernels on 241 models
-        // (W 6-256; order 1, bands, random, side-by-side blocks, full pairwise
-        // and scattered diagonals; one strand and both): blocked whenever
-        // every block pair has a table, otherwise when 1.5 * nlinked +
-        // 0.5 * m_nblocks - 4 < W + npair, in naive lookups. A linked block
-        // pair's table is 2 KB where the naive kernel reads 128 bytes per
-        // coupling, so couplings scattered one per block pair cost the
-        // blocked kernel more than the naive one, and wide models with them
-        // run naive. The kernel this picks was at most 12% slower than the
-        // other one, 0.15% on average. The two kernels add the same terms in
+        // The gate, in naive lookups: blocked when a * nlinked + 0.5 *
+        // m_nblocks - 4 < W + npair, where nlinked counts the block pairs with
+        // a table and a block pair's lookup costs a = 1 in the loop over every
+        // block pair, 1.5 through the m_pair_u / m_pair_v list. A block pair's
+        // table is 2 KB where the naive kernel reads 128 bytes per coupling,
+        // so couplings scattered one per block pair cost the blocked kernel
+        // more than the naive one, and wide models with them run naive.
+        // Fitted to gseq.potts() times of both kernels on 245 models (W 6-256;
+        // order 1, bands, random, side-by-side blocks, full pairwise and
+        // scattered couplings, some at 81% of block pairs; one strand and
+        // both): the kernel this picks was at most 12% slower than the other
+        // one, 0.15% on average. The two kernels add the same terms in
         // different orders, so their scores can differ in the last bits; for
         // odd W, rc() links a different set of block pairs, so the two
         // strands of one model can run different kernels.
-        m_use_blocked = nlinked == npairs_blocks ||
-                        3 * nlinked + (std::size_t)m_nblocks < 2 * ((std::size_t)m_W + m_p1.size()) + 8;
+        const std::size_t a2 = (nlinked == npairs_blocks) ? 2 : 3; // 2a
+        m_use_blocked = a2 * nlinked + (std::size_t)m_nblocks < 2 * ((std::size_t)m_W + m_p1.size()) + 8;
     }
 
     int m_W = 0;

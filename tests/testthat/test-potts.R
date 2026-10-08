@@ -286,10 +286,10 @@ test_that("gseq.potts mode = pos works on the reverse strand alone", {
 })
 
 test_that("the blocked kernel agrees with the naive one on 1e6 random windows at W = 20, full pairwise", {
-    # PottsModel.h's score_codes() runs score_codes_blocked() for every
-    # model up to W = 256, so production scores come from the blocked kernel
-    # and the naive one is its reference. This is the equivalence check that
-    # rests on, kept as a permanent regression test -
+    # PottsModel.h's score_codes() runs whichever kernel build_blocked_tables()'s
+    # gate picks for the model - the blocked one for a dense model like this
+    # one. This is the equivalence check that choice rests on, kept as a
+    # permanent regression test -
     # C_potts_score_codes_cmp is a test-only entry point that scores an
     # integer code matrix with BOTH kernels directly, without a DNA string or
     # gseq.potts() in between.
@@ -466,8 +466,8 @@ test_that("an odd-W window followed by an N, or by nothing, scores like the orac
 
 test_that("a model wider than 256 runs the naive kernel and scores like the oracle", {
     # build_blocked_tables() builds no blocked tables past W = 256, so
-    # score_codes() falls back to the naive kernel - the one place production
-    # still runs it.
+    # score_codes() falls back to the naive kernel whatever the gate would
+    # say.
     W <- 257L
     full <- t(utils::combn(W, 2))
     pairs <- full[full[, 2] - full[, 1] <= 2L, , drop = FALSE]
@@ -515,6 +515,34 @@ test_that("couplings scattered one per block pair run the naive kernel", {
     )
     set.seed(82L)
     n <- 5000L
+    codes <- matrix(sample(0:3, W * n, replace = TRUE), nrow = W, ncol = n)
+    storage.mode(codes) <- "integer"
+    res <- .Call("C_potts_score_codes_cmp", params, codes)
+    expect_equal(res$use_blocked, c(FALSE, FALSE))
+    max_diff <- max(abs(res$naive - res$blocked))
+    expect_true(max_diff < 1e-9, info = sprintf("max |naive - blocked| = %.3e over %d windows", max_diff, n))
+
+    # The same holds where every block pair gets a table (80% or more
+    # linked): one coupling in each of the block pairs (u, v) with u + v not
+    # a multiple of 6 links 83% of them at W = 64.
+    W <- 64L
+    nb <- W %/% 2L
+    bp <- t(utils::combn(nb, 2)) - 1L
+    bp <- bp[(bp[, 1] + bp[, 2]) %% 6L != 0L, , drop = FALSE]
+    expect_gte(nrow(bp), 0.8 * choose(nb, 2))
+    pairs <- 2L * bp + 1L
+    storage.mode(pairs) <- "integer"
+    set.seed(83L)
+    m <- list(
+        e = matrix(round(rnorm(W * 4), 4), nrow = W, ncol = 4, dimnames = list(NULL, POTTS_BASES)),
+        J = lapply(seq_len(nrow(pairs)), function(k) matrix(round(rnorm(16), 4), 4L, 4L)),
+        pairs = pairs,
+        intercept = round(rnorm(1), 4)
+    )
+    params <- misha:::.potts_params(m,
+        bidirect = TRUE, extend = FALSE, strand = 1L, score.thresh = 0,
+        what = "scattered couplings test"
+    )
     codes <- matrix(sample(0:3, W * n, replace = TRUE), nrow = W, ncol = n)
     storage.mode(codes) <- "integer"
     res <- .Call("C_potts_score_codes_cmp", params, codes)

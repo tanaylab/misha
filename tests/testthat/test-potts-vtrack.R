@@ -581,8 +581,8 @@ test_that("an odd-W potts vtrack scores like gseq.potts, seeded and slid", {
 
     iv <- gintervals(1, 5000, 5100)
     for (o in list(list(bidirect = TRUE, strand = 1), list(bidirect = FALSE, strand = -1))) {
+        th <- potts_cache_thresh(m, iv, 40L, o$bidirect, as.integer(o$strand))
         for (it in c(1L, 7L)) {
-            th <- potts_cache_thresh(m, iv, 40L, o$bidirect, as.integer(o$strand))
             for (fn in c("potts", "potts.max", "potts.max.pos", "potts.count")) {
                 expect_potts_cache_agrees(
                     fn, c(m, o, list(extend = TRUE, score.thresh = th)),
