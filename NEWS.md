@@ -8,6 +8,8 @@
 
 * **Behavior fix:** files named by chromosome aliases (`1` for `chr1`, `1-2` for `chr1` and `chr2`, as earlier pymisha wrote them) are found in 2D tracks, big interval sets and `gtrack.liftover()` source tracks, as in 1D tracks. Such 2D tracks had read as empty and such sources lifted to empty tracks, with no error. If such a 2D track was used as an intervals set, delete the `.meta` file in its directory. Where a pair has both a canonically named and an alias-named file, the canonical one is read, and `gtrack.2d.convert_to_indexed()` and `gintervals.2d.convert_to_indexed()` pack only that one (with `remove.old = TRUE` they remove both).
 
+* Potts models score faster in the `potts` virtual tracks and `gseq.potts()`, most of all when their couplings link nearby positions, such as several models summed side by side; wide models with many scattered couplings keep their speed. Some models' scores change in the last digits, so a score exactly at a threshold or tied with another can come out the other way.
+
 # misha 5.12.1
 
 * **Behavior fix:** `gcluster.run()` jobs run against the caller's database, working directory, datasets and virtual tracks, and load misha from the caller's library. They had used the example database unless the job called `gsetroot()` itself.
