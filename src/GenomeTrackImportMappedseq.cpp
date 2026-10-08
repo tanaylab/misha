@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <zlib.h>
 
@@ -166,6 +167,12 @@ static bool has_bam_payload(const std::string &path) {
 }
 
 static std::unique_ptr<ByteSource> open_source(const std::string &path) {
+	// A FIFO or other non-regular file (e.g. misha.ext's samtools pipe) cannot be sniffed: reading its first
+	// bytes consumes them and closes the only reader. zlib reads plain or gzipped text from it as a stream.
+	struct stat st;
+	if (::stat(path.c_str(), &st) == 0 && !S_ISREG(st.st_mode))
+		return std::make_unique<GzipSource>(path);
+
 	unsigned char magic[4] = {0, 0, 0, 0};
 	size_t n = read_magic_bytes(path, magic, 4);
 	// bgzip uses gzip magic with FLG.FEXTRA (0x04) and method 0x08; that

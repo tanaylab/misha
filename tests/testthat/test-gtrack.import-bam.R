@@ -111,3 +111,31 @@ test_that("gtrack.import_mappedseq accepts gzipped SAM", {
     expect_equal(stats[[1]][["total.mapped"]], 2)
     expect_equal(stats[[1]][["total.unmapped"]], 1)
 })
+
+test_that("gtrack.import_mappedseq reads SAM from a named pipe", {
+    skip_on_os("windows")
+    skip_if(!nzchar(Sys.which("mkfifo")), "mkfifo not on PATH")
+    sam <- tempfile(fileext = ".sam")
+    writeLines(default_sam_text(), sam)
+
+    for (gz in c(FALSE, TRUE)) {
+        src <- sam
+        if (gz) {
+            src <- paste0(sam, ".gz")
+            con <- gzfile(src, "w")
+            writeLines(default_sam_text(), con)
+            close(con)
+        }
+        fifo <- tempfile()
+        system2("mkfifo", fifo)
+        withr::defer(unlink(fifo))
+        # the writer blocks until the importer opens the pipe
+        system(paste("cat", shQuote(src), ">", shQuote(fifo)), wait = FALSE)
+
+        tmptrack <- random_track_name("test")
+        withr::defer(gtrack.rm(tmptrack, force = TRUE))
+        stats <- gtrack.import_mappedseq(tmptrack, "FIFO", fifo, cols.order = NULL)
+        expect_equal(stats[[1]][["total.mapped"]], 2, info = paste("gzipped:", gz))
+        expect_equal(stats[[1]][["total.unmapped"]], 1, info = paste("gzipped:", gz))
+    }
+})
