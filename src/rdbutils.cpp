@@ -838,7 +838,7 @@ void rdb::runprotect_all()
 	RdbInitializer::s_protect_counter = 0;
 }
 
-void rdb::get_chrom_files(const char *dirname, vector<string> &chrom_files)
+void rdb::get_chrom_files(const char *dirname, vector<string> &chrom_files, bool with_symlinks)
 {
 	// Check for indexed format first
 	string idx_path = string(dirname) + "/track.idx";
@@ -872,7 +872,7 @@ void rdb::get_chrom_files(const char *dirname, vector<string> &chrom_files)
 
 		if (dirp->d_type == DT_REG)
 			chrom_files.push_back(dirp->d_name);
-		else if (dirp->d_type == DT_UNKNOWN || dirp->d_type == DT_LNK) {  // a symlink counts if it leads to a regular file
+		else if (dirp->d_type == DT_UNKNOWN || (with_symlinks && dirp->d_type == DT_LNK)) {
 			struct stat sbuf;
 			char filename[PATH_MAX];
 

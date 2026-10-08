@@ -61,3 +61,29 @@ test_that("a big intervals set whose files are named by chromosome aliases reads
 
     expect_equal(read_all(), expected)
 })
+
+test_that("gintervals.2d.convert_to_indexed packs the file the readers use when aliases name a pair twice", {
+    local_db_state()
+    withr::local_options(list(gmulticontig.indexed_format = FALSE))
+    td <- tempfile("bigset_dup_")
+    dir.create(td)
+    withr::defer(unlink(td, recursive = TRUE))
+    db <- create_db_with_unsorted_chrom_sizes(file.path(td, "db"))
+    gsetroot(db)
+
+    withr::with_options(list(gmax.data.size = 1), {
+        gintervals.save("dupset", gintervals.2d(c("chr1", "chr2"), c(0, 0), c(50, 100), c("chr2", "chr2"), c(0, 0), c(50, 100)))
+        gintervals.save("otherset", gintervals.2d(c("chr1", "chr2"), c(200, 200), c(300, 300), c("chr2", "chr2"), c(200, 200), c(300, 300)))
+    })
+    # an alias-named file of a pair that also has its canonical file, which the readers use
+    set_dir <- file.path(db, "tracks", "dupset.interv")
+    expect_true(file.copy(file.path(db, "tracks", "otherset.interv", "chr1-chr2"), file.path(set_dir, "1-2")))
+    expected <- gintervals.load("dupset")
+    expect_equal(nrow(expected), 2)
+
+    suppressMessages(gintervals.2d.convert_to_indexed("dupset", remove.old = TRUE))
+    expect_true(file.exists(file.path(set_dir, "intervals2d.idx")))
+    # remove.old removes every file of a packed pair
+    expect_false(any(c("chr1-chr2", "1-2") %in% list.files(set_dir)))
+    expect_equal(gintervals.load("dupset"), expected)
+})

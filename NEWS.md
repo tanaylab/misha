@@ -6,7 +6,7 @@
 
 * **Behavior fix:** a per-chromosome database with an unprefixed `chrom_sizes.txt` gets the same chromosome order in every locale: a session in a C locale now numbers its chromosomes as an en_US session does (on hg38 they differed). Indexed tracks and interval sets converted in a C-locale session in such a database read the wrong chromosomes and have to be recreated: `gtrack.convert_to_indexed()` leaves an indexed track as it is.
 
-* **Behavior fix:** files named by chromosome aliases (`1` for `chr1`, `1-2` for `chr1` and `chr2`, as earlier pymisha wrote them) are found in 2D tracks, big interval sets and `gtrack.liftover()` source tracks, as in 1D tracks. Such 2D tracks had read as empty and such sources lifted to empty tracks, with no error. If such a 2D track was used as an intervals set, delete the `.meta` file in its directory.
+* **Behavior fix:** files named by chromosome aliases (`1` for `chr1`, `1-2` for `chr1` and `chr2`, as earlier pymisha wrote them) are found in 2D tracks, big interval sets and `gtrack.liftover()` source tracks, as in 1D tracks. Such 2D tracks had read as empty and such sources lifted to empty tracks, with no error. If such a 2D track was used as an intervals set, delete the `.meta` file in its directory. Where a pair has both a canonically named and an alias-named file, the canonical one is read, and `gtrack.2d.convert_to_indexed()` and `gintervals.2d.convert_to_indexed()` pack only that one (with `remove.old = TRUE` they remove both).
 
 # misha 5.12.1
 

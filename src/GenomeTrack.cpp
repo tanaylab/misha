@@ -141,7 +141,7 @@ void GenomeTrack::get_2d_alias_filenames(const GenomeChromKey &chromkey, const s
 
 	// get_chrom_files lists nothing for an indexed track: it keeps every pair in track.dat
 	vector<string> filenames;
-	rdb::get_chrom_files(track_dir.c_str(), filenames);
+	rdb::get_chrom_files(track_dir.c_str(), filenames, true);
 	sort(filenames.begin(), filenames.end());
 
 	unordered_set<string> existing(filenames.begin(), filenames.end());
@@ -159,9 +159,14 @@ void GenomeTrack::get_2d_alias_filenames(const GenomeChromKey &chromkey, const s
 
 string GenomeTrack::get_2d_filename(const GenomeChromKey &chromkey, const string &track_dir, int chromid1, int chromid2)
 {
+	// the canonical file wins whatever the cache holds
+	const string canonical = get_2d_filename(chromkey, chromid1, chromid2);
+	if (access((track_dir + "/" + canonical).c_str(), F_OK) == 0)
+		return canonical;
+
 	struct stat st;
 	if (stat(track_dir.c_str(), &st) != 0)
-		return get_2d_filename(chromkey, chromid1, chromid2);
+		return canonical;
 #ifdef __APPLE__
 	const int64_t mtime = (int64_t)st.st_mtimespec.tv_sec * 1000000000 + st.st_mtimespec.tv_nsec;
 #else
@@ -224,9 +229,10 @@ GenomeTrack::Type GenomeTrack::get_type(const char *track_dir, const GenomeChrom
 		}
 	}
 
-	// Fall back to per-chromosome probing (per-chrom files)
+	// Fall back to per-chromosome probing (per-chrom files, symlinked ones too: a file that is
+	// not track data is skipped below)
 	vector<string> filenames;
-	rdb::get_chrom_files(track_dir, filenames);
+	rdb::get_chrom_files(track_dir, filenames, true);
 
 	sort(filenames.begin(), filenames.end());
 

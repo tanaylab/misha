@@ -15,7 +15,9 @@
 #include <algorithm>
 #include <dirent.h>
 #include <tuple>
+#include <map>
 
+#include "GenomeTrack.h"
 #include "IntervalsIndex1D.h"
 #include "IntervalsIndex2D.h"
 #include "CRC64.h"
@@ -368,61 +370,27 @@ SEXP ginterv2d_convert(SEXP _intervset, SEXP _remove_old, SEXP _envir) {
         IntervUtils iu(_envir);
         const GenomeChromKey &chromkey = iu.get_chromkey();
 
-        // Enumerate existing per-pair files
-        DIR *dir = opendir(intervset_dir.c_str());
-        if (!dir) {
-            verror("Cannot open interval set directory %s: %s",
-                   intervset_dir.c_str(), strerror(errno));
-        }
-
-        // Store both chromids and original filenames
-        vector<tuple<int, int, string>> pair_files; // (chromid1, chromid2, filename)
-        struct dirent *entry;
-        while ((entry = readdir(dir)) != nullptr) {
-            string filename = entry->d_name;
-
-            // Skip . and ..
-            if (filename == "." || filename == "..") continue;
-
-            // Look for files matching pattern: chrom1-chrom2
-            size_t dash_pos = filename.find('-');
-            if (dash_pos != string::npos && dash_pos > 0 && dash_pos < filename.length() - 1) {
-                string chrom1_name = filename.substr(0, dash_pos);
-                string chrom2_name = filename.substr(dash_pos + 1);
-
-                // Try to map to chromids (handle chr prefix mismatch)
-                int chromid1 = chromkey.chrom2id(chrom1_name.c_str());
-                int chromid2 = chromkey.chrom2id(chrom2_name.c_str());
-
-                // If not found, try with/without chr prefix
-                if (chromid1 < 0) {
-                    if (chrom1_name.substr(0, 3) == "chr") {
-                        chromid1 = chromkey.chrom2id(chrom1_name.substr(3).c_str());
-                    } else {
-                        chromid1 = chromkey.chrom2id(("chr" + chrom1_name).c_str());
-                    }
-                }
-                if (chromid2 < 0) {
-                    if (chrom2_name.substr(0, 3) == "chr") {
-                        chromid2 = chromkey.chrom2id(chrom2_name.substr(3).c_str());
-                    } else {
-                        chromid2 = chromkey.chrom2id(("chr" + chrom2_name).c_str());
-                    }
-                }
-
-                if (chromid1 >= 0 && chromid2 >= 0) {
-                    pair_files.push_back(make_tuple(chromid1, chromid2, filename));
-                }
+        // The per-pair files by chrom pair, names parsed as the readers parse them; a file that is
+        // not a pair file is left alone. A pair named by several files (aliases of its chromosomes)
+        // is packed from the file the readers use (get_2d_filename with the alias filenames), and
+        // remove_old removes all of its files.
+        vector<string> filenames;
+        rdb::get_chrom_files(intervset_dir.c_str(), filenames, true);
+        GenomeTrack::Pair2Filename alias_filenames;
+        GenomeTrack::get_2d_alias_filenames(chromkey, intervset_dir, alias_filenames);
+        map<pair<int, int>, vector<string>> pair_filenames;  // sorted by (chromid1, chromid2) for stable ordering
+        for (const string &filename : filenames) {
+            try {
+                pair_filenames[GenomeTrack::get_chromid_2d(chromkey, filename)].push_back(filename);
+            } catch (TGLException &) {
+                continue;
             }
         }
-        closedir(dir);
 
-        // Sort pairs by (chromid1, chromid2) for stable ordering
-        sort(pair_files.begin(), pair_files.end(),
-             [](const tuple<int, int, string> &a, const tuple<int, int, string> &b) {
-                 if (get<0>(a) != get<0>(b)) return get<0>(a) < get<0>(b);
-                 return get<1>(a) < get<1>(b);
-             });
+        vector<tuple<int, int, string>> pair_files; // (chromid1, chromid2, filename)
+        for (const auto &ipair : pair_filenames)
+            pair_files.emplace_back(ipair.first.first, ipair.first.second,
+                                    GenomeTrack::get_2d_filename(chromkey, ipair.first.first, ipair.first.second, alias_filenames));
 
         // Prepare paths
         dat_path_tmp = intervset_dir + "/intervals2d.dat.tmp";
@@ -467,7 +435,8 @@ SEXP ginterv2d_convert(SEXP _intervset, SEXP _remove_old, SEXP _envir) {
             if (copy_file_contents(pair_file, dat_fp, bytes_written)) {
                 entry.length = bytes_written;
                 current_offset += bytes_written;
-                pair_files_to_remove.push_back(pair_file);
+                for (const string &pair_filename : pair_filenames[make_pair(chromid1, chromid2)])
+                    pair_files_to_remove.push_back(intervset_dir + "/" + pair_filename);
             }
 
             // Write entry to index in one call (28 bytes total)

@@ -16,7 +16,7 @@
 #include <string>
 #include <algorithm>
 #include <tuple>
-#include <set>
+#include <map>
 
 #include "GenomeTrack.h"
 #include "TrackIndex2D.h"
@@ -177,26 +177,27 @@ SEXP gtrack2d_convert_to_indexed(SEXP _track, SEXP _remove_old, SEXP _envir) {
             TrackIndex2D::clear_cache();
         }
 
-        // The per-pair files, one per chrom pair: the file the readers use (get_2d_filename with the
-        // alias filenames) when several are named by aliases of the same pair. Names are parsed as
-        // the readers parse them; a file that is not a pair file is left alone.
+        // The per-pair files by chrom pair, names parsed as the readers parse them; a file that is
+        // not a pair file is left alone. A pair named by several files (aliases of its chromosomes)
+        // is packed from the file the readers use (get_2d_filename with the alias filenames), and
+        // remove_old removes all of its files.
         vector<string> filenames;
-        rdb::get_chrom_files(track_dir.c_str(), filenames);
+        rdb::get_chrom_files(track_dir.c_str(), filenames, true);
         GenomeTrack::Pair2Filename alias_filenames;
         GenomeTrack::get_2d_alias_filenames(chromkey, track_dir, alias_filenames);
-        set<pair<int, int>> chrom_pairs;  // sorted by (chromid1, chromid2) for deterministic output
+        map<pair<int, int>, vector<string>> pair_filenames;  // sorted by (chromid1, chromid2) for deterministic output
         for (const string &filename : filenames) {
             try {
-                chrom_pairs.insert(GenomeTrack::get_chromid_2d(chromkey, filename));
+                pair_filenames[GenomeTrack::get_chromid_2d(chromkey, filename)].push_back(filename);
             } catch (TGLException &) {
                 continue;
             }
         }
 
         vector<tuple<int, int, string>> pair_files;
-        for (const auto &chrom_pair : chrom_pairs)
-            pair_files.emplace_back(chrom_pair.first, chrom_pair.second,
-                                    GenomeTrack::get_2d_filename(chromkey, chrom_pair.first, chrom_pair.second, alias_filenames));
+        for (const auto &ipair : pair_filenames)
+            pair_files.emplace_back(ipair.first.first, ipair.first.second,
+                                    GenomeTrack::get_2d_filename(chromkey, ipair.first.first, ipair.first.second, alias_filenames));
 
         if (pair_files.empty()) {
             verror("No valid chromosome pair files found in track directory %s", track_dir.c_str());
@@ -229,7 +230,8 @@ SEXP gtrack2d_convert_to_indexed(SEXP _track, SEXP _remove_old, SEXP _envir) {
             if (copy_file_contents_2d(pair_file, dat_fp, bytes_written)) {
                 entry.length = bytes_written;
                 current_offset += bytes_written;
-                pair_files_to_remove.push_back(pair_file);
+                for (const string &pair_filename : pair_filenames[make_pair(chromid1, chromid2)])
+                    pair_files_to_remove.push_back(track_dir + "/" + pair_filename);
             }
 
             entries.push_back(entry);

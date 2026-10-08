@@ -95,10 +95,35 @@ test_that("a symlinked pair file counts, whether canonical or named by aliases",
     expect_true(file.symlink(real, file.path(track_dir, "1-2")))
     expect_equal(gextract("linked", scope), expected)
     expect_equal(gintervals.load("linked", chrom1 = "chr1", chrom2 = "chr2"), expected_load)
+
+    # a symlink to a file that is not a pair file is not taken for one
+    writeLines("x", file.path(td, "notes.txt"))
+    expect_true(file.symlink(file.path(td, "notes.txt"), file.path(track_dir, "notes")))
+    expect_equal(gextract("linked", scope), expected)
+})
+
+test_that("a canonical pair file wins over an alias-named one read before it appeared", {
+    local_db_state()
+    td <- tempfile("pair_late_")
+    dir.create(td)
+    withr::defer(unlink(td, recursive = TRUE))
+    db <- create_db_with_unsorted_chrom_sizes(file.path(td, "db"))
+    gsetroot(db)
+
+    gtrack.2d.create("late", "x", data.frame(chrom1 = "chr1", start1 = 10, end1 = 15, chrom2 = "chr2", start2 = 30, end2 = 35), 1)
+    gtrack.2d.create("other", "x", data.frame(chrom1 = "chr1", start1 = 100, end1 = 105, chrom2 = "chr2", start2 = 300, end2 = 305), 2)
+    track_dir <- file.path(db, "tracks", "late.track")
+    expect_true(file.rename(file.path(track_dir, "chr1-chr2"), file.path(track_dir, "1-2")))
+    unlink(file.path(track_dir, ".meta"))
+    expect_equal(gintervals.load("late", chrom1 = "chr1", chrom2 = "chr2")$start1, 10)
+
+    expect_true(file.copy(file.path(db, "tracks", "other.track", "chr1-chr2"), file.path(track_dir, "chr1-chr2")))
+    expect_equal(gintervals.load("late", chrom1 = "chr1", chrom2 = "chr2")$start1, 100)
 })
 
 test_that("pair files of chromosomes whose names contain a dash are found", {
     local_db_state()
+    withr::local_options(list(gmulticontig.indexed_format = FALSE))
     td <- tempfile("pair_dashes_")
     dir.create(td)
     withr::defer(unlink(td, recursive = TRUE))
@@ -132,6 +157,15 @@ test_that("pair files of chromosomes whose names contain a dash are found", {
     unlink(file.path(track_dir, ".meta"))
     expect_equal(gextract("dashed", scope), expected)
     expect_equal(gintervals.load("dashed"), expected_load)
+
+    # a per-pair big intervals set of such chromosomes converts to the indexed format
+    withr::with_options(list(gmax.data.size = 1), gintervals.save("dashedset", rects))
+    expect_true("chrSuper-Scaffold_1-chr2" %in% list.files(file.path(db, "tracks", "dashedset.interv")))
+    expected_set <- gintervals.load("dashedset")
+    expect_equal(nrow(expected_set), 2)
+    suppressMessages(gintervals.2d.convert_to_indexed("dashedset"))
+    expect_true(file.exists(file.path(db, "tracks", "dashedset.interv", "intervals2d.idx")))
+    expect_equal(gintervals.load("dashedset"), expected_set)
 })
 
 test_that("gtrack.2d.convert_to_indexed packs the file the readers use when aliases name a pair twice", {
@@ -159,8 +193,10 @@ test_that("gtrack.2d.convert_to_indexed packs the file the readers use when alia
     expect_equal(gextract("dup", scope), expected)
     expect_equal(gintervals.load("dup"), expected_load)
 
-    suppressMessages(gtrack.2d.convert_to_indexed("dup"))
+    suppressMessages(gtrack.2d.convert_to_indexed("dup", remove.old = TRUE))
     expect_true(file.exists(file.path(track_dir, "track.idx")))
+    # remove.old removes every file of a packed pair
+    expect_false(any(c("chr1-chr2", "1-2") %in% list.files(track_dir)))
     expect_equal(gextract("dup", scope), expected)
     expect_equal(gintervals.load("dup"), expected_load)
 })

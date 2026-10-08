@@ -5,6 +5,7 @@
  *      Author: hoichman
  */
 
+#include <sys/stat.h>
 #include <cstdint>
 #include <errno.h>
 #include <sys/time.h>
@@ -1064,8 +1065,9 @@ for (unsigned ivar = 0; ivar < vars.get_num_track_vars(); ++ivar) {
 			vector<string> filenames;
 			unsigned binsize = 0;
 
-			// read the list of chrom files
-			get_chrom_files(trackpath.c_str(), filenames);
+			// read the list of chrom files; a 2D track's pair files may be symlinks, as its readers
+			// take them (GenomeTrack::get_2d_alias_filenames)
+			get_chrom_files(trackpath.c_str(), filenames, GenomeTrack::is_2d(track_type));
 
 			// Indexed 1D fast path: when track.idx is present, validate via the
 			// in-memory index instead of synthesizing one filename per chromosome
@@ -1250,14 +1252,20 @@ for (unsigned ivar = 0; ivar < vars.get_num_track_vars(); ++ivar) {
 						verror("Chrom %s presented in the global chrom list is missing in track %s", m_iu.id2chrom(iinterv->chromid).c_str(), itrack_name->c_str());
 				}
 			} else if (GenomeTrack::is_2d(track_type)) {
+				bool first_pair_file = true;
 				for (vector<string>::const_iterator ifilename = filenames.begin(); ifilename != filenames.end(); ++ifilename) {
 					try {
 						 GenomeTrack::get_chromid_2d(m_iu.get_chromkey(), *ifilename);
 					} catch (TGLException &e) {
+						// a symlink that is not a pair file is ignored, as the readers ignore it
+						struct stat st;
+						if (!lstat((trackpath + "/" + *ifilename).c_str(), &st) && S_ISLNK(st.st_mode))
+							continue;
 						verror("Track %s: %s\n", itrack_name->c_str(), e.msg());
 					}
 
-					if (ifilename == filenames.begin()) {
+					if (first_pair_file) {
+						first_pair_file = false;
 						if (Rf_isString(giterator)) {
 							if (*itrack_name == CHAR(STRING_ELT(giterator, 0)))
 								common_track_type = track_type;

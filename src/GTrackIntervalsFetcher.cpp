@@ -183,7 +183,7 @@ void GTrackIntervalsFetcher::create_track_meta(const char *track_name, const Int
 			// choice when N is large. A pair named by several files (aliases of
 			// its chromosomes) is read once, from the file the readers use.
 			vector<string> filenames;
-			rdb::get_chrom_files(trackpath.c_str(), filenames);
+			rdb::get_chrom_files(trackpath.c_str(), filenames, true);
 			set<pair<int, int>> listed;
 			for (const string &filename : filenames) {
 				try {

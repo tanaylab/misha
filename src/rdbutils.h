@@ -195,7 +195,8 @@ struct SEXPCleaner {
     SEXP *var;
 };
 
-void get_chrom_files(const char *dirname, vector<string> &chrom_files);
+// with_symlinks: also a symlink that leads to a regular file, as the per-pair 2D readers count it
+void get_chrom_files(const char *dirname, vector<string> &chrom_files, bool with_symlinks = false);
 
 const char *get_groot(SEXP envir);
 
