@@ -82,6 +82,11 @@ public:
 		return get_2d_filename(chromkey, chromid1, chromid2);
 	}
 
+	// The same for a caller that resolves one pair per call: the alias filenames of track_dir are
+	// listed once and cached per directory, and listed again when the directory's modification
+	// time changes or the cached file of the pair does not exist
+	static string get_2d_filename(const GenomeChromKey &chromkey, const string &track_dir, int chromid1, int chromid2);
+
 	static const int get_chromid_1d(const GenomeChromKey &chromkey, const string &filename) { return chromkey.chrom2id(filename); }
 
 	static const pair<int, int> get_chromid_2d(const GenomeChromKey &chromkey, const string &filename);
@@ -125,6 +130,8 @@ public:
 protected:
 	// Track index cache (thread-safe)
 	static std::map<std::string, std::shared_ptr<TrackIndex>> s_index_cache;
+	// get_2d_alias_filenames per directory, with the directory's mtime in ns; guarded by s_cache_mutex too
+	static std::map<std::string, std::pair<int64_t, Pair2Filename>> s_alias_filenames_cache;
 	static std::mutex s_cache_mutex;
 };
 

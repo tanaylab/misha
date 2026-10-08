@@ -27,6 +27,7 @@ double (*GenomeTrack::s_rnd_func)() = drand48;
 
 // Static members for track index cache
 std::map<std::string, std::shared_ptr<TrackIndex>> GenomeTrack::s_index_cache;
+std::map<std::string, std::pair<int64_t, GenomeTrack::Pair2Filename>> GenomeTrack::s_alias_filenames_cache;
 std::mutex GenomeTrack::s_cache_mutex;
 
 std::shared_ptr<TrackIndex> GenomeTrack::get_track_index(const std::string &track_dir) {
@@ -55,11 +56,13 @@ std::shared_ptr<TrackIndex> GenomeTrack::get_track_index(const std::string &trac
 void GenomeTrack::invalidate_index_cache(const std::string &track_dir) {
 	std::lock_guard<std::mutex> lock(s_cache_mutex);
 	s_index_cache.erase(track_dir);
+	s_alias_filenames_cache.erase(track_dir);
 }
 
 void GenomeTrack::clear_index_cache() {
 	std::lock_guard<std::mutex> lock(s_cache_mutex);
 	s_index_cache.clear();
+	s_alias_filenames_cache.clear();
 }
 
 std::string GenomeTrack::get_track_dir(const std::string &filename) {
@@ -80,10 +83,18 @@ const pair<int, int> GenomeTrack::get_chromid_2d(const GenomeChromKey &chromkey,
 	if (pos == string::npos)
 		TGLError<GenomeTrack>(NOT_2D, "File %s does not belong to 2D track", filename.c_str());
 
-	string chrom1(filename, 0, pos);
-	string chrom2(filename, pos + 1);
-
-	return pair<int, int>(chromkey.chrom2id(chrom1), chromkey.chrom2id(chrom2));
+	try {
+		return pair<int, int>(chromkey.chrom2id(string(filename, 0, pos)), chromkey.chrom2id(string(filename, pos + 1)));
+	} catch (TGLException &) {
+		// A chromosome name may contain '-' itself, so the separator may be a later dash
+		for (uint64_t later = filename.find('-', pos + 1); later != string::npos; later = filename.find('-', later + 1)) {
+			try {
+				return pair<int, int>(chromkey.chrom2id(string(filename, 0, later)), chromkey.chrom2id(string(filename, later + 1)));
+			} catch (TGLException &) {
+			}
+		}
+		throw;  // the first dash's error
+	}
 }
 
 string GenomeTrack::find_existing_1d_filename(const GenomeChromKey &chromkey, const string &track_dir, int chromid)
@@ -144,6 +155,31 @@ void GenomeTrack::get_2d_alias_filenames(const GenomeChromKey &chromkey, const s
 		if (!existing.count(get_2d_filename(chromkey, chromids.first, chromids.second)))
 			alias_filenames.emplace(chromids, filename);  // keeps the first in sorted order
 	}
+}
+
+string GenomeTrack::get_2d_filename(const GenomeChromKey &chromkey, const string &track_dir, int chromid1, int chromid2)
+{
+	struct stat st;
+	if (stat(track_dir.c_str(), &st) != 0)
+		return get_2d_filename(chromkey, chromid1, chromid2);
+#ifdef __APPLE__
+	const int64_t mtime = (int64_t)st.st_mtimespec.tv_sec * 1000000000 + st.st_mtimespec.tv_nsec;
+#else
+	const int64_t mtime = (int64_t)st.st_mtim.tv_sec * 1000000000 + st.st_mtim.tv_nsec;
+#endif
+
+	std::lock_guard<std::mutex> lock(s_cache_mutex);
+	std::pair<int64_t, Pair2Filename> &cached = s_alias_filenames_cache[track_dir];
+	if (cached.first == mtime) {
+		const string filename = get_2d_filename(chromkey, chromid1, chromid2, cached.second);
+		if (access((track_dir + "/" + filename).c_str(), F_OK) == 0)
+			return filename;
+	}
+	// The first call, the directory changed, or the cached file is gone: a rename can leave the
+	// directory's mtime as it was, since Linux timestamps are only a few ms fine
+	get_2d_alias_filenames(chromkey, track_dir, cached.second);
+	cached.first = mtime;
+	return get_2d_filename(chromkey, chromid1, chromid2, cached.second);
 }
 
 

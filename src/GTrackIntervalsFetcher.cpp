@@ -177,31 +177,22 @@ void GTrackIntervalsFetcher::create_track_meta(const char *track_name, const Int
 		}
 
 		if (!indexed_2d) {
-			// Legacy per-pair files: scan the track directory and match
-			// "chrom1-chrom2" names against the chromkey. This is O(num files)
-			// rather than O(N*N), which is the only tractable choice when N is
-			// large.
-			DIR *d = opendir(trackpath.c_str());
-			if (d) {
-				struct dirent *de;
-				while ((de = readdir(d)) != NULL) {
-					if (de->d_name[0] == '.')
-						continue;
-					const char *dash = strrchr(de->d_name, '-');
-					if (!dash || dash == de->d_name)
-						continue;
-					string chrom1_str(de->d_name, dash - de->d_name);
-					string chrom2_str(dash + 1);
-					try {
-						int c1 = iu.get_chromkey().chrom2id(chrom1_str);
-						int c2 = iu.get_chromkey().chrom2id(chrom2_str);
-						pairs.emplace_back((uint64_t)c1, (uint64_t)c2);
-					} catch (TGLException &) {
-						// not a chrom-pair file (attributes, etc.)
-						continue;
-					}
+			// Legacy per-pair files: list the track directory and parse the
+			// "chrom1-chrom2" names as the readers do (get_chromid_2d). This is
+			// O(num files) rather than O(N*N), which is the only tractable
+			// choice when N is large. A pair named by several files (aliases of
+			// its chromosomes) is read once, from the file the readers use.
+			vector<string> filenames;
+			rdb::get_chrom_files(trackpath.c_str(), filenames);
+			set<pair<int, int>> listed;
+			for (const string &filename : filenames) {
+				try {
+					const auto ilisted = listed.insert(GenomeTrack::get_chromid_2d(iu.get_chromkey(), filename));
+					if (ilisted.second)
+						pairs.emplace_back((uint64_t)ilisted.first->first, (uint64_t)ilisted.first->second);
+				} catch (TGLException &) {
+					continue;  // not a chrom-pair file (attributes, etc.)
 				}
-				closedir(d);
 			}
 		}
 

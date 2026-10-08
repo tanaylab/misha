@@ -834,9 +834,7 @@ SEXP gtrack_intervals_load(SEXP _track, SEXP _chrom, SEXP _chrom1, SEXP _chrom2,
 			int chromid1 = iu.chrom2id(chrom1);
 			int chromid2 = iu.chrom2id(chrom2);
 
-			GenomeTrack::Pair2Filename alias_filenames;
-			GenomeTrack::get_2d_alias_filenames(iu.get_chromkey(), trackpath, alias_filenames);
-			string filename(trackpath + "/" + GenomeTrack::get_2d_filename(iu.get_chromkey(), chromid1, chromid2, alias_filenames));
+			string filename(trackpath + "/" + GenomeTrack::get_2d_filename(iu.get_chromkey(), trackpath, chromid1, chromid2));
 
 			if (track_type == GenomeTrack::RECTS) {
 				track = unique_ptr<GenomeTrack2D>(new GenomeTrackRectsRects(iu.get_track_chunk_size(), iu.get_track_num_chunks()));
@@ -1001,11 +999,8 @@ SEXP gbigintervs_load_chrom2d(SEXP _intervset, SEXP _chrom1, SEXP _chrom2, SEXP 
 		SEXP rintervals = R_NilValue;
 
 		// a per-pair file may be named by aliases of the chromosomes, as a 2D track's is
-		if (stat(pair_filename.c_str(), &st) != 0 && stat((intervset_path + "/intervals2d.idx").c_str(), &st) != 0) {
-			GenomeTrack::Pair2Filename alias_filenames;
-			GenomeTrack::get_2d_alias_filenames(iu.get_chromkey(), intervset_path, alias_filenames);
-			pair_filename = intervset_path + "/" + GenomeTrack::get_2d_filename(iu.get_chromkey(), chromid1, chromid2, alias_filenames);
-		}
+		if (stat(pair_filename.c_str(), &st) != 0 && stat((intervset_path + "/intervals2d.idx").c_str(), &st) != 0)
+			pair_filename = intervset_path + "/" + GenomeTrack::get_2d_filename(iu.get_chromkey(), intervset_path, chromid1, chromid2);
 
 		if (stat(pair_filename.c_str(), &st) == 0) {
 			// PER-PAIR PATH: Per-pair file exists

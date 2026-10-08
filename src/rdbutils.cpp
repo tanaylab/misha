@@ -872,7 +872,7 @@ void rdb::get_chrom_files(const char *dirname, vector<string> &chrom_files)
 
 		if (dirp->d_type == DT_REG)
 			chrom_files.push_back(dirp->d_name);
-		else if (dirp->d_type == DT_UNKNOWN) {
+		else if (dirp->d_type == DT_UNKNOWN || dirp->d_type == DT_LNK) {  // a symlink counts if it leads to a regular file
 			struct stat sbuf;
 			char filename[PATH_MAX];
 

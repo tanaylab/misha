@@ -64,3 +64,103 @@ test_that("a 2D track whose pair files are named by chromosome aliases reads as 
         expect_equal(suppressMessages(read_all(track)), expected, info = track)
     }
 })
+
+test_that("a symlinked pair file counts, whether canonical or named by aliases", {
+    local_db_state()
+    td <- tempfile("pair_links_")
+    dir.create(td)
+    withr::defer(unlink(td, recursive = TRUE))
+    db <- create_db_with_unsorted_chrom_sizes(file.path(td, "db"))
+    gsetroot(db)
+
+    rects <- data.frame(chrom1 = "chr1", start1 = 10, end1 = 15, chrom2 = "chr2", start2 = 30, end2 = 35)
+    gtrack.2d.create("linked", "x", rects, 1)
+    gtrack.2d.create("other", "x", rects, 2)
+    scope <- gintervals.2d.all()
+    expected <- gextract("linked", scope)
+    expected_load <- gintervals.load("linked", chrom1 = "chr1", chrom2 = "chr2")
+    track_dir <- file.path(db, "tracks", "linked.track")
+    real <- file.path(td, "real-pair-file")
+    expect_true(file.rename(file.path(track_dir, "chr1-chr2"), real))
+
+    # a symlinked canonical file wins over an alias-named file of the same pair
+    expect_true(file.symlink(real, file.path(track_dir, "chr1-chr2")))
+    expect_true(file.copy(file.path(db, "tracks", "other.track", "chr1-chr2"), file.path(track_dir, "1-2")))
+    unlink(file.path(track_dir, ".meta"))
+    expect_equal(gextract("linked", scope), expected)
+    expect_equal(gintervals.load("linked", chrom1 = "chr1", chrom2 = "chr2"), expected_load)
+
+    # a symlinked alias-named file is found
+    unlink(file.path(track_dir, c("chr1-chr2", "1-2", ".meta")))
+    expect_true(file.symlink(real, file.path(track_dir, "1-2")))
+    expect_equal(gextract("linked", scope), expected)
+    expect_equal(gintervals.load("linked", chrom1 = "chr1", chrom2 = "chr2"), expected_load)
+})
+
+test_that("pair files of chromosomes whose names contain a dash are found", {
+    local_db_state()
+    td <- tempfile("pair_dashes_")
+    dir.create(td)
+    withr::defer(unlink(td, recursive = TRUE))
+    db <- file.path(td, "db")
+    dir.create(file.path(db, "tracks"), recursive = TRUE)
+    dir.create(file.path(db, "seq"))
+    chroms <- c("2", "Super-Scaffold_1")
+    for (chrom in chroms) {
+        writeBin(charToRaw(strrep("A", 1000)), file.path(db, "seq", paste0("chr", chrom, ".seq")))
+    }
+    writeLines(paste(chroms, 1000, sep = "\t"), file.path(db, "chrom_sizes.txt"))
+    gsetroot(db)
+
+    rects <- data.frame(
+        chrom1 = c("chrSuper-Scaffold_1", "chr2"), start1 = c(10, 20), end1 = c(15, 25),
+        chrom2 = c("chr2", "chrSuper-Scaffold_1"), start2 = c(30, 40), end2 = c(35, 45)
+    )
+    gtrack.2d.create("dashed", "x", rects, c(1, 2))
+    scope <- gintervals.2d.all()
+    expected <- gextract("dashed", scope)
+    expected_load <- gintervals.load("dashed")
+    expect_equal(nrow(expected), 2)
+    expect_equal(nrow(expected_load), 2)
+
+    # canonical names ("chrSuper-Scaffold_1-chr2"), then unprefixed aliases ("Super-Scaffold_1-2")
+    track_dir <- file.path(db, "tracks", "dashed.track")
+    unlink(file.path(track_dir, ".meta"))
+    expect_equal(gintervals.load("dashed"), expected_load)
+    pair_files <- c("chrSuper-Scaffold_1-chr2", "chr2-chrSuper-Scaffold_1")
+    expect_true(all(file.rename(file.path(track_dir, pair_files), file.path(track_dir, gsub("chr", "", pair_files)))))
+    unlink(file.path(track_dir, ".meta"))
+    expect_equal(gextract("dashed", scope), expected)
+    expect_equal(gintervals.load("dashed"), expected_load)
+})
+
+test_that("gtrack.2d.convert_to_indexed packs the file the readers use when aliases name a pair twice", {
+    local_db_state()
+    td <- tempfile("pair_convert_")
+    dir.create(td)
+    withr::defer(unlink(td, recursive = TRUE))
+    db <- create_db_with_unsorted_chrom_sizes(file.path(td, "db"))
+    gsetroot(db)
+
+    rects <- data.frame(
+        chrom1 = c("chr1", "chr2"), start1 = c(10, 20), end1 = c(15, 25),
+        chrom2 = c("chr2", "chr2"), start2 = c(30, 40), end2 = c(35, 45)
+    )
+    gtrack.2d.create("dup", "x", rects, c(1, 2))
+    gtrack.2d.create("other", "x", rects, c(3, 4))
+    scope <- gintervals.2d.all()
+    expected <- gextract("dup", scope)
+    expected_load <- gintervals.load("dup")
+
+    # an alias-named file of a pair that also has its canonical file, which the readers use
+    track_dir <- file.path(db, "tracks", "dup.track")
+    expect_true(file.copy(file.path(db, "tracks", "other.track", "chr1-chr2"), file.path(track_dir, "1-2")))
+    unlink(file.path(track_dir, ".meta"))
+    expect_equal(gextract("dup", scope), expected)
+    expect_equal(gintervals.load("dup"), expected_load)
+
+    suppressMessages(gtrack.2d.convert_to_indexed("dup"))
+    expect_true(file.exists(file.path(track_dir, "track.idx")))
+    expect_equal(gextract("dup", scope), expected)
+    expect_equal(gintervals.load("dup"), expected_load)
+})

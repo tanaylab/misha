@@ -16,6 +16,7 @@
 #include <string>
 #include <algorithm>
 #include <tuple>
+#include <set>
 
 #include "GenomeTrack.h"
 #include "TrackIndex2D.h"
@@ -176,71 +177,30 @@ SEXP gtrack2d_convert_to_indexed(SEXP _track, SEXP _remove_old, SEXP _envir) {
             TrackIndex2D::clear_cache();
         }
 
-        // Enumerate existing per-pair files in the track directory
-        DIR *dir = opendir(track_dir.c_str());
-        if (!dir) {
-            verror("Cannot open track directory %s: %s",
-                   track_dir.c_str(), strerror(errno));
-        }
-
-        // Collect (chromid1, chromid2, filename) tuples for all valid pair files
-        vector<tuple<int, int, string>> pair_files;
-        struct dirent *dentry;
-        while ((dentry = readdir(dir)) != nullptr) {
-            string filename = dentry->d_name;
-
-            // Skip . and .. and hidden files
-            if (filename.empty() || filename[0] == '.') continue;
-
-            // Skip track.dat, track.idx, and any .tmp files
-            if (filename == "track.dat" || filename == "track.idx") continue;
-            if (filename.size() > 4 && filename.substr(filename.size() - 4) == ".tmp") continue;
-
-            // Look for files matching the chrom1-chrom2 pattern
-            size_t dash_pos = filename.find('-');
-            if (dash_pos == string::npos || dash_pos == 0 || dash_pos >= filename.length() - 1) {
+        // The per-pair files, one per chrom pair: the file the readers use (get_2d_filename with the
+        // alias filenames) when several are named by aliases of the same pair. Names are parsed as
+        // the readers parse them; a file that is not a pair file is left alone.
+        vector<string> filenames;
+        rdb::get_chrom_files(track_dir.c_str(), filenames);
+        GenomeTrack::Pair2Filename alias_filenames;
+        GenomeTrack::get_2d_alias_filenames(chromkey, track_dir, alias_filenames);
+        set<pair<int, int>> chrom_pairs;  // sorted by (chromid1, chromid2) for deterministic output
+        for (const string &filename : filenames) {
+            try {
+                chrom_pairs.insert(GenomeTrack::get_chromid_2d(chromkey, filename));
+            } catch (TGLException &) {
                 continue;
             }
-
-            string chrom1_name = filename.substr(0, dash_pos);
-            string chrom2_name = filename.substr(dash_pos + 1);
-
-            // Try to map to chromids (handle chr prefix mismatch)
-            int chromid1 = chromkey.chrom2id(chrom1_name.c_str());
-            int chromid2 = chromkey.chrom2id(chrom2_name.c_str());
-
-            // If not found, try with/without chr prefix
-            if (chromid1 < 0) {
-                if (chrom1_name.substr(0, 3) == "chr") {
-                    chromid1 = chromkey.chrom2id(chrom1_name.substr(3).c_str());
-                } else {
-                    chromid1 = chromkey.chrom2id(("chr" + chrom1_name).c_str());
-                }
-            }
-            if (chromid2 < 0) {
-                if (chrom2_name.substr(0, 3) == "chr") {
-                    chromid2 = chromkey.chrom2id(chrom2_name.substr(3).c_str());
-                } else {
-                    chromid2 = chromkey.chrom2id(("chr" + chrom2_name).c_str());
-                }
-            }
-
-            if (chromid1 >= 0 && chromid2 >= 0) {
-                pair_files.push_back(make_tuple(chromid1, chromid2, filename));
-            }
         }
-        closedir(dir);
+
+        vector<tuple<int, int, string>> pair_files;
+        for (const auto &chrom_pair : chrom_pairs)
+            pair_files.emplace_back(chrom_pair.first, chrom_pair.second,
+                                    GenomeTrack::get_2d_filename(chromkey, chrom_pair.first, chrom_pair.second, alias_filenames));
 
         if (pair_files.empty()) {
             verror("No valid chromosome pair files found in track directory %s", track_dir.c_str());
         }
-
-        // Sort pairs by (chromid1, chromid2) for deterministic output
-        sort(pair_files.begin(), pair_files.end(),
-             [](const tuple<int, int, string> &a, const tuple<int, int, string> &b) {
-                 if (get<0>(a) != get<0>(b)) return get<0>(a) < get<0>(b);
-                 return get<1>(a) < get<1>(b);
-             });
 
         // Prepare temporary file paths
         dat_path_tmp = track_dir + "/track.dat.tmp";
