@@ -619,6 +619,46 @@ test_that("gtrack.copy into a database whose order cannot be told copies per-pai
     expect_equal(.gdb.chrom_names_at(third)[1], "chrA")
 })
 
+test_that("gtrack.copy with overwrite = TRUE keeps the existing track when the copy stops", {
+    local_db_state()
+    td <- withr::local_tempdir()
+    mk_db <- function(name, chroms, indexed = FALSE) {
+        path <- file.path(td, name)
+        dir.create(file.path(path, "tracks"), recursive = TRUE)
+        dir.create(file.path(path, "seq"))
+        if (indexed) {
+            fa <- tempfile(fileext = ".fa", tmpdir = td)
+            writeLines(unlist(lapply(chroms, function(ch) c(paste0(">", ch), strrep("A", 1000)))), fa)
+            invisible(misha:::.gcall("gseq_multifasta_import", fa, file.path(path, "seq", "genome.seq"), file.path(path, "seq", "genome.idx"), FALSE, misha:::.misha_env()))
+        } else {
+            for (ch in chroms) writeBin(charToRaw(strrep("A", 1000)), file.path(path, "seq", paste0(ch, ".seq")))
+        }
+        writeLines(paste(chroms, 1000, sep = "\t"), file.path(path, "chrom_sizes.txt"))
+        normalizePath(path)
+    }
+    src <- mk_db("src", c("chr1", "chr2"))
+    gsetroot(src)
+    gtrack.create_sparse("s1", "x", gintervals(c("chr1", "chr2"), 0, 10), c(1, 2))
+    pair <- data.frame(chrom1 = "chr1", start1 = 0, end1 = 10, chrom2 = "chr2", start2 = 0, end2 = 10)
+    gtrack.2d.create("r2", "x", pair, 5)
+    gtrack.2d.create("r2i", "x", pair, 6)
+    suppressMessages(gtrack.2d.convert_to_indexed("r2i"))
+
+    cases <- list(
+        list(track = "r2", db = mk_db("reversed", c("chr2", "chr1")), error = "requires identical chromosome order"),
+        list(track = "s1", db = mk_db("disjoint", "chrZ"), error = "no chromosomes from source database are present"),
+        list(track = "r2i", db = mk_db("per_chrom", c("chr1", "chr2")), error = "indexed 2D track .* into a per-chromosome database"),
+        list(track = "r2", db = mk_db("indexed", c("chr1", "chr2"), indexed = TRUE), error = "format conversion to a non-active dataset")
+    )
+    for (case in cases) {
+        old <- file.path(case$db, "tracks", "t.track")
+        dir.create(old)
+        writeLines("keep me", file.path(old, "sentinel"))
+        expect_error(gtrack.copy(case$track, "t", db = case$db, overwrite = TRUE), case$error)
+        expect_equal(list.files(old), "sentinel", info = basename(case$db))
+    }
+})
+
 test_that("an unloaded database whose linked seq/ was converted since does not give a stale order", {
     local_db_state()
     td <- tempfile("stale_")

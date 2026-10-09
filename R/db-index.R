@@ -57,7 +57,8 @@
 #' would be overwritten). A database whose seq/ or chrom_sizes.txt is in another database, such as a
 #' dataset saved with \code{copy_seq = FALSE} or a \code{gdb.create_linked()} database, is not
 #' converted: convert that database. A seq/ or chrom_sizes.txt linked to storage of its own elsewhere
-#' is converted there. The session loaded before the conversion is put back as it was after it. If
+#' is converted there. The session loaded before the conversion is put back as it was after it,
+#' except the converted database if it was loaded as a dataset: it is unloaded, with a warning. If
 #' the conversion changed the sequence it reads (its seq/ is the converted database's, with a
 #' chrom_sizes.txt of its own), a warning says so, and nothing is loaded when its chromosomes would
 #' read other chromosomes' sequence. chrom_sizes.txt keeps its group when the converting user
@@ -134,8 +135,8 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
 
     # The steps below load the database being converted (to validate it, and to list its tracks and
     # interval sets). The session loaded before is put back as it was at the end, its datasets and
-    # working directory included, with the directory caches dropped, as tracks may have changed
-    # format under the same paths. If the conversion changed the sequence it reads (its seq/ is the
+    # working directory included (but not the converted database, if it was a loaded dataset), with
+    # the directory caches dropped, as tracks may have changed format under the same paths. If the conversion changed the sequence it reads (its seq/ is the
     # converted one, with a chrom_sizes.txt of its own), it is unloaded when its chrom ids no longer
     # match the index, and a warning says so; one that still reads right but that gsetroot() would
     # not load now gets a warning too.
@@ -147,18 +148,22 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
                 rm(list = ls(.misha, all.names = TRUE), envir = .misha)
                 list2env(old_session, envir = .misha)
                 .gdb.clear_all_dir_caches()
+                # A loaded dataset that was converted (or partly, by a conversion that failed) is
+                # left out: its tracks may now be keyed by its own chrom ids, not the root's
+                datasets <- get0("GDATASETS", envir = .misha, ifnotfound = character(0))
+                converted <- datasets[normalizePath(datasets, mustWork = FALSE) == normalizePath(setup_info$groot)]
+                if (length(converted)) {
+                    gdataset.unload(converted[1])
+                }
                 genome <- get("ALLGENOME", envir = .misha)[[1]]
                 problem <- tryCatch(
                     .gdb.check_genome_idx(old_groot, as.character(genome$chrom), genome$end),
                     warning = function(w) NULL,
                     error = conditionMessage
                 )
-                if (!is.null(problem)) {
+                reads_own <- is.null(problem)
+                if (!reads_own) {
                     gdb.unload()
-                    warning(sprintf(
-                        "%s, loaded before the conversion, no longer reads its own sequence: %s No database is loaded.",
-                        old_groot, problem
-                    ), call. = FALSE)
                 } else {
                     # as gsetroot() checks it
                     problem <- tryCatch(
@@ -172,12 +177,24 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
                         warning = function(w) NULL,
                         error = conditionMessage
                     )
-                    if (!is.null(problem)) {
-                        warning(sprintf(
-                            "%s is loaded as before the conversion, but gsetroot() would not load it now: %s",
-                            old_groot, problem
-                        ), call. = FALSE)
-                    }
+                }
+                # warnings last, once the session is in place: a handler that stops at one leaves it so
+                if (length(converted)) {
+                    warning(sprintf(
+                        "%s was converted, so it is no longer loaded as a dataset; load it again with gdataset.load().",
+                        converted[1]
+                    ), call. = FALSE)
+                }
+                if (!reads_own) {
+                    warning(sprintf(
+                        "%s, loaded before the conversion, no longer reads its own sequence: %s No database is loaded.",
+                        old_groot, problem
+                    ), call. = FALSE)
+                } else if (!is.null(problem)) {
+                    warning(sprintf(
+                        "%s is loaded as before the conversion, but gsetroot() would not load it now: %s",
+                        old_groot, problem
+                    ), call. = FALSE)
                 }
             },
             add = TRUE

@@ -834,6 +834,46 @@ test_that("a database that does not load after a conversion and no longer reads 
     expect_null(get0("GROOT", envir = misha:::.misha))
 })
 
+test_that("gdb.convert_to_indexed of a loaded dataset unloads it, keeping the rest of the session", {
+    local_db_state()
+    td <- withr::local_tempdir()
+    # Y: per-chromosome, chrom ids by the sorted names
+    y <- create_db_with_unsorted_chrom_sizes(file.path(td, "Y"))
+    # X: the same genome and chrom_sizes.txt, indexed, chrom ids in chrom_sizes.txt order
+    x <- file.path(td, "X")
+    dir.create(file.path(x, "tracks"), recursive = TRUE)
+    dir.create(file.path(x, "seq"))
+    cs <- utils::read.delim(file.path(y, "chrom_sizes.txt"), header = FALSE, colClasses = c("character", "numeric"))
+    fa <- file.path(td, "x.fa")
+    writeLines(unlist(lapply(seq_len(nrow(cs)), function(i) c(paste0(">", cs$V1[i]), strrep(unsorted_db_bases[[paste0("chr", cs$V1[i])]], cs$V2[i])))), fa)
+    invisible(misha:::.gcall("gseq_multifasta_import", fa, file.path(x, "seq", "genome.seq"), file.path(x, "seq", "genome.idx"), FALSE, misha:::.misha_env()))
+    expect_true(file.copy(file.path(y, "chrom_sizes.txt"), x))
+
+    gsetroot(y)
+    gtrack.create_sparse("yt", "x", gintervals(c("chr1", "chr10", "chr2", "chrX"), 0, 10), c(1, 10, 2, 99))
+    gsetroot(x)
+    gtrack.create_sparse("zt", "x", gintervals("1", 0, 10), 7)
+    z <- file.path(td, "Z")
+    suppressMessages(gdataset.save(z, "z", tracks = "zt"))
+    gtrack.rm("zt", force = TRUE)
+    suppressMessages(gdataset.load(y))
+    suppressMessages(gdataset.load(z))
+    q <- gintervals(c("1", "10", "2", "X"), 0, 10)
+    before <- gextract("yt", q, iterator = q)
+    expect_equal(setNames(before$yt, as.character(before$chrom))[c("1", "10", "2", "X")], c("1" = 1, "10" = 10, "2" = 2, "X" = 99))
+
+    # Y's tracks are rewritten with Y's chrom ids, which are not X's: Y is unloaded
+    expect_warning(
+        suppressMessages(gdb.convert_to_indexed(groot = y, force = TRUE, validate = FALSE, convert_tracks = TRUE)),
+        "Y was converted, so it is no longer loaded as a dataset"
+    )
+    expect_true(file.exists(file.path(y, "tracks", "yt.track", "track.idx")))
+    expect_equal(get("GROOT", envir = misha:::.misha), normalizePath(x))
+    expect_equal(get("GDATASETS", envir = misha:::.misha), normalizePath(z))
+    expect_error(gextract("yt", q, iterator = q))
+    expect_equal(gextract("zt", gintervals("1", 0, 10))$zt, 7)
+})
+
 for (.steps in c("validate", "tracks and interval sets")) {
     test_that(sprintf("gdb.convert_to_indexed of another database puts the session back as it was (%s)", .steps), {
         local_db_state()

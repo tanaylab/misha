@@ -8,6 +8,10 @@
 
 * **Behavior fix:** `gdb.convert_to_indexed()` leaves the database as it was when it cannot convert it exactly (a full disk, a `.seq` file of another length, a chromosome name the index cannot store, a chromosome named `genome`), and an interrupted conversion can be run again.
 
+* `gdb.convert_to_indexed()` keeps the session's datasets, working directory and virtual tracks, where it had reloaded the loaded database; a dataset it converted is unloaded.
+
+* **Behavior fix:** `gtrack.copy(overwrite = TRUE)` deleted the existing track and then stopped when the copy could not be made; it now checks first and keeps the track.
+
 * **Breaking:** `gdb.convert_to_indexed()` stops for a database whose `seq/` or `chrom_sizes.txt` is another database's (a dataset saved with `copy_seq = FALSE`, a `gdb.create_linked()` database): convert that database instead.
 
 * **Breaking:** `gsetroot()` stops when `seq/genome.idx` does not match `chrom_sizes.txt` (which may list only the index's first contigs) in sizes or chromosome order, which made chromosomes read other chromosomes' sequence, and warns when only names differ.

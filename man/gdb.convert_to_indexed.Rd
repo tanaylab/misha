@@ -65,7 +65,8 @@ differs from chrom_sizes.txt, stops it, and so does a chromosome named 'genome' 
 would be overwritten). A database whose seq/ or chrom_sizes.txt is in another database, such as a
 dataset saved with \code{copy_seq = FALSE} or a \code{gdb.create_linked()} database, is not
 converted: convert that database. A seq/ or chrom_sizes.txt linked to storage of its own elsewhere
-is converted there. The session loaded before the conversion is put back as it was after it. If
+is converted there. The session loaded before the conversion is put back as it was after it,
+except the converted database if it was loaded as a dataset: it is unloaded, with a warning. If
 the conversion changed the sequence it reads (its seq/ is the converted database's, with a
 chrom_sizes.txt of its own), a warning says so, and nothing is loaded when its chromosomes would
 read other chromosomes' sequence. chrom_sizes.txt keeps its group when the converting user
