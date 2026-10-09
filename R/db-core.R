@@ -293,11 +293,29 @@
             seq_dir, groot, what, hint
         ), call. = FALSE)
     }
+    # the same chromosome listed twice, by its name with and without "chr" (only possible when the
+    # names are mixed) or by the same name
+    prefixed <- startsWith(names, "chr")
+    dup <- anyDuplicated(names)
+    if (!dup && any(prefixed) && !all(prefixed)) {
+        dup <- match(TRUE, names %in% sub("^chr", "", names[prefixed]))
+        dup <- if (is.na(dup)) 0L else dup
+    }
+    if (dup) {
+        twin <- match(sub("^chr", "", names[dup]), sub("^chr", "", names[-dup]))
+        twin <- twin + (twin >= dup)
+        stop(sprintf(
+            "chrom_sizes.txt in %s lists the same chromosome twice: %s (chrom id %d) and %s (chrom id %d).",
+            groot, names[min(dup, twin)], min(dup, twin) - 1L, names[max(dup, twin)], max(dup, twin) - 1L
+        ), call. = FALSE)
+    }
     n <- length(sizes)
     if (n > length(idx$length) || !identical(idx$length[seq_len(n)], sizes)) {
         k <- seq_len(max(length(idx$length), n))
         i <- which(is.na(idx$length[k]) | is.na(sizes[k]) | idx$length[k] != sizes[k])[1]
-        describe <- function(name, size) if (is.na(size)) "missing" else sprintf("%s (%.0f bp)", name, size)
+        describe <- function(name, size) {
+            if (is.na(name)) "missing" else if (is.na(size)) sprintf("%s (with no size)", name) else sprintf("%s (%.0f bp)", name, size)
+        }
         mismatch(sprintf("chrom id %d is %s in the index and %s in chrom_sizes.txt", i - 1L, describe(idx$name[i], idx$length[i]), describe(names[i], sizes[i])))
     }
     # the prefix is dropped only from the names that differ (millions of contigs in some databases)

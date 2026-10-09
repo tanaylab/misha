@@ -860,32 +860,23 @@ test_that("a database that does not load after a conversion and no longer reads 
 test_that("gdb.convert_to_indexed of a loaded dataset unloads it, keeping the rest of the session", {
     local_db_state()
     td <- withr::local_tempdir()
-    # Y: per-chromosome, chrom ids by the sorted names
+    # X the root, Y a database loaded as a dataset of it (the same chrom_sizes.txt), Z another dataset
+    x <- create_db_with_unsorted_chrom_sizes(file.path(td, "X"))
     y <- create_db_with_unsorted_chrom_sizes(file.path(td, "Y"))
-    # X: the same genome and chrom_sizes.txt, indexed, chrom ids in chrom_sizes.txt order
-    x <- file.path(td, "X")
-    dir.create(file.path(x, "tracks"), recursive = TRUE)
-    dir.create(file.path(x, "seq"))
-    cs <- utils::read.delim(file.path(y, "chrom_sizes.txt"), header = FALSE, colClasses = c("character", "numeric"))
-    fa <- file.path(td, "x.fa")
-    writeLines(unlist(lapply(seq_len(nrow(cs)), function(i) c(paste0(">", cs$V1[i]), strrep(unsorted_db_bases[[paste0("chr", cs$V1[i])]], cs$V2[i])))), fa)
-    invisible(misha:::.gcall("gseq_multifasta_import", fa, file.path(x, "seq", "genome.seq"), file.path(x, "seq", "genome.idx"), FALSE, misha:::.misha_env()))
-    expect_true(file.copy(file.path(y, "chrom_sizes.txt"), x))
-
+    iv <- gintervals(c("chr1", "chr10", "chr2", "chrX"), 0, 10)
     gsetroot(y)
-    gtrack.create_sparse("yt", "x", gintervals(c("chr1", "chr10", "chr2", "chrX"), 0, 10), c(1, 10, 2, 99))
+    gtrack.create_sparse("yt", "x", iv, c(1, 10, 2, 99))
     gsetroot(x)
-    gtrack.create_sparse("zt", "x", gintervals("1", 0, 10), 7)
+    gtrack.create_sparse("zt", "x", gintervals("chr1", 0, 10), 7)
     z <- file.path(td, "Z")
     suppressMessages(gdataset.save(z, "z", tracks = "zt"))
     gtrack.rm("zt", force = TRUE)
     suppressMessages(gdataset.load(y))
     suppressMessages(gdataset.load(z))
-    q <- gintervals(c("1", "10", "2", "X"), 0, 10)
-    before <- gextract("yt", q, iterator = q)
-    expect_equal(setNames(before$yt, as.character(before$chrom))[c("1", "10", "2", "X")], c("1" = 1, "10" = 10, "2" = 2, "X" = 99))
+    expect_equal(gextract("yt", iv)$yt, c(1, 10, 2, 99))
 
-    # Y's tracks are rewritten with Y's chrom ids, which are not X's: Y is unloaded
+    # Y's tracks are rewritten (here in the same chrom ids, but a conversion that failed midway or a
+    # dataset numbered otherwise would not read right): Y is unloaded
     expect_warning(
         suppressMessages(gdb.convert_to_indexed(groot = y, force = TRUE, validate = FALSE, convert_tracks = TRUE)),
         "Y was converted, so it is no longer loaded as a dataset"
@@ -893,8 +884,8 @@ test_that("gdb.convert_to_indexed of a loaded dataset unloads it, keeping the re
     expect_true(file.exists(file.path(y, "tracks", "yt.track", "track.idx")))
     expect_equal(get("GROOT", envir = misha:::.misha), normalizePath(x))
     expect_equal(get("GDATASETS", envir = misha:::.misha), normalizePath(z))
-    expect_error(gextract("yt", q, iterator = q))
-    expect_equal(gextract("zt", gintervals("1", 0, 10))$zt, 7)
+    expect_error(gextract("yt", iv))
+    expect_equal(gextract("zt", gintervals("chr1", 0, 10))$zt, 7)
 })
 
 test_that("gdb.convert_to_indexed of the loaded database leaves its session in the indexed format", {
@@ -984,6 +975,24 @@ test_that("gsetroot loads an indexed database whose chrom_sizes.txt lists only t
     # a name that differs among the first ones
     writeLines(c(full[1], "chrY\t500"), cs)
     expect_error(gsetroot(db), "lists 2 of the index's 5 contigs, which have to be its first ones")
+})
+
+test_that("gsetroot stops for an indexed database whose chrom_sizes.txt lists a chromosome twice", {
+    local_db_state()
+    td <- withr::local_tempdir()
+    db <- create_db_with_unsorted_chrom_sizes(file.path(td, "db"))
+    suppressMessages(gdb.convert_to_indexed(groot = db, force = TRUE, validate = FALSE))
+    cs <- file.path(db, "chrom_sizes.txt")
+    full <- readLines(cs)
+    # chr1 1000, chr1_KI270706v1_random 500, chr10 1500, chr2 2000, chrX 1200
+    # chr1 again without the prefix, in chrX's place
+    writeLines(c(full[1:4], "1\t1200"), cs)
+    expect_error(gsetroot(db), "lists the same chromosome twice: chr1 \\(chrom id 0\\) and 1 \\(chrom id 4\\)")
+    writeLines(c(full[1:3], "chr10\t2000", full[5]), cs)
+    expect_error(gsetroot(db), "lists the same chromosome twice: chr10 \\(chrom id 2\\) and chr10 \\(chrom id 3\\)")
+    # a line with no size
+    writeLines(c(full[1:4], "chrX"), cs)
+    expect_error(gsetroot(db), "chrom id 4 is chrX \\(1200 bp\\) in the index and chrX \\(with no size\\) in chrom_sizes.txt")
 })
 
 test_that("gsetroot warns when only the names in seq/genome.idx differ from chrom_sizes.txt", {

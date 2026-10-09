@@ -619,6 +619,45 @@ test_that("gtrack.copy into a database whose order cannot be told copies per-pai
     expect_equal(.gdb.chrom_names_at(third)[1], "chrA")
 })
 
+test_that("gtrack.copy copies a per-pair 2D track between chr-prefixed and unprefixed names of the same chromosomes", {
+    local_db_state()
+    td <- withr::local_tempdir()
+    unprefixed <- create_db_with_unsorted_chrom_sizes(file.path(td, "unprefixed"))
+    prefixed <- create_db_with_unsorted_chrom_sizes(file.path(td, "prefixed"))
+    writeLines(paste0("chr", readLines(file.path(prefixed, "chrom_sizes.txt"))), file.path(prefixed, "chrom_sizes.txt"))
+    pairs <- data.frame(chrom1 = c("chr1", "chr10"), start1 = 10, end1 = 15, chrom2 = c("chr2", "chrX"), start2 = 30, end2 = 35)
+    for (from in c(prefixed, unprefixed)) {
+        to <- setdiff(c(prefixed, unprefixed), from)
+        gsetroot(from)
+        gtrack.2d.create("r2", "x", pairs, c(12, 1023))
+        gtrack.copy("r2", "r2c", db = to)
+        gtrack.rm("r2", force = TRUE)
+        gsetroot(to)
+        res <- gextract("r2c", gintervals.2d.all())
+        expect_equal(setNames(res$r2c, paste(res$chrom1, res$chrom2))[c("chr1 chr2", "chr10 chrX")], c("chr1 chr2" = 12, "chr10 chrX" = 1023), info = basename(from))
+        gtrack.rm("r2c", force = TRUE)
+    }
+})
+
+test_that("gtrack.copy with overwrite = TRUE into an unloaded database leaves the session's tracks out of its cache", {
+    local_db_state()
+    td <- withr::local_tempdir()
+    src <- create_db_with_unsorted_chrom_sizes(file.path(td, "src"))
+    dest <- create_db_with_unsorted_chrom_sizes(file.path(td, "dest"))
+    gsetroot(src)
+    gtrack.create_sparse("sp", "x", gintervals(c("chr1", "chr2"), 0, 10), c(1, 2))
+    gtrack.create_sparse("other", "x", gintervals("chr1", 0, 10), 3)
+    gtrack.copy("sp", "sp_c", db = dest)
+    gtrack.copy("other", "sp_c", db = dest, overwrite = TRUE)
+    cache <- file.path(dest, ".db.cache")
+    if (file.exists(cache)) {
+        expect_false(any(c("sp", "other") %in% unlist(readRDS(cache))))
+    }
+    gsetroot(dest)
+    expect_equal(gtrack.ls(), "sp_c")
+    expect_equal(gextract("sp_c", gintervals("chr1", 0, 10))$sp_c, 3)
+})
+
 test_that("gtrack.copy with overwrite = TRUE keeps the existing track when the copy stops", {
     local_db_state()
     td <- withr::local_tempdir()
@@ -645,7 +684,8 @@ test_that("gtrack.copy with overwrite = TRUE keeps the existing track when the c
     suppressMessages(gtrack.2d.convert_to_indexed("r2i"))
 
     cases <- list(
-        list(track = "r2", db = mk_db("reversed", c("chr2", "chr1")), error = "requires identical chromosome order"),
+        list(track = "r2", db = mk_db("renamed", c("chrA", "chrB")), error = "requires the same chromosome names"),
+        list(track = "r2i", db = mk_db("reversed", c("chr2", "chr1"), indexed = TRUE), error = "requires identical chromosome order"),
         list(track = "s1", db = mk_db("disjoint", "chrZ"), error = "no chromosomes from source database are present"),
         list(track = "r2i", db = mk_db("per_chrom", c("chr1", "chr2")), error = "indexed 2D track .* into a per-chromosome database"),
         list(track = "r2", db = mk_db("indexed", c("chr1", "chr2"), indexed = TRUE), error = "format conversion to a non-active dataset")
