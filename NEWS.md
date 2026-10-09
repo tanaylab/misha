@@ -2,19 +2,19 @@
 
 * **Behavior fix:** `gdb.convert_to_indexed()`, and `gtrack.copy()` of an indexed track, could put data on the wrong chromosomes in a per-chromosome database whose `chrom_sizes.txt` is unsorted and lacks "chr". Recreate indexed tracks and interval sets made that way.
 
-* **Breaking:** such a database now numbers its chromosomes the same way in every session. A C locale or an R without ICU numbered them differently: recreate indexed tracks and interval sets converted in such a session.
+* **Breaking:** such a database now numbers its chromosomes the same way in every session. A C locale or an R without ICU could number them differently: recreate indexed tracks and interval sets converted in such a session.
 
-* **Breaking:** `gsetroot()` stops when `seq/genome.idx` disagrees with `chrom_sizes.txt` in order or sizes (chromosomes read other chromosomes' sequence), or when `chrom_sizes.txt` names one contig twice, as `chr1` and `1`.
+* **Breaking:** `gsetroot()` stops when `seq/genome.idx` disagrees with `chrom_sizes.txt` in order or sizes (chromosomes read other chromosomes' sequence), or when `chrom_sizes.txt` names one of its contigs twice, as `chr1` and `1`.
 
-* **Breaking:** `gdataset.load()` refuses a dataset with indexed tracks or interval sets that numbers its chromosomes differently from the working database, or whose `seq/` index no longer matches its `chrom_sizes.txt`, as these can read other chromosomes.
+* **Breaking:** `gdataset.load()` refuses a dataset with indexed tracks or interval sets when it finds that the dataset numbers its chromosomes differently from the working database, as these can read other chromosomes.
 
-* **Behavior fix:** `gdb.convert_to_indexed()` keeps the database readable when it fails or is interrupted, so it can be run again, and keeps the session's working directory, virtual tracks and unconverted datasets instead of reloading.
+* **Behavior fix:** `gdb.convert_to_indexed()` keeps the database readable when it fails or is interrupted, so it can be run again, and keeps the session (working directory, virtual tracks, unconverted datasets) where it can, instead of reloading.
 
 * **Breaking:** `gdb.convert_to_indexed()` stops instead of converting inexactly, e.g. for a `.seq` file whose length differs from `chrom_sizes.txt`, or a `seq/` that belongs to another database (convert that one).
 
 * **Bug fix:** `gtrack.copy(overwrite = TRUE)` checks first, so it no longer deletes the existing track, or the source, when the copy cannot be made.
 
-* **Breaking:** `gtrack.copy()` of an indexed track into a database whose chromosome order cannot be read stops, as does `gtrack.liftover()` from one, and `gtrack.copy()` of a per-pair 2D track between databases whose names differ by "chr".
+* **Breaking:** `gtrack.copy()` stops into a database whose `seq/genome.idx` disagrees with its `chrom_sizes.txt`, and for a per-pair 2D track between databases whose names differ by "chr"; `gtrack.liftover()` stops for an indexed track from a database whose chromosome order cannot be read.
 
 # misha 5.13.0
 
