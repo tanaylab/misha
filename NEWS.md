@@ -14,8 +14,6 @@
 
 * **Behavior fix:** `gdataset.load()` refuses a dataset with the working database's `chrom_sizes.txt` that numbers the chromosomes differently (an indexed and a per-chromosome database with unprefixed names); its indexed tracks and interval sets read other chromosomes.
 
-* **Bug fix:** with a dataset loaded, tracks and interval sets in a subdirectory of the working directory (after `gdir.cd()`) were looked up in the database's top directory and could not be read.
-
 * **Breaking:** `gdb.convert_to_indexed()` stops for a database whose `seq/` or `chrom_sizes.txt` is another database's (a dataset saved with `copy_seq = FALSE`, a `gdb.create_linked()` database): convert that database instead.
 
 * **Breaking:** `gsetroot()` stops when `seq/genome.idx` does not match `chrom_sizes.txt` (which may list only the index's first contigs) in sizes or chromosome order, which made chromosomes read other chromosomes' sequence, and warns when only names differ.

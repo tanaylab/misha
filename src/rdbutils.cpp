@@ -910,10 +910,8 @@ const char *rdb::get_glib_dir(SEXP envir)
 }
 
 // Look up a name in a database mapping (named character vector: name -> db_path).
-// Returns db_path/tracks if found, empty string otherwise. Names are relative to db_path/tracks
-// only when the working directory is that directory: in a subdirectory of it (gdir.cd()) they are
-// relative to the working directory, and the empty string sends the caller there.
-static string lookup_db_path(SEXP db_mapping, const string &name, const string &gwd)
+// Returns db_path/tracks if found, empty string otherwise.
+static string lookup_db_path(SEXP db_mapping, const string &name)
 {
     if (db_mapping == R_NilValue || Rf_isNull(db_mapping) || db_mapping == R_UnboundValue) {
         return "";
@@ -939,17 +937,14 @@ static string lookup_db_path(SEXP db_mapping, const string &name, const string &
         return "";
     }
 
-    string db_tracks_dir;
     if (TYPEOF(db_mapping) == VECSXP) {
         SEXP val = VECTOR_ELT(db_mapping, pos);
         if (Rf_isString(val) && Rf_length(val) > 0)
-            db_tracks_dir = string(CHAR(STRING_ELT(val, 0))) + "/tracks";
+            return string(CHAR(STRING_ELT(val, 0))) + "/tracks";
     } else if (TYPEOF(db_mapping) == STRSXP) {
-        db_tracks_dir = string(CHAR(STRING_ELT(db_mapping, pos))) + "/tracks";
+        return string(CHAR(STRING_ELT(db_mapping, pos))) + "/tracks";
     }
-    if (!db_tracks_dir.empty() && gwd.compare(0, db_tracks_dir.size() + 1, db_tracks_dir + "/") == 0)
-        return "";
-    return db_tracks_dir;
+    return "";
 }
 
 string rdb::track2path(SEXP envir, const string &trackname)
@@ -967,7 +962,7 @@ string rdb::track2path(SEXP envir, const string &trackname)
 	// non-allocating, but pinning the SEXP closes a theoretical GC hole
 	// of the same family as the chromkey cache fix.
 	SEXP gtrack_dataset = PROTECT(find_in_misha(envir, "GTRACK_DATASET"));
-	string db_tracks_dir = lookup_db_path(gtrack_dataset, trackname, get_gwd(envir));
+	string db_tracks_dir = lookup_db_path(gtrack_dataset, trackname);
 	UNPROTECT(1);
 	if (db_tracks_dir.empty()) {
 		db_tracks_dir = get_gwd(envir);
@@ -987,7 +982,7 @@ string rdb::interv2path(SEXP envir, const string &intervname)
 	}
 
 	SEXP gintervals_dataset = PROTECT(find_in_misha(envir, "GINTERVALS_DATASET"));
-	string db_tracks_dir = lookup_db_path(gintervals_dataset, intervname, get_gwd(envir));
+	string db_tracks_dir = lookup_db_path(gintervals_dataset, intervname);
 	UNPROTECT(1);
 	if (db_tracks_dir.empty()) {
 		db_tracks_dir = get_gwd(envir);
