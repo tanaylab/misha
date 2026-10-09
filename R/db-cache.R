@@ -706,28 +706,64 @@ gdb.mark_cache_dirty <- function() {
     if (is.null(groot) || !nzchar(groot)) {
         return(FALSE)
     }
-    seq_dir <- file.path(groot, "seq")
-    if (!dir.exists(seq_dir)) {
-        return(FALSE)
+    # A loaded dataset with no sequence of its own (its seq/ link gone, or an empty folder) is in
+    # the loaded database's format; a dataset that is a database in its own right keeps its own
+    loaded <- c(get0("GROOT", envir = .misha, ifnotfound = NULL), get0("GDATASETS", envir = .misha, ifnotfound = NULL))
+    if (length(loaded) && normalizePath(groot, mustWork = FALSE) %in% normalizePath(loaded, mustWork = FALSE)) {
+        first_chrom <- as.character(get("ALLGENOME", envir = .misha)[[1]]$chrom[1])
+        # sequence as .gdb.chrom_names_at() probes it
+        own_seq <- all(file.exists(file.path(groot, "seq", c("genome.idx", "genome.seq")))) ||
+            any(file.exists(file.path(groot, "seq", paste0(c(first_chrom, paste0("chr", first_chrom), sub("^chr", "", first_chrom)), ".seq"))))
+        if (!own_seq) {
+            groot <- get("GROOT", envir = .misha)
+        }
     }
-    file.exists(file.path(seq_dir, "genome.idx")) &&
-        file.exists(file.path(seq_dir, "genome.seq"))
+    seq_dir <- file.path(groot, "seq")
+    file.exists(file.path(seq_dir, "genome.idx")) && file.exists(file.path(seq_dir, "genome.seq"))
 }
 
-# Read chromosome names verbatim from chrom_sizes.txt (no "chr" prefix
-# normalization), in declaration order. Callers that need normalization
-# must apply it themselves.
+# The chromosome names of the database at groot in chrom id order, as gsetroot() gives
+# them (.gdb.chrom_order): chrom id i (0-based) is element i + 1. An indexed track of the
+# database is keyed by these ids. In a per-chromosome database the names get the "chr" prefix
+# and follow the sorted names, not the chrom_sizes.txt order. The loaded database and its
+# loaded datasets (gdataset.load() requires the same chrom_sizes.txt) take the order gsetroot()
+# gave, held in ALLGENOME, rather than probe seq/: a dataset's seq/ link may be gone or empty.
+# Any other database is read from disk, without loading it; one whose seq/ holds no sequence
+# cannot show which order its names take, and is an error rather than a guess.
 .gdb.chrom_names_at <- function(groot) {
+    loaded <- c(get0("GROOT", envir = .misha, ifnotfound = NULL), get0("GDATASETS", envir = .misha, ifnotfound = NULL))
+    if (length(loaded) && normalizePath(groot, mustWork = FALSE) %in% normalizePath(loaded, mustWork = FALSE)) {
+        # a dataset loaded with an order of its own (gdataset.load()) keeps it
+        own <- get0("GDATASET_CHROMS", envir = .misha, ifnotfound = NULL)[[normalizePath(groot, mustWork = FALSE)]]
+        return(if (is.null(own)) as.character(get("ALLGENOME", envir = .misha)[[1]]$chrom) else own)
+    }
     cs <- file.path(groot, "chrom_sizes.txt")
     if (!file.exists(cs)) {
         stop(sprintf("chrom_sizes.txt missing in %s", groot), call. = FALSE)
     }
-    df <- utils::read.table(
+    # read as gsetroot() reads it
+    chromsizes <- utils::read.csv(
         cs,
-        header = FALSE, sep = "\t",
-        stringsAsFactors = FALSE,
-        colClasses = c("character", "integer"),
-        col.names = c("chrom", "size")
+        sep = "\t", header = FALSE, col.names = c("chrom", "size"), colClasses = c("character", "numeric")
     )
-    df$chrom
+    chrom_order <- .gdb.chrom_order(groot, chromsizes)
+    # Names mostly without the "chr" prefix are sorted in a per-chromosome database and kept in
+    # chrom_sizes.txt order in an indexed one (.is_per_chromosome_db); a seq/ with neither
+    # genome.idx and genome.seq nor the first chromosome's .seq file cannot tell which
+    seq_dir <- file.path(groot, "seq")
+    first_chrom <- chromsizes$chrom[1]
+    # sequence as .gdb.is_indexed_at() probes it
+    no_seq <- !(all(file.exists(file.path(seq_dir, c("genome.idx", "genome.seq")))) ||
+        any(file.exists(file.path(seq_dir, paste0(c(first_chrom, paste0("chr", first_chrom), sub("^chr", "", first_chrom)), ".seq")))))
+    if (!chrom_order$per_chromosome && nrow(chromsizes) && no_seq &&
+        mean(!startsWith(chromsizes$chrom, "chr")) >= 0.8) {
+        stop(sprintf(
+            "The chromosome order of %s cannot be told: its chrom_sizes.txt names lack the \"chr\" prefix, so its indexed tracks are keyed by the sorted names if it is a per-chromosome database and by the chrom_sizes.txt order if it is indexed, and its seq/ has no sequence to show which (as in a copy of a database's tracks without its seq/). Put back its seq/ (a link to the original database's seq/ will do), or load it with gdataset.load() as a dataset of its database.",
+            groot
+        ), call. = FALSE)
+    }
+    # as gsetroot() checks it: an indexed seq/ linked to a database converted since gives the order
+    # of chrom_sizes.txt, not of the index its tracks would be read with
+    .gdb.check_genome_idx(groot, chrom_order$names[chrom_order$id_order], chromsizes$size[chrom_order$id_order])
+    chrom_order$names[chrom_order$id_order]
 }

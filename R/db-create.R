@@ -362,6 +362,13 @@ gdb.get_readonly_attrs <- function() {
 #' When option 'gmulticontig.indexed_format' is set to TRUE, the function
 #' loads a database with "indexed" track format.
 #'
+#' In a per-chromosome database whose 'chrom_sizes.txt' names lack the "chr"
+#' prefix of its '.seq' files, the chromosomes get that prefix, and their order
+#' (in ALLGENOME and by chromosome id) is that of the sorted names: the order R's
+#' \code{order()} gives in an en_US.UTF-8 session of an R built with ICU,
+#' whatever the session's locale. A name with a character outside ASCII sorts
+#' after the ASCII ones, byte by byte, which may differ from that order.
+#'
 #' @aliases gdb.init gsetroot
 #' @param groot the root directory of the Genomic Database
 #' @param dir the current working directory inside the Genomic Database

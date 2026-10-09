@@ -18,8 +18,11 @@ GenomeSeqFetch::~GenomeSeqFetch() {
 void GenomeSeqFetch::set_seqdir(const std::string &dir) {
     m_seqdir = dir;
 
-    // Check for indexed format (genome.idx exists)
+    // Indexed format: genome.idx and genome.seq both, as R (.is_per_chromosome_db,
+    // gdb.convert_to_indexed) and rdb::is_db_indexed count it; a genome.idx left alone by an
+    // interrupted conversion is not
     std::string idx_path = m_seqdir + "/genome.idx";
+    std::string genome_seq_path = m_seqdir + "/genome.seq";
     struct stat st;
 
     // Drop any index from a previous set_seqdir() call so repeated calls on
@@ -27,7 +30,7 @@ void GenomeSeqFetch::set_seqdir(const std::string &dir) {
     delete m_index;
     m_index = nullptr;
 
-    if (stat(idx_path.c_str(), &st) == 0) {
+    if (stat(idx_path.c_str(), &st) == 0 && stat(genome_seq_path.c_str(), &st) == 0) {
         // Indexed mode: load index and open main genome.seq file
         m_indexed_mode = true;
         m_index = new GenomeIndex();

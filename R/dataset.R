@@ -51,6 +51,7 @@ gdataset.load <- function(path, force = FALSE, verbose = FALSE) {
     gdatasets <- get("GDATASETS", envir = .misha)
     if (path_norm %in% gdatasets) {
         gdataset.unload(path_norm)
+        gdatasets <- get("GDATASETS", envir = .misha)
     }
 
     # Validate path has tracks/ directory
@@ -73,11 +74,71 @@ gdataset.load <- function(path, force = FALSE, verbose = FALSE) {
         stop(sprintf("Cannot load dataset '%s': genome does not match working database", path), call. = FALSE)
     }
 
+    # The same chrom_sizes.txt can number the chromosomes differently: by the sorted names in a
+    # per-chromosome database whose names lack the "chr" prefix and whose .seq files have it, in
+    # file order otherwise (an indexed database, or .seq files without the prefix). The session
+    # reads a dataset in its own order (ALLGENOME), so the dataset's order, from its
+    # chrom_sizes.txt and its seq/ as gsetroot() would read them, is compared with it. They are
+    # equal by construction when the dataset's seq/ is the working database's, or when both are
+    # indexed and the dataset's seq/ is a directory of its own, or a link into a database whose
+    # chrom_sizes.txt is the dataset's (chrom ids then follow chrom_sizes.txt, the order gsetroot()
+    # holds the index to); that database decides only this. A dataset whose order cannot be read
+    # (no sequence, an unreadable index) loads. One in another order, or whose index does not
+    # match its own chrom_sizes.txt (a seq/ linked to a database converted since), is refused if it
+    # holds files keyed by chrom id (indexed tracks and interval sets), which would read other
+    # chromosomes; otherwise it loads, and GDATASET_CHROMS keeps its order (.gdb.chrom_names_at()).
+    dataset_seq <- file.path(path_norm, "seq")
+    groot_seq <- file.path(groot, "seq")
+    seq_owner_cs <- file.path(dirname(normalizePath(dataset_seq, mustWork = FALSE)), "chrom_sizes.txt")
+    both_indexed <- all(file.exists(file.path(dataset_seq, c("genome.idx", "genome.seq")))) &&
+        all(file.exists(file.path(groot_seq, c("genome.idx", "genome.seq")))) &&
+        (!nzchar(Sys.readlink(dataset_seq)) ||
+            (identical(file.size(seq_owner_cs), file.size(cs_path)) && identical(unname(tools::md5sum(seq_owner_cs)), unname(dataset_hash))))
+    dataset_chroms <- NULL
+    index_mismatch <- FALSE
+    if (normalizePath(dataset_seq, mustWork = FALSE) != normalizePath(groot_seq, mustWork = FALSE) && !both_indexed) {
+        # without the warning .gdb.check_genome_idx() gives for index names other than chrom_sizes.txt's
+        dataset_chroms <- tryCatch(suppressWarnings(.gdb.chrom_names_at(path_norm)), error = function(e) e)
+        groot_chroms <- as.character(get("ALLGENOME", envir = .misha)[[1]]$chrom)
+        index_mismatch <- inherits(dataset_chroms, "error") &&
+            grepl("genome.idx does not match chrom_sizes.txt", conditionMessage(dataset_chroms), fixed = TRUE)
+        if (index_mismatch) {
+            dataset_chroms <- utils::read.csv(cs_path, sep = "\t", header = FALSE, colClasses = c("character", "numeric"))[[1]]
+        } else if (inherits(dataset_chroms, "error") || identical(sub("^chr", "", dataset_chroms), sub("^chr", "", groot_chroms))) {
+            dataset_chroms <- NULL
+        }
+    }
+
     # Scan for tracks and intervals using fast path (.db.cache or C++ fts)
     # Avoids slow R-level list.files(recursive=TRUE) on large databases
     dataset_contents <- .gdb.scan_db_fast(path_norm)
     dataset_tracks <- dataset_contents$tracks
     dataset_intervals <- dataset_contents$intervals
+
+    # In another order: files keyed by chrom id, one look per track and interval set, named by a
+    # fresh scan of its tracks/ (its .db.cache may be older than its files)
+    if (!is.null(dataset_chroms)) {
+        tracks_dir <- file.path(path_norm, "tracks")
+        scanned <- .gcall("gfind_tracks_n_intervals", tracks_dir, .misha_env())
+        keyed <- c(
+            file.path(tracks_dir, paste0(gsub(".", "/", scanned[[1]], fixed = TRUE), ".track"), "track.idx"),
+            file.path(tracks_dir, rep(paste0(gsub(".", "/", scanned[[2]], fixed = TRUE), ".interv"), each = 2), c("intervals.idx", "intervals2d.idx"))
+        )
+        if (any(file.exists(keyed))) {
+            if (index_mismatch) {
+                stop(sprintf(
+                    "Cannot load dataset '%s': its seq/genome.idx does not match its chrom_sizes.txt, so the chrom ids of its indexed tracks and interval sets cannot be checked",
+                    path
+                ), call. = FALSE)
+            }
+            k <- seq_len(max(length(dataset_chroms), length(groot_chroms)))
+            i <- which(is.na(dataset_chroms[k]) | is.na(groot_chroms[k]) | sub("^chr", "", dataset_chroms[k]) != sub("^chr", "", groot_chroms[k]))[1]
+            stop(sprintf(
+                "Cannot load dataset '%s': it numbers the chromosomes differently from the working database, though its chrom_sizes.txt is the same (chrom id %d is %s in the dataset and %s in the working database), so its indexed tracks and interval sets would read other chromosomes",
+                path, i - 1L, dataset_chroms[i], groot_chroms[i]
+            ), call. = FALSE)
+        }
+    }
 
     # Get current state
     .gdb.ensure_dataset_maps()
@@ -141,6 +202,11 @@ gdataset.load <- function(path, force = FALSE, verbose = FALSE) {
     # Add to loaded datasets first (needed for gdb.reload)
     gdatasets <- c(gdatasets, path_norm)
     assign("GDATASETS", gdatasets, envir = .misha)
+    if (!is.null(dataset_chroms)) {
+        dataset_orders <- as.list(get0("GDATASET_CHROMS", envir = .misha, ifnotfound = NULL))
+        dataset_orders[[path_norm]] <- dataset_chroms
+        assign("GDATASET_CHROMS", dataset_orders, envir = .misha)
+    }
 
     # Reload the database to aggregate all tracks/intervals.
     # Use rescan=FALSE so existing databases use their .db.cache (much faster
@@ -200,6 +266,9 @@ gdataset.unload <- function(path, validate = FALSE) {
     # Remove from loaded datasets
     gdatasets <- setdiff(gdatasets, path_norm)
     assign("GDATASETS", gdatasets, envir = .misha)
+    dataset_orders <- as.list(get0("GDATASET_CHROMS", envir = .misha, ifnotfound = NULL))
+    dataset_orders[[path_norm]] <- NULL
+    assign("GDATASET_CHROMS", dataset_orders, envir = .misha)
 
     # Reload the database to aggregate remaining tracks/intervals.
     # Use rescan=FALSE so databases use their .db.cache (no files changed).

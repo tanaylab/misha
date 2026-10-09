@@ -202,7 +202,9 @@
 }
 
 .is_per_chromosome_db <- function(groot, chromsizes) {
-    if (file.exists(file.path(groot, "seq", "genome.idx"))) {
+    # indexed as gdb.convert_to_indexed() and the sequence readers see it: genome.idx and
+    # genome.seq both, not a genome.idx left over from an interrupted conversion
+    if (file.exists(file.path(groot, "seq", "genome.idx")) && file.exists(file.path(groot, "seq", "genome.seq"))) {
         return(FALSE)
     }
 
@@ -245,11 +247,11 @@
 # The canonical chromosome names of the database at groot and the order of their chrom
 # ids, as gsetroot() sets them; chromsizes is its chrom_sizes.txt. A per-chromosome
 # database (.is_per_chromosome_db) gets the "chr" prefix of its seq files, and its chrom
-# ids follow the sorted names, for backward compatibility with existing test snapshots.
-# Any other database keeps the chrom_sizes.txt order, which matches the chromids of an
-# indexed database's genome.idx. An indexed track (track.idx) is keyed by these ids.
-# Returns list(names, id_order, per_chromosome): names in chrom_sizes.txt order, and
-# chrom id i (0-based) is names[id_order[i + 1]].
+# ids follow the sorted names (.gdb.chrom_sort_key), for backward compatibility with
+# existing test snapshots. Any other database keeps the chrom_sizes.txt order, which
+# matches the chromids of an indexed database's genome.idx. An indexed track (track.idx)
+# is keyed by these ids. Returns list(names, id_order, per_chromosome): names in
+# chrom_sizes.txt order, and chrom id i (0-based) is names[id_order[i + 1]].
 .gdb.chrom_order <- function(groot, chromsizes) {
     per_chromosome <- .is_per_chromosome_db(groot, chromsizes)
     names <- chromsizes$chrom
@@ -258,7 +260,133 @@
     }
     needs_prefix <- !startsWith(names, "chr")
     names[needs_prefix] <- paste0("chr", names[needs_prefix])
-    list(names = names, id_order = order(names), per_chromosome = TRUE)
+    # radix: by bytes in every locale, and stable as order() is
+    list(names = names, id_order = order(.gdb.chrom_sort_key(names), method = "radix"), per_chromosome = TRUE)
+}
+
+# An indexed seq/ (genome.idx and genome.seq) is read by chrom id: the index's contig i holds the
+# sequence of chrom id i. Stop unless its contig lengths are the database's chromosome sizes in chrom
+# id order (names, sizes: the database's, in chrom id order), and unless every name the two share
+# (up to the "chr" prefix) is at the same chrom id in both, as otherwise chromosomes read other
+# chromosomes' sequence: a seq/ linked to a database converted after this one was made from it, or
+# the reverse. Contigs named differently at the same chrom ids with the same sizes (another naming
+# of the same assembly, as tgdb/evo/Phylo241/NZW_T2T) are a warning: the index cannot show whether
+# they are the same contigs. A chrom_sizes.txt may list only the index's first contigs (trimmed by
+# hand), with their names and sizes.
+.gdb.check_genome_idx <- function(groot, names, sizes) {
+    seq_dir <- file.path(groot, "seq")
+    if (!file.exists(file.path(seq_dir, "genome.idx")) || !file.exists(file.path(seq_dir, "genome.seq"))) {
+        return(invisible())
+    }
+    idx <- .gcall("gseq_validate_index", seq_dir, .misha_env())
+    sizes <- as.numeric(sizes)
+    mismatch <- function(what) {
+        # a seq/ that is another database's: that database's chrom_sizes.txt is the one to match
+        owner <- dirname(normalizePath(seq_dir))
+        hint <- if (owner != normalizePath(groot) && file.exists(file.path(owner, "chrom_sizes.txt"))) {
+            sprintf(" Its seq/ is in %s: if that database was converted after this one was made from it, copy %s into %s.", owner, file.path(owner, "chrom_sizes.txt"), groot)
+        } else {
+            ""
+        }
+        stop(sprintf(
+            "%s/genome.idx does not match chrom_sizes.txt in %s: %s, so chromosomes would read other chromosomes' sequence.%s",
+            seq_dir, groot, what, hint
+        ), call. = FALSE)
+    }
+    n <- length(sizes)
+    if (n > length(idx$length) || !identical(idx$length[seq_len(n)], sizes)) {
+        k <- seq_len(max(length(idx$length), n))
+        i <- which(is.na(idx$length[k]) | is.na(sizes[k]) | idx$length[k] != sizes[k])[1]
+        describe <- function(name, size) {
+            if (is.na(name)) "missing" else if (is.na(size)) sprintf("%s (with no size)", name) else sprintf("%s (%.0f bp)", name, size)
+        }
+        mismatch(sprintf("chrom id %d is %s in the index and %s in chrom_sizes.txt", i - 1L, describe(idx$name[i], idx$length[i]), describe(names[i], sizes[i])))
+    }
+    # the prefix is dropped only from the names that differ (millions of contigs in some databases)
+    idx$name <- idx$name[seq_len(n)]
+    differ <- which(idx$name != names)
+    if (length(differ)) {
+        # A chromosome listed twice stops: by the same name, or by a name that differs from the
+        # index's at its chrom id while its form with or without "chr" is listed at a chrom id the
+        # index gives that name (as "chr1" and "1" for an index with only "chr1"). Each name reads
+        # its own chrom id, but misha takes a name with or without "chr" for the same chromosome,
+        # so such a file is ambiguous. Names equal to the index's (distinct contigs "chr1" and "1")
+        # are not compared so.
+        same <- duplicated(names) | duplicated(names, fromLast = TRUE)
+        first <- match(names[differ], names)
+        last <- length(names) + 1L - match(names[differ], rev(names))
+        twins <- ifelse(same[differ], ifelse(first != differ, first, last), NA)
+        other <- ifelse(startsWith(names[differ], "chr"), sub("^chr", "", names[differ]), paste0("chr", names[differ]))
+        prefix_twins <- match(other, names)
+        prefix_twins[!is.na(prefix_twins) & sub("^chr", "", idx$name[prefix_twins]) != sub("^chr", "", names[differ])] <- NA
+        twins[is.na(twins)] <- prefix_twins[is.na(twins)]
+        k <- which(!is.na(twins))[1]
+        dup <- if (is.na(k)) 0L else differ[k]
+        twin <- if (is.na(k)) NA else twins[k]
+        if (dup) {
+            stop(sprintf(
+                "chrom_sizes.txt in %s lists the same chromosome twice: %s (chrom id %d) and %s (chrom id %d).",
+                groot, names[min(dup, twin)], min(dup, twin) - 1L, names[max(dup, twin)], max(dup, twin) - 1L
+            ), call. = FALSE)
+        }
+    }
+    idx_names <- sub("^chr", "", idx$name[differ])
+    db_names <- sub("^chr", "", names[differ])
+    keep <- idx_names != db_names
+    differ <- differ[keep]
+    if (length(differ)) {
+        # a name of chrom_sizes.txt at another chrom id in the index
+        moved <- match(db_names[keep], idx_names[keep])
+        i <- which(!is.na(moved))[1]
+        if (!is.na(i)) {
+            mismatch(sprintf("%s is chrom id %d in chrom_sizes.txt and %d in the index", names[differ[i]], differ[i] - 1L, differ[moved[i]] - 1L))
+        }
+        if (n < length(idx$length)) {
+            mismatch(sprintf(
+                "chrom_sizes.txt lists %d of the index's %d contigs, which have to be its first ones, and chrom id %d is %s in the index and %s in chrom_sizes.txt",
+                n, length(idx$length), differ[1] - 1L, idx$name[differ[1]], names[differ[1]]
+            ))
+        }
+        warning(sprintf(
+            "%s/genome.idx names %d of its %d contigs differently from chrom_sizes.txt in %s (chrom id %d is %s in the index and %s in chrom_sizes.txt). Sequence is read by chrom id and the sizes agree, so each chromosome reads the index contig at its chrom id; unless that is the same contig under another name, its sequence is wrong.",
+            seq_dir, length(differ), length(names), groot, differ[1] - 1L, idx$name[differ[1]], names[differ[1]]
+        ), call. = FALSE)
+    }
+    invisible()
+}
+
+# Keys that sort by bytes as the names sort under ICU's root collation, which is how order()
+# sorts a character vector in an R built with ICU and run in an en_US.UTF-8 session, the
+# lab's setting when per-chromosome databases got their chrom ids. order() on the names
+# themselves follows the session's LC_COLLATE instead: a C locale sorts by bytes and puts
+# chr10 before chr1_KI270706v1_random, so a session's locale changed the chrom ids.
+#
+# For ASCII, ICU root gives each printable character a primary weight, in the order of
+# `punct_digits` below and then the letters, a letter's two cases sharing one; the cases
+# differ at the tertiary level, lowercase first; control characters are ignored. Names are
+# compared by their primary weights, then by their tertiary weights. A byte outside ASCII
+# sorts after every ASCII character, by its value: ICU's order of non-ASCII characters is
+# not reproduced, so a name with one may sort differently than order() sorts it in an
+# en_US.UTF-8 session. TAB, LF and CR are not ignored by ICU either (it sorts them before the
+# space), so a name with one of them sorts differently too. pymisha's r_collate_less (src/PMDb.cpp) uses the same rule, as of
+# commit e6c52e9 on its chrom-names-r-order branch; released pymisha does not yet.
+.gdb.chrom_sort_key <- function(names) {
+    punct_digits <- utf8ToInt(" _-,;:!?.'\"()[]{}@*/\\&#%`^+<=>|~$0123456789")
+    primary <- rep(NA_integer_, 256) # by byte value + 1; NA: ignored
+    tertiary <- integer(256)
+    primary[punct_digits + 1L] <- seq_along(punct_digits)
+    letter_weights <- length(punct_digits) + seq_len(26)
+    primary[utf8ToInt(paste(letters, collapse = "")) + 1L] <- letter_weights
+    primary[utf8ToInt(paste(LETTERS, collapse = "")) + 1L] <- letter_weights
+    tertiary[utf8ToInt(paste(LETTERS, collapse = "")) + 1L] <- 1L
+    primary[129:256] <- 1000L + 128:255
+    # fixed-width primary weights, then a space (below any digit, so a name sorts before the
+    # names it is a prefix of), then the tertiary weights
+    vapply(names, function(name) {
+        bytes <- as.integer(charToRaw(name)) + 1L
+        bytes <- bytes[!is.na(primary[bytes])]
+        paste0(paste(sprintf("%04d", primary[bytes]), collapse = ""), " ", paste(tertiary[bytes], collapse = ""))
+    }, character(1), USE.NAMES = FALSE)
 }
 
 # Build the full alias map (chr-prefix toggles + MT aliases + optional TSV

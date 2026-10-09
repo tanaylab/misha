@@ -1351,3 +1351,342 @@ test_that("gdataset.save() errors when an interval set's data is missing", {
         expect_false(dir.exists("ds"))
     })
 })
+
+test_that("gdataset.load refuses a dataset that numbers chromosomes differently and holds indexed tracks", {
+    local_db_state()
+    td <- withr::local_tempdir()
+    # indexed, the same chrom_sizes.txt as `from`, chrom ids in chrom_sizes.txt order
+    indexed_like <- function(from, path, contig = NULL) {
+        dir.create(file.path(path, "tracks"), recursive = TRUE)
+        dir.create(file.path(path, "seq"))
+        cs <- utils::read.delim(file.path(from, "chrom_sizes.txt"), header = FALSE, colClasses = c("character", "numeric"))
+        names <- if (is.null(contig)) cs$V1 else paste0(contig, seq_len(nrow(cs)))
+        fa <- file.path(td, paste0(basename(path), ".fa"))
+        writeLines(unlist(lapply(seq_len(nrow(cs)), function(k) c(paste0(">", names[k]), strrep("A", cs$V2[k])))), fa)
+        invisible(misha:::.gcall("gseq_multifasta_import", fa, file.path(path, "seq", "genome.seq"), file.path(path, "seq", "genome.idx"), FALSE, misha:::.misha_env()))
+        expect_true(file.copy(file.path(from, "chrom_sizes.txt"), path))
+        normalizePath(path)
+    }
+    with_indexed_track <- function(db) {
+        gsetroot(db)
+        iv <- gintervals.all()
+        iv$end <- 10
+        gtrack.create_sparse("it", "x", iv, seq_len(nrow(iv)))
+        suppressMessages(gtrack.convert_to_indexed("it"))
+        expect_true(file.exists(file.path(db, "tracks", "it.track", "track.idx")))
+        db
+    }
+    differently <- "numbers the chromosomes differently from the working database"
+    # P: per-chromosome, chrom ids by the sorted names; I: indexed, in chrom_sizes.txt order
+    p <- create_db_with_unsorted_chrom_sizes(file.path(td, "P"))
+    i <- with_indexed_track(indexed_like(p, file.path(td, "I")))
+    pi <- with_indexed_track(create_db_with_unsorted_chrom_sizes(file.path(td, "PI")))
+    gsetroot(p)
+    expect_error(gdataset.load(i), differently)
+    expect_equal(get("GDATASETS", envir = misha:::.misha), character(0))
+    gsetroot(i)
+    expect_error(gdataset.load(pi), differently)
+
+    # files keyed by chrom id of each kind, alone: an indexed track in a subdirectory, an indexed
+    # interval set, an indexed 2D interval set
+    for (kind in c("nested track", "interval set", "2D interval set")) {
+        k <- create_db_with_unsorted_chrom_sizes(file.path(td, gsub(" ", "_", kind)))
+        gsetroot(k)
+        a <- gintervals.all()
+        a$end <- 10
+        if (kind == "nested track") {
+            gdir.create("sub", showWarnings = FALSE)
+            gtrack.create_sparse("sub.nt", "x", a, seq_len(nrow(a)))
+            suppressMessages(gtrack.convert_to_indexed("sub.nt"))
+            expect_true(file.exists(file.path(k, "tracks", "sub", "nt.track", "track.idx")))
+        } else if (kind == "interval set") {
+            withr::with_options(list(gbig.intervals.size = 2), gintervals.save("bv", a))
+            suppressMessages(gintervals.convert_to_indexed("bv"))
+            expect_true(file.exists(file.path(k, "tracks", "bv.interv", "intervals.idx")))
+        } else {
+            withr::with_options(list(gbig.intervals.size = 2), gintervals.save("bv2", gintervals.2d(a$chrom, 0, 10, a$chrom[c(2:nrow(a), 1)], 0, 10)))
+            suppressMessages(gintervals.2d.convert_to_indexed("bv2"))
+            expect_true(file.exists(file.path(k, "tracks", "bv2.interv", "intervals2d.idx")))
+        }
+        gsetroot(i)
+        expect_error(gdataset.load(k), differently, info = kind)
+    }
+
+    # the same order with names that differ by "chr": an indexed database whose chrom_sizes.txt is
+    # sorted, and a per-chromosome one with that file (chrom ids by the sorted names, with "chr")
+    sorted_root <- file.path(td, "sorted_root")
+    dir.create(file.path(sorted_root, "tracks"), recursive = TRUE)
+    dir.create(file.path(sorted_root, "seq"))
+    gsetroot(p)
+    sorted <- gintervals.all()
+    writeLines(paste(sub("^chr", "", sorted$chrom), sorted$end, sep = "\t"), file.path(sorted_root, "chrom_sizes.txt"))
+    sorted_root <- indexed_like(sorted_root, file.path(td, "sorted_root_i"))
+    sorted_ds <- file.path(td, "sorted_ds")
+    dir.create(file.path(sorted_ds, "tracks"), recursive = TRUE)
+    expect_true(file.copy(file.path(p, "seq"), sorted_ds, recursive = TRUE))
+    expect_true(file.copy(file.path(sorted_root, "chrom_sizes.txt"), sorted_ds))
+    with_indexed_track(normalizePath(sorted_ds))
+    truth <- gextract("it", gintervals.all())
+    gsetroot(sorted_root)
+    expect_equal(as.character(gintervals.all()$chrom), sub("^chr", "", as.character(truth$chrom)))
+    suppressMessages(gdataset.load(sorted_ds))
+    expect_equal(gextract("it", gintervals.all())$it, truth$it)
+
+    # an indexed track or interval set added to a dataset after its .db.cache was written is found
+    for (added in c(file.path(pi, "tracks", "it.track"), file.path(td, "interval_set", "tracks", "bv.interv"))) {
+        late <- create_db_with_unsorted_chrom_sizes(file.path(td, paste0("late_", basename(added))))
+        gsetroot(i)
+        suppressMessages(gdataset.load(late))
+        expect_true(file.exists(file.path(late, ".db.cache")))
+        expect_true(file.copy(added, file.path(late, "tracks"), recursive = TRUE))
+        gsetroot(i)
+        expect_error(gdataset.load(late), differently, info = basename(added))
+    }
+
+    # .seq files without the "chr" prefix give chrom_sizes.txt order
+    u <- create_db_with_unsorted_chrom_sizes(file.path(td, "U"))
+    for (f in list.files(file.path(u, "seq"), full.names = TRUE)) file.rename(f, file.path(dirname(f), sub("^chr", "", basename(f))))
+    with_indexed_track(u)
+    gsetroot(p)
+    expect_error(gdataset.load(u), differently)
+
+    # the working database's order is the session's, whatever its seq/ holds: sorted with the first
+    # chromosome's .seq file missing, chrom_sizes.txt order with no sequence at all
+    first_missing <- file.path(td, "first_missing")
+    dir.create(file.path(first_missing, "tracks"), recursive = TRUE)
+    dir.create(file.path(first_missing, "seq"))
+    chroms6 <- c("2", "10", "X", "3", "4", "1")
+    for (k in seq_along(chroms6)) writeBin(charToRaw(strrep("A", 1000 + k)), file.path(first_missing, "seq", paste0("chr", chroms6[k], ".seq")))
+    writeLines(paste(chroms6, 1000 + seq_along(chroms6), sep = "\t"), file.path(first_missing, "chrom_sizes.txt"))
+    i6 <- with_indexed_track(indexed_like(first_missing, file.path(td, "I6")))
+    unlink(file.path(first_missing, "seq", "chr1.seq"))
+    gsetroot(first_missing)
+    expect_equal(as.character(gintervals.all()$chrom)[1], "chr1")
+    expect_error(gdataset.load(i6), differently)
+    for (kind in c("dangling", "empty")) {
+        r <- file.path(td, paste0("R_", kind))
+        dir.create(file.path(r, "tracks"), recursive = TRUE)
+        dir.create(file.path(r, "seq"))
+        expect_true(file.copy(file.path(p, "chrom_sizes.txt"), r))
+        if (kind == "dangling") {
+            for (f in list.files(file.path(p, "seq"))) file.symlink(file.path(td, "nowhere", f), file.path(r, "seq", f))
+        }
+        gsetroot(r)
+        expect_equal(as.character(gintervals.all()$chrom)[1], "2", info = kind)
+        expect_error(gdataset.load(pi), differently, info = kind)
+        # one without files keyed by chrom id loads
+        suppressMessages(gdataset.load(p))
+        expect_equal(get("GDATASETS", envir = misha:::.misha), p, info = kind)
+    }
+
+    # both indexed: chrom_sizes.txt order on both sides, even with other contig names in the index
+    d <- indexed_like(p, file.path(td, "D"), contig = "contig")
+    gsetroot(i)
+    expect_no_warning(suppressMessages(gdataset.load(d)))
+    expect_equal(get("GDATASETS", envir = misha:::.misha), d)
+
+    # the same order loads: a dataset on the working database's seq/, a copy, one without sequence
+    gsetroot(p)
+    gtrack.create_sparse("t", "x", gintervals("chr1", 0, 10), 1)
+    linked <- file.path(td, "linked")
+    suppressMessages(gdataset.save(linked, "d", tracks = "t"))
+    copied <- file.path(td, "copied")
+    suppressMessages(gdataset.save(copied, "d", tracks = "t", copy_seq = TRUE))
+    bare <- file.path(td, "bare")
+    suppressMessages(gdataset.save(bare, "d", tracks = "t"))
+    unlink(file.path(bare, "seq"))
+    gtrack.rm("t", force = TRUE)
+    for (ds in c(linked, copied, bare)) {
+        suppressMessages(gdataset.load(ds))
+        expect_equal(gextract("t", gintervals("chr1", 0, 10))$t, 1, info = ds)
+        gdataset.unload(ds)
+    }
+})
+
+test_that("a dataset numbering chromosomes differently without indexed tracks loads, and keeps its own order", {
+    local_db_state()
+    td <- withr::local_tempdir()
+    p <- create_db_with_unsorted_chrom_sizes(file.path(td, "P"))
+    # I: indexed, the same chrom_sizes.txt, chrom ids in chrom_sizes.txt order, no tracks
+    i <- file.path(td, "I")
+    dir.create(file.path(i, "tracks"), recursive = TRUE)
+    dir.create(file.path(i, "seq"))
+    cs <- utils::read.delim(file.path(p, "chrom_sizes.txt"), header = FALSE, colClasses = c("character", "numeric"))
+    fa <- file.path(td, "i.fa")
+    writeLines(unlist(lapply(seq_len(nrow(cs)), function(k) c(paste0(">", cs$V1[k]), strrep("A", cs$V2[k])))), fa)
+    invisible(misha:::.gcall("gseq_multifasta_import", fa, file.path(i, "seq", "genome.seq"), file.path(i, "seq", "genome.idx"), FALSE, misha:::.misha_env()))
+    expect_true(file.copy(file.path(p, "chrom_sizes.txt"), i))
+    i <- normalizePath(i)
+    iv <- gintervals(c("1", "2", "10", "X"), 0, 10)
+
+    # tracks and interval sets of P, read with I as the working database by chromosome name
+    gsetroot(p)
+    gtrack.create_sparse("pt", "x", iv, c(1, 2, 10, 99))
+    gtrack.create_sparse("pi", "x", iv, c(1, 2, 10, 99))
+    suppressMessages(gtrack.convert_to_indexed("pi"))
+    gtrack.2d.create("p2", "x", data.frame(chrom1 = "chr1", start1 = 0, end1 = 10, chrom2 = "chr2", start2 = 0, end2 = 10), 5)
+    gintervals.save("pv", iv)
+    gintervals.save("pv2", gintervals.2d("chr1", 0, 10, "chr2", 0, 10))
+    by_name <- function(track) {
+        res <- gextract(track, iv)
+        setNames(res[[track]], sub("^chr", "", as.character(res$chrom)))[c("1", "2", "10", "X")]
+    }
+    truth <- by_name("pt")
+    ds <- file.path(td, "ds")
+    suppressMessages(gdataset.save(ds, "d", tracks = c("pt", "p2"), intervals = c("pv", "pv2"), copy_seq = TRUE))
+    gsetroot(i)
+    suppressMessages(gdataset.load(ds))
+    expect_equal(by_name("pt"), truth)
+    expect_equal(sub("^chr", "", .gdb.chrom_names_at(ds))[1], "1")
+    # nothing of it is written in the indexed format in this session
+    expect_error(gtrack.convert_to_indexed("pt"), "in a dataset that numbers the chromosomes differently")
+    expect_error(gtrack.2d.convert_to_indexed("p2"), "in a dataset that numbers the chromosomes differently")
+    expect_error(gintervals.convert_to_indexed("pv"), "in a dataset that numbers the chromosomes differently")
+    expect_error(gintervals.2d.convert_to_indexed("pv2"), "in a dataset that numbers the chromosomes differently")
+
+    # the order kept is dropped with the dataset, by gdataset.unload(), gsetroot() and a gsetroot()
+    # that fails
+    expect_false(is.null(get("GDATASET_CHROMS", envir = misha:::.misha)[[ds]]))
+    gdataset.unload(ds)
+    expect_null(get("GDATASET_CHROMS", envir = misha:::.misha)[[ds]])
+    suppressMessages(gdataset.load(ds))
+    # loaded again while loaded: listed once
+    suppressMessages(gdataset.load(ds))
+    expect_equal(get("GDATASETS", envir = misha:::.misha), ds)
+    gsetroot(i)
+    expect_null(get("GDATASET_CHROMS", envir = misha:::.misha))
+    suppressMessages(gdataset.load(ds))
+    expect_error(gsetroot(i, dir = ""), "empty string")
+    expect_null(get("GDATASET_CHROMS", envir = misha:::.misha))
+
+    # copies into I loaded as a dataset of P, of an indexed and a per-chromosome track, by db = and
+    # from inside its tracks/, are written in files named by chromosome: they read right in this
+    # session and with I as the working database
+    gsetroot(p)
+    suppressMessages(gdataset.load(i))
+    gtrack.copy("pi", "pic", db = i)
+    gtrack.copy("pt", "ptc", db = i)
+    gdir.cd(file.path(i, "tracks"))
+    gtrack.copy("pi", "pic2")
+    gdir.cd(file.path(p, "tracks"))
+    for (t in c("pic", "ptc", "pic2")) {
+        expect_false(file.exists(file.path(i, "tracks", paste0(t, ".track"), "track.idx")), info = t)
+        expect_equal(by_name(t), truth, info = t)
+    }
+    gsetroot(i)
+    expect_equal(by_name("pic"), truth)
+    expect_equal(by_name("ptc"), truth)
+    expect_equal(by_name("pic2"), truth)
+    gsetroot(p)
+    suppressMessages(gdataset.load(i))
+    expect_equal(get("GDATASETS", envir = misha:::.misha), i)
+})
+
+test_that("gdataset.load refuses a dataset whose linked seq/ belongs to a database converted since", {
+    local_db_state()
+    td <- withr::local_tempdir()
+    p <- create_db_with_unsorted_chrom_sizes(file.path(td, "P"))
+    # I: indexed, the same chrom_sizes.txt, chrom ids in chrom_sizes.txt order
+    i <- file.path(td, "I")
+    dir.create(file.path(i, "tracks"), recursive = TRUE)
+    dir.create(file.path(i, "seq"))
+    cs <- utils::read.delim(file.path(p, "chrom_sizes.txt"), header = FALSE, colClasses = c("character", "numeric"))
+    fa <- file.path(td, "i.fa")
+    writeLines(unlist(lapply(seq_len(nrow(cs)), function(k) c(paste0(">", cs$V1[k]), strrep("A", cs$V2[k])))), fa)
+    invisible(misha:::.gcall("gseq_multifasta_import", fa, file.path(i, "seq", "genome.seq"), file.path(i, "seq", "genome.idx"), FALSE, misha:::.misha_env()))
+    expect_true(file.copy(file.path(p, "chrom_sizes.txt"), i))
+    i <- normalizePath(i)
+    # D: an indexed track of P (sorted chrom ids), saved with copy_seq = FALSE
+    gsetroot(p)
+    a <- gintervals.all()
+    a$end <- 10
+    gtrack.create_sparse("t", "x", a, seq_len(nrow(a)))
+    suppressMessages(gtrack.convert_to_indexed("t"))
+    d <- file.path(td, "D")
+    suppressMessages(gdataset.save(d, "d", tracks = "t", copy_seq = FALSE))
+    gtrack.rm("t", force = TRUE)
+    gsetroot(i)
+    expect_error(gdataset.load(d), "numbers the chromosomes differently")
+    # P converted since: D's seq/ is indexed in P's order, which D's chrom_sizes.txt does not match
+    suppressMessages(gdb.convert_to_indexed(groot = p, force = TRUE, validate = FALSE))
+    expect_true(file.exists(file.path(d, "seq", "genome.idx")))
+    gsetroot(i)
+    expect_error(gdataset.load(d), "its seq/genome.idx does not match its chrom_sizes.txt")
+})
+
+test_that("gdataset.load does not read the order of a linked seq/ whose database has the same chrom_sizes.txt, and loads one whose index cannot be read", {
+    local_db_state()
+    td <- withr::local_tempdir()
+    p <- create_db_with_unsorted_chrom_sizes(file.path(td, "P"))
+    # indexed, the same chrom_sizes.txt as P, chrom ids in chrom_sizes.txt order
+    indexed_like <- function(path) {
+        dir.create(file.path(path, "tracks"), recursive = TRUE)
+        dir.create(file.path(path, "seq"))
+        cs <- utils::read.delim(file.path(p, "chrom_sizes.txt"), header = FALSE, colClasses = c("character", "numeric"))
+        fa <- file.path(td, paste0(basename(path), ".fa"))
+        writeLines(unlist(lapply(seq_len(nrow(cs)), function(k) c(paste0(">", cs$V1[k]), strrep("A", cs$V2[k])))), fa)
+        invisible(misha:::.gcall("gseq_multifasta_import", fa, file.path(path, "seq", "genome.seq"), file.path(path, "seq", "genome.idx"), FALSE, misha:::.misha_env()))
+        expect_true(file.copy(file.path(p, "chrom_sizes.txt"), path))
+        normalizePath(path)
+    }
+    r <- indexed_like(file.path(td, "R"))
+    s <- indexed_like(file.path(td, "S"))
+    # D: an indexed track of S, saved with copy_seq = FALSE (seq/ a link to S's)
+    gsetroot(s)
+    a <- gintervals.all()
+    a$end <- 10
+    gtrack.create_sparse("t", "x", a, seq_len(nrow(a)))
+    suppressMessages(gtrack.convert_to_indexed("t"))
+    d <- file.path(td, "D")
+    suppressMessages(gdataset.save(d, "d", tracks = "t", copy_seq = FALSE))
+    gtrack.rm("t", force = TRUE)
+    expect_true(nzchar(Sys.readlink(file.path(d, "seq"))))
+    looked <- 0
+    chrom_names_at <- misha:::.gdb.chrom_names_at
+    local_mocked_bindings(.gdb.chrom_names_at = function(...) {
+        looked <<- looked + 1
+        chrom_names_at(...)
+    }, .package = "misha")
+    load_d <- function() {
+        looked <<- 0
+        gsetroot(r)
+        suppressMessages(gdataset.load(d))
+        expect_equal(gextract("t", a)$t, seq_len(nrow(a)))
+        looked
+    }
+    # S's chrom_sizes.txt is D's: the order is not read
+    expect_equal(load_d(), 0)
+    # S's chrom_sizes.txt of the same size but not D's (two lines swapped): the order is read
+    cs_s <- readLines(file.path(s, "chrom_sizes.txt"))
+    writeLines(cs_s[c(2, 1, seq_along(cs_s)[-(1:2)])], file.path(s, "chrom_sizes.txt"))
+    expect_equal(load_d(), 1)
+    # seq/ in a directory of no database: the order is read, and is R's
+    store <- file.path(td, "store")
+    dir.create(store)
+    expect_true(file.rename(file.path(s, "seq"), file.path(store, "seq")))
+    unlink(file.path(d, "seq"))
+    expect_true(file.symlink(file.path(store, "seq"), file.path(d, "seq")))
+    expect_equal(load_d(), 1)
+    # an index that cannot be read (truncated) leaves the order unknown: D loads as before
+    idx <- file.path(store, "seq", "genome.idx")
+    writeBin(readBin(idx, "raw", file.size(idx))[seq_len(file.size(idx) %/% 2)], idx)
+    expect_error(gsetroot(d))
+    expect_equal(load_d(), 1)
+})
+
+test_that("gdataset.load gives no warning for a dataset's index names", {
+    local_db_state()
+    td <- withr::local_tempdir()
+    p <- create_db_with_unsorted_chrom_sizes(file.path(td, "P"))
+    # indexed, contigs named otherwise in genome.idx than in chrom_sizes.txt (as tgdb NZW_T2T)
+    d <- file.path(td, "D")
+    dir.create(file.path(d, "tracks"), recursive = TRUE)
+    dir.create(file.path(d, "seq"))
+    cs <- utils::read.delim(file.path(p, "chrom_sizes.txt"), header = FALSE, colClasses = c("character", "numeric"))
+    fa <- file.path(td, "d.fa")
+    writeLines(unlist(lapply(seq_len(nrow(cs)), function(k) c(paste0(">contig", k), strrep("A", cs$V2[k])))), fa)
+    invisible(misha:::.gcall("gseq_multifasta_import", fa, file.path(d, "seq", "genome.seq"), file.path(d, "seq", "genome.idx"), FALSE, misha:::.misha_env()))
+    expect_true(file.copy(file.path(p, "chrom_sizes.txt"), d))
+    gsetroot(p)
+    expect_no_warning(suppressMessages(gdataset.load(d)))
+})

@@ -105,6 +105,12 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
         stop("chrom_sizes.txt file does not contain any chromosomes", call. = FALSE)
     }
 
+    # The chromosome names and chrom id order (for per-chromosome databases, the names get the "chr"
+    # prefix of the seq files and are sorted), and an indexed seq/ checked against them, before the
+    # session state is cleared: a database that fails leaves the loaded one loaded
+    chrom_order <- .gdb.chrom_order(groot, chromsizes)
+    .gdb.check_genome_idx(groot, chrom_order$names[chrom_order$id_order], chromsizes$size[chrom_order$id_order])
+
     # Drop the process-static index caches. They are keyed by absolute track /
     # interval-set directory, so pointing the session at a database whose
     # contents changed under the same paths (a rebuilt db, gdb.init_examples()
@@ -122,9 +128,8 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
     assign("GTRACK_DATASET", NULL, envir = .misha)
     assign("GINTERVALS_DATASET", NULL, envir = .misha)
     assign("GDATASETS", character(0), envir = .misha)
+    assign("GDATASET_CHROMS", NULL, envir = .misha)
 
-    # For per-chromosome databases, the names get the "chr" prefix of the seq files
-    chrom_order <- .gdb.chrom_order(groot, chromsizes)
     is_per_chromosome <- chrom_order$per_chromosome
     assign("DB_IS_PER_CHROMOSOME", is_per_chromosome, envir = .misha)
 
@@ -145,12 +150,6 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
     # ~5M strings on a million-contig database.
     all_chrom_names <- names(alias_map)
 
-    # Validate genome.idx if it exists (indexed format)
-    idx_path <- file.path(groot, "seq", "genome.idx")
-    if (file.exists(idx_path)) {
-        .gcall("gseq_validate_index", file.path(groot, "seq"), .misha_env())
-    }
-
     intervals <- data.frame(
         chrom = canonical_names,
         start = 0,
@@ -158,7 +157,7 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
     )
 
     # For indexed databases, preserve the order from chrom_sizes.txt to match genome.idx chromid assignments
-    # For per-chromosome databases, sort alphabetically for backward compatibility with existing test snapshots
+    # For per-chromosome databases, sort the names (.gdb.chrom_order: the same order in every locale)
     if (is_per_chromosome) {
         intervals <- intervals[chrom_order$id_order, ]
         canonical_names <- canonical_names[chrom_order$id_order]
@@ -270,6 +269,7 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
                 assign("GTRACK_DATASET", NULL, envir = .misha)
                 assign("GINTERVALS_DATASET", NULL, envir = .misha)
                 assign("GDATASETS", character(0), envir = .misha)
+                assign("GDATASET_CHROMS", NULL, envir = .misha)
             }
         }
     )
@@ -319,7 +319,7 @@ gdb.unload <- function() {
 
     session_vars <- c(
         "GROOT", "GWD", "ALLGENOME", "GINTERVID", "GITERATOR.INTERVALS",
-        "GVTRACKS", "GDATASETS", "GTRACK_DATASET", "GINTERVALS_DATASET", "GTRACKS_SRC",
+        "GVTRACKS", "GDATASETS", "GDATASET_CHROMS", "GTRACK_DATASET", "GINTERVALS_DATASET", "GTRACKS_SRC",
         "CHROM_ALIAS", "DB_IS_PER_CHROMOSOME"
     )
     for (v in session_vars) {

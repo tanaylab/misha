@@ -508,9 +508,25 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
     dest_db <- .gtrack.copy.resolve_dest_db(db)
     .gcheck_write_permission(file.path(dest_db, "tracks"), "copy track to")
 
+    # The destination, once for all tracks: its format, and its chrom order, read when a track first
+    # needs it. A loaded dataset with no sequence of its own is in its database's format
+    # (.gdb.is_indexed_at), which an indexed track is copied in; any other track goes into it as it
+    # is, by its own seq/ (none: per-chromosome).
+    dest_info <- new.env(parent = emptyenv())
+    dest_info$db <- dest_db
+    dest_info$indexed <- .gdb.is_indexed_at(dest_db)
+    dest_info$seq_indexed <- all(file.exists(file.path(dest_db, "seq", c("genome.idx", "genome.seq"))))
+    # A loaded dataset that numbers the chromosomes differently from the working database
+    # (gdataset.load() keeps its order in GDATASET_CHROMS) is read with the session's chrom ids
+    # but its own as a working database: it gets files named by chromosome, which read right in both.
+    if (!is.null(get0("GDATASET_CHROMS", envir = .misha, ifnotfound = NULL)[[dest_db]])) {
+        dest_info$indexed <- FALSE
+        dest_info$seq_indexed <- FALSE
+    }
+
     created <- character(0)
     for (i in seq_along(srcnames)) {
-        created <- c(created, .gtrack.copy.one(srcnames[i], destnames[i], dest_db, overwrite))
+        created <- c(created, .gtrack.copy.one(srcnames[i], destnames[i], dest_info, overwrite))
     }
 
     invisible(created)
@@ -558,7 +574,8 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
 }
 
 # Copy a single track. Returns the destination track name on success.
-.gtrack.copy.one <- function(srcname, destname, dest_db, overwrite) {
+.gtrack.copy.one <- function(srcname, destname, dest_info, overwrite) {
+    dest_db <- dest_info$db
     if (!(srcname %in% get("GTRACKS", envir = .misha))) {
         stop(sprintf("Track %s does not exist", srcname), call. = FALSE)
     }
@@ -566,26 +583,105 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
     src_db <- .gtrack_db_path(srcname)
     if (is.null(src_db)) src_db <- get("GROOT", envir = .misha)
 
-    if (srcname == destname && identical(src_db, dest_db)) {
-        stop(sprintf("Source and destination are the same track: %s", srcname), call. = FALSE)
-    }
-
     src_dir <- .track_dir(srcname)
     dest_dir <- file.path(dest_db, "tracks", paste0(gsub("\\.", "/", destname), ".track"))
-    dest_parent <- dirname(dest_dir)
-    if (!dir.exists(dest_parent)) {
-        .gwith_umask(dir.create(dest_parent, recursive = TRUE, showWarnings = FALSE))
+
+    # the same name in the same database, or the same directory by two names (a linked directory,
+    # another path to the database)
+    if ((srcname == destname && identical(src_db, dest_db)) ||
+        normalizePath(src_dir, mustWork = FALSE) == normalizePath(dest_dir, mustWork = FALSE)) {
+        stop(sprintf("Source and destination are the same track: %s", srcname), call. = FALSE)
     }
 
     # Use the filesystem as the source of truth for "destination already exists".
     # An in-memory cache check is fragile when dest_db is not in GDATASETS.
-    if (dir.exists(dest_dir)) {
-        if (!overwrite) {
+    if (dir.exists(dest_dir) && !overwrite) {
+        stop(sprintf(
+            "Track %s already exists in %s; use overwrite=TRUE to replace.",
+            destname, dest_db
+        ), call. = FALSE)
+    }
+
+    src_indexed <- file.exists(file.path(src_dir, "track.idx"))
+    dest_indexed <- if (src_indexed) dest_info$indexed else dest_info$seq_indexed
+    info <- gtrack.info(srcname)
+    is_2d <- info$type %in% c("rectangles", "points")
+
+    # An indexed track (track.idx) is keyed by chrom ids: reading one takes the source's order (the
+    # source is loaded: the order gsetroot() gave), writing one the destination's, and a 2D track
+    # is copied in its own format, so an indexed one needs both. Per-chromosome files are copied by
+    # name, by the chrom_sizes.txt names, as before, and need no order. Per-pair files are named by
+    # the names gsetroot() gives, which the two databases have to share, in any order; a
+    # destination that cannot show them (.gdb.chrom_names_at() stops for one without sequence) is
+    # compared by its chrom_sizes.txt names.
+    # The destination's names are read once, when a track first needs them
+    if ((is_2d || dest_indexed) && is.null(dest_info$chroms)) {
+        dest_info$chroms <- tryCatch(.gdb.chrom_names_at(dest_db), error = function(e) e)
+    }
+    order_known <- (is_2d || dest_indexed) && !inherits(dest_info$chroms, "error")
+    if ((if (is_2d) src_indexed else dest_indexed) && !order_known) {
+        stop(dest_info$chroms)
+    }
+    if (src_indexed || (is_2d && order_known)) {
+        src_chroms <- .gdb.chrom_names_at(src_db)
+    } else {
+        src_chroms <- utils::read.csv(file.path(src_db, "chrom_sizes.txt"), sep = "\t", header = FALSE, colClasses = c("character", "numeric"))[[1]]
+    }
+    if (order_known) {
+        dest_chroms <- dest_info$chroms
+    } else {
+        dest_chroms <- utils::read.csv(file.path(dest_db, "chrom_sizes.txt"), sep = "\t", header = FALSE, colClasses = c("character", "numeric"))[[1]]
+    }
+
+    # Every check that can stop the copy comes before the destination is touched (overwrite = TRUE
+    # deletes the track there)
+    if (is_2d && src_indexed && !identical(src_chroms, dest_chroms)) {
+        stop(sprintf(
+            "Cross-db copy of 2D track %s requires identical chromosome order in source and destination.",
+            srcname
+        ), call. = FALSE)
+    }
+    if (is_2d && !src_indexed && !setequal(src_chroms, dest_chroms)) {
+        stop(sprintf(
+            "Cross-db copy of 2D track %s requires the same chromosome names in source and destination.",
+            srcname
+        ), call. = FALSE)
+    }
+    if (is_2d && src_indexed && !dest_indexed) {
+        stop(sprintf(
+            "Cross-db copy of indexed 2D track %s into a per-chromosome database is not yet supported.",
+            destname
+        ), call. = FALSE)
+    }
+    if (is_2d && dest_indexed && !src_indexed && dest_db != get("GROOT", envir = .misha)) {
+        # gtrack.2d.convert_to_indexed reads GROOT directly in C++, so it only works when dest_db
+        # is the active database. Cross-db 2D conversion is a follow-up.
+        stop(sprintf(
+            "Cross-db copy of 2D track %s with format conversion to a non-active dataset is not yet supported.",
+            destname
+        ), call. = FALSE)
+    }
+    if (!is_2d) {
+        # the per-chromosome files the copy would have (an indexed track splits into one per contig)
+        src_files <- if (src_indexed) src_chroms else setdiff(list.files(src_dir), .TRACK_INTERNAL_FILES)
+        if (length(src_files) && all(vapply(src_files, function(f) is.null(.gtrack.copy.match_chrom_alias(f, dest_chroms)), logical(1)))) {
             stop(sprintf(
-                "Track %s already exists in %s; use overwrite=TRUE to replace.",
-                destname, dest_db
+                "gtrack.copy(%s): no chromosomes from source database are present in destination; refusing to create empty track.",
+                destname
             ), call. = FALSE)
         }
+    }
+
+    groot <- get("GROOT", envir = .misha)
+    gdatasets <- get("GDATASETS", envir = .misha)
+    if (is.null(gdatasets)) gdatasets <- character(0)
+    dest_db_loaded <- dest_db %in% c(groot, gdatasets)
+
+    dest_parent <- dirname(dest_dir)
+    if (!dir.exists(dest_parent)) {
+        .gwith_umask(dir.create(dest_parent, recursive = TRUE, showWarnings = FALSE))
+    }
+    if (dir.exists(dest_dir)) {
         # Bypass gtrack.rm (which insists db is loaded) and clean up directly.
         # If trash failed and residue remains, abort so we don't create on top
         # of stale files.
@@ -595,48 +691,13 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
                 dest_dir
             ), call. = FALSE)
         }
-        .gdb.rm_track(destname, trackdir = dest_dir, db = dest_db)
-    }
-
-    src_indexed <- file.exists(file.path(src_dir, "track.idx"))
-    dest_indexed <- .gdb.is_indexed_at(dest_db)
-    src_chroms <- .gdb.chrom_names_at(src_db)
-    dest_chroms <- .gdb.chrom_names_at(dest_db)
-
-    info <- gtrack.info(srcname)
-
-    # 2D track guard
-    if (info$type %in% c("rectangles", "points") &&
-        !identical(src_chroms, dest_chroms)) {
-        stop(sprintf(
-            "Cross-db copy of 2D track %s requires identical chromosome order in source and destination.",
-            srcname
-        ), call. = FALSE)
-    }
-
-    # Legacy single-file (1D) tracks: refuse if dest is indexed
-    if (info$type %in% c("dense", "sparse", "array") && !dir.exists(src_dir)) {
-        if (dest_indexed) {
-            stop(sprintf(
-                "Track %s is in legacy single-file format; convert with gtrack.convert(\"%s\") first.",
-                srcname, srcname
-            ), call. = FALSE)
-        }
-        if (!.gwith_umask(file.copy(src_dir, dest_dir, copy.mode = TRUE))) {
-            stop(sprintf("Failed to copy %s to %s", srcname, destname), call. = FALSE)
-        }
-        groot <- get("GROOT", envir = .misha)
-        gdatasets <- get("GDATASETS", envir = .misha)
-        if (is.null(gdatasets)) gdatasets <- character(0)
-        if (dest_db %in% c(groot, gdatasets)) {
-            .gdb.add_track(destname, dest_db)
+        # the session's track list is updated only for a loaded destination (.gdb.rm_track writes it
+        # into the database's .db.cache); an unloaded one is rescanned when loaded
+        if (dest_db_loaded) {
+            .gdb.rm_track(destname, trackdir = dest_dir, db = dest_db)
         } else {
-            # Cross-db copy to an unloaded path: skip in-memory registration to
-            # avoid state leakage; mark the dest db's cache dirty so a later
-            # gsetroot/gdataset.load will pick up the new track on rescan.
             .gdb.cache_mark_dirty(dest_db)
         }
-        return(destname)
     }
 
     # Register destination first so convert-to-indexed (called inside pipeline)
@@ -646,10 +707,6 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
     if (!.gwith_umask(dir.create(dest_dir, showWarnings = FALSE)) && !dir.exists(dest_dir)) {
         stop(sprintf("Failed to create %s", dest_dir), call. = FALSE)
     }
-    groot <- get("GROOT", envir = .misha)
-    gdatasets <- get("GDATASETS", envir = .misha)
-    if (is.null(gdatasets)) gdatasets <- character(0)
-    dest_db_loaded <- dest_db %in% c(groot, gdatasets)
     if (dest_db_loaded) {
         .gdb.add_track(destname, dest_db)
     } else {
@@ -693,25 +750,11 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
     }
 
     # 2D track: at this point we know either format or chrom order differs.
-    # If chrom orders differ, we already errored in .gtrack.copy.one.
+    # .gtrack.copy.one already stopped for differing chrom orders and for the format changes not
+    # supported (indexed into per-chromosome, or into a database that is not the active one).
     if (track_type %in% c("rectangles", "points")) {
-        if (src_indexed && !dest_indexed) {
-            stop(sprintf(
-                "Cross-db copy of indexed 2D track %s into a per-chromosome database is not yet supported.",
-                destname
-            ), call. = FALSE)
-        }
         .gtrack.copy.raw_dir(src_dir, dest_dir)
         if (dest_indexed && !src_indexed) {
-            # gtrack.2d.convert_to_indexed reads GROOT directly in C++, so it
-            # only works when dest_db is the active database. Cross-db 2D
-            # conversion is a follow-up.
-            if (dest_db != get("GROOT", envir = .misha)) {
-                stop(sprintf(
-                    "Cross-db copy of 2D track %s with format conversion to a non-active dataset is not yet supported.",
-                    destname
-                ), call. = FALSE)
-            }
             .with_db_context(dest_db, function() {
                 gtrack.2d.convert_to_indexed(destname, remove.old = TRUE)
             })

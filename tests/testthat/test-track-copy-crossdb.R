@@ -15,6 +15,16 @@ test_that(".gdb.is_indexed_at and .gdb.chrom_names_at probe a db without loading
     })
 })
 
+test_that(".gdb.chrom_names_at gives the chrom id order gsetroot gives a per-chromosome db", {
+    local_db_state()
+    withr::with_tempdir({
+        db <- create_db_with_unsorted_chrom_sizes("unsorted_db")
+        names_at <- misha:::.gdb.chrom_names_at(db)
+        gsetroot(db)
+        expect_equal(names_at, as.character(gintervals.all()$chrom))
+    })
+})
+
 test_that(".gdb.is_indexed_at returns TRUE for an indexed db", {
     withr::with_tempdir({
         create_test_db("idx_db")
@@ -431,4 +441,309 @@ test_that("split followed by pack reproduces the original indexed pair byte-for-
         expect_equal(idx_after, idx_before)
         expect_equal(dat_after, dat_before)
     })
+})
+
+test_that("gtrack.copy splits an indexed track of a per-chromosome db by the chrom ids gsetroot gives it", {
+    local_db_state()
+    withr::with_tempdir({
+        # chrom_sizes.txt is unsorted, so the chrom ids of src follow the sorted names
+        src <- create_db_with_unsorted_chrom_sizes("src")
+        dest_perchrom <- create_db_with_unsorted_chrom_sizes("dest_perchrom")
+        dest_indexed <- normalizePath(create_test_db("dest_indexed", chrom_sizes = data.frame(
+            chrom = c("chr2", "chr10", "chr1", "chrX", "chr1_KI270706v1_random"),
+            size = c(2000, 1500, 1000, 1200, 500)
+        )))
+        gdb.init(dest_indexed)
+        gdb.convert_to_indexed(force = TRUE, verbose = FALSE)
+
+        gsetroot(src)
+        intervs <- gintervals.all()
+        intervs$end <- 100
+        gtrack.create_sparse("sp", "x", intervs, seq_len(nrow(intervs)))
+        gtrack.convert_to_indexed("sp")
+        src_vals <- gextract("sp", gintervals.all())
+        expected <- setNames(src_vals$sp, as.character(src_vals$chrom))
+
+        for (db in c(dest_perchrom, dest_indexed)) {
+            gsetroot(src)
+            gtrack.copy("sp", "sp_copy", db = db)
+            gsetroot(db)
+            res <- gextract("sp_copy", gintervals.all())
+            expect_equal(setNames(res$sp_copy, as.character(res$chrom))[names(expected)], expected, info = db)
+        }
+    })
+})
+
+for (.seq_state in c("missing", "empty")) {
+    test_that(sprintf("a dataset of a per-chromosome db with its seq/ %s numbers chromosomes as the db does", .seq_state), {
+        local_db_state()
+        td <- tempfile("ds_order_")
+        dir.create(td)
+        withr::defer(unlink(td, recursive = TRUE))
+        db <- create_db_with_unsorted_chrom_sizes(file.path(td, "db"))
+        gsetroot(db)
+
+        iv <- gintervals(c("chr1", "chr2", "chr10", "chrX"), 0, 100)
+        gtrack.create_sparse("t1", "x", iv, c(1, 2, 10, 23))
+        suppressMessages(gtrack.convert_to_indexed("t1"))
+        gtrack.2d.create("r2", "x", data.frame(chrom1 = "chr1", start1 = 10, end1 = 15, chrom2 = "chr2", start2 = 30, end2 = 35), 7)
+        expected <- gextract("t1", gintervals.all())
+        expected2d <- gextract("r2", gintervals.2d.all())
+
+        ds <- file.path(td, "ds")
+        suppressMessages(gdataset.save(ds, "d", tracks = "t1"))
+        # a dataset moved away from its db, copied without its seq/ link or assembled by hand
+        unlink(file.path(ds, "seq"))
+        if (.seq_state == "empty") {
+            dir.create(file.path(ds, "seq"))
+        }
+        gtrack.rm("t1", force = TRUE)
+        suppressMessages(gdataset.load(ds))
+        expect_equal(.gdb.chrom_names_at(ds), c("chr1", "chr1_KI270706v1_random", "chr10", "chr2", "chrX"))
+
+        # an indexed track copied out of the dataset keeps its values on their chromosomes
+        gtrack.copy("t1", "t1c")
+        expect_equal(gextract("t1c", gintervals.all())$t1c, expected$t1)
+
+        # a 2D track copied into the dataset
+        gtrack.copy("r2", "r2c", db = ds)
+        expect_equal(gextract("r2c", gintervals.2d.all())$r2c, expected2d$r2)
+    })
+}
+
+test_that("a dataset of an indexed db without its seq/ link is indexed as the db is", {
+    local_db_state()
+    td <- tempfile("ds_indexed_")
+    dir.create(td)
+    withr::defer(unlink(td, recursive = TRUE))
+    db <- create_db_with_unsorted_chrom_sizes(file.path(td, "db"))
+    gsetroot(db)
+    # tracks in per-chromosome and per-pair files, made before the database was converted
+    gtrack.create_sparse("v2", "x", gintervals(c("chr1", "chr2"), 0, 100), c(7, 8))
+    gtrack.2d.create("r2", "x", data.frame(chrom1 = "chr1", start1 = 10, end1 = 15, chrom2 = "chr2", start2 = 30, end2 = 35), 7)
+    suppressMessages(gdb.convert_to_indexed(groot = db, force = TRUE, validate = FALSE))
+    gsetroot(db)
+    expect_true(.gdb.is_indexed_at(db))
+
+    iv <- gintervals(c("chr1", "chr2"), 0, 100)
+    gtrack.create_sparse("t1", "x", iv, c(1, 2))
+    ds <- file.path(td, "ds")
+    suppressMessages(gdataset.save(ds, "d", tracks = "t1"))
+    unlink(file.path(ds, "seq"))
+    gtrack.rm("t1", force = TRUE)
+    suppressMessages(gdataset.load(ds))
+    expect_true(.gdb.is_indexed_at(ds))
+    # nor does a genome.seq without genome.idx make a sequence of its own
+    dir.create(file.path(ds, "seq"))
+    file.create(file.path(ds, "seq", "genome.seq"))
+    expect_true(.gdb.is_indexed_at(ds))
+    unlink(file.path(ds, "seq"), recursive = TRUE)
+
+    # an indexed track is copied in the database's format; other tracks go in as they are
+    gtrack.create_sparse("v1", "x", iv, c(5, 6))
+    suppressMessages(gtrack.convert_to_indexed("v1"))
+    gtrack.copy(c("v1", "v2", "r2"), "c", db = ds)
+    expect_equal(gtrack.info("c.v1")$format, "indexed")
+    expect_false(file.exists(file.path(ds, "tracks", "c", "v2.track", "track.idx")))
+    expect_false(file.exists(file.path(ds, "tracks", "c", "r2.track", "track.idx")))
+    expect_equal(gextract("c.v1", iv)$c.v1, c(5, 6))
+    expect_equal(gextract("c.v2", iv)$c.v2, c(7, 8))
+    expect_equal(gextract("c.r2", gintervals.2d.all())$c.r2, 7)
+})
+
+test_that("an unloaded database whose seq/ holds no sequence gives no chrom order to guess from", {
+    local_db_state()
+    td <- tempfile("noseq_")
+    dir.create(td)
+    withr::defer(unlink(td, recursive = TRUE))
+    db <- create_db_with_unsorted_chrom_sizes(file.path(td, "db"))
+    gsetroot(db)
+    iv <- gintervals(c("chr1", "chr2"), 0, 100)
+    gtrack.create_sparse("sp", "x", iv, c(1, 2))
+    gtrack.create_sparse("spi", "x", iv, c(3, 4))
+    suppressMessages(gtrack.convert_to_indexed("spi"))
+
+    # a directory of the same database, not loaded, with tracks/ and chrom_sizes.txt but no seq/
+    other <- file.path(td, "other")
+    dir.create(file.path(other, "tracks"), recursive = TRUE)
+    expect_true(file.copy(file.path(db, "chrom_sizes.txt"), other))
+    expect_error(.gdb.chrom_names_at(other), "cannot be told")
+
+    # a liftover of an indexed source track out of it needs the order
+    src <- file.path(other, "tracks", "lift.track")
+    dir.create(src)
+    expect_error(misha:::.gtrack.liftover.src_chroms(src), "cannot be told")
+    unlink(src, recursive = TRUE)
+    # a genome.idx without genome.seq is no sequence either
+    dir.create(file.path(other, "seq"))
+    writeBin(raw(16), file.path(other, "seq", "genome.idx"))
+    expect_error(.gdb.chrom_names_at(other), "cannot be told")
+    unlink(file.path(other, "seq"), recursive = TRUE)
+
+    # copies into it go by chromosome name: the source's order is known, as it is loaded
+    gtrack.copy("sp", "sp_copy", db = other)
+    gtrack.copy("spi", "spi_copy", db = other)
+    suppressMessages(gdataset.load(other))
+    expect_equal(gextract("sp_copy", iv)$sp_copy, c(1, 2))
+    expect_equal(gextract("spi_copy", iv)$spi_copy, c(3, 4))
+})
+
+test_that("gtrack.copy into a database whose order cannot be told copies per-pair 2D tracks by name, and checks before overwriting", {
+    local_db_state()
+    td <- withr::local_tempdir()
+    db <- create_db_with_unsorted_chrom_sizes(file.path(td, "db"))
+    gsetroot(db)
+    pairs <- data.frame(chrom1 = c("chr1", "chr10"), start1 = 10, end1 = 15, chrom2 = c("chr2", "chrX"), start2 = 30, end2 = 35)
+    gtrack.2d.create("r2", "x", pairs, c(12, 1023))
+    gtrack.2d.create("r2i", "x", pairs, c(5, 6))
+    suppressMessages(gtrack.2d.convert_to_indexed("r2i"))
+    # a tracks-only copy of the database: no seq/, unprefixed names
+    other <- file.path(td, "other")
+    dir.create(file.path(other, "tracks"), recursive = TRUE)
+    expect_true(file.copy(file.path(db, "chrom_sizes.txt"), other))
+
+    gtrack.copy("r2", "r2c", db = other)
+    old <- sort(list.files(file.path(other, "tracks", "r2c.track")))
+    # an indexed 2D track needs the order: it stops before the existing track is touched
+    expect_error(gtrack.copy("r2i", "r2c", db = other, overwrite = TRUE), "cannot be told")
+    expect_equal(sort(list.files(file.path(other, "tracks", "r2c.track"))), old)
+    suppressMessages(gdataset.load(other))
+    expect_equal(gextract("r2c", gintervals.2d.all())$r2c, c(12, 1023))
+
+    # a chr-prefixed first name and a .seq file without the prefix still show the order
+    gdb.unload()
+    third <- file.path(td, "third")
+    dir.create(file.path(third, "seq"), recursive = TRUE)
+    writeLines(c("chrA\t10", paste0(c("B", "C", "D", "E"), "\t10")), file.path(third, "chrom_sizes.txt"))
+    writeBin(charToRaw(strrep("A", 10)), file.path(third, "seq", "A.seq"))
+    expect_equal(.gdb.chrom_names_at(third)[1], "chrA")
+})
+
+test_that("gtrack.copy copies a per-pair 2D track between chr-prefixed and unprefixed names of the same chromosomes", {
+    local_db_state()
+    td <- withr::local_tempdir()
+    unprefixed <- create_db_with_unsorted_chrom_sizes(file.path(td, "unprefixed"))
+    prefixed <- create_db_with_unsorted_chrom_sizes(file.path(td, "prefixed"))
+    writeLines(paste0("chr", readLines(file.path(prefixed, "chrom_sizes.txt"))), file.path(prefixed, "chrom_sizes.txt"))
+    pairs <- data.frame(chrom1 = c("chr1", "chr10"), start1 = 10, end1 = 15, chrom2 = c("chr2", "chrX"), start2 = 30, end2 = 35)
+    for (from in c(prefixed, unprefixed)) {
+        to <- setdiff(c(prefixed, unprefixed), from)
+        gsetroot(from)
+        gtrack.2d.create("r2", "x", pairs, c(12, 1023))
+        gtrack.copy("r2", "r2c", db = to)
+        gtrack.rm("r2", force = TRUE)
+        gsetroot(to)
+        res <- gextract("r2c", gintervals.2d.all())
+        expect_equal(setNames(res$r2c, paste(res$chrom1, res$chrom2))[c("chr1 chr2", "chr10 chrX")], c("chr1 chr2" = 12, "chr10 chrX" = 1023), info = basename(from))
+        gtrack.rm("r2c", force = TRUE)
+    }
+})
+
+test_that("gtrack.copy with overwrite = TRUE into an unloaded database leaves the session's tracks out of its cache", {
+    local_db_state()
+    td <- withr::local_tempdir()
+    src <- create_db_with_unsorted_chrom_sizes(file.path(td, "src"))
+    dest <- create_db_with_unsorted_chrom_sizes(file.path(td, "dest"))
+    gsetroot(src)
+    gtrack.create_sparse("sp", "x", gintervals(c("chr1", "chr2"), 0, 10), c(1, 2))
+    gtrack.create_sparse("other", "x", gintervals("chr1", 0, 10), 3)
+    gtrack.copy("sp", "sp_c", db = dest)
+    gtrack.copy("other", "sp_c", db = dest, overwrite = TRUE)
+    cache <- file.path(dest, ".db.cache")
+    if (file.exists(cache)) {
+        expect_false(any(c("sp", "other") %in% unlist(readRDS(cache))))
+    }
+    gsetroot(dest)
+    expect_equal(gtrack.ls(), "sp_c")
+    expect_equal(gextract("sp_c", gintervals("chr1", 0, 10))$sp_c, 3)
+})
+
+test_that("gtrack.copy of a track onto its own name stops, also in a subdirectory", {
+    local_db_state()
+    td <- withr::local_tempdir()
+    db <- create_db_with_unsorted_chrom_sizes(file.path(td, "db"))
+    gsetroot(db)
+    gtrack.create_sparse("t", "x", gintervals("chr1", 0, 10), 1)
+    gdir.create("sub", showWarnings = FALSE)
+    gtrack.create_sparse("sub.t", "x", gintervals("chr1", 0, 10), 2)
+    gdir.cd("sub")
+    expect_error(gtrack.copy("t", "t", overwrite = TRUE), "Source and destination are the same track")
+    gdir.cd("..")
+    expect_equal(gextract("t", gintervals("chr1", 0, 10))$t, 1)
+    expect_equal(gextract("sub.t", gintervals("chr1", 0, 10))$sub.t, 2)
+})
+
+test_that("gtrack.copy with overwrite = TRUE stops for the same directory under two names", {
+    local_db_state()
+    td <- withr::local_tempdir()
+    db <- create_db_with_unsorted_chrom_sizes(file.path(td, "db"))
+    gsetroot(db)
+    gdir.create("sub", showWarnings = FALSE)
+    gtrack.create_sparse("sub.t", "x", gintervals("chr1", 0, 10), 1)
+    # tracks/alias is a link to tracks/sub: alias.t is sub.t
+    expect_true(file.symlink(file.path(db, "tracks", "sub"), file.path(db, "tracks", "alias")))
+    gdb.reload()
+    expect_true(all(c("alias.t", "sub.t") %in% gtrack.ls()))
+    expect_error(gtrack.copy("sub.t", "alias.t", overwrite = TRUE), "Source and destination are the same track")
+    expect_equal(gextract("sub.t", gintervals("chr1", 0, 10))$sub.t, 1)
+})
+
+test_that("gtrack.copy with overwrite = TRUE keeps the existing track when the copy stops", {
+    local_db_state()
+    td <- withr::local_tempdir()
+    mk_db <- function(name, chroms, indexed = FALSE) {
+        path <- file.path(td, name)
+        dir.create(file.path(path, "tracks"), recursive = TRUE)
+        dir.create(file.path(path, "seq"))
+        if (indexed) {
+            fa <- tempfile(fileext = ".fa", tmpdir = td)
+            writeLines(unlist(lapply(chroms, function(ch) c(paste0(">", ch), strrep("A", 1000)))), fa)
+            invisible(misha:::.gcall("gseq_multifasta_import", fa, file.path(path, "seq", "genome.seq"), file.path(path, "seq", "genome.idx"), FALSE, misha:::.misha_env()))
+        } else {
+            for (ch in chroms) writeBin(charToRaw(strrep("A", 1000)), file.path(path, "seq", paste0(ch, ".seq")))
+        }
+        writeLines(paste(chroms, 1000, sep = "\t"), file.path(path, "chrom_sizes.txt"))
+        normalizePath(path)
+    }
+    src <- mk_db("src", c("chr1", "chr2"))
+    gsetroot(src)
+    gtrack.create_sparse("s1", "x", gintervals(c("chr1", "chr2"), 0, 10), c(1, 2))
+    pair <- data.frame(chrom1 = "chr1", start1 = 0, end1 = 10, chrom2 = "chr2", start2 = 0, end2 = 10)
+    gtrack.2d.create("r2", "x", pair, 5)
+    gtrack.2d.create("r2i", "x", pair, 6)
+    suppressMessages(gtrack.2d.convert_to_indexed("r2i"))
+
+    cases <- list(
+        list(track = "r2", db = mk_db("renamed", c("chrA", "chrB")), error = "requires the same chromosome names"),
+        list(track = "r2i", db = mk_db("reversed", c("chr2", "chr1"), indexed = TRUE), error = "requires identical chromosome order"),
+        list(track = "s1", db = mk_db("disjoint", "chrZ"), error = "no chromosomes from source database are present"),
+        list(track = "r2i", db = mk_db("per_chrom", c("chr1", "chr2")), error = "indexed 2D track .* into a per-chromosome database"),
+        list(track = "r2", db = mk_db("indexed", c("chr1", "chr2"), indexed = TRUE), error = "format conversion to a non-active dataset")
+    )
+    for (case in cases) {
+        old <- file.path(case$db, "tracks", "t.track")
+        dir.create(old)
+        writeLines("keep me", file.path(old, "sentinel"))
+        expect_error(gtrack.copy(case$track, "t", db = case$db, overwrite = TRUE), case$error)
+        expect_equal(list.files(old), "sentinel", info = basename(case$db))
+    }
+})
+
+test_that("an unloaded database whose linked seq/ was converted since does not give a stale order", {
+    local_db_state()
+    td <- tempfile("stale_")
+    dir.create(td)
+    withr::defer(unlink(td, recursive = TRUE))
+    parent <- create_db_with_unsorted_chrom_sizes(file.path(td, "parent"))
+    # a database made from parent with its own chrom_sizes.txt and a link to its seq/
+    child <- file.path(td, "child")
+    dir.create(file.path(child, "tracks", "t1.track"), recursive = TRUE)
+    expect_true(file.copy(file.path(parent, "chrom_sizes.txt"), child))
+    expect_true(file.symlink(file.path(parent, "seq"), file.path(child, "seq")))
+    expect_equal(.gdb.chrom_names_at(child), c("chr1", "chr1_KI270706v1_random", "chr10", "chr2", "chrX"))
+
+    suppressMessages(gdb.convert_to_indexed(groot = parent, force = TRUE, validate = FALSE))
+    gsetroot(parent)
+    expect_error(.gdb.chrom_names_at(child), "does not match chrom_sizes.txt")
+    expect_error(misha:::.gtrack.liftover.src_chroms(file.path(child, "tracks", "t1.track")), "does not match chrom_sizes.txt")
 })

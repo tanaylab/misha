@@ -202,7 +202,9 @@ void write_index_file(const string &index_path,
         }
     }
 
-    fclose(fp);
+    // fclose flushes the stdio buffer: a full disk shows here
+    if (fclose(fp) != 0)
+        verror("Failed to write %s: %s", index_path.c_str(), strerror(errno));
 }
 
 } // anonymous namespace
@@ -409,8 +411,10 @@ SEXP gseq_multifasta_import(SEXP _fasta, SEXP _seq, SEXP _index, SEXP _sort, SEX
             seq_buffer.clear();
         }
 
-        // Close sequence file
-        seq_file.close();
+        // Flush and close the sequence file, checking both: a full disk shows here, not at write()
+        // (see BufferedFile::flush)
+        if (seq_file.flush() != 0 || seq_file.close() != 0)
+            verror("Failed to write %s: %s", seq_fname, strerror(errno));
 
         // Check if we got any contigs
         if (entries.empty()) {

@@ -298,7 +298,8 @@ SEXP gseqread(SEXP _intervals, SEXP _envir)
 }
 
 // Validate genome index file (called during gdb.init)
-// Throws error if index is corrupt or has checksum mismatch
+// Throws error if index is corrupt or has checksum mismatch. Returns the contig names and lengths
+// in chrom id order, list(name, length), for gsetroot() to match against chrom_sizes.txt.
 SEXP gseq_validate_index(SEXP _seqdir, SEXP _envir)
 {
 	try {
@@ -314,7 +315,23 @@ SEXP gseq_validate_index(SEXP _seqdir, SEXP _envir)
 		GenomeIndex index;
 		index.load(idx_path);
 
-		return R_NilValue;
+		const vector<ContigIndexEntry> &entries = index.get_all_entries();
+		SEXP names = rprotect_ptr(RSaneAllocVector(STRSXP, entries.size()));
+		SEXP lengths = rprotect_ptr(RSaneAllocVector(REALSXP, entries.size()));
+		for (const ContigIndexEntry &entry : entries) {
+			if (entry.chromid >= entries.size())
+				verror("Chrom id %u in %s is out of range (%zu contigs)", entry.chromid, idx_path.c_str(), entries.size());
+			SET_STRING_ELT(names, entry.chromid, RSaneMkChar(entry.name.c_str()));
+			REAL(lengths)[entry.chromid] = (double)entry.length;
+		}
+		SEXP answer = rprotect_ptr(RSaneAllocVector(VECSXP, 2));
+		SET_VECTOR_ELT(answer, 0, names);
+		SET_VECTOR_ELT(answer, 1, lengths);
+		SEXP answer_names = rprotect_ptr(RSaneAllocVector(STRSXP, 2));
+		SET_STRING_ELT(answer_names, 0, RSaneMkChar("name"));
+		SET_STRING_ELT(answer_names, 1, RSaneMkChar("length"));
+		Rf_setAttrib(answer, R_NamesSymbol, answer_names);
+		return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
     } catch (const bad_alloc &e) {
