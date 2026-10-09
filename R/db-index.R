@@ -147,14 +147,13 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
     old_groot <- old_session$GROOT
     datasets <- as.character(old_session$GDATASETS)
     converted <- datasets[normalizePath(datasets, mustWork = FALSE) == normalizePath(setup_info$groot)]
-    # what the conversion got to, for a converted loaded dataset: the genome step finished, files
-    # keyed by chrom id (indexed tracks and interval sets) were written, or chrom_sizes.txt was
+    # what the conversion got to, for a converted loaded dataset: the genome step finished, the
+    # track or interval step rewrote something (files keyed by chrom id), or chrom_sizes.txt was
     # replaced and not put back; and whether all of it finished
     changed <- FALSE
     finished <- FALSE
     if (length(converted)) {
         chrom_sizes_md5 <- unname(tools::md5sum(file.path(setup_info$groot, "chrom_sizes.txt")))
-        keyed_before <- file.info(list.files(file.path(setup_info$groot, "tracks"), pattern = "^(track|intervals|intervals2d)\\.idx$", recursive = TRUE, full.names = TRUE))[, c("size", "mtime")]
     }
     if (!is.null(old_groot) && nzchar(old_groot)) {
         on.exit(
@@ -163,8 +162,7 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
                 list2env(old_session, envir = .misha)
                 .gdb.clear_all_dir_caches()
                 unload <- length(converted) &&
-                    (changed || !identical(unname(tools::md5sum(file.path(setup_info$groot, "chrom_sizes.txt"))), chrom_sizes_md5) ||
-                        !identical(file.info(list.files(file.path(setup_info$groot, "tracks"), pattern = "^(track|intervals|intervals2d)\\.idx$", recursive = TRUE, full.names = TRUE))[, c("size", "mtime")], keyed_before))
+                    (changed || !identical(unname(tools::md5sum(file.path(setup_info$groot, "chrom_sizes.txt"))), chrom_sizes_md5))
                 if (unload) {
                     gdataset.unload(converted[1])
                 }
@@ -228,13 +226,13 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
 
 
     # Convert tracks if requested
-    if (convert_tracks) {
-        .gdb.convert_to_indexed.tracks(setup_info$groot, verbose, threads = threads)
+    if (convert_tracks && .gdb.convert_to_indexed.tracks(setup_info$groot, verbose, threads = threads) > 0) {
+        changed <- TRUE
     }
 
     # Convert intervals if requested
-    if (convert_intervals) {
-        .gdb.convert_to_indexed.intervals(setup_info$groot, remove_old_files, verbose, threads = threads)
+    if (convert_intervals && .gdb.convert_to_indexed.intervals(setup_info$groot, remove_old_files, verbose, threads = threads) > 0) {
+        changed <- TRUE
     }
 
     finished <- TRUE
@@ -711,7 +709,7 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
 
     if (length(all_tracks) == 0) {
         if (verbose) message("No tracks found in database")
-        return(invisible(NULL))
+        return(invisible(0L))
     }
 
     if (verbose) message(sprintf("Found %d tracks in database", length(all_tracks)))
@@ -840,6 +838,8 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
             ))
         }
     }
+    # the number of tracks rewritten, for gdb.convert_to_indexed()
+    invisible(converted_count)
 }
 
 # Helper function to convert interval sets to indexed format
@@ -854,7 +854,7 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
 
     if (length(all_intervals) == 0) {
         if (verbose) message("No interval sets found in database")
-        return(invisible(NULL))
+        return(invisible(0L))
     }
 
     if (verbose) message(sprintf("Found %d interval sets in database", length(all_intervals)))
@@ -992,6 +992,8 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
             ), call. = FALSE)
         }
     }
+    # the number of interval sets rewritten, for gdb.convert_to_indexed()
+    invisible(total_converted)
 }
 
 
@@ -1133,7 +1135,7 @@ gtrack.convert_to_indexed <- function(track = NULL) {
 
     # the session's chrom ids are not those of a dataset loaded with an order of its own
     if (any(.gtrack_db_path(trackstr) %in% names(get0("GDATASET_CHROMS", envir = .misha, ifnotfound = NULL)))) {
-        stop(sprintf("Track %s is in a dataset that numbers the chromosomes differently from the working database; convert it with that database loaded by gsetroot().", trackstr), call. = FALSE)
+        stop(sprintf("Track %s is in a dataset that numbers the chromosomes differently from the working database, so it cannot be written in the indexed format in this session; load that database with gsetroot() to do it there.", trackstr), call. = FALSE)
     }
 
     trackdir <- .track_dir(trackstr)
@@ -1259,7 +1261,7 @@ gintervals.convert_to_indexed <- function(set.name = NULL, remove.old = FALSE, f
 
     # the session's chrom ids are not those of a dataset loaded with an order of its own
     if (any(.gintervals_db_path(set.name) %in% names(get0("GDATASET_CHROMS", envir = .misha, ifnotfound = NULL)))) {
-        stop(sprintf("Interval set %s is in a dataset that numbers the chromosomes differently from the working database; convert it with that database loaded by gsetroot().", set.name), call. = FALSE)
+        stop(sprintf("Interval set %s is in a dataset that numbers the chromosomes differently from the working database, so it cannot be written in the indexed format in this session; load that database with gsetroot() to do it there.", set.name), call. = FALSE)
     }
 
     # Get interval set path using database-aware resolution
@@ -1348,7 +1350,7 @@ gtrack.2d.convert_to_indexed <- function(track = NULL, remove.old = FALSE, force
 
     # the session's chrom ids are not those of a dataset loaded with an order of its own
     if (any(.gtrack_db_path(trackstr) %in% names(get0("GDATASET_CHROMS", envir = .misha, ifnotfound = NULL)))) {
-        stop(sprintf("Track %s is in a dataset that numbers the chromosomes differently from the working database; convert it with that database loaded by gsetroot().", trackstr), call. = FALSE)
+        stop(sprintf("Track %s is in a dataset that numbers the chromosomes differently from the working database, so it cannot be written in the indexed format in this session; load that database with gsetroot() to do it there.", trackstr), call. = FALSE)
     }
 
     trackdir <- .track_dir(trackstr)
@@ -1445,7 +1447,7 @@ gintervals.2d.convert_to_indexed <- function(set.name = NULL, remove.old = FALSE
 
     # the session's chrom ids are not those of a dataset loaded with an order of its own
     if (any(.gintervals_db_path(set.name) %in% names(get0("GDATASET_CHROMS", envir = .misha, ifnotfound = NULL)))) {
-        stop(sprintf("Interval set %s is in a dataset that numbers the chromosomes differently from the working database; convert it with that database loaded by gsetroot().", set.name), call. = FALSE)
+        stop(sprintf("Interval set %s is in a dataset that numbers the chromosomes differently from the working database, so it cannot be written in the indexed format in this session; load that database with gsetroot() to do it there.", set.name), call. = FALSE)
     }
 
     # Get interval set path using database-aware resolution

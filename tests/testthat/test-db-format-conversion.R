@@ -928,9 +928,24 @@ test_that("gdb.convert_to_indexed unloads a loaded dataset only when it changed 
     expect_no_warning(suppressMessages(gdb.convert_to_indexed(groot = y, force = TRUE)))
     expect_equal(get("GDATASETS", envir = misha:::.misha), y)
     # a track step that stops before writing anything
-    local_mocked_bindings(.gdb.convert_to_indexed.tracks = function(...) stop("injected"), .package = "misha")
-    expect_no_warning(expect_error(suppressMessages(gdb.convert_to_indexed(groot = y, force = TRUE, convert_tracks = TRUE)), "injected"))
+    local({
+        local_mocked_bindings(.gdb.convert_to_indexed.tracks = function(...) stop("injected"), .package = "misha")
+        expect_no_warning(expect_error(suppressMessages(gdb.convert_to_indexed(groot = y, force = TRUE, convert_tracks = TRUE)), "injected"))
+    })
     expect_equal(get("GDATASETS", envir = misha:::.misha), y)
+    # a track step that converts a track (the genome step is skipped: Y is indexed)
+    gsetroot(p)
+    iv <- gintervals.all()
+    iv$end <- 10
+    gtrack.create_sparse("pt", "x", iv, seq_len(nrow(iv)))
+    expect_true(file.copy(file.path(p, "tracks", "pt.track"), file.path(y, "tracks"), recursive = TRUE))
+    unlink(file.path(y, ".db.cache"))
+    gtrack.rm("pt", force = TRUE)
+    gsetroot(x)
+    suppressMessages(gdataset.load(y))
+    expect_warning(suppressMessages(gdb.convert_to_indexed(groot = y, convert_tracks = TRUE)), "Y was converted, so it is no longer loaded as a dataset")
+    expect_true(file.exists(file.path(y, "tracks", "pt.track", "track.idx")))
+    expect_equal(get("GDATASETS", envir = misha:::.misha), character(0))
 
     # a failed conversion that could not put chrom_sizes.txt back
     q <- create_db_with_unsorted_chrom_sizes(file.path(td, "Q"))
@@ -1075,6 +1090,11 @@ test_that("gsetroot stops for an indexed database whose chrom_sizes.txt lists a 
     writeLines(c("chr1\t100", "1\t100"), file.path(two, "chrom_sizes.txt"))
     gsetroot(two)
     expect_equal(toupper(gseq.extract(gintervals(c("chr1", "1"), 0, 3))), c("AAA", "CCC"))
+    # those two, and a third contig named otherwise in chrom_sizes.txt: only that one is compared
+    writeLines(c("chr1\t100", "1\t100", "chrY\t100"), file.path(two, "chrom_sizes.txt"))
+    writeLines(c(">chr1", strrep("A", 100), ">1", strrep("C", 100), ">contig3", strrep("G", 100)), fa)
+    invisible(misha:::.gcall("gseq_multifasta_import", fa, file.path(two, "seq", "genome.seq"), file.path(two, "seq", "genome.idx"), FALSE, misha:::.misha_env()))
+    expect_warning(gsetroot(two), "names 1 of its 3 contigs differently")
     # a line with no size
     writeLines(c(full[1:4], "chrX"), cs)
     expect_error(gsetroot(db), "chrom id 4 is chrX \\(1200 bp\\) in the index and chrX \\(with no size\\) in chrom_sizes.txt")

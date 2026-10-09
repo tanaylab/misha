@@ -516,6 +516,13 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
     dest_info$db <- dest_db
     dest_info$indexed <- .gdb.is_indexed_at(dest_db)
     dest_info$seq_indexed <- all(file.exists(file.path(dest_db, "seq", c("genome.idx", "genome.seq"))))
+    # A loaded dataset that numbers the chromosomes differently from the working database
+    # (gdataset.load() keeps its order in GDATASET_CHROMS) is read with the session's chrom ids
+    # but its own as a working database: it gets files named by chromosome, which read right in both.
+    if (!is.null(get0("GDATASET_CHROMS", envir = .misha, ifnotfound = NULL)[[dest_db]])) {
+        dest_info$indexed <- FALSE
+        dest_info$seq_indexed <- FALSE
+    }
 
     created <- character(0)
     for (i in seq_along(srcnames)) {

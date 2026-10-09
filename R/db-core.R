@@ -306,18 +306,17 @@
     idx$name <- idx$name[seq_len(n)]
     differ <- which(idx$name != names)
     if (length(differ)) {
-        # Names compared without "chr" have to be unique: the same chromosome listed twice, by its
-        # name with and without "chr" or by the same name, would read the other one's sequence.
-        # Names equal to the index's (as distinct contigs "chr1" and "1") are not compared so.
-        prefixed <- startsWith(names, "chr")
-        dup <- anyDuplicated(names)
-        if (!dup && any(prefixed) && !all(prefixed)) {
-            dup <- match(TRUE, names %in% sub("^chr", "", names[prefixed]))
-            dup <- if (is.na(dup)) 0L else dup
-        }
+        # Names compared without "chr" have to be unique: a name that differs from the index's and
+        # is another chromosome's name too, as it is or with or without "chr", would read the other
+        # one's sequence. Names equal to the index's (as distinct contigs "chr1" and "1") are not
+        # compared so.
+        other <- ifelse(startsWith(names[differ], "chr"), sub("^chr", "", names[differ]), paste0("chr", names[differ]))
+        twins <- match(other, names)
+        same <- duplicated(names) | duplicated(names, fromLast = TRUE)
+        k <- which(!is.na(twins) | same[differ])[1]
+        dup <- if (is.na(k)) 0L else differ[k]
+        twin <- if (is.na(k)) NA else if (!is.na(twins[k])) twins[k] else which(names == names[dup] & seq_along(names) != dup)[1]
         if (dup) {
-            twin <- match(sub("^chr", "", names[dup]), sub("^chr", "", names[-dup]))
-            twin <- twin + (twin >= dup)
             stop(sprintf(
                 "chrom_sizes.txt in %s lists the same chromosome twice: %s (chrom id %d) and %s (chrom id %d).",
                 groot, names[min(dup, twin)], min(dup, twin) - 1L, names[max(dup, twin)], max(dup, twin) - 1L

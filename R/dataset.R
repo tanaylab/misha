@@ -51,6 +51,7 @@ gdataset.load <- function(path, force = FALSE, verbose = FALSE) {
     gdatasets <- get("GDATASETS", envir = .misha)
     if (path_norm %in% gdatasets) {
         gdataset.unload(path_norm)
+        gdatasets <- get("GDATASETS", envir = .misha)
     }
 
     # Validate path has tracks/ directory
@@ -76,31 +77,31 @@ gdataset.load <- function(path, force = FALSE, verbose = FALSE) {
     # The same chrom_sizes.txt can number the chromosomes differently: by the sorted names in a
     # per-chromosome database whose names lack the "chr" prefix and whose .seq files have it, in
     # file order otherwise (an indexed database, or .seq files without the prefix). The session
-    # reads a dataset in its own order (ALLGENOME), so the dataset's order is compared with it,
-    # unless they are equal by construction: the dataset's seq/ is the working database's, or both
-    # are indexed (their chrom ids follow chrom_sizes.txt, the order gsetroot() holds the index to).
-    # A dataset whose order cannot be read (no sequence) loads. One in another order is refused if
-    # it holds files keyed by chrom id (indexed tracks and interval sets), which would read other
-    # chromosomes; otherwise it loads, and GDATASET_CHROMS keeps its order for what is written
-    # into it (.gdb.chrom_names_at()).
-    dataset_seq <- file.path(path_norm, "seq")
+    # reads a dataset in its own order (ALLGENOME), so the dataset's order is compared with it.
+    # A dataset whose seq/ is another database's (saved with copy_seq = FALSE) has that database's
+    # order, which a conversion of it keeps though it rewrites its chrom_sizes.txt. The orders are
+    # equal by construction when the dataset's seq/ is the working database's, or when both are
+    # indexed with the chrom_sizes.txt of the dataset (chrom ids follow it, the order gsetroot()
+    # holds the index to). A dataset whose order cannot be read (no sequence) loads. One in another
+    # order is refused if it holds files keyed by chrom id (indexed tracks and interval sets),
+    # which would read other chromosomes; otherwise it loads, and GDATASET_CHROMS keeps its order
+    # (.gdb.chrom_names_at()).
+    dataset_seq <- normalizePath(file.path(path_norm, "seq"), mustWork = FALSE)
     groot_seq <- file.path(groot, "seq")
+    seq_owner <- dirname(dataset_seq)
+    if (seq_owner != path_norm && !file.exists(file.path(seq_owner, "chrom_sizes.txt"))) {
+        seq_owner <- path_norm
+    }
+    both_indexed <- all(file.exists(file.path(dataset_seq, c("genome.idx", "genome.seq")))) &&
+        all(file.exists(file.path(groot_seq, c("genome.idx", "genome.seq")))) &&
+        (seq_owner == path_norm || identical(unname(tools::md5sum(file.path(seq_owner, "chrom_sizes.txt"))), unname(dataset_hash)))
     dataset_chroms <- NULL
-    if (normalizePath(dataset_seq, mustWork = FALSE) != normalizePath(groot_seq, mustWork = FALSE) &&
-        !(all(file.exists(file.path(dataset_seq, c("genome.idx", "genome.seq")))) &&
-            all(file.exists(file.path(groot_seq, c("genome.idx", "genome.seq")))))) {
-        dataset_chroms <- tryCatch(.gdb.chrom_names_at(path_norm), error = function(e) NULL)
+    if (dataset_seq != normalizePath(groot_seq, mustWork = FALSE) && !both_indexed) {
+        # without the warning .gdb.check_genome_idx() gives for index names other than chrom_sizes.txt's
+        dataset_chroms <- tryCatch(suppressWarnings(.gdb.chrom_names_at(seq_owner)), error = function(e) NULL)
         groot_chroms <- as.character(get("ALLGENOME", envir = .misha)[[1]]$chrom)
         if (!is.null(dataset_chroms) && identical(sub("^chr", "", dataset_chroms), sub("^chr", "", groot_chroms))) {
             dataset_chroms <- NULL
-        }
-        if (!is.null(dataset_chroms) &&
-            length(list.files(file.path(path_norm, "tracks"), pattern = "^(track|intervals|intervals2d)\\.idx$", recursive = TRUE))) {
-            i <- which(sub("^chr", "", dataset_chroms) != sub("^chr", "", groot_chroms))[1]
-            stop(sprintf(
-                "Cannot load dataset '%s': it numbers the chromosomes differently from the working database, though its chrom_sizes.txt is the same (chrom id %d is %s in the dataset and %s in the working database), so its indexed tracks and interval sets would read other chromosomes",
-                path, i - 1L, dataset_chroms[i], groot_chroms[i]
-            ), call. = FALSE)
         }
     }
 
@@ -109,6 +110,22 @@ gdataset.load <- function(path, force = FALSE, verbose = FALSE) {
     dataset_contents <- .gdb.scan_db_fast(path_norm)
     dataset_tracks <- dataset_contents$tracks
     dataset_intervals <- dataset_contents$intervals
+
+    # in another order: files keyed by chrom id, one look per track and interval set
+    if (!is.null(dataset_chroms)) {
+        tracks_dir <- file.path(path_norm, "tracks")
+        keyed <- c(
+            file.path(tracks_dir, paste0(gsub(".", "/", dataset_tracks, fixed = TRUE), ".track"), "track.idx"),
+            file.path(tracks_dir, rep(paste0(gsub(".", "/", dataset_intervals, fixed = TRUE), ".interv"), each = 2), c("intervals.idx", "intervals2d.idx"))
+        )
+        if (any(file.exists(keyed))) {
+            i <- which(sub("^chr", "", dataset_chroms) != sub("^chr", "", groot_chroms))[1]
+            stop(sprintf(
+                "Cannot load dataset '%s': it numbers the chromosomes differently from the working database, though its chrom_sizes.txt is the same (chrom id %d is %s in the dataset and %s in the working database), so its indexed tracks and interval sets would read other chromosomes",
+                path, i - 1L, dataset_chroms[i], groot_chroms[i]
+            ), call. = FALSE)
+        }
+    }
 
     # Get current state
     .gdb.ensure_dataset_maps()
