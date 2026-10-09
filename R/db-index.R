@@ -165,13 +165,15 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
                 if (!reads_own) {
                     gdb.unload()
                 } else {
-                    # as gsetroot() checks it
+                    # as gsetroot() checks it; and its format as the files now have it (the loaded
+                    # database may be the converted one)
                     problem <- tryCatch(
                         {
                             chromsizes <- utils::read.csv(file.path(old_groot, "chrom_sizes.txt"),
                                 sep = "\t", header = FALSE, col.names = c("chrom", "size"), colClasses = c("character", "numeric")
                             )
                             chrom_order <- .gdb.chrom_order(old_groot, chromsizes)
+                            assign("DB_IS_PER_CHROMOSOME", chrom_order$per_chromosome, envir = .misha)
                             .gdb.check_genome_idx(old_groot, chrom_order$names[chrom_order$id_order], chromsizes$size[chrom_order$id_order])
                         },
                         warning = function(w) NULL,
@@ -451,27 +453,38 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
     index_path_tmp <- paste0(index_path, ".tmp")
     # chrom_sizes.txt is replaced through a temporary file next to it, and the original is kept, to
     # put back if the conversion fails after replacing it: a hard link, or where that is refused (a
-    # file of another user under fs.protected_hardlinks), a copy with its mode and bytes. Both get
-    # names no other file has.
+    # file of another user under fs.protected_hardlinks), a copy with its group, mode and bytes. Both
+    # get names no other file has. A new file gets the original's group when the converting user is
+    # in it (else chgrp fails and it keeps the user's group), then its mode.
     chrom_sizes_target <- normalizePath(chrom_sizes_path, mustWork = TRUE)
     chrom_sizes_tmp <- tempfile("chrom_sizes.txt.", tmpdir = dirname(chrom_sizes_target))
     chrom_sizes_orig <- tempfile("chrom_sizes.txt.", tmpdir = dirname(chrom_sizes_target))
+    original <- file.info(chrom_sizes_target, extra_cols = TRUE)
+    chrom_sizes_replaced <- FALSE
+    # The temporary file goes on exit, an interrupt included. The backup goes once the conversion is
+    # done (genome.idx in place) or if chrom_sizes.txt was not replaced; it stays when putting the
+    # original back failed (the error names it) and when stopped between the two renames.
+    on.exit(
+        {
+            unlink(chrom_sizes_tmp)
+            if (!chrom_sizes_replaced || file.exists(index_path)) unlink(chrom_sizes_orig)
+        },
+        add = TRUE
+    )
     if (!suppressWarnings(file.link(chrom_sizes_target, chrom_sizes_orig))) {
-        if (!file.copy(chrom_sizes_target, chrom_sizes_orig) ||
-            !Sys.chmod(chrom_sizes_orig, file.info(chrom_sizes_target)$mode, use_umask = FALSE) ||
+        copied <- file.copy(chrom_sizes_target, chrom_sizes_orig)
+        if (copied && !is.na(original$gid)) {
+            suppressWarnings(system2("chgrp", c(original$gid, shQuote(chrom_sizes_orig)), stdout = FALSE, stderr = FALSE))
+        }
+        if (!copied ||
+            !Sys.chmod(chrom_sizes_orig, original$mode, use_umask = FALSE) ||
             !identical(
                 readBin(chrom_sizes_orig, "raw", file.size(chrom_sizes_orig)),
                 readBin(chrom_sizes_target, "raw", file.size(chrom_sizes_target))
             )) {
-            unlink(chrom_sizes_orig)
             stop(sprintf("Failed to keep a copy of %s", chrom_sizes_target), call. = FALSE)
         }
     }
-    chrom_sizes_replaced <- FALSE
-    # The backup goes once the conversion is done (genome.idx in place) or if chrom_sizes.txt was not
-    # replaced, also after an interrupt. It stays when putting the original back failed (the error
-    # names it) and when stopped between the two renames.
-    on.exit(if (!chrom_sizes_replaced || file.exists(index_path)) unlink(chrom_sizes_orig), add = TRUE)
     # R reports a failed write or close (a full disk, say) as a warning; here it stops the conversion
     as_error <- function(expr) {
         withCallingHandlers(expr, warning = function(w) stop(conditionMessage(w), call. = FALSE))
@@ -583,9 +596,7 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
             .gwith_umask(as_error(write.table(updated_chrom_sizes, chrom_sizes_tmp,
                 quote = FALSE, sep = "\t", col.names = FALSE, row.names = FALSE
             )))
-            # The new file gets the original's group (when the converting user is in it; else chgrp
-            # fails and it keeps the user's), then its mode, before it replaces it
-            original <- file.info(chrom_sizes_target, extra_cols = TRUE)
+            # the original's group and mode, before it replaces it
             if (!is.na(original$gid)) {
                 suppressWarnings(system2("chgrp", c(original$gid, shQuote(chrom_sizes_tmp)), stdout = FALSE, stderr = FALSE))
             }
@@ -658,7 +669,6 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
             # counts as indexed, and the original chrom_sizes.txt back if it was replaced
             unlink(c(index_path, index_path_tmp))
             unlink(genome_seq_path)
-            unlink(chrom_sizes_tmp)
             if (chrom_sizes_replaced && !file.rename(chrom_sizes_orig, chrom_sizes_target)) {
                 stop(sprintf(
                     "Conversion failed: %s; and putting back chrom_sizes.txt failed too: the original is %s",

@@ -657,27 +657,39 @@ test_that("gdb.convert_to_indexed stops, with chrom_sizes.txt as it was, when it
     expect_false(file.exists(file.path(db, "seq", "genome.idx")))
 })
 
-test_that("an interrupted gdb.convert_to_indexed leaves no backup of chrom_sizes.txt", {
-    local_db_state()
-    td <- withr::local_tempdir()
-    db <- create_db_with_unsorted_chrom_sizes(file.path(td, "db"))
-    before <- readBin(file.path(db, "chrom_sizes.txt"), "raw", 10000)
-    gcall <- misha:::.gcall
-    local_mocked_bindings(.gcall = function(...) {
-        res <- gcall(...)
-        if (identical(..1, "gseq_multifasta_import")) {
-            # Ctrl-C, after the import
-            stop(structure(class = c("interrupt", "condition"), list(message = "", call = NULL)))
+for (.interrupt_at in c("backup copy", "import", "chrom_sizes.txt rename")) {
+    test_that(sprintf("gdb.convert_to_indexed interrupted at the %s leaves no temporary file next to chrom_sizes.txt", .interrupt_at), {
+        local_db_state()
+        td <- withr::local_tempdir()
+        db <- create_db_with_unsorted_chrom_sizes(file.path(td, "db"))
+        before <- readBin(file.path(db, "chrom_sizes.txt"), "raw", 10000)
+        # Ctrl-C
+        interrupt <- quote(stop(structure(class = c("interrupt", "condition"), list(message = "", call = NULL))))
+        if (.interrupt_at == "backup copy") {
+            # hard links refused, and the copy interrupted once made
+            trace("file.link", quote(to <- file.path(tempdir(), "no", "such", "dir", "x")), print = FALSE, where = baseenv())
+            withr::defer(untrace("file.link", where = baseenv()))
+            trace("file.copy", exit = bquote(if (any(grepl("chrom_sizes", to))) .(interrupt)), print = FALSE, where = baseenv())
+            withr::defer(untrace("file.copy", where = baseenv()))
+        } else if (.interrupt_at == "import") {
+            gcall <- misha:::.gcall
+            local_mocked_bindings(.gcall = function(...) {
+                res <- gcall(...)
+                if (identical(..1, "gseq_multifasta_import")) eval(interrupt)
+                res
+            }, .package = "misha")
+        } else {
+            trace("file.rename", bquote(if (any(grepl("chrom_sizes.txt[.]", from))) .(interrupt)), print = FALSE, where = baseenv())
+            withr::defer(untrace("file.rename", where = baseenv()))
         }
-        res
-    }, .package = "misha")
-    expect_equal(
-        tryCatch(suppressMessages(gdb.convert_to_indexed(groot = db, force = TRUE, validate = FALSE)), interrupt = function(i) "interrupted"),
-        "interrupted"
-    )
-    expect_equal(list.files(db), c("chrom_sizes.txt", "seq", "tracks"))
-    expect_identical(readBin(file.path(db, "chrom_sizes.txt"), "raw", 10000), before)
-})
+        expect_equal(
+            tryCatch(suppressMessages(gdb.convert_to_indexed(groot = db, force = TRUE, validate = FALSE)), interrupt = function(i) "interrupted"),
+            "interrupted"
+        )
+        expect_equal(list.files(db), c("chrom_sizes.txt", "seq", "tracks"))
+        expect_identical(readBin(file.path(db, "chrom_sizes.txt"), "raw", 10000), before)
+    })
+}
 
 test_that("a warning that is not from a write does not stop gdb.convert_to_indexed", {
     local_db_state()
@@ -760,6 +772,17 @@ test_that("gdb.convert_to_indexed keeps the group of chrom_sizes.txt", {
     skip_if(system2("chgrp", c(other[1], shQuote(cs))) != 0, "chgrp failed")
     gid <- file.info(cs, extra_cols = TRUE)$gid
     expect_equal(as.character(gid), other[1])
+
+    # a failed conversion puts back the backup, here a copy (hard links refused)
+    bytes <- readBin(cs, "raw", 10000)
+    trace("file.link", quote(to <- file.path(tempdir(), "no", "such", "dir", "x")), print = FALSE, where = baseenv())
+    dir.create(file.path(db, "seq", "genome.idx"))
+    expect_error(suppressWarnings(suppressMessages(gdb.convert_to_indexed(groot = db, force = TRUE, validate = FALSE))), "genome.idx into place")
+    untrace("file.link", where = baseenv())
+    unlink(file.path(db, "seq", "genome.idx"), recursive = TRUE)
+    expect_equal(file.info(cs, extra_cols = TRUE)$gid, gid)
+    expect_identical(readBin(cs, "raw", 10000), bytes)
+
     suppressMessages(gdb.convert_to_indexed(groot = db, force = TRUE, validate = FALSE))
     expect_true(file.exists(file.path(db, "seq", "genome.idx")))
     expect_equal(file.info(cs, extra_cols = TRUE)$gid, gid)
@@ -872,6 +895,17 @@ test_that("gdb.convert_to_indexed of a loaded dataset unloads it, keeping the re
     expect_equal(get("GDATASETS", envir = misha:::.misha), normalizePath(z))
     expect_error(gextract("yt", q, iterator = q))
     expect_equal(gextract("zt", gintervals("1", 0, 10))$zt, 7)
+})
+
+test_that("gdb.convert_to_indexed of the loaded database leaves its session in the indexed format", {
+    local_db_state()
+    td <- withr::local_tempdir()
+    db <- create_db_with_unsorted_chrom_sizes(file.path(td, "db"))
+    gsetroot(db)
+    expect_true(get("DB_IS_PER_CHROMOSOME", envir = misha:::.misha))
+    suppressMessages(gdb.convert_to_indexed(force = TRUE, convert_tracks = TRUE))
+    expect_false(get("DB_IS_PER_CHROMOSOME", envir = misha:::.misha))
+    expect_equal(first_bases(), unsorted_db_bases)
 })
 
 for (.steps in c("validate", "tracks and interval sets")) {
