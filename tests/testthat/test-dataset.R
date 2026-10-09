@@ -1393,3 +1393,44 @@ test_that("with a dataset loaded, tracks and interval sets in a subdirectory of 
     expect_equal(gextract("tsub", iv)$tsub, c(1000, 2000))
     expect_equal(gextract("sub.tsub", iv)$sub.tsub, c(3, 6))
 })
+
+test_that("gdataset.load refuses a dataset with the same chrom_sizes.txt that numbers chromosomes differently", {
+    local_db_state()
+    td <- withr::local_tempdir()
+    # P: per-chromosome, chrom ids by the sorted names
+    p <- create_db_with_unsorted_chrom_sizes(file.path(td, "P"))
+    # I: the same genome and chrom_sizes.txt, indexed, chrom ids in chrom_sizes.txt order
+    i <- file.path(td, "I")
+    dir.create(file.path(i, "tracks"), recursive = TRUE)
+    dir.create(file.path(i, "seq"))
+    cs <- utils::read.delim(file.path(p, "chrom_sizes.txt"), header = FALSE, colClasses = c("character", "numeric"))
+    fa <- file.path(td, "i.fa")
+    writeLines(unlist(lapply(seq_len(nrow(cs)), function(k) c(paste0(">", cs$V1[k]), strrep("A", cs$V2[k])))), fa)
+    invisible(misha:::.gcall("gseq_multifasta_import", fa, file.path(i, "seq", "genome.seq"), file.path(i, "seq", "genome.idx"), FALSE, misha:::.misha_env()))
+    expect_true(file.copy(file.path(p, "chrom_sizes.txt"), i))
+    i <- normalizePath(i)
+
+    gsetroot(p)
+    expect_error(gdataset.load(i), "numbers the chromosomes differently from the working database")
+    expect_equal(get("GDATASETS", envir = misha:::.misha), character(0))
+    gsetroot(i)
+    expect_error(gdataset.load(p), "numbers the chromosomes differently from the working database")
+
+    # the same order loads: a dataset on the working database's seq/, in the same format, or
+    # without sequence (its order cannot be told)
+    gsetroot(p)
+    gtrack.create_sparse("t", "x", gintervals("chr1", 0, 10), 1)
+    linked <- file.path(td, "linked")
+    suppressMessages(gdataset.save(linked, "d", tracks = "t"))
+    copied <- file.path(td, "copied")
+    suppressMessages(gdataset.save(copied, "d", tracks = "t", copy_seq = TRUE))
+    bare <- file.path(td, "bare")
+    suppressMessages(gdataset.save(bare, "d", tracks = "t"))
+    unlink(file.path(bare, "seq"))
+    gtrack.rm("t", force = TRUE)
+    for (ds in c(linked, copied, bare)) {
+        suppressMessages(gdataset.load(ds))
+        expect_equal(gextract("t", gintervals("chr1", 0, 10))$t, 1, info = ds)
+        gdataset.unload(ds)
+    }
+})

@@ -12,6 +12,8 @@
 
 * **Behavior fix:** `gtrack.copy(overwrite = TRUE)` deleted the existing track and then stopped when the copy could not be made; it now checks first and keeps the track.
 
+* **Behavior fix:** `gdataset.load()` refuses a dataset with the working database's `chrom_sizes.txt` that numbers the chromosomes differently (an indexed and a per-chromosome database with unprefixed names); its indexed tracks and interval sets read other chromosomes.
+
 * **Bug fix:** with a dataset loaded, tracks and interval sets in a subdirectory of the working directory (after `gdir.cd()`) were looked up in the database's top directory and could not be read.
 
 * **Breaking:** `gdb.convert_to_indexed()` stops for a database whose `seq/` or `chrom_sizes.txt` is another database's (a dataset saved with `copy_seq = FALSE`, a `gdb.create_linked()` database): convert that database instead.

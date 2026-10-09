@@ -73,6 +73,26 @@ gdataset.load <- function(path, force = FALSE, verbose = FALSE) {
         stop(sprintf("Cannot load dataset '%s': genome does not match working database", path), call. = FALSE)
     }
 
+    # The same chrom_sizes.txt can number the chromosomes differently: by the sorted names in a
+    # per-chromosome database whose names lack the "chr" prefix, in file order in an indexed one.
+    # Indexed tracks and interval sets are keyed by chrom ids, so the dataset has to number them as
+    # the working database does. The order is the same when its seq/ is the working database's or
+    # both are in the same format; a dataset without sequence cannot show its order and loads.
+    dataset_seq <- file.path(path_norm, "seq")
+    dataset_indexed <- all(file.exists(file.path(dataset_seq, c("genome.idx", "genome.seq"))))
+    if (dataset_indexed == isTRUE(get0("DB_IS_PER_CHROMOSOME", envir = .misha)) &&
+        normalizePath(dataset_seq, mustWork = FALSE) != normalizePath(file.path(groot, "seq"), mustWork = FALSE)) {
+        dataset_chroms <- tryCatch(sub("^chr", "", .gdb.chrom_names_at(path_norm)), error = function(e) NULL)
+        groot_chroms <- sub("^chr", "", as.character(get("ALLGENOME", envir = .misha)[[1]]$chrom))
+        if (!is.null(dataset_chroms) && !identical(dataset_chroms, groot_chroms)) {
+            i <- which(dataset_chroms != groot_chroms)[1]
+            stop(sprintf(
+                "Cannot load dataset '%s': it numbers the chromosomes differently from the working database, though its chrom_sizes.txt is the same (chrom id %d is %s in the dataset and %s in the working database), so its indexed tracks and interval sets would read other chromosomes",
+                path, i - 1L, dataset_chroms[i], groot_chroms[i]
+            ), call. = FALSE)
+        }
+    }
+
     # Scan for tracks and intervals using fast path (.db.cache or C++ fts)
     # Avoids slow R-level list.files(recursive=TRUE) on large databases
     dataset_contents <- .gdb.scan_db_fast(path_norm)
