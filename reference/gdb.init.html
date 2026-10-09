@@ -9,7 +9,7 @@ intervals, etc."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">misha</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.13.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.13.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -38,7 +38,7 @@ intervals, etc."></head><body>
   <main id="main" class="col-md-9"><div class="page-header">
 
       <h1>Initializes connection with Genomic Database</h1>
-      <small class="dont-index">Source: <a href="https://github.com/tanaylab/misha/blob/v5.13.0/R/db-create.R" class="external-link"><code>R/db-create.R</code></a>, <a href="https://github.com/tanaylab/misha/blob/v5.13.0/R/db-root.R" class="external-link"><code>R/db-root.R</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/tanaylab/misha/blob/master/R/db-create.R" class="external-link"><code>R/db-create.R</code></a>, <a href="https://github.com/tanaylab/misha/blob/master/R/db-root.R" class="external-link"><code>R/db-root.R</code></a></small>
       <div class="d-none name"><code>gdb.init.Rd</code></div>
     </div>
 
@@ -99,6 +99,12 @@ all available tracks</td></tr><tr><td>GINTERVS</td><td>List of all available int
 all chromosomes and their sizes</td></tr><tr><td>GITERATOR.INTERVALS</td><td>A set of
 iterator intervals for which the track expression is evaluated</td></tr></table><p>When option 'gmulticontig.indexed_format' is set to TRUE, the function
 loads a database with "indexed" track format.</p>
+<p>In a per-chromosome database whose 'chrom_sizes.txt' names lack the "chr"
+prefix of its '.seq' files, the chromosomes get that prefix, and their order
+(in ALLGENOME and by chromosome id) is that of the sorted names: the order R's
+<code><a href="https://rdrr.io/r/base/order.html" class="external-link">order()</a></code> gives in an en_US.UTF-8 session of an R built with ICU,
+whatever the session's locale. A name with a character outside ASCII sorts
+after the ASCII ones, byte by byte, which may differ from that order.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>

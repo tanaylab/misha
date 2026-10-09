@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">misha</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.13.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.13.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -36,9 +36,20 @@
   <main id="main" class="col-md-9"><div class="page-header">
 
       <h1>Changelog</h1>
-      <small>Source: <a href="https://github.com/tanaylab/misha/blob/v5.13.0/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
+      <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="5.13.1" id="misha-5131">misha 5.13.1<a class="anchor" aria-label="anchor" href="#misha-5131"></a></h2>
+<ul><li><p><strong>Behavior fix:</strong> <code><a href="../reference/gdb.convert_to_indexed.html">gdb.convert_to_indexed()</a></code>, and <code><a href="../reference/gtrack.copy.html">gtrack.copy()</a></code> of an indexed track, could put data on the wrong chromosomes in a per-chromosome database whose <code>chrom_sizes.txt</code> is unsorted and lacks “chr”. Recreate indexed tracks and interval sets made that way.</p></li>
+<li><p><strong>Breaking:</strong> such a database now numbers its chromosomes the same way in every session. A C locale or an R without ICU could number them differently: recreate indexed tracks and interval sets converted in such a session.</p></li>
+<li><p><strong>Breaking:</strong> <code><a href="../reference/gdb.init.html">gsetroot()</a></code> stops when <code>seq/genome.idx</code> disagrees with <code>chrom_sizes.txt</code> in order or sizes (chromosomes read other chromosomes’ sequence), or when <code>chrom_sizes.txt</code> names one index contig twice, as <code>chr1</code> and <code>1</code>.</p></li>
+<li><p><strong>Breaking:</strong> <code><a href="../reference/gdataset.load.html">gdataset.load()</a></code> refuses a dataset with indexed tracks or interval sets when it finds that the dataset numbers its chromosomes differently from the working database, as these can read other chromosomes.</p></li>
+<li><p><strong>Behavior fix:</strong> <code><a href="../reference/gdb.convert_to_indexed.html">gdb.convert_to_indexed()</a></code> keeps the database readable when it fails or is interrupted, so it can be run again, and keeps the session (working directory, virtual tracks, unconverted datasets) where it can, instead of reloading.</p></li>
+<li><p><strong>Breaking:</strong> <code><a href="../reference/gdb.convert_to_indexed.html">gdb.convert_to_indexed()</a></code> stops instead of converting inexactly, e.g. for a <code>.seq</code> file whose length differs from <code>chrom_sizes.txt</code>, or a <code>seq/</code> that belongs to another database (convert that one).</p></li>
+<li><p><strong>Bug fix:</strong> <code>gtrack.copy(overwrite = TRUE)</code> checks first, so it no longer deletes the existing track, or the source, when the copy cannot be made.</p></li>
+<li><p><strong>Breaking:</strong> <code><a href="../reference/gtrack.copy.html">gtrack.copy()</a></code> stops into a database whose <code>seq/genome.idx</code> disagrees with its <code>chrom_sizes.txt</code>, and for a per-pair 2D track between databases whose names differ by “chr”; <code><a href="../reference/gtrack.liftover.html">gtrack.liftover()</a></code> stops for an indexed track from a database whose chromosome order cannot be read.</p></li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="5.13.0" id="misha-5130">misha 5.13.0<a class="anchor" aria-label="anchor" href="#misha-5130"></a></h2>
 <ul><li><p><code><a href="../reference/gtrack.import_mappedseq.html">gtrack.import_mappedseq()</a></code> imports paired-end data with <code>paired = TRUE</code>: each proper pair adds its whole fragment to a dense track, instead of each mate being extended by <code>pileup</code>. Fragment files (e.g. a 10x <code>fragments.tsv.gz</code>) are read the same way, and the new <code>max.fraglen</code> (default 2000) drops longer fragments.</p></li>

@@ -108,7 +108,7 @@ The full record:
 
 gdb.info()
 #> $path
-#> [1] "/tmp/RtmpfT6m8H/trackdb/test"
+#> [1] "/tmp/RtmpdhCviy/trackdb/test"
 #> 
 #> $is_db
 #> [1] TRUE
@@ -274,7 +274,7 @@ source_db <- .misha$GROOT
 target_db <- file.path(tempdir(), "target_db")
 unlink(target_db, recursive = TRUE)
 gdb.create_linked(target_db, parent = source_db)
-#> Created linked database at /tmp/RtmpfT6m8H/target_db (linked to /tmp/RtmpfT6m8H/trackdb/test)
+#> Created linked database at /tmp/RtmpdhCviy/target_db (linked to /tmp/RtmpdhCviy/trackdb/test)
 
 # One track, or many
 gtrack.copy("dense_track", db = target_db)
@@ -292,11 +292,14 @@ gtrack.info("dense_track")[c("type", "size.in.bytes")]
 ```
 
 The destination does not have to be in the same format: converting it
-afterwards leaves the tracks readable.
+afterwards leaves the tracks readable. `target_db` shares the `seq/`
+directory and `chrom_sizes.txt` of `source_db`, so it is converted by
+converting `source_db`.
 
 ``` r
 
-gdb.convert_to_indexed()
+gdb.convert_to_indexed(groot = source_db)
+gsetroot(target_db)
 gdb.info()$format
 #> [1] "indexed"
 head(gextract("dense_track", gintervals(1, 0, 300)))
@@ -382,7 +385,7 @@ Based on comprehensive benchmarks comparing indexed vs legacy formats:
 ``` r
 
 # Work with both formats in same session
-gsetroot(source_db) # per-chromosome
+gdb.init_examples(file.path(tempdir(), "per_chromosome")) # per-chromosome
 data1 <- gextract("dense_track", gintervals(1, 0, 1000))
 head(data1)
 #>   chrom start end dense_track intervalID

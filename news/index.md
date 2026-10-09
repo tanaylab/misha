@@ -1,5 +1,57 @@
 # Changelog
 
+## misha 5.13.1
+
+- **Behavior fix:**
+  [`gdb.convert_to_indexed()`](https://tanaylab.github.io/misha/reference/gdb.convert_to_indexed.md),
+  and
+  [`gtrack.copy()`](https://tanaylab.github.io/misha/reference/gtrack.copy.md)
+  of an indexed track, could put data on the wrong chromosomes in a
+  per-chromosome database whose `chrom_sizes.txt` is unsorted and lacks
+  “chr”. Recreate indexed tracks and interval sets made that way.
+
+- **Breaking:** such a database now numbers its chromosomes the same way
+  in every session. A C locale or an R without ICU could number them
+  differently: recreate indexed tracks and interval sets converted in
+  such a session.
+
+- **Breaking:**
+  [`gsetroot()`](https://tanaylab.github.io/misha/reference/gdb.init.md)
+  stops when `seq/genome.idx` disagrees with `chrom_sizes.txt` in order
+  or sizes (chromosomes read other chromosomes’ sequence), or when
+  `chrom_sizes.txt` names one index contig twice, as `chr1` and `1`.
+
+- **Breaking:**
+  [`gdataset.load()`](https://tanaylab.github.io/misha/reference/gdataset.load.md)
+  refuses a dataset with indexed tracks or interval sets when it finds
+  that the dataset numbers its chromosomes differently from the working
+  database, as these can read other chromosomes.
+
+- **Behavior fix:**
+  [`gdb.convert_to_indexed()`](https://tanaylab.github.io/misha/reference/gdb.convert_to_indexed.md)
+  keeps the database readable when it fails or is interrupted, so it can
+  be run again, and keeps the session (working directory, virtual
+  tracks, unconverted datasets) where it can, instead of reloading.
+
+- **Breaking:**
+  [`gdb.convert_to_indexed()`](https://tanaylab.github.io/misha/reference/gdb.convert_to_indexed.md)
+  stops instead of converting inexactly, e.g. for a `.seq` file whose
+  length differs from `chrom_sizes.txt`, or a `seq/` that belongs to
+  another database (convert that one).
+
+- **Bug fix:** `gtrack.copy(overwrite = TRUE)` checks first, so it no
+  longer deletes the existing track, or the source, when the copy cannot
+  be made.
+
+- **Breaking:**
+  [`gtrack.copy()`](https://tanaylab.github.io/misha/reference/gtrack.copy.md)
+  stops into a database whose `seq/genome.idx` disagrees with its
+  `chrom_sizes.txt`, and for a per-pair 2D track between databases whose
+  names differ by “chr”;
+  [`gtrack.liftover()`](https://tanaylab.github.io/misha/reference/gtrack.liftover.md)
+  stops for an indexed track from a database whose chromosome order
+  cannot be read.
+
 ## misha 5.13.0
 
 - [`gtrack.import_mappedseq()`](https://tanaylab.github.io/misha/reference/gtrack.import_mappedseq.md)

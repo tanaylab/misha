@@ -11,7 +11,7 @@ Optionally also converts tracks and interval sets to indexed format."></head><bo
 
     <a class="navbar-brand me-2" href="../index.html">misha</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.13.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.13.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -40,7 +40,7 @@ Optionally also converts tracks and interval sets to indexed format."></head><bo
   <main id="main" class="col-md-9"><div class="page-header">
 
       <h1>Change Database to Indexed Genome Format</h1>
-      <small class="dont-index">Source: <a href="https://github.com/tanaylab/misha/blob/v5.13.0/R/db-index.R" class="external-link"><code>R/db-index.R</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/tanaylab/misha/blob/master/R/db-index.R" class="external-link"><code>R/db-index.R</code></a></small>
       <div class="d-none name"><code>gdb.convert_to_indexed.Rd</code></div>
     </div>
 
@@ -119,14 +119,27 @@ Falls back to serial on non-Unix platforms (mclapply requires fork).</p></dd>
     <p>This function converts a per-chromosome database (with separate .seq files per contig) to
 indexed format (single genome.seq + genome.idx). The indexed format
 provides better performance and scalability, especially for genomes with many contigs.</p>
-<p><strong>Important: Preserving Chromosome Order</strong></p>
-<p>For exact conversion that produces bit-for-bit identical results before and after conversion,
-you should load the source database first using <code><a href="gdb.init.html">gsetroot()</a></code> or <code><a href="gdb.init.html">gdb.init()</a></code>:</p><ul><li><p>If database is loaded: Uses chromosome order from ALLGENOME (exact preservation)</p></li>
-<li><p>If database is not loaded: Uses order from chrom_sizes.txt (may differ from ALLGENOME)</p></li>
-</ul><p>This ensures that the converted database has the exact same chromosome ordering, which affects
-iteration order, interval IDs, and other operations that depend on chromosome order.</p>
+<p>The converted database keeps the chromosome names and order that <code><a href="gdb.init.html">gsetroot()</a></code> gives it,
+whether or not it is the loaded database, so its indexed tracks and interval sets, iteration
+order and interval IDs stay the same. In a per-chromosome database whose chrom_sizes.txt names
+lack the "chr" prefix of its .seq files, that order is the sorted chromosome names, not the
+chrom_sizes.txt order, and chrom_sizes.txt is rewritten in it.
+The conversion stops, leaving the database as it was, unless the indexed sequence holds exactly
+the chromosomes of chrom_sizes.txt: a chromosome name with a character other than a letter,
+digit, '_', '-' or '.' (which the index would replace with '_'), or a .seq file whose length
+differs from chrom_sizes.txt, stops it, and so does a chromosome named 'genome' (its genome.seq
+would be overwritten). A database whose seq/ or chrom_sizes.txt is in another database, such as a
+dataset saved with <code>copy_seq = FALSE</code> or a <code><a href="gdb.create_linked.html">gdb.create_linked()</a></code> database, is not
+converted: convert that database. A seq/ or chrom_sizes.txt linked to storage of its own elsewhere
+is converted there. The session loaded before the conversion is put back as it was after it,
+except the converted database if it was loaded as a dataset and the conversion changed it: it
+is unloaded, with a warning. If
+the conversion changed the sequence it reads (its seq/ is the converted database's, with a
+chrom_sizes.txt of its own), a warning says so, and nothing is loaded when its chromosomes would
+read other chromosomes' sequence. chrom_sizes.txt keeps its group when the converting user
+belongs to it; otherwise it takes that user's group.</p>
 <p>The conversion process:</p><ol><li><p>Checks if database is already in indexed format</p></li>
-<li><p>Gets chromosome order from ALLGENOME (if loaded) or chrom_sizes.txt</p></li>
+<li><p>Gets the chromosome names and order that <code><a href="gdb.init.html">gsetroot()</a></code> gives the database</p></li>
 <li><p>Consolidates all per-chromosome .seq files into genome.seq</p></li>
 <li><p>Creates genome.idx with CRC64 checksum</p></li>
 <li><p>Optionally validates the conversion</p></li>
@@ -144,7 +157,7 @@ iteration order, interval IDs, and other operations that depend on chromosome or
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
     <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span> <span class="co"># \dontrun{</span></span></span>
-<span class="r-in"><span><span class="co"># Recommended: Load database first for exact conversion</span></span></span>
+<span class="r-in"><span><span class="co"># Convert the loaded database with its tracks and interval sets</span></span></span>
 <span class="r-in"><span><span class="fu"><a href="gdb.init.html">gsetroot</a></span><span class="op">(</span><span class="st">"/path/to/database"</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="fu">gdb.convert_to_indexed</span><span class="op">(</span></span></span>
 <span class="r-in"><span>    convert_tracks <span class="op">=</span> <span class="cn">TRUE</span>,</span></span>
@@ -157,14 +170,13 @@ iteration order, interval IDs, and other operations that depend on chromosome or
 <span class="r-in"><span><span class="fu">gdb.convert_to_indexed</span><span class="op">(</span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Convert specific database without loading it first</span></span></span>
-<span class="r-in"><span><span class="co"># Note: chromosome order may differ from ALLGENOME</span></span></span>
 <span class="r-in"><span><span class="fu">gdb.convert_to_indexed</span><span class="op">(</span>groot <span class="op">=</span> <span class="st">"/path/to/database"</span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Convert genome and all tracks to indexed format</span></span></span>
 <span class="r-in"><span><span class="fu">gdb.convert_to_indexed</span><span class="op">(</span>convert_tracks <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Full conversion with validation and cleanup</span></span></span>
-<span class="r-in"><span><span class="fu"><a href="gdb.init.html">gsetroot</a></span><span class="op">(</span><span class="st">"/path/to/database"</span><span class="op">)</span> <span class="co"># Load first for exact order preservation</span></span></span>
+<span class="r-in"><span><span class="fu"><a href="gdb.init.html">gsetroot</a></span><span class="op">(</span><span class="st">"/path/to/database"</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="fu">gdb.convert_to_indexed</span><span class="op">(</span></span></span>
 <span class="r-in"><span>    convert_tracks <span class="op">=</span> <span class="cn">TRUE</span>,</span></span>
 <span class="r-in"><span>    convert_intervals <span class="op">=</span> <span class="cn">TRUE</span>,</span></span>
