@@ -77,9 +77,15 @@ gdataset.load <- function(path, force = FALSE, verbose = FALSE) {
     # per-chromosome database whose names lack the "chr" prefix and whose .seq files have it, in
     # file order otherwise (an indexed database, or .seq files without the prefix). Indexed tracks
     # and interval sets are keyed by chrom ids, so the dataset has to number them as the working
-    # database does. The order is the same when its seq/ is the working database's; a dataset
-    # without sequence cannot show its order and loads.
-    if (normalizePath(file.path(path_norm, "seq"), mustWork = FALSE) != normalizePath(file.path(groot, "seq"), mustWork = FALSE)) {
+    # database does. The order is the same when its seq/ is the working database's; a dataset or
+    # working database without sequence (no seq/, or an empty or dangling one) cannot show its
+    # order, and the dataset loads.
+    groot_seq <- file.path(groot, "seq")
+    first_chrom <- as.character(get("ALLGENOME", envir = .misha)[[1]]$chrom[1])
+    groot_has_seq <- all(file.exists(file.path(groot_seq, c("genome.idx", "genome.seq")))) ||
+        any(file.exists(file.path(groot_seq, paste0(c(first_chrom, paste0("chr", first_chrom), sub("^chr", "", first_chrom)), ".seq"))))
+    if (groot_has_seq &&
+        normalizePath(file.path(path_norm, "seq"), mustWork = FALSE) != normalizePath(groot_seq, mustWork = FALSE)) {
         dataset_chroms <- tryCatch(sub("^chr", "", .gdb.chrom_names_at(path_norm)), error = function(e) NULL)
         groot_chroms <- sub("^chr", "", as.character(get("ALLGENOME", envir = .misha)[[1]]$chrom))
         if (!is.null(dataset_chroms) && !identical(dataset_chroms, groot_chroms)) {

@@ -1380,6 +1380,22 @@ test_that("gdataset.load refuses a dataset with the same chrom_sizes.txt that nu
     gsetroot(p)
     expect_error(gdataset.load(u), "numbers the chromosomes differently from the working database")
 
+    # a working database whose seq/ has no sequence (dangling links, or empty) cannot show its own
+    # order, and the dataset loads, as before
+    for (kind in c("dangling", "empty")) {
+        r <- file.path(td, paste0("R_", kind))
+        dir.create(file.path(r, "tracks"), recursive = TRUE)
+        dir.create(file.path(r, "seq"))
+        expect_true(file.copy(file.path(p, "chrom_sizes.txt"), r))
+        if (kind == "dangling") {
+            for (f in list.files(file.path(p, "seq"))) file.symlink(file.path(td, "nowhere", f), file.path(r, "seq", f))
+        }
+        gsetroot(r)
+        expect_equal(as.character(gintervals.all()$chrom)[1], "2", info = kind)
+        suppressMessages(gdataset.load(p))
+        expect_equal(get("GDATASETS", envir = misha:::.misha), p, info = kind)
+    }
+
     # the same order loads: a dataset on the working database's seq/, in the same format, or
     # without sequence (its order cannot be told)
     gsetroot(p)
