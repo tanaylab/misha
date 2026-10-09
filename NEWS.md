@@ -4,7 +4,7 @@
 
 * **Breaking:** such a database now numbers its chromosomes the same way in every session. A C locale or an R without ICU could number them differently: recreate indexed tracks and interval sets converted in such a session.
 
-* **Breaking:** `gsetroot()` stops when `seq/genome.idx` disagrees with `chrom_sizes.txt` in order or sizes (chromosomes read other chromosomes' sequence), or when `chrom_sizes.txt` names one of its contigs twice, as `chr1` and `1`.
+* **Breaking:** `gsetroot()` stops when `seq/genome.idx` disagrees with `chrom_sizes.txt` in order or sizes (chromosomes read other chromosomes' sequence), or when `chrom_sizes.txt` names one index contig twice, as `chr1` and `1`.
 
 * **Breaking:** `gdataset.load()` refuses a dataset with indexed tracks or interval sets when it finds that the dataset numbers its chromosomes differently from the working database, as these can read other chromosomes.
 
