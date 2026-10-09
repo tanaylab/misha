@@ -747,6 +747,24 @@ for (.backup in c("hard link", "copy")) {
     })
 }
 
+test_that("gdb.convert_to_indexed keeps the group of chrom_sizes.txt", {
+    skip_on_os("windows")
+    local_db_state()
+    groups <- tryCatch(system2("id", "-G", stdout = TRUE), error = function(e) character(0), warning = function(w) character(0))
+    primary <- tryCatch(system2("id", "-g", stdout = TRUE), error = function(e) "", warning = function(w) "")
+    other <- setdiff(strsplit(paste(groups, collapse = " "), " ")[[1]], c(primary, ""))
+    skip_if(length(other) == 0, "the test user belongs to no group besides the primary one")
+    td <- withr::local_tempdir()
+    db <- create_db_with_unsorted_chrom_sizes(file.path(td, "db"))
+    cs <- file.path(db, "chrom_sizes.txt")
+    skip_if(system2("chgrp", c(other[1], shQuote(cs))) != 0, "chgrp failed")
+    gid <- file.info(cs, extra_cols = TRUE)$gid
+    expect_equal(as.character(gid), other[1])
+    suppressMessages(gdb.convert_to_indexed(groot = db, force = TRUE, validate = FALSE))
+    expect_true(file.exists(file.path(db, "seq", "genome.idx")))
+    expect_equal(file.info(cs, extra_cols = TRUE)$gid, gid)
+})
+
 test_that("gdb.convert_to_indexed leaves the user's files next to chrom_sizes.txt alone", {
     local_db_state()
     td <- withr::local_tempdir()

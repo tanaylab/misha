@@ -68,7 +68,8 @@ converted: convert that database. A seq/ or chrom_sizes.txt linked to storage of
 is converted there. The session loaded before the conversion is put back as it was after it. If
 the conversion changed the sequence it reads (its seq/ is the converted database's, with a
 chrom_sizes.txt of its own), a warning says so, and nothing is loaded when its chromosomes would
-read other chromosomes' sequence.
+read other chromosomes' sequence. chrom_sizes.txt keeps its group when the converting user
+belongs to it; otherwise it takes that user's group.
 
 The conversion process:
 \enumerate{

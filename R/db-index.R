@@ -60,7 +60,8 @@
 #' is converted there. The session loaded before the conversion is put back as it was after it. If
 #' the conversion changed the sequence it reads (its seq/ is the converted database's, with a
 #' chrom_sizes.txt of its own), a warning says so, and nothing is loaded when its chromosomes would
-#' read other chromosomes' sequence.
+#' read other chromosomes' sequence. chrom_sizes.txt keeps its group when the converting user
+#' belongs to it; otherwise it takes that user's group.
 #'
 #' The conversion process:
 #' \enumerate{
@@ -565,7 +566,13 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
             .gwith_umask(as_error(write.table(updated_chrom_sizes, chrom_sizes_tmp,
                 quote = FALSE, sep = "\t", col.names = FALSE, row.names = FALSE
             )))
-            suppressWarnings(Sys.chmod(chrom_sizes_tmp, file.info(chrom_sizes_target)$mode, use_umask = FALSE))
+            # The new file gets the original's group (when the converting user is in it; else chgrp
+            # fails and it keeps the user's), then its mode, before it replaces it
+            original <- file.info(chrom_sizes_target, extra_cols = TRUE)
+            if (!is.na(original$gid)) {
+                suppressWarnings(system2("chgrp", c(original$gid, shQuote(chrom_sizes_tmp)), stdout = FALSE, stderr = FALSE))
+            }
+            suppressWarnings(Sys.chmod(chrom_sizes_tmp, original$mode, use_umask = FALSE))
             if (!file.rename(chrom_sizes_tmp, chrom_sizes_target)) {
                 stop(sprintf("Failed to replace %s", chrom_sizes_target), call. = FALSE)
             }
