@@ -1,4 +1,4 @@
-# misha 5.12.2
+# misha 5.13.1
 
 * **Behavior fix:** `gdb.convert_to_indexed()` renumbered the chromosomes of a per-chromosome database that was not loaded, if its `chrom_sizes.txt` was unsorted and unprefixed. Recreate the indexed tracks and interval sets of a database converted that way.
 
@@ -11,6 +11,26 @@
 * **Breaking:** `gdb.convert_to_indexed()` stops for a database whose `seq/` or `chrom_sizes.txt` is another database's (a dataset saved with `copy_seq = FALSE`, a `gdb.create_linked()` database): convert that database instead.
 
 * **Breaking:** `gsetroot()` stops when `seq/genome.idx` does not match `chrom_sizes.txt` (which may list only the index's first contigs) in sizes or chromosome order, which made chromosomes read other chromosomes' sequence, and warns when only names differ.
+
+# misha 5.13.0
+
+* `gtrack.import_mappedseq()` imports paired-end data with `paired = TRUE`: each proper pair adds its whole fragment to a dense track, instead of each mate being extended by `pileup`. Fragment files (e.g. a 10x `fragments.tsv.gz`) are read the same way, and the new `max.fraglen` (default 2000) drops longer fragments.
+
+* New `min.mapq` argument of `gtrack.import_mappedseq()` drops SAM/BAM reads with a lower MAPQ (default 0: no filter).
+
+* New `one.based` argument of `gtrack.import_mappedseq()` for tab-delimited files: `TRUE` reads 1-based coordinates, as in Illumina export files. The default keeps the previous placement.
+
+* The statistics of `gtrack.import_mappedseq()` gain `total.filtered`, and `total` no longer counts duplicates twice.
+
+* **Behavior fix:** `gtrack.import_mappedseq()` places SAM/BAM reads at their 0-based 5' base. Reads sat 1bp to the right (2bp for reverse reads in sparse tracks), and reverse reads with soft clips, indels or splices were placed by their sequence length instead of their CIGAR. Re-import to get the corrected placement.
+
+* **Behavior fix:** `gtrack.import_mappedseq()` skips unmapped, secondary, QC-failed and supplementary SAM/BAM records, and mapped records without a usable CIGAR. Unmapped mates and supplementary alignments used to be counted as reads.
+
+* **Bug fix:** `gtrack.import_mappedseq()` could crash R when a reverse read ended past the end of a chromosome (e.g. chrM), and could write sparse points outside the chromosome.
+
+* **Bug fix:** `gtrack.import_mappedseq()` hung when reading a named pipe (FIFO), as `misha.ext::gtrack.import_mappedseq_bam()` does. A pipe is read as SAM (pass `cols.order = NULL`) or text; BAM through a pipe gives an error.
+
+* `gtrack.import_mappedseq()` reads bgzipped text and CRLF line endings, and warns when nothing was imported.
 
 * Potts models score faster in the `potts` virtual tracks and `gseq.potts()`, most of all when their couplings link nearby positions, such as several models summed side by side; wide models with many scattered couplings keep their speed. Some models' scores change in the last digits, so a score exactly at a threshold or tied with another can come out the other way.
 

@@ -11,7 +11,11 @@ gtrack.import_mappedseq(
   pileup = 0,
   binsize = -1,
   cols.order = c(9, 11, 13, 14),
-  remove.dups = TRUE
+  remove.dups = TRUE,
+  paired = FALSE,
+  min.mapq = 0,
+  max.fraglen = 2000,
+  one.based = FALSE
 )
 }
 \arguments{
@@ -33,6 +37,16 @@ non-NULL `cols.order` with BAM input is an error.}
 
 \item{remove.dups}{if 'TRUE' the duplicated coordinates are counted only
 once.}
+
+\item{paired}{if 'TRUE' import paired-end fragments (see Description).}
+
+\item{min.mapq}{minimal MAPQ of an imported SAM / BAM record.}
+
+\item{max.fraglen}{maximal fragment length when 'paired' is 'TRUE' ('Inf'
+for no limit).}
+
+\item{one.based}{if 'TRUE' the coordinates of a tab-delimited file are
+1-based (see Description). Not used for SAM / BAM, which are always 1-based.}
 }
 \value{
 A list of conversion process statistics.
@@ -44,8 +58,12 @@ Creates a track from a file of mapped sequences.
 This function creates a track from a file of mapped sequences. The file can
 be in SAM format, in a general TAB delimited text format where each line
 describes a single read, in gzipped variants of either (`.sam.gz`,
-`.tsv.gz`), or in BAM format (auto-detected by bgzip magic; requires
-`samtools` on `PATH`).
+`.tsv.gz`), or in BAM format (detected from its content; requires
+`samtools` on `PATH`). Without 'paired', any bgzipped file is read as SAM.
+'file' may also be a named pipe (FIFO) carrying SAM or text, plain or
+gzipped, but not BAM. A pipe is not inspected, so the BAM and bgzip rules
+above do not apply to it: pass 'cols.order = NULL' for SAM. An import that
+brings in no read at all gives a warning.
 
 For a SAM file 'cols.order' must be set to 'NULL'. For BAM input the
 default `cols.order = c(9, 11, 13, 14)` is treated as SAM mode because
@@ -62,6 +80,20 @@ are 1-based, i.e. the first column is referenced by 1. Chromosome needs a
 prefix 'chr' e.g. 'chr1'. Valid strand values are '+' or 'F' for forward
 strand and '-' or 'R' for the reverse strand.
 
+Coordinates. SAM / BAM 'POS' is 1-based, as the SAM specification defines
+it, and is converted to the 0-based leftmost aligned base. The 5' end of a
+reverse-strand read is its rightmost aligned base, from the CIGAR. A mapped
+SAM record without a CIGAR ('*'), or with a malformed one, is counted as
+unmapped, as htslib does. In a tab-delimited file the coordinate is the
+leftmost base of the read, and the 5' end of a reverse read is found from
+the length of the sequence. With 'one.based = TRUE' the coordinate is read
+as 1-based and reads are placed as for SAM; Illumina export files (the
+default 'cols.order' layout) are 1-based. With the default
+'one.based = FALSE' a tab-delimited file keeps the placement of earlier
+misha versions: the coordinate is used as is, which places dense coverage
+correctly for a 0-based file, but in a sparse track a reverse read is
+recorded one base past its 5' end.
+
 Each read at given coordinate can be "expanded" to cover an interval rather
 than a single point. The length of the interval is controlled by 'pileup'
 argument. The direction of expansion depends on the strand value. If
@@ -71,6 +103,34 @@ than zero, the output track is in dense format. 'binsize' controls the bin
 size of the dense track.
 
 If 'remove.dups' is 'TRUE' the duplicated coordinates are counted only once.
+
+For SAM and BAM input, unmapped, secondary, QC-failed and supplementary
+records (FLAG 0x4, 0x100, 0x200, 0x800) are never imported, and
+'min.mapq' drops records with a lower MAPQ.
+
+If 'paired' is 'TRUE' each fragment covers its own span instead of being
+expanded by 'pileup' (which must be 0), and the track is dense with bins of
+'binsize'. Each bin holds the mean number of fragments covering its bases
+(the last, partial bin of a chromosome is also divided by 'binsize').
+For SAM / BAM input ('cols.order = NULL', or any BAM) the fragment is read
+from each proper pair (FLAG 0x1 and 0x2 set, 0x8 unset) by its first mate,
+as [min(POS, PNEXT), min(POS, PNEXT) + |TLEN|), the way MACS3 does with
+'-f BAMPE': records of second mates (FLAG 0x80) are skipped. The input may be sorted in any order. 'min.mapq' is
+tested on the first mate only. With 'remove.dups' fragments with the same
+start and end are counted once. Any other input (not a BAM, and
+'cols.order' not set to 'NULL') is read as a fragment file:
+tab-delimited, 0-based half-open chromosome, start and end in columns 1-3
+(BED, or a 10x 'fragments.tsv.gz'), lines starting with '#' skipped.
+Fragment files are taken as already deduplicated, so 'remove.dups' does not
+apply to them, and 'cols.order' must not be set. Fragments longer than
+'max.fraglen' are skipped in both cases. With 'paired' the records of
+second mates are not counted in the returned statistics.
+
+The statistics report 'total' records, 'total.mapped' (imported,
+duplicates included), 'total.unmapped' (unmapped, unparsable, with an
+unusable CIGAR, or with its 5' end outside the chromosomes of the
+database), 'total.dups' and 'total.filtered' (left out by
+the flag, MAPQ, proper-pair or fragment length filters).
 
 'description' is added as a track attribute.
 
