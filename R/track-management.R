@@ -579,8 +579,10 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
     src_dir <- .track_dir(srcname)
     dest_dir <- file.path(dest_db, "tracks", paste0(gsub("\\.", "/", destname), ".track"))
 
-    # the same directory by two names (a linked directory, another path to the database) included
-    if (normalizePath(src_dir, mustWork = FALSE) == normalizePath(dest_dir, mustWork = FALSE)) {
+    # the same name in the same database, or the same directory by two names (a linked directory,
+    # another path to the database)
+    if ((srcname == destname && identical(src_db, dest_db)) ||
+        normalizePath(src_dir, mustWork = FALSE) == normalizePath(dest_dir, mustWork = FALSE)) {
         stop(sprintf("Source and destination are the same track: %s", srcname), call. = FALSE)
     }
 

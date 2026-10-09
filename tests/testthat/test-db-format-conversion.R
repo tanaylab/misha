@@ -906,6 +906,63 @@ for (.how in c("converted", "failed in the genome step", "failed in the track st
     })
 }
 
+test_that("gdb.convert_to_indexed unloads a loaded dataset only when it changed it", {
+    local_db_state()
+    td <- withr::local_tempdir()
+    indexed_like <- function(from, path) {
+        dir.create(file.path(path, "tracks"), recursive = TRUE)
+        dir.create(file.path(path, "seq"))
+        cs <- utils::read.delim(file.path(from, "chrom_sizes.txt"), header = FALSE, colClasses = c("character", "numeric"))
+        fa <- file.path(td, paste0(basename(path), ".fa"))
+        writeLines(unlist(lapply(seq_len(nrow(cs)), function(k) c(paste0(">", cs$V1[k]), strrep("A", cs$V2[k])))), fa)
+        invisible(misha:::.gcall("gseq_multifasta_import", fa, file.path(path, "seq", "genome.seq"), file.path(path, "seq", "genome.idx"), FALSE, misha:::.misha_env()))
+        expect_true(file.copy(file.path(from, "chrom_sizes.txt"), path))
+        normalizePath(path)
+    }
+    p <- create_db_with_unsorted_chrom_sizes(file.path(td, "P"))
+    x <- indexed_like(p, file.path(td, "X"))
+    y <- indexed_like(p, file.path(td, "Y"))
+    gsetroot(x)
+    suppressMessages(gdataset.load(y))
+    # Y is indexed already: the conversion changes nothing, and Y stays
+    expect_no_warning(suppressMessages(gdb.convert_to_indexed(groot = y, force = TRUE)))
+    expect_equal(get("GDATASETS", envir = misha:::.misha), y)
+    # a track step that stops before writing anything
+    local_mocked_bindings(.gdb.convert_to_indexed.tracks = function(...) stop("injected"), .package = "misha")
+    expect_no_warning(expect_error(suppressMessages(gdb.convert_to_indexed(groot = y, force = TRUE, convert_tracks = TRUE)), "injected"))
+    expect_equal(get("GDATASETS", envir = misha:::.misha), y)
+
+    # a failed conversion that could not put chrom_sizes.txt back
+    q <- create_db_with_unsorted_chrom_sizes(file.path(td, "Q"))
+    r <- create_db_with_unsorted_chrom_sizes(file.path(td, "R"))
+    gsetroot(r)
+    suppressMessages(gdataset.load(q))
+    # genome.idx cannot be moved into place (a directory has its name), and the second rename of
+    # chrom_sizes.txt, putting the original back, fails
+    dir.create(file.path(q, "seq", "genome.idx"))
+    renames <- new.env()
+    renames$n <- 0
+    trace("file.rename", bquote(if (any(grepl("chrom_sizes\\.txt\\.", from))) {
+        counter <- .(renames)
+        counter$n <- counter$n + 1
+        if (counter$n == 2) to <- file.path(tempdir(), "no", "such", "dir", "x")
+    }), print = FALSE, where = baseenv())
+    withr::defer(untrace("file.rename", where = baseenv()))
+    warned <- character(0)
+    expect_error(
+        withCallingHandlers(
+            suppressMessages(gdb.convert_to_indexed(groot = q, force = TRUE, validate = FALSE)),
+            warning = function(w) {
+                warned <<- c(warned, conditionMessage(w))
+                invokeRestart("muffleWarning")
+            }
+        ),
+        "putting back chrom_sizes.txt failed too"
+    )
+    expect_true(any(grepl("The conversion of .*Q failed after changing it", warned)))
+    expect_equal(get("GDATASETS", envir = misha:::.misha), character(0))
+})
+
 test_that("gdb.convert_to_indexed of the loaded database leaves its session in the indexed format", {
     local_db_state()
     td <- withr::local_tempdir()
@@ -1008,6 +1065,16 @@ test_that("gsetroot stops for an indexed database whose chrom_sizes.txt lists a 
     expect_error(gsetroot(db), "lists the same chromosome twice: chr1 \\(chrom id 0\\) and 1 \\(chrom id 4\\)")
     writeLines(c(full[1:3], "chr10\t2000", full[5]), cs)
     expect_error(gsetroot(db), "lists the same chromosome twice: chr10 \\(chrom id 2\\) and chr10 \\(chrom id 3\\)")
+    # names that equal the index's are not compared without "chr": "chr1" and "1" can be two contigs
+    two <- file.path(td, "two")
+    dir.create(file.path(two, "tracks"), recursive = TRUE)
+    dir.create(file.path(two, "seq"))
+    fa <- file.path(td, "two.fa")
+    writeLines(c(">chr1", strrep("A", 100), ">1", strrep("C", 100)), fa)
+    invisible(misha:::.gcall("gseq_multifasta_import", fa, file.path(two, "seq", "genome.seq"), file.path(two, "seq", "genome.idx"), FALSE, misha:::.misha_env()))
+    writeLines(c("chr1\t100", "1\t100"), file.path(two, "chrom_sizes.txt"))
+    gsetroot(two)
+    expect_equal(toupper(gseq.extract(gintervals(c("chr1", "1"), 0, 3))), c("AAA", "CCC"))
     # a line with no size
     writeLines(c(full[1:4], "chrX"), cs)
     expect_error(gsetroot(db), "chrom id 4 is chrX \\(1200 bp\\) in the index and chrX \\(with no size\\) in chrom_sizes.txt")

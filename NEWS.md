@@ -8,11 +8,13 @@
 
 * **Behavior fix:** `gdb.convert_to_indexed()` leaves the database as it was when it cannot convert it exactly (a full disk, a `.seq` file of another length, a chromosome name the index cannot store, a chromosome named `genome`), and an interrupted conversion can be run again.
 
-* `gdb.convert_to_indexed()` keeps the session's datasets, working directory and virtual tracks, where it had reloaded the loaded database; a dataset it converted is unloaded.
+* `gdb.convert_to_indexed()` keeps the session's datasets, working directory and virtual tracks, where it had reloaded the loaded database. A dataset it changed (also by a conversion that failed) is unloaded, and so is the working database when it no longer reads its own sequence.
 
-* **Behavior fix:** `gtrack.copy(overwrite = TRUE)` deleted the existing track and then stopped when the copy could not be made, or emptied the source when it was the same directory under another name; it now checks first and keeps the track.
+* **Behavior fix:** `gtrack.copy(overwrite = TRUE)` deleted the existing track and then stopped when the copy could not be made, or deleted the source when it was the same directory under another name; it now checks first and keeps the track.
 
-* **Behavior fix:** `gdataset.load()` refuses a dataset that numbers the chromosomes differently from the working database though their `chrom_sizes.txt` is the same, when both orders can be read; its indexed tracks and interval sets read other chromosomes.
+* **Breaking:** `gdataset.load()` refuses a dataset that numbers the chromosomes differently from the working database (though their `chrom_sizes.txt` is the same) and holds indexed tracks or interval sets, which would read other chromosomes.
+
+* **Breaking:** `gtrack.liftover()` stops for an indexed source track in a database without sequence whose `chrom_sizes.txt` names lack the "chr" prefix, as its chromosome order cannot be told; it had read it in `chrom_sizes.txt` order.
 
 * **Breaking:** `gdb.convert_to_indexed()` stops for a database whose `seq/` or `chrom_sizes.txt` is another database's (a dataset saved with `copy_seq = FALSE`, a `gdb.create_linked()` database): convert that database instead.
 

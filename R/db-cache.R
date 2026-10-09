@@ -711,9 +711,9 @@ gdb.mark_cache_dirty <- function() {
     loaded <- c(get0("GROOT", envir = .misha, ifnotfound = NULL), get0("GDATASETS", envir = .misha, ifnotfound = NULL))
     if (length(loaded) && normalizePath(groot, mustWork = FALSE) %in% normalizePath(loaded, mustWork = FALSE)) {
         first_chrom <- as.character(get("ALLGENOME", envir = .misha)[[1]]$chrom[1])
-        own_seq <- (file.exists(file.path(groot, "seq", "genome.idx")) && file.exists(file.path(groot, "seq", "genome.seq"))) ||
-            file.exists(file.path(groot, "seq", paste0(first_chrom, ".seq"))) ||
-            file.exists(file.path(groot, "seq", paste0(sub("^chr", "", first_chrom), ".seq")))
+        # sequence as .gdb.chrom_names_at() probes it
+        own_seq <- all(file.exists(file.path(groot, "seq", c("genome.idx", "genome.seq")))) ||
+            any(file.exists(file.path(groot, "seq", paste0(c(first_chrom, paste0("chr", first_chrom), sub("^chr", "", first_chrom)), ".seq"))))
         if (!own_seq) {
             groot <- get("GROOT", envir = .misha)
         }
@@ -733,7 +733,9 @@ gdb.mark_cache_dirty <- function() {
 .gdb.chrom_names_at <- function(groot) {
     loaded <- c(get0("GROOT", envir = .misha, ifnotfound = NULL), get0("GDATASETS", envir = .misha, ifnotfound = NULL))
     if (length(loaded) && normalizePath(groot, mustWork = FALSE) %in% normalizePath(loaded, mustWork = FALSE)) {
-        return(as.character(get("ALLGENOME", envir = .misha)[[1]]$chrom))
+        # a dataset loaded with an order of its own (gdataset.load()) keeps it
+        own <- get0("GDATASET_CHROMS", envir = .misha, ifnotfound = NULL)[[normalizePath(groot, mustWork = FALSE)]]
+        return(if (is.null(own)) as.character(get("ALLGENOME", envir = .misha)[[1]]$chrom) else own)
     }
     cs <- file.path(groot, "chrom_sizes.txt")
     if (!file.exists(cs)) {
@@ -750,10 +752,9 @@ gdb.mark_cache_dirty <- function() {
     # genome.idx and genome.seq nor the first chromosome's .seq file cannot tell which
     seq_dir <- file.path(groot, "seq")
     first_chrom <- chromsizes$chrom[1]
-    no_seq <- !(file.exists(file.path(seq_dir, "genome.idx")) && file.exists(file.path(seq_dir, "genome.seq"))) &&
-        !file.exists(file.path(seq_dir, paste0(first_chrom, ".seq"))) &&
-        !file.exists(file.path(seq_dir, paste0("chr", first_chrom, ".seq"))) &&
-        !file.exists(file.path(seq_dir, paste0(sub("^chr", "", first_chrom), ".seq")))
+    # sequence as .gdb.is_indexed_at() probes it
+    no_seq <- !(all(file.exists(file.path(seq_dir, c("genome.idx", "genome.seq")))) ||
+        any(file.exists(file.path(seq_dir, paste0(c(first_chrom, paste0("chr", first_chrom), sub("^chr", "", first_chrom)), ".seq")))))
     if (!chrom_order$per_chromosome && nrow(chromsizes) && no_seq &&
         mean(!startsWith(chromsizes$chrom, "chr")) >= 0.8) {
         stop(sprintf(

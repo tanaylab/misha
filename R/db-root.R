@@ -128,6 +128,7 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
     assign("GTRACK_DATASET", NULL, envir = .misha)
     assign("GINTERVALS_DATASET", NULL, envir = .misha)
     assign("GDATASETS", character(0), envir = .misha)
+    assign("GDATASET_CHROMS", NULL, envir = .misha)
 
     is_per_chromosome <- chrom_order$per_chromosome
     assign("DB_IS_PER_CHROMOSOME", is_per_chromosome, envir = .misha)
@@ -268,6 +269,7 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
                 assign("GTRACK_DATASET", NULL, envir = .misha)
                 assign("GINTERVALS_DATASET", NULL, envir = .misha)
                 assign("GDATASETS", character(0), envir = .misha)
+                assign("GDATASET_CHROMS", NULL, envir = .misha)
             }
         }
     )
@@ -317,7 +319,7 @@ gdb.unload <- function() {
 
     session_vars <- c(
         "GROOT", "GWD", "ALLGENOME", "GINTERVID", "GITERATOR.INTERVALS",
-        "GVTRACKS", "GDATASETS", "GTRACK_DATASET", "GINTERVALS_DATASET", "GTRACKS_SRC",
+        "GVTRACKS", "GDATASETS", "GDATASET_CHROMS", "GTRACK_DATASET", "GINTERVALS_DATASET", "GTRACKS_SRC",
         "CHROM_ALIAS", "DB_IS_PER_CHROMOSOME"
     )
     for (v in session_vars) {

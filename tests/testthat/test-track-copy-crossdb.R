@@ -658,6 +658,21 @@ test_that("gtrack.copy with overwrite = TRUE into an unloaded database leaves th
     expect_equal(gextract("sp_c", gintervals("chr1", 0, 10))$sp_c, 3)
 })
 
+test_that("gtrack.copy of a track onto its own name stops, also in a subdirectory", {
+    local_db_state()
+    td <- withr::local_tempdir()
+    db <- create_db_with_unsorted_chrom_sizes(file.path(td, "db"))
+    gsetroot(db)
+    gtrack.create_sparse("t", "x", gintervals("chr1", 0, 10), 1)
+    gdir.create("sub", showWarnings = FALSE)
+    gtrack.create_sparse("sub.t", "x", gintervals("chr1", 0, 10), 2)
+    gdir.cd("sub")
+    expect_error(gtrack.copy("t", "t", overwrite = TRUE), "Source and destination are the same track")
+    gdir.cd("..")
+    expect_equal(gextract("t", gintervals("chr1", 0, 10))$t, 1)
+    expect_equal(gextract("sub.t", gintervals("chr1", 0, 10))$sub.t, 2)
+})
+
 test_that("gtrack.copy with overwrite = TRUE stops for the same directory under two names", {
     local_db_state()
     td <- withr::local_tempdir()

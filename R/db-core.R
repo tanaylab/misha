@@ -293,22 +293,6 @@
             seq_dir, groot, what, hint
         ), call. = FALSE)
     }
-    # the same chromosome listed twice, by its name with and without "chr" (only possible when the
-    # names are mixed) or by the same name
-    prefixed <- startsWith(names, "chr")
-    dup <- anyDuplicated(names)
-    if (!dup && any(prefixed) && !all(prefixed)) {
-        dup <- match(TRUE, names %in% sub("^chr", "", names[prefixed]))
-        dup <- if (is.na(dup)) 0L else dup
-    }
-    if (dup) {
-        twin <- match(sub("^chr", "", names[dup]), sub("^chr", "", names[-dup]))
-        twin <- twin + (twin >= dup)
-        stop(sprintf(
-            "chrom_sizes.txt in %s lists the same chromosome twice: %s (chrom id %d) and %s (chrom id %d).",
-            groot, names[min(dup, twin)], min(dup, twin) - 1L, names[max(dup, twin)], max(dup, twin) - 1L
-        ), call. = FALSE)
-    }
     n <- length(sizes)
     if (n > length(idx$length) || !identical(idx$length[seq_len(n)], sizes)) {
         k <- seq_len(max(length(idx$length), n))
@@ -321,6 +305,25 @@
     # the prefix is dropped only from the names that differ (millions of contigs in some databases)
     idx$name <- idx$name[seq_len(n)]
     differ <- which(idx$name != names)
+    if (length(differ)) {
+        # Names compared without "chr" have to be unique: the same chromosome listed twice, by its
+        # name with and without "chr" or by the same name, would read the other one's sequence.
+        # Names equal to the index's (as distinct contigs "chr1" and "1") are not compared so.
+        prefixed <- startsWith(names, "chr")
+        dup <- anyDuplicated(names)
+        if (!dup && any(prefixed) && !all(prefixed)) {
+            dup <- match(TRUE, names %in% sub("^chr", "", names[prefixed]))
+            dup <- if (is.na(dup)) 0L else dup
+        }
+        if (dup) {
+            twin <- match(sub("^chr", "", names[dup]), sub("^chr", "", names[-dup]))
+            twin <- twin + (twin >= dup)
+            stop(sprintf(
+                "chrom_sizes.txt in %s lists the same chromosome twice: %s (chrom id %d) and %s (chrom id %d).",
+                groot, names[min(dup, twin)], min(dup, twin) - 1L, names[max(dup, twin)], max(dup, twin) - 1L
+            ), call. = FALSE)
+        }
+    }
     idx_names <- sub("^chr", "", idx$name[differ])
     db_names <- sub("^chr", "", names[differ])
     keep <- idx_names != db_names
