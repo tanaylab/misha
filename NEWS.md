@@ -12,6 +12,8 @@
 
 * **Behavior fix:** `gtrack.copy(overwrite = TRUE)` deleted the existing track and then stopped when the copy could not be made; it now checks first and keeps the track.
 
+* **Bug fix:** with a dataset loaded, tracks and interval sets in a subdirectory of the working directory (after `gdir.cd()`) were looked up in the database's top directory and could not be read.
+
 * **Breaking:** `gdb.convert_to_indexed()` stops for a database whose `seq/` or `chrom_sizes.txt` is another database's (a dataset saved with `copy_seq = FALSE`, a `gdb.create_linked()` database): convert that database instead.
 
 * **Breaking:** `gsetroot()` stops when `seq/genome.idx` does not match `chrom_sizes.txt` (which may list only the index's first contigs) in sizes or chromosome order, which made chromosomes read other chromosomes' sequence, and warns when only names differ.

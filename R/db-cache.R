@@ -328,22 +328,32 @@ gdb.reload <- function(rescan = TRUE) {
     fn()
 }
 
-# Get the database path for a track (returns NULL if not found)
+# Get the database path for a track (returns NULL if not found). Names are relative to the
+# database's tracks/ only when GWD is that directory: in a subdirectory of it (gdir.cd()) they are
+# relative to GWD, and NULL sends the callers there (as rdb::track2path does).
 .gtrack_db_path <- function(trackname) {
     track_db <- get("GTRACK_DATASET", envir = .misha)
     if (is.null(track_db) || !(trackname %in% names(track_db))) {
         return(NULL)
     }
-    track_db[[trackname]]
+    db <- track_db[[trackname]]
+    if (startsWith(get("GWD", envir = .misha), paste0(file.path(db, "tracks"), "/"))) {
+        return(NULL)
+    }
+    db
 }
 
-# Get the database path for an intervals set (returns NULL if not found)
+# Get the database path for an intervals set (returns NULL if not found), as .gtrack_db_path()
 .gintervals_db_path <- function(intervalsname) {
     intervals_db <- get("GINTERVALS_DATASET", envir = .misha)
     if (is.null(intervals_db) || !(intervalsname %in% names(intervals_db))) {
         return(NULL)
     }
-    intervals_db[[intervalsname]]
+    db <- intervals_db[[intervalsname]]
+    if (startsWith(get("GWD", envir = .misha), paste0(file.path(db, "tracks"), "/"))) {
+        return(NULL)
+    }
+    db
 }
 
 # Check write permission for a path and provide clear error message.
