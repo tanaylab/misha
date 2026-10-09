@@ -887,7 +887,7 @@ for (.how in c("converted", "failed in the genome step", "failed in the track st
             expect_error(convert(), "seq/chrX.seq has 10 bytes")
         } else if (.how == "failed in the track step") {
             local_mocked_bindings(.gdb.convert_to_indexed.tracks = function(...) stop("injected"), .package = "misha")
-            expect_warning(expect_error(convert(), "injected"), "The conversion of .*Y failed after changing it, so it is no longer loaded as a dataset")
+            expect_warning(expect_error(convert(), "injected"), "The conversion of .*Y did not finish and may have changed it, so it is no longer loaded as a dataset")
         } else {
             # the warning is an error: the session is put back before it
             withr::local_options(warn = 2)
@@ -927,12 +927,19 @@ test_that("gdb.convert_to_indexed unloads a loaded dataset only when it changed 
     # Y is indexed already: the conversion changes nothing, and Y stays
     expect_no_warning(suppressMessages(gdb.convert_to_indexed(groot = y, force = TRUE)))
     expect_equal(get("GDATASETS", envir = misha:::.misha), y)
-    # a track step that stops before writing anything
+    # a track step with nothing to convert
+    expect_no_warning(suppressMessages(gdb.convert_to_indexed(groot = y, force = TRUE, convert_tracks = TRUE, convert_intervals = TRUE)))
+    expect_equal(get("GDATASETS", envir = misha:::.misha), y)
+    # a track step that stops: what it converted before stopping cannot be told
     local({
         local_mocked_bindings(.gdb.convert_to_indexed.tracks = function(...) stop("injected"), .package = "misha")
-        expect_no_warning(expect_error(suppressMessages(gdb.convert_to_indexed(groot = y, force = TRUE, convert_tracks = TRUE)), "injected"))
+        expect_warning(
+            expect_error(suppressMessages(gdb.convert_to_indexed(groot = y, force = TRUE, convert_tracks = TRUE)), "injected"),
+            "did not finish and may have changed it"
+        )
     })
-    expect_equal(get("GDATASETS", envir = misha:::.misha), y)
+    expect_equal(get("GDATASETS", envir = misha:::.misha), character(0))
+    suppressMessages(gdataset.load(y))
     # a track step that converts a track (the genome step is skipped: Y is indexed)
     gsetroot(p)
     iv <- gintervals.all()
@@ -946,6 +953,54 @@ test_that("gdb.convert_to_indexed unloads a loaded dataset only when it changed 
     expect_warning(suppressMessages(gdb.convert_to_indexed(groot = y, convert_tracks = TRUE)), "Y was converted, so it is no longer loaded as a dataset")
     expect_true(file.exists(file.path(y, "tracks", "pt.track", "track.idx")))
     expect_equal(get("GDATASETS", envir = misha:::.misha), character(0))
+    # an interval step that converts an interval set
+    gsetroot(p)
+    withr::with_options(list(gbig.intervals.size = 2), gintervals.save("bv", iv))
+    expect_true(file.copy(file.path(p, "tracks", "bv.interv"), file.path(y, "tracks"), recursive = TRUE))
+    unlink(file.path(y, ".db.cache"))
+    gintervals.rm("bv", force = TRUE)
+    gsetroot(x)
+    suppressMessages(gdataset.load(y))
+    expect_warning(suppressMessages(gdb.convert_to_indexed(groot = y, convert_intervals = TRUE)), "Y was converted, so it is no longer loaded as a dataset")
+    expect_true(file.exists(file.path(y, "tracks", "bv.interv", "intervals.idx")))
+    expect_equal(get("GDATASETS", envir = misha:::.misha), character(0))
+
+    # a track step stopped partway, after converting a track: by an interrupt, and by a failed
+    # track's warning made an error (warn = 2)
+    for (how in c("interrupt", "warn = 2")) {
+        for (t in c("p1", "p2")) {
+            gsetroot(p)
+            gtrack.create_sparse(t, "x", iv, seq_len(nrow(iv)))
+            unlink(file.path(y, "tracks", paste0(t, ".track")), recursive = TRUE)
+            expect_true(file.copy(file.path(p, "tracks", paste0(t, ".track")), file.path(y, "tracks"), recursive = TRUE))
+            gtrack.rm(t, force = TRUE)
+        }
+        unlink(file.path(y, ".db.cache"))
+        gsetroot(x)
+        suppressMessages(gdataset.load(y))
+        convert_one <- misha:::gtrack.convert_to_indexed
+        local({
+            local_mocked_bindings(gtrack.convert_to_indexed = function(track = NULL) {
+                if (identical(track, "p2")) {
+                    if (how == "interrupt") stop(structure(class = c("interrupt", "condition"), list(message = "", call = NULL)))
+                    stop("injected")
+                }
+                convert_one(track)
+            }, .package = "misha")
+            if (how == "interrupt") {
+                expect_equal(
+                    tryCatch(suppressWarnings(suppressMessages(gdb.convert_to_indexed(groot = y, convert_tracks = TRUE, threads = 1))), interrupt = function(i) "interrupted"),
+                    "interrupted"
+                )
+            } else {
+                withr::local_options(warn = 2)
+                stopped <- tryCatch(suppressMessages(gdb.convert_to_indexed(groot = y, convert_tracks = TRUE, threads = 1)), error = function(e) conditionMessage(e))
+                expect_match(stopped, "did not finish and may have changed it")
+            }
+        })
+        expect_true(file.exists(file.path(y, "tracks", "p1.track", "track.idx")), info = how)
+        expect_equal(get("GDATASETS", envir = misha:::.misha), character(0), info = how)
+    }
 
     # a failed conversion that could not put chrom_sizes.txt back
     q <- create_db_with_unsorted_chrom_sizes(file.path(td, "Q"))
@@ -974,7 +1029,7 @@ test_that("gdb.convert_to_indexed unloads a loaded dataset only when it changed 
         ),
         "putting back chrom_sizes.txt failed too"
     )
-    expect_true(any(grepl("The conversion of .*Q failed after changing it", warned)))
+    expect_true(any(grepl("The conversion of .*Q did not finish and may have changed it", warned)))
     expect_equal(get("GDATASETS", envir = misha:::.misha), character(0))
 })
 
@@ -1095,6 +1150,20 @@ test_that("gsetroot stops for an indexed database whose chrom_sizes.txt lists a 
     writeLines(c(">chr1", strrep("A", 100), ">1", strrep("C", 100), ">contig3", strrep("G", 100)), fa)
     invisible(misha:::.gcall("gseq_multifasta_import", fa, file.path(two, "seq", "genome.seq"), file.path(two, "seq", "genome.idx"), FALSE, misha:::.misha_env()))
     expect_warning(gsetroot(two), "names 1 of its 3 contigs differently")
+    # names of other contigs with and without "chr", which no index contig has, load as before;
+    # a name listed twice does not load
+    for (case in list(list(idx = c("c1", "c2"), cs = c("chr5", "5"), loads = TRUE), list(idx = c("chr1", "c2"), cs = c("chr1", "chrchr1"), loads = TRUE), list(idx = c("A", "B"), cs = c("X", "X"), loads = FALSE))) {
+        writeLines(c(paste0(">", case$idx[1]), strrep("A", 100), paste0(">", case$idx[2]), strrep("C", 100)), fa)
+        unlink(file.path(two, "seq", c("genome.seq", "genome.idx")))
+        invisible(misha:::.gcall("gseq_multifasta_import", fa, file.path(two, "seq", "genome.seq"), file.path(two, "seq", "genome.idx"), FALSE, misha:::.misha_env()))
+        writeLines(paste0(case$cs, "\t100"), file.path(two, "chrom_sizes.txt"))
+        if (case$loads) {
+            suppressWarnings(gsetroot(two))
+            expect_equal(toupper(gseq.extract(gintervals(case$cs, 0, 3))), c("AAA", "CCC"), info = paste(case$cs, collapse = ","))
+        } else {
+            expect_error(suppressWarnings(gsetroot(two)), "lists the same chromosome twice")
+        }
+    }
     # a line with no size
     writeLines(c(full[1:4], "chrX"), cs)
     expect_error(gsetroot(db), "chrom id 4 is chrX \\(1200 bp\\) in the index and chrX \\(with no size\\) in chrom_sizes.txt")

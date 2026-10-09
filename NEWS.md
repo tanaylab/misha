@@ -2,7 +2,7 @@
 
 * **Behavior fix:** `gdb.convert_to_indexed()` renumbered the chromosomes of a per-chromosome database that was not loaded, if its `chrom_sizes.txt` was unsorted and unprefixed. Recreate the indexed tracks and interval sets of a database converted that way.
 
-* **Behavior fix:** `gtrack.copy()` of an indexed track out of a per-chromosome database with an unsorted, unprefixed `chrom_sizes.txt`, or out of a dataset of one, put values on the wrong chromosomes. Re-copy such tracks. A per-pair 2D copy between databases whose chromosome names differ by "chr" now stops, where it wrote a track that read empty.
+* **Behavior fix:** `gtrack.copy()` of an indexed track out of a per-chromosome database with an unsorted, unprefixed `chrom_sizes.txt`, or out of a dataset of one, put values on the wrong chromosomes. Re-copy such tracks.
 
 * **Breaking:** a per-chromosome database with an unprefixed `chrom_sizes.txt` gets the same chromosome order in every session. A C locale or an R built without ICU had numbered its chromosomes differently: recreate indexed tracks and interval sets converted in such a session.
 
@@ -12,7 +12,11 @@
 
 * **Behavior fix:** `gtrack.copy(overwrite = TRUE)` deleted the existing track and then stopped when the copy could not be made, or deleted the source when it was the same directory under another name; it now checks first and keeps the track.
 
-* **Breaking:** `gdataset.load()` refuses a dataset that numbers the chromosomes differently from the working database (though their `chrom_sizes.txt` is the same) and holds indexed tracks or interval sets, which would read other chromosomes. One without them loads, but its tracks and interval sets cannot be converted to the indexed format in that session.
+* **Breaking:** `gdataset.load()` refuses a dataset with the same `chrom_sizes.txt` but another chromosome order if it holds indexed tracks or interval sets, which would read other chromosomes. Otherwise it loads, copies into it are written per chromosome, and its tracks and interval sets cannot be converted to indexed in that session.
+
+* **Breaking:** `gtrack.copy()` of a per-pair 2D track between databases whose chromosome names differ by "chr" stops; the copy read empty with the destination as the working database.
+
+* **Bug fix:** `gdataset.load()` of a dataset already loaded listed it twice.
 
 * **Breaking:** `gtrack.liftover()` stops for an indexed source track in a database without sequence whose `chrom_sizes.txt` names lack the "chr" prefix, as its chromosome order cannot be told; it had read it in `chrom_sizes.txt` order.
 

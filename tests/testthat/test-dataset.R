@@ -1387,6 +1387,60 @@ test_that("gdataset.load refuses a dataset that numbers chromosomes differently 
     gsetroot(i)
     expect_error(gdataset.load(pi), differently)
 
+    # files keyed by chrom id of each kind, alone: an indexed track in a subdirectory, an indexed
+    # interval set, an indexed 2D interval set
+    for (kind in c("nested track", "interval set", "2D interval set")) {
+        k <- create_db_with_unsorted_chrom_sizes(file.path(td, gsub(" ", "_", kind)))
+        gsetroot(k)
+        a <- gintervals.all()
+        a$end <- 10
+        if (kind == "nested track") {
+            gdir.create("sub", showWarnings = FALSE)
+            gtrack.create_sparse("sub.nt", "x", a, seq_len(nrow(a)))
+            suppressMessages(gtrack.convert_to_indexed("sub.nt"))
+            expect_true(file.exists(file.path(k, "tracks", "sub", "nt.track", "track.idx")))
+        } else if (kind == "interval set") {
+            withr::with_options(list(gbig.intervals.size = 2), gintervals.save("bv", a))
+            suppressMessages(gintervals.convert_to_indexed("bv"))
+            expect_true(file.exists(file.path(k, "tracks", "bv.interv", "intervals.idx")))
+        } else {
+            withr::with_options(list(gbig.intervals.size = 2), gintervals.save("bv2", gintervals.2d(a$chrom, 0, 10, a$chrom[c(2:nrow(a), 1)], 0, 10)))
+            suppressMessages(gintervals.2d.convert_to_indexed("bv2"))
+            expect_true(file.exists(file.path(k, "tracks", "bv2.interv", "intervals2d.idx")))
+        }
+        gsetroot(i)
+        expect_error(gdataset.load(k), differently, info = kind)
+    }
+
+    # the same order with names that differ by "chr": an indexed database whose chrom_sizes.txt is
+    # sorted, and a per-chromosome one with that file (chrom ids by the sorted names, with "chr")
+    sorted_root <- file.path(td, "sorted_root")
+    dir.create(file.path(sorted_root, "tracks"), recursive = TRUE)
+    dir.create(file.path(sorted_root, "seq"))
+    gsetroot(p)
+    sorted <- gintervals.all()
+    writeLines(paste(sub("^chr", "", sorted$chrom), sorted$end, sep = "\t"), file.path(sorted_root, "chrom_sizes.txt"))
+    sorted_root <- indexed_like(sorted_root, file.path(td, "sorted_root_i"))
+    sorted_ds <- file.path(td, "sorted_ds")
+    dir.create(file.path(sorted_ds, "tracks"), recursive = TRUE)
+    expect_true(file.copy(file.path(p, "seq"), sorted_ds, recursive = TRUE))
+    expect_true(file.copy(file.path(sorted_root, "chrom_sizes.txt"), sorted_ds))
+    with_indexed_track(normalizePath(sorted_ds))
+    truth <- gextract("it", gintervals.all())
+    gsetroot(sorted_root)
+    expect_equal(as.character(gintervals.all()$chrom), sub("^chr", "", as.character(truth$chrom)))
+    suppressMessages(gdataset.load(sorted_ds))
+    expect_equal(gextract("it", gintervals.all())$it, truth$it)
+
+    # an indexed track added to a dataset after its .db.cache was written is found
+    late <- create_db_with_unsorted_chrom_sizes(file.path(td, "late"))
+    gsetroot(i)
+    suppressMessages(gdataset.load(late))
+    expect_true(file.exists(file.path(late, ".db.cache")))
+    expect_true(file.copy(file.path(pi, "tracks", "it.track"), file.path(late, "tracks"), recursive = TRUE))
+    gsetroot(i)
+    expect_error(gdataset.load(late), differently)
+
     # .seq files without the "chr" prefix give chrom_sizes.txt order
     u <- create_db_with_unsorted_chrom_sizes(file.path(td, "U"))
     for (f in list.files(file.path(u, "seq"), full.names = TRUE)) file.rename(f, file.path(dirname(f), sub("^chr", "", basename(f))))
@@ -1503,27 +1557,30 @@ test_that("a dataset numbering chromosomes differently without indexed tracks lo
     expect_error(gsetroot(i, dir = ""), "empty string")
     expect_null(get("GDATASET_CHROMS", envir = misha:::.misha))
 
-    # a copy into I loaded as a dataset of P, by db = and from inside its tracks/, is written in
-    # files named by chromosome: it reads right in this session and with I as the working database
+    # copies into I loaded as a dataset of P, of an indexed and a per-chromosome track, by db = and
+    # from inside its tracks/, are written in files named by chromosome: they read right in this
+    # session and with I as the working database
     gsetroot(p)
     suppressMessages(gdataset.load(i))
     gtrack.copy("pi", "pic", db = i)
+    gtrack.copy("pt", "ptc", db = i)
     gdir.cd(file.path(i, "tracks"))
     gtrack.copy("pi", "pic2")
     gdir.cd(file.path(p, "tracks"))
-    for (t in c("pic", "pic2")) {
+    for (t in c("pic", "ptc", "pic2")) {
         expect_false(file.exists(file.path(i, "tracks", paste0(t, ".track"), "track.idx")), info = t)
         expect_equal(by_name(t), truth, info = t)
     }
     gsetroot(i)
     expect_equal(by_name("pic"), truth)
+    expect_equal(by_name("ptc"), truth)
     expect_equal(by_name("pic2"), truth)
     gsetroot(p)
     suppressMessages(gdataset.load(i))
     expect_equal(get("GDATASETS", envir = misha:::.misha), i)
 })
 
-test_that("gdataset.load reads the order of a dataset with a linked seq/ from the database that owns it", {
+test_that("gdataset.load refuses a dataset whose linked seq/ belongs to a database converted since", {
     local_db_state()
     td <- withr::local_tempdir()
     p <- create_db_with_unsorted_chrom_sizes(file.path(td, "P"))
@@ -1548,11 +1605,11 @@ test_that("gdataset.load reads the order of a dataset with a linked seq/ from th
     gtrack.rm("t", force = TRUE)
     gsetroot(i)
     expect_error(gdataset.load(d), "numbers the chromosomes differently")
-    # P converted since: D's seq/ is indexed in P's order, with P's new chrom_sizes.txt
+    # P converted since: D's seq/ is indexed in P's order, which D's chrom_sizes.txt does not match
     suppressMessages(gdb.convert_to_indexed(groot = p, force = TRUE, validate = FALSE))
     expect_true(file.exists(file.path(d, "seq", "genome.idx")))
     gsetroot(i)
-    expect_error(gdataset.load(d), "numbers the chromosomes differently")
+    expect_error(gdataset.load(d), "its seq/genome.idx does not match its chrom_sizes.txt")
 })
 
 test_that("gdataset.load gives no warning for a dataset's index names", {

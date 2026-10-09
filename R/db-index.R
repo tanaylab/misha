@@ -148,8 +148,8 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
     datasets <- as.character(old_session$GDATASETS)
     converted <- datasets[normalizePath(datasets, mustWork = FALSE) == normalizePath(setup_info$groot)]
     # what the conversion got to, for a converted loaded dataset: the genome step finished, the
-    # track or interval step rewrote something (files keyed by chrom id), or chrom_sizes.txt was
-    # replaced and not put back; and whether all of it finished
+    # track or interval step began and did not end converting nothing (files keyed by chrom id), or
+    # chrom_sizes.txt was replaced and not put back; and whether all of it finished
     changed <- FALSE
     finished <- FALSE
     if (length(converted)) {
@@ -197,7 +197,7 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
                         if (finished) {
                             "%s was converted, so it is no longer loaded as a dataset."
                         } else {
-                            "The conversion of %s failed after changing it, so it is no longer loaded as a dataset."
+                            "The conversion of %s did not finish and may have changed it, so it is no longer loaded as a dataset."
                         },
                         converted[1]
                     ), call. = FALSE)
@@ -226,13 +226,25 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
 
 
     # Convert tracks if requested
-    if (convert_tracks && .gdb.convert_to_indexed.tracks(setup_info$groot, verbose, threads = threads) > 0) {
+    # A step counts as a change from its start, as an error or interrupt partway leaves what it
+    # converted; one that had nothing to convert does not.
+    if (convert_tracks) {
+        changed_before <- changed
         changed <- TRUE
+        rewritten <- .gdb.convert_to_indexed.tracks(setup_info$groot, verbose, threads = threads)
+        if (rewritten == 0) {
+            changed <- changed_before
+        }
     }
 
     # Convert intervals if requested
-    if (convert_intervals && .gdb.convert_to_indexed.intervals(setup_info$groot, remove_old_files, verbose, threads = threads) > 0) {
+    if (convert_intervals) {
+        changed_before <- changed
         changed <- TRUE
+        rewritten <- .gdb.convert_to_indexed.intervals(setup_info$groot, remove_old_files, verbose, threads = threads)
+        if (rewritten == 0) {
+            changed <- changed_before
+        }
     }
 
     finished <- TRUE
@@ -838,8 +850,9 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
             ))
         }
     }
-    # the number of tracks rewritten, for gdb.convert_to_indexed()
-    invisible(converted_count)
+    # the number of tracks it set out to rewrite, for gdb.convert_to_indexed() (a worker that fails
+    # may have written its track)
+    invisible(total_convertible)
 }
 
 # Helper function to convert interval sets to indexed format
@@ -992,8 +1005,8 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
             ), call. = FALSE)
         }
     }
-    # the number of interval sets rewritten, for gdb.convert_to_indexed()
-    invisible(total_converted)
+    # the number of interval sets it set out to rewrite, for gdb.convert_to_indexed()
+    invisible(total_convertible)
 }
 
 

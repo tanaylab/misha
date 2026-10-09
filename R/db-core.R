@@ -306,16 +306,21 @@
     idx$name <- idx$name[seq_len(n)]
     differ <- which(idx$name != names)
     if (length(differ)) {
-        # Names compared without "chr" have to be unique: a name that differs from the index's and
-        # is another chromosome's name too, as it is or with or without "chr", would read the other
-        # one's sequence. Names equal to the index's (as distinct contigs "chr1" and "1") are not
-        # compared so.
-        other <- ifelse(startsWith(names[differ], "chr"), sub("^chr", "", names[differ]), paste0("chr", names[differ]))
-        twins <- match(other, names)
+        # A name that differs from the index's is a second name of the same chromosome when it
+        # is listed twice (which does not load), or when, with or without "chr", it is the name
+        # at an index contig of that name without "chr": both would read that contig. Names equal
+        # to the index's (as distinct contigs "chr1" and "1") are not compared so.
         same <- duplicated(names) | duplicated(names, fromLast = TRUE)
-        k <- which(!is.na(twins) | same[differ])[1]
+        first <- match(names[differ], names)
+        last <- length(names) + 1L - match(names[differ], rev(names))
+        twins <- ifelse(same[differ], ifelse(first != differ, first, last), NA)
+        other <- ifelse(startsWith(names[differ], "chr"), sub("^chr", "", names[differ]), paste0("chr", names[differ]))
+        prefix_twins <- match(other, names)
+        prefix_twins[!is.na(prefix_twins) & sub("^chr", "", idx$name[prefix_twins]) != sub("^chr", "", names[differ])] <- NA
+        twins[is.na(twins)] <- prefix_twins[is.na(twins)]
+        k <- which(!is.na(twins))[1]
         dup <- if (is.na(k)) 0L else differ[k]
-        twin <- if (is.na(k)) NA else if (!is.na(twins[k])) twins[k] else which(names == names[dup] & seq_along(names) != dup)[1]
+        twin <- if (is.na(k)) NA else twins[k]
         if (dup) {
             stop(sprintf(
                 "chrom_sizes.txt in %s lists the same chromosome twice: %s (chrom id %d) and %s (chrom id %d).",
