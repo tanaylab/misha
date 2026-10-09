@@ -58,7 +58,8 @@
 #' dataset saved with \code{copy_seq = FALSE} or a \code{gdb.create_linked()} database, is not
 #' converted: convert that database. A seq/ or chrom_sizes.txt linked to storage of its own elsewhere
 #' is converted there. The session loaded before the conversion is put back as it was after it,
-#' except the converted database if it was loaded as a dataset: it is unloaded, with a warning. If
+#' except the converted database if it was loaded as a dataset and the conversion changed it: it
+#' is unloaded, with a warning. If
 #' the conversion changed the sequence it reads (its seq/ is the converted database's, with a
 #' chrom_sizes.txt of its own), a warning says so, and nothing is loaded when its chromosomes would
 #' read other chromosomes' sequence. chrom_sizes.txt keeps its group when the converting user
@@ -135,24 +136,31 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
 
     # The steps below load the database being converted (to validate it, and to list its tracks and
     # interval sets). The session loaded before is put back as it was at the end, its datasets and
-    # working directory included (but not the converted database, if it was a loaded dataset), with
-    # the directory caches dropped, as tracks may have changed format under the same paths. If the conversion changed the sequence it reads (its seq/ is the
-    # converted one, with a chrom_sizes.txt of its own), it is unloaded when its chrom ids no longer
-    # match the index, and a warning says so; one that still reads right but that gsetroot() would
-    # not load now gets a warning too.
+    # working directory included, with the directory caches dropped, as tracks may have changed
+    # format under the same paths. The converted database, if it was a loaded dataset, is left out
+    # once the conversion changed it (its tracks may be keyed by its own chrom ids now). If the
+    # conversion changed the sequence the session reads (its seq/ is the converted one, with a
+    # chrom_sizes.txt of its own), it is unloaded when its chrom ids no longer match the index, and
+    # a warning says so; one that still reads right but that gsetroot() would not load now gets a
+    # warning too.
     old_session <- as.list(.misha, all.names = TRUE)
     old_groot <- old_session$GROOT
+    datasets <- as.character(old_session$GDATASETS)
+    converted <- datasets[normalizePath(datasets, mustWork = FALSE) == normalizePath(setup_info$groot)]
+    # what the conversion got to: a step that changes the database began (or chrom_sizes.txt was
+    # replaced and not put back), and whether all of it finished
+    changed <- FALSE
+    finished <- FALSE
+    chrom_sizes_md5 <- if (length(converted)) unname(tools::md5sum(file.path(setup_info$groot, "chrom_sizes.txt")))
     if (!is.null(old_groot) && nzchar(old_groot)) {
         on.exit(
             {
                 rm(list = ls(.misha, all.names = TRUE), envir = .misha)
                 list2env(old_session, envir = .misha)
                 .gdb.clear_all_dir_caches()
-                # A loaded dataset that was converted (or partly, by a conversion that failed) is
-                # left out: its tracks may now be keyed by its own chrom ids, not the root's
-                datasets <- get0("GDATASETS", envir = .misha, ifnotfound = character(0))
-                converted <- datasets[normalizePath(datasets, mustWork = FALSE) == normalizePath(setup_info$groot)]
-                if (length(converted)) {
+                unload <- length(converted) &&
+                    (changed || !identical(unname(tools::md5sum(file.path(setup_info$groot, "chrom_sizes.txt"))), chrom_sizes_md5))
+                if (unload) {
                     gdataset.unload(converted[1])
                 }
                 genome <- get("ALLGENOME", envir = .misha)[[1]]
@@ -181,9 +189,13 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
                     )
                 }
                 # warnings last, once the session is in place: a handler that stops at one leaves it so
-                if (length(converted)) {
+                if (unload) {
                     warning(sprintf(
-                        "%s was converted, so it is no longer loaded as a dataset; load it again with gdataset.load().",
+                        if (finished) {
+                            "%s was converted, so it is no longer loaded as a dataset."
+                        } else {
+                            "The conversion of %s failed after changing it, so it is no longer loaded as a dataset."
+                        },
                         converted[1]
                     ), call. = FALSE)
                 }
@@ -206,19 +218,23 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
     if (!setup_info$already_indexed) {
         # Convert genome sequences
         .gdb.convert_to_indexed.genome(setup_info, validate, remove_old_files, verbose = verbose, chunk_size = chunk_size)
+        changed <- TRUE
     }
 
 
     # Convert tracks if requested
     if (convert_tracks) {
+        changed <- TRUE
         .gdb.convert_to_indexed.tracks(setup_info$groot, verbose, threads = threads)
     }
 
     # Convert intervals if requested
     if (convert_intervals) {
+        changed <- TRUE
         .gdb.convert_to_indexed.intervals(setup_info$groot, remove_old_files, verbose, threads = threads)
     }
 
+    finished <- TRUE
     if (verbose) message("\n=== Conversion Complete ===")
 
     invisible(NULL)

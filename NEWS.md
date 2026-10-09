@@ -10,7 +10,7 @@
 
 * `gdb.convert_to_indexed()` keeps the session's datasets, working directory and virtual tracks, where it had reloaded the loaded database; a dataset it converted is unloaded.
 
-* **Behavior fix:** `gtrack.copy(overwrite = TRUE)` deleted the existing track and then stopped when the copy could not be made; it now checks first and keeps the track.
+* **Behavior fix:** `gtrack.copy(overwrite = TRUE)` deleted the existing track and then stopped when the copy could not be made, or emptied the source when it was the same directory under another name; it now checks first and keeps the track.
 
 * **Behavior fix:** `gdataset.load()` refuses a dataset with the working database's `chrom_sizes.txt` that numbers the chromosomes differently (an indexed and a per-chromosome database with unprefixed names); its indexed tracks and interval sets read other chromosomes.
 

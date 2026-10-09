@@ -576,12 +576,13 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
     src_db <- .gtrack_db_path(srcname)
     if (is.null(src_db)) src_db <- get("GROOT", envir = .misha)
 
-    if (srcname == destname && identical(src_db, dest_db)) {
-        stop(sprintf("Source and destination are the same track: %s", srcname), call. = FALSE)
-    }
-
     src_dir <- .track_dir(srcname)
     dest_dir <- file.path(dest_db, "tracks", paste0(gsub("\\.", "/", destname), ".track"))
+
+    # the same directory by two names (a linked directory, another path to the database) included
+    if (normalizePath(src_dir, mustWork = FALSE) == normalizePath(dest_dir, mustWork = FALSE)) {
+        stop(sprintf("Source and destination are the same track: %s", srcname), call. = FALSE)
+    }
 
     # Use the filesystem as the source of truth for "destination already exists".
     # An in-memory cache check is fragile when dest_db is not in GDATASETS.
@@ -608,16 +609,16 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
     if ((is_2d || dest_indexed) && is.null(dest_info$chroms)) {
         dest_info$chroms <- tryCatch(.gdb.chrom_names_at(dest_db), error = function(e) e)
     }
-    told <- (is_2d || dest_indexed) && !inherits(dest_info$chroms, "error")
-    if ((if (is_2d) src_indexed else dest_indexed) && !told) {
+    order_known <- (is_2d || dest_indexed) && !inherits(dest_info$chroms, "error")
+    if ((if (is_2d) src_indexed else dest_indexed) && !order_known) {
         stop(dest_info$chroms)
     }
-    if (src_indexed || (is_2d && told)) {
+    if (src_indexed || (is_2d && order_known)) {
         src_chroms <- .gdb.chrom_names_at(src_db)
     } else {
         src_chroms <- utils::read.csv(file.path(src_db, "chrom_sizes.txt"), sep = "\t", header = FALSE, colClasses = c("character", "numeric"))[[1]]
     }
-    if (told) {
+    if (order_known) {
         dest_chroms <- dest_info$chroms
     } else {
         dest_chroms <- utils::read.csv(file.path(dest_db, "chrom_sizes.txt"), sep = "\t", header = FALSE, colClasses = c("character", "numeric"))[[1]]

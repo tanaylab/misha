@@ -857,36 +857,54 @@ test_that("a database that does not load after a conversion and no longer reads 
     expect_null(get0("GROOT", envir = misha:::.misha))
 })
 
-test_that("gdb.convert_to_indexed of a loaded dataset unloads it, keeping the rest of the session", {
-    local_db_state()
-    td <- withr::local_tempdir()
-    # X the root, Y a database loaded as a dataset of it (the same chrom_sizes.txt), Z another dataset
-    x <- create_db_with_unsorted_chrom_sizes(file.path(td, "X"))
-    y <- create_db_with_unsorted_chrom_sizes(file.path(td, "Y"))
-    iv <- gintervals(c("chr1", "chr10", "chr2", "chrX"), 0, 10)
-    gsetroot(y)
-    gtrack.create_sparse("yt", "x", iv, c(1, 10, 2, 99))
-    gsetroot(x)
-    gtrack.create_sparse("zt", "x", gintervals("chr1", 0, 10), 7)
-    z <- file.path(td, "Z")
-    suppressMessages(gdataset.save(z, "z", tracks = "zt"))
-    gtrack.rm("zt", force = TRUE)
-    suppressMessages(gdataset.load(y))
-    suppressMessages(gdataset.load(z))
-    expect_equal(gextract("yt", iv)$yt, c(1, 10, 2, 99))
+for (.how in c("converted", "failed in the genome step", "failed in the track step", "converted under warn = 2")) {
+    test_that(sprintf("gdb.convert_to_indexed of a loaded dataset (%s) keeps the rest of the session", .how), {
+        local_db_state()
+        td <- withr::local_tempdir()
+        # X the root, Y a database loaded as a dataset of it (the same chrom_sizes.txt), Z another dataset
+        x <- create_db_with_unsorted_chrom_sizes(file.path(td, "X"))
+        y <- create_db_with_unsorted_chrom_sizes(file.path(td, "Y"))
+        iv <- gintervals(c("chr1", "chr10", "chr2", "chrX"), 0, 10)
+        gsetroot(y)
+        gtrack.create_sparse("yt", "x", iv, c(1, 10, 2, 99))
+        gsetroot(x)
+        gtrack.create_sparse("zt", "x", gintervals("chr1", 0, 10), 7)
+        z <- file.path(td, "Z")
+        suppressMessages(gdataset.save(z, "z", tracks = "zt"))
+        gtrack.rm("zt", force = TRUE)
+        suppressMessages(gdataset.load(y))
+        suppressMessages(gdataset.load(z))
+        gvtrack.create("v", "zt", "max")
+        expect_equal(gextract("yt", iv)$yt, c(1, 10, 2, 99))
+        convert <- function() suppressMessages(gdb.convert_to_indexed(groot = y, force = TRUE, validate = FALSE, convert_tracks = TRUE))
 
-    # Y's tracks are rewritten (here in the same chrom ids, but a conversion that failed midway or a
-    # dataset numbered otherwise would not read right): Y is unloaded
-    expect_warning(
-        suppressMessages(gdb.convert_to_indexed(groot = y, force = TRUE, validate = FALSE, convert_tracks = TRUE)),
-        "Y was converted, so it is no longer loaded as a dataset"
-    )
-    expect_true(file.exists(file.path(y, "tracks", "yt.track", "track.idx")))
-    expect_equal(get("GROOT", envir = misha:::.misha), normalizePath(x))
-    expect_equal(get("GDATASETS", envir = misha:::.misha), normalizePath(z))
-    expect_error(gextract("yt", iv))
-    expect_equal(gextract("zt", gintervals("chr1", 0, 10))$zt, 7)
-})
+        if (.how == "converted") {
+            # Y's tracks are rewritten in its own chrom ids: Y is unloaded
+            expect_warning(convert(), "Y was converted, so it is no longer loaded as a dataset\\.$")
+        } else if (.how == "failed in the genome step") {
+            # nothing changed: Y stays
+            writeBin(charToRaw(strrep("A", 10)), file.path(y, "seq", "chrX.seq"))
+            expect_error(convert(), "seq/chrX.seq has 10 bytes")
+        } else if (.how == "failed in the track step") {
+            local_mocked_bindings(.gdb.convert_to_indexed.tracks = function(...) stop("injected"), .package = "misha")
+            expect_warning(expect_error(convert(), "injected"), "The conversion of .*Y failed after changing it, so it is no longer loaded as a dataset")
+        } else {
+            # the warning is an error: the session is put back before it
+            withr::local_options(warn = 2)
+            expect_error(convert(), "Y was converted, so it is no longer loaded as a dataset")
+        }
+        unloaded <- .how != "failed in the genome step"
+        expect_equal(get("GROOT", envir = misha:::.misha), normalizePath(x))
+        expect_equal(get("GDATASETS", envir = misha:::.misha), if (unloaded) normalizePath(z) else normalizePath(c(y, z)))
+        expect_equal(gvtrack.ls(), "v")
+        expect_equal(gextract("v", gintervals("chr1", 0, 10))$v, 7)
+        if (unloaded) {
+            expect_error(gextract("yt", iv))
+        } else {
+            expect_equal(gextract("yt", iv)$yt, c(1, 10, 2, 99))
+        }
+    })
+}
 
 test_that("gdb.convert_to_indexed of the loaded database leaves its session in the indexed format", {
     local_db_state()

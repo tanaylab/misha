@@ -1351,6 +1351,7 @@ test_that("gdataset.save() errors when an interval set's data is missing", {
         expect_false(dir.exists("ds"))
     })
 })
+
 test_that("gdataset.load refuses a dataset with the same chrom_sizes.txt that numbers chromosomes differently", {
     local_db_state()
     td <- withr::local_tempdir()
@@ -1372,6 +1373,12 @@ test_that("gdataset.load refuses a dataset with the same chrom_sizes.txt that nu
     expect_equal(get("GDATASETS", envir = misha:::.misha), character(0))
     gsetroot(i)
     expect_error(gdataset.load(p), "numbers the chromosomes differently from the working database")
+
+    # also per-chromosome: .seq files without the "chr" prefix give chrom_sizes.txt order
+    u <- create_db_with_unsorted_chrom_sizes(file.path(td, "U"))
+    for (f in list.files(file.path(u, "seq"), full.names = TRUE)) file.rename(f, file.path(dirname(f), sub("^chr", "", basename(f))))
+    gsetroot(p)
+    expect_error(gdataset.load(u), "numbers the chromosomes differently from the working database")
 
     # the same order loads: a dataset on the working database's seq/, in the same format, or
     # without sequence (its order cannot be told)
