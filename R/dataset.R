@@ -80,29 +80,31 @@ gdataset.load <- function(path, force = FALSE, verbose = FALSE) {
     # reads a dataset in its own order (ALLGENOME), so the dataset's order, from its
     # chrom_sizes.txt and its seq/ as gsetroot() would read them, is compared with it. They are
     # equal by construction when the dataset's seq/ is the working database's, or when both are
-    # indexed and the dataset's seq/ is a directory of its own (chrom ids then follow
-    # chrom_sizes.txt, the order gsetroot() holds the index to). A dataset without sequence cannot
-    # show its order and loads. One in another order, or whose index does not match its own
-    # chrom_sizes.txt (a seq/ linked to a database converted since), is refused if it holds files
-    # keyed by chrom id (indexed tracks and interval sets), which would read other chromosomes;
-    # otherwise it loads, and GDATASET_CHROMS keeps its order (.gdb.chrom_names_at()).
+    # indexed and the dataset's seq/ is a directory of its own, or a link into a database whose
+    # chrom_sizes.txt is the dataset's (chrom ids then follow chrom_sizes.txt, the order gsetroot()
+    # holds the index to); that database decides only this. A dataset whose order cannot be read
+    # (no sequence, an unreadable index) loads. One in another order, or whose index does not
+    # match its own chrom_sizes.txt (a seq/ linked to a database converted since), is refused if it
+    # holds files keyed by chrom id (indexed tracks and interval sets), which would read other
+    # chromosomes; otherwise it loads, and GDATASET_CHROMS keeps its order (.gdb.chrom_names_at()).
     dataset_seq <- file.path(path_norm, "seq")
     groot_seq <- file.path(groot, "seq")
-    dataset_indexed <- all(file.exists(file.path(dataset_seq, c("genome.idx", "genome.seq"))))
-    both_indexed <- dataset_indexed && all(file.exists(file.path(groot_seq, c("genome.idx", "genome.seq")))) &&
-        !nzchar(Sys.readlink(dataset_seq))
+    seq_owner_cs <- file.path(dirname(normalizePath(dataset_seq, mustWork = FALSE)), "chrom_sizes.txt")
+    both_indexed <- all(file.exists(file.path(dataset_seq, c("genome.idx", "genome.seq")))) &&
+        all(file.exists(file.path(groot_seq, c("genome.idx", "genome.seq")))) &&
+        (!nzchar(Sys.readlink(dataset_seq)) ||
+            (identical(file.size(seq_owner_cs), file.size(cs_path)) && identical(unname(tools::md5sum(seq_owner_cs)), unname(dataset_hash))))
     dataset_chroms <- NULL
     index_mismatch <- FALSE
     if (normalizePath(dataset_seq, mustWork = FALSE) != normalizePath(groot_seq, mustWork = FALSE) && !both_indexed) {
         # without the warning .gdb.check_genome_idx() gives for index names other than chrom_sizes.txt's
-        dataset_chroms <- tryCatch(suppressWarnings(.gdb.chrom_names_at(path_norm)), error = function(e) NULL)
+        dataset_chroms <- tryCatch(suppressWarnings(.gdb.chrom_names_at(path_norm)), error = function(e) e)
         groot_chroms <- as.character(get("ALLGENOME", envir = .misha)[[1]]$chrom)
-        if (is.null(dataset_chroms) && dataset_indexed) {
-            # .gdb.chrom_names_at() stops for an indexed database only when its index does not match
-            # its chrom_sizes.txt (one without sequence is not indexed)
-            index_mismatch <- TRUE
+        index_mismatch <- inherits(dataset_chroms, "error") &&
+            grepl("genome.idx does not match chrom_sizes.txt", conditionMessage(dataset_chroms), fixed = TRUE)
+        if (index_mismatch) {
             dataset_chroms <- utils::read.csv(cs_path, sep = "\t", header = FALSE, colClasses = c("character", "numeric"))[[1]]
-        } else if (!is.null(dataset_chroms) && identical(sub("^chr", "", dataset_chroms), sub("^chr", "", groot_chroms))) {
+        } else if (inherits(dataset_chroms, "error") || identical(sub("^chr", "", dataset_chroms), sub("^chr", "", groot_chroms))) {
             dataset_chroms <- NULL
         }
     }

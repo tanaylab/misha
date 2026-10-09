@@ -887,7 +887,7 @@ for (.how in c("converted", "failed in the genome step", "failed in the track st
             expect_error(convert(), "seq/chrX.seq has 10 bytes")
         } else if (.how == "failed in the track step") {
             local_mocked_bindings(.gdb.convert_to_indexed.tracks = function(...) stop("injected"), .package = "misha")
-            expect_warning(expect_error(convert(), "injected"), "The conversion of .*Y did not finish and may have changed it, so it is no longer loaded as a dataset")
+            expect_warning(expect_error(convert(), "injected"), "The conversion of .*Y failed and may have changed it, so it is no longer loaded as a dataset")
         } else {
             # the warning is an error: the session is put back before it
             withr::local_options(warn = 2)
@@ -935,7 +935,7 @@ test_that("gdb.convert_to_indexed unloads a loaded dataset only when it changed 
         local_mocked_bindings(.gdb.convert_to_indexed.tracks = function(...) stop("injected"), .package = "misha")
         expect_warning(
             expect_error(suppressMessages(gdb.convert_to_indexed(groot = y, force = TRUE, convert_tracks = TRUE)), "injected"),
-            "did not finish and may have changed it"
+            "failed and may have changed it"
         )
     })
     expect_equal(get("GDATASETS", envir = misha:::.misha), character(0))
@@ -965,41 +965,68 @@ test_that("gdb.convert_to_indexed unloads a loaded dataset only when it changed 
     expect_true(file.exists(file.path(y, "tracks", "bv.interv", "intervals.idx")))
     expect_equal(get("GDATASETS", envir = misha:::.misha), character(0))
 
-    # a track step stopped partway, after converting a track: by an interrupt, and by a failed
-    # track's warning made an error (warn = 2)
-    for (how in c("interrupt", "warn = 2")) {
-        for (t in c("p1", "p2")) {
+    # a track or interval step that wrote and then failed: every track or interval set written and
+    # then failed (default warn, forked workers), stopped by an interrupt after the first, and the
+    # first failure's warning made an error (warn = 2)
+    for (kind in c("track", "interval set")) {
+        items <- if (kind == "track") c("p1", "p2") else c("v1", "v2")
+        dirs <- paste0(items, if (kind == "track") ".track" else ".interv")
+        idx <- if (kind == "track") "track.idx" else "intervals.idx"
+        convert_one <- if (kind == "track") misha:::gtrack.convert_to_indexed else misha:::gintervals.convert_to_indexed
+        for (how in c("every one fails", "interrupt", "warn = 2")) {
             gsetroot(p)
-            gtrack.create_sparse(t, "x", iv, seq_len(nrow(iv)))
-            unlink(file.path(y, "tracks", paste0(t, ".track")), recursive = TRUE)
-            expect_true(file.copy(file.path(p, "tracks", paste0(t, ".track")), file.path(y, "tracks"), recursive = TRUE))
-            gtrack.rm(t, force = TRUE)
-        }
-        unlink(file.path(y, ".db.cache"))
-        gsetroot(x)
-        suppressMessages(gdataset.load(y))
-        convert_one <- misha:::gtrack.convert_to_indexed
-        local({
-            local_mocked_bindings(gtrack.convert_to_indexed = function(track = NULL) {
-                if (identical(track, "p2")) {
+            for (k in 1:2) {
+                if (kind == "track") {
+                    gtrack.create_sparse(items[k], "x", iv, seq_len(nrow(iv)))
+                } else {
+                    withr::with_options(list(gbig.intervals.size = 2), gintervals.save(items[k], iv))
+                }
+                unlink(file.path(y, "tracks", dirs[k]), recursive = TRUE)
+                expect_true(file.copy(file.path(p, "tracks", dirs[k]), file.path(y, "tracks"), recursive = TRUE))
+                if (kind == "track") gtrack.rm(items[k], force = TRUE) else gintervals.rm(items[k], force = TRUE)
+            }
+            unlink(file.path(y, ".db.cache"))
+            gsetroot(x)
+            suppressMessages(gdataset.load(y))
+            failing <- function(name, ...) {
+                if (how == "every one fails") {
+                    convert_one(name, ...)
+                    stop("injected")
+                }
+                if (identical(name, items[2])) {
                     if (how == "interrupt") stop(structure(class = c("interrupt", "condition"), list(message = "", call = NULL)))
                     stop("injected")
                 }
-                convert_one(track)
-            }, .package = "misha")
-            if (how == "interrupt") {
-                expect_equal(
-                    tryCatch(suppressWarnings(suppressMessages(gdb.convert_to_indexed(groot = y, convert_tracks = TRUE, threads = 1))), interrupt = function(i) "interrupted"),
-                    "interrupted"
-                )
-            } else {
-                withr::local_options(warn = 2)
-                stopped <- tryCatch(suppressMessages(gdb.convert_to_indexed(groot = y, convert_tracks = TRUE, threads = 1)), error = function(e) conditionMessage(e))
-                expect_match(stopped, "did not finish and may have changed it")
+                convert_one(name, ...)
             }
-        })
-        expect_true(file.exists(file.path(y, "tracks", "p1.track", "track.idx")), info = how)
-        expect_equal(get("GDATASETS", envir = misha:::.misha), character(0), info = how)
+            convert <- function(threads) {
+                suppressMessages(gdb.convert_to_indexed(groot = y, convert_tracks = kind == "track", convert_intervals = kind != "track", threads = threads))
+            }
+            local({
+                if (kind == "track") {
+                    local_mocked_bindings(gtrack.convert_to_indexed = failing, .package = "misha")
+                } else {
+                    local_mocked_bindings(gintervals.convert_to_indexed = failing, .package = "misha")
+                }
+                if (how == "every one fails") {
+                    warned <- character(0)
+                    withCallingHandlers(convert(2), warning = function(w) {
+                        warned <<- c(warned, conditionMessage(w))
+                        invokeRestart("muffleWarning")
+                    })
+                    expect_true(any(grepl("The conversion of .*Y failed and may have changed it", warned)), info = kind)
+                } else if (how == "interrupt") {
+                    expect_equal(tryCatch(suppressWarnings(convert(1)), interrupt = function(i) "interrupted"), "interrupted", info = kind)
+                } else {
+                    withr::local_options(warn = 2)
+                    stopped <- tryCatch(convert(1), error = function(e) conditionMessage(e))
+                    expect_match(stopped, "failed and may have changed it", info = kind)
+                }
+            })
+            written <- if (how == "every one fails") 1:2 else 1
+            expect_true(all(file.exists(file.path(y, "tracks", dirs[written], idx))), info = paste(kind, how))
+            expect_equal(get("GDATASETS", envir = misha:::.misha), character(0), info = paste(kind, how))
+        }
     }
 
     # a failed conversion that could not put chrom_sizes.txt back
@@ -1029,7 +1056,7 @@ test_that("gdb.convert_to_indexed unloads a loaded dataset only when it changed 
         ),
         "putting back chrom_sizes.txt failed too"
     )
-    expect_true(any(grepl("The conversion of .*Q did not finish and may have changed it", warned)))
+    expect_true(any(grepl("The conversion of .*Q failed and may have changed it", warned)))
     expect_equal(get("GDATASETS", envir = misha:::.misha), character(0))
 })
 

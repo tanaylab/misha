@@ -149,7 +149,8 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
     converted <- datasets[normalizePath(datasets, mustWork = FALSE) == normalizePath(setup_info$groot)]
     # what the conversion got to, for a converted loaded dataset: the genome step finished, the
     # track or interval step began and did not end converting nothing (files keyed by chrom id), or
-    # chrom_sizes.txt was replaced and not put back; and whether all of it finished
+    # chrom_sizes.txt was replaced and not put back; and whether all of it finished, with no track
+    # or interval set failed
     changed <- FALSE
     finished <- FALSE
     if (length(converted)) {
@@ -197,7 +198,7 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
                         if (finished) {
                             "%s was converted, so it is no longer loaded as a dataset."
                         } else {
-                            "The conversion of %s did not finish and may have changed it, so it is no longer loaded as a dataset."
+                            "The conversion of %s failed and may have changed it, so it is no longer loaded as a dataset."
                         },
                         converted[1]
                     ), call. = FALSE)
@@ -227,12 +228,15 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
 
     # Convert tracks if requested
     # A step counts as a change from its start, as an error or interrupt partway leaves what it
-    # converted; one that had nothing to convert does not.
+    # converted; one that had nothing to convert does not. A track or interval set that failed
+    # (its warning) may have been written too.
+    failed <- 0
     if (convert_tracks) {
         changed_before <- changed
         changed <- TRUE
         rewritten <- .gdb.convert_to_indexed.tracks(setup_info$groot, verbose, threads = threads)
-        if (rewritten == 0) {
+        failed <- failed + rewritten[["failed"]]
+        if (rewritten[["convertible"]] == 0) {
             changed <- changed_before
         }
     }
@@ -242,12 +246,13 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
         changed_before <- changed
         changed <- TRUE
         rewritten <- .gdb.convert_to_indexed.intervals(setup_info$groot, remove_old_files, verbose, threads = threads)
-        if (rewritten == 0) {
+        failed <- failed + rewritten[["failed"]]
+        if (rewritten[["convertible"]] == 0) {
             changed <- changed_before
         }
     }
 
-    finished <- TRUE
+    finished <- failed == 0
     if (verbose) message("\n=== Conversion Complete ===")
 
     invisible(NULL)
@@ -721,7 +726,7 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
 
     if (length(all_tracks) == 0) {
         if (verbose) message("No tracks found in database")
-        return(invisible(0L))
+        return(invisible(c(convertible = 0L, failed = 0L)))
     }
 
     if (verbose) message(sprintf("Found %d tracks in database", length(all_tracks)))
@@ -850,9 +855,9 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
             ))
         }
     }
-    # the number of tracks it set out to rewrite, for gdb.convert_to_indexed() (a worker that fails
-    # may have written its track)
-    invisible(total_convertible)
+    # for gdb.convert_to_indexed(): the number of tracks it set out to rewrite (a worker that fails
+    # may have written its track), and of those that failed
+    invisible(c(convertible = total_convertible, failed = length(failed)))
 }
 
 # Helper function to convert interval sets to indexed format
@@ -867,7 +872,7 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
 
     if (length(all_intervals) == 0) {
         if (verbose) message("No interval sets found in database")
-        return(invisible(0L))
+        return(invisible(c(convertible = 0L, failed = 0L)))
     }
 
     if (verbose) message(sprintf("Found %d interval sets in database", length(all_intervals)))
@@ -1005,8 +1010,9 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
             ), call. = FALSE)
         }
     }
-    # the number of interval sets it set out to rewrite, for gdb.convert_to_indexed()
-    invisible(total_convertible)
+    # for gdb.convert_to_indexed(): the number of interval sets it set out to rewrite, and of those
+    # that failed
+    invisible(c(convertible = total_convertible, failed = length(failed_1d) + length(failed_2d)))
 }
 
 

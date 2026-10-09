@@ -306,10 +306,12 @@
     idx$name <- idx$name[seq_len(n)]
     differ <- which(idx$name != names)
     if (length(differ)) {
-        # A name that differs from the index's is a second name of the same chromosome when it
-        # is listed twice (which does not load), or when, with or without "chr", it is the name
-        # at an index contig of that name without "chr": both would read that contig. Names equal
-        # to the index's (as distinct contigs "chr1" and "1") are not compared so.
+        # A chromosome listed twice stops: by the same name, or by a name that differs from the
+        # index's at its chrom id while its form with or without "chr" is listed at a chrom id the
+        # index gives that name (as "chr1" and "1" for an index with only "chr1"). Each name reads
+        # its own chrom id, but misha takes a name with or without "chr" for the same chromosome,
+        # so such a file is ambiguous. Names equal to the index's (distinct contigs "chr1" and "1")
+        # are not compared so.
         same <- duplicated(names) | duplicated(names, fromLast = TRUE)
         first <- match(names[differ], names)
         last <- length(names) + 1L - match(names[differ], rev(names))
