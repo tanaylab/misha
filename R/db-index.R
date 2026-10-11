@@ -1158,8 +1158,7 @@ gtrack.convert_to_indexed <- function(track = NULL) {
     }
     # nor into another loaded dataset or, after gdir.cd(), a directory of none (the session may not
     # know their chromosome order)
-    gwd_db <- .gdb.gwd_db()
-    track_db <- if (is.null(gwd_db)) .gtrack_db_path(trackstr) %||% get("GROOT", envir = .misha) else gwd_db
+    track_db <- if (is.null(.gdb.gwd_db())) .gtrack_db_path(trackstr) %||% get("GROOT", envir = .misha) else .gdb.path_db(.track_dir(trackstr))
     if (!identical(track_db, get("GROOT", envir = .misha))) {
         stop(sprintf("Track %s is not in the working database; convert it with gsetroot() on the database it is in.", trackstr), call. = FALSE)
     }
@@ -1380,8 +1379,7 @@ gtrack.2d.convert_to_indexed <- function(track = NULL, remove.old = FALSE, force
     }
     # nor into another loaded dataset or, after gdir.cd(), a directory of none (the session may not
     # know their chromosome order)
-    gwd_db <- .gdb.gwd_db()
-    track_db <- if (is.null(gwd_db)) .gtrack_db_path(trackstr) %||% get("GROOT", envir = .misha) else gwd_db
+    track_db <- if (is.null(.gdb.gwd_db())) .gtrack_db_path(trackstr) %||% get("GROOT", envir = .misha) else .gdb.path_db(.track_dir(trackstr))
     if (!identical(track_db, get("GROOT", envir = .misha))) {
         stop(sprintf("Track %s is not in the working database; convert it with gsetroot() on the database it is in.", trackstr), call. = FALSE)
     }

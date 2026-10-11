@@ -412,8 +412,9 @@ gdb.reload <- function(rescan = TRUE) {
     tracks <- get("GTRACKS", envir = .misha)
     if (!is.null(tracks) && track %in% tracks) {
         gwd <- get("GWD", envir = .misha)
-        target_db <- .gdb.resolve_db_for_path(gwd)
-        if (is.null(target_db)) {
+        # in a subdirectory (gdir.cd()), the database the session lists the names in
+        target_db <- .gdb.gwd_db() %||% .gdb.resolve_db_for_path(gwd)
+        if (is.null(target_db) || is.na(target_db)) {
             target_db <- get("GROOT", envir = .misha)
         }
 

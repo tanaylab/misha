@@ -1459,6 +1459,11 @@ test_that("with the working directory outside the working database, db = it mean
     gdir.cd(file.path(inner, "tracks", "sub"))
     expect_error(gtrack.convert_to_indexed("y"), "is not in the working database")
     expect_false(file.exists(file.path(inner, "tracks", "sub", "y.track", "track.idx")))
+    # nor is its directory the working database's
+    gdir.cd(inner)
+    expect_error(gtrack.convert_to_indexed("tracks.sub.y"), "is not in the working database")
+    expect_false(file.exists(file.path(inner, "tracks", "sub", "y.track", "track.idx")))
+    gdir.cd(file.path(inner, "tracks", "sub"))
     expect_equal(gextract("y", iv)$y, c(3, 3))
 
     gdir.cd(file.path(db, "tracks"))

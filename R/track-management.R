@@ -671,6 +671,10 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
         ), call. = FALSE)
     }
     gwd_db <- .gdb.gwd_db()
+    if (!is.null(gwd_db) && identical(gwd_db, dest_db) && !identical(.gdb.path_db(dest_dir), dest_db)) {
+        # in a subdirectory (gdir.cd()), a name that leads into another database kept below it
+        stop(sprintf("Track %s would be written inside another database under %s.", destname, get("GWD", envir = .misha)), call. = FALSE)
+    }
     if (is_2d && dest_indexed && !src_indexed && !is.null(gwd_db) && !identical(gwd_db, dest_db)) {
         # converted by its name, which the session lists only under GWD (.gdb.add_track())
         stop(sprintf(
