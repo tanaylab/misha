@@ -1449,6 +1449,17 @@ test_that("with the working directory outside the working database, db = it mean
     gdir.cd(file.path(nested, "tracks"))
     expect_error(gtrack.convert_to_indexed("nt"), "is not in the working database")
     expect_false(file.exists(file.path(nested, "tracks", "nt.track", "track.idx")))
+    # a dataset kept in the working database's tracks/: its subdirectories are its own
+    inner <- file.path(db, "tracks", "inner")
+    gdir.cd(file.path(db, "tracks"))
+    suppressMessages(gdataset.save(inner, "i", tracks = "y"))
+    dir.create(file.path(inner, "tracks", "sub"))
+    expect_true(file.rename(file.path(inner, "tracks", "y.track"), file.path(inner, "tracks", "sub", "y.track")))
+    suppressMessages(gdataset.load(inner, force = TRUE))
+    gdir.cd(file.path(inner, "tracks", "sub"))
+    expect_error(gtrack.convert_to_indexed("y"), "is not in the working database")
+    expect_false(file.exists(file.path(inner, "tracks", "sub", "y.track", "track.idx")))
+    expect_equal(gextract("y", iv)$y, c(3, 3))
 
     gdir.cd(file.path(db, "tracks"))
     expect_equal(gextract("x", iv)$x, c(1, 1))

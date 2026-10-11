@@ -73,9 +73,9 @@ gdb.reload <- function(rescan = TRUE) {
             all_tracks <- res[[1]]
             all_intervals <- res[[2]]
             # Determine which database this GWD belongs to
-            groot_idx <- which(vapply(root_tracks_dirs, function(root) .gpath_is_within(gwd, root), logical(1)))[1]
-            if (!is.na(groot_idx)) {
-                groot <- groots[groot_idx]
+            gwd_db <- .gdb.gwd_db()
+            if (!is.na(gwd_db)) {
+                groot <- gwd_db
                 if (length(all_tracks)) {
                     track_db[all_tracks] <- rep(groot, length(all_tracks))
                     track_dbs[all_tracks] <- rep(list(groot), length(all_tracks))
