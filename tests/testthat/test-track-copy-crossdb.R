@@ -690,6 +690,11 @@ test_that("after gdir.cd(), gtrack.copy writes in the subdirectory and its track
     expect_equal(gextract("u", iv)$u, c(7, 7))
     gtrack.copy("t", "u", overwrite = TRUE)
     expect_equal(gextract("u", iv)$u, c(3, 6))
+    # a name that leads through a link into another database is not written there
+    other <- create_db_with_unsorted_chrom_sizes(file.path(td, "other"))
+    expect_true(file.symlink(file.path(other, "tracks"), file.path(db, "tracks", "sub", "lnk")))
+    expect_error(gtrack.copy("t", "lnk.new"), "inside another database")
+    expect_false(dir.exists(file.path(other, "tracks", "new.track")))
     gdir.cd("..")
     expect_equal(gextract("u", iv)$u, c(5, 5))
     expect_equal(gextract("sub.u", iv)$sub.u, c(3, 6))

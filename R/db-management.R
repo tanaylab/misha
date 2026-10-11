@@ -156,7 +156,13 @@
 .gdb.path_db <- function(path) {
     groots <- c(get("GROOT", envir = .misha), get("GDATASETS", envir = .misha))
     tracks_dirs <- normalizePath(file.path(groots, "tracks"), mustWork = FALSE)
-    path <- normalizePath(path, mustWork = FALSE)
+    # links are followed in the part of the path that exists (a new track's directory does not yet)
+    rest <- character(0)
+    while (!file.exists(path) && dirname(path) != path) {
+        rest <- c(basename(path), rest)
+        path <- dirname(path)
+    }
+    path <- do.call(file.path, as.list(c(normalizePath(path, mustWork = FALSE), rest)))
     within <- path == tracks_dirs | startsWith(path, paste0(tracks_dirs, "/"))
     if (!any(within)) {
         return(NA_character_)
