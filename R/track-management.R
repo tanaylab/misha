@@ -388,7 +388,9 @@ gtrack.mv <- function(src = NULL, dest = NULL) {
     src_dir <- .track_dir(srcname)
     src_db <- .gtrack_db_path(srcname)
 
-    # Destination must be in the same database
+    # Destination must be in the same database, by a name relative to where the source's is (GWD in a
+    # subdirectory)
+    if (!is.null(.gdb.gwd_db())) src_db <- NULL
     dest_dir <- .track_dir(destname, src_db)
 
     # Check write permission
@@ -535,6 +537,14 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
 # Otherwise validate that the explicit path is loaded.
 .gtrack.copy.resolve_dest_db <- function(db) {
     if (is.null(db)) {
+        # in a subdirectory (gdir.cd()), the database whose names the session lists
+        gwd_db <- .gdb.gwd_db()
+        if (!is.null(gwd_db)) {
+            if (is.na(gwd_db)) {
+                stop("The working directory is in no loaded database; give the destination with db.", call. = FALSE)
+            }
+            return(gwd_db)
+        }
         gwd <- get("GWD", envir = .misha)
         groot <- get("GROOT", envir = .misha)
         gdatasets <- get("GDATASETS", envir = .misha)

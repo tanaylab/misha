@@ -152,15 +152,21 @@
 
 # The database GWD is in, when GWD is a subdirectory (gdir.cd()) and not the tracks/ of the working
 # database or of a loaded dataset: the session then lists only the names under GWD (gdb.reload), in
-# this database (GROOT when GWD is in none). NULL otherwise, where names are relative to each
+# this database: the one whose tracks/ holds GWD, else the one whose directory does (gdir.cd() above
+# tracks/), else NA (GWD is in no loaded database). NULL otherwise, where names are relative to each
 # database's tracks/.
 .gdb.gwd_db <- function() {
     gwd <- get("GWD", envir = .misha)
-    groot <- get("GROOT", envir = .misha)
-    if (gwd %in% file.path(c(groot, get("GDATASETS", envir = .misha)), "tracks")) {
+    groots <- c(get("GROOT", envir = .misha), get("GDATASETS", envir = .misha))
+    if (gwd %in% file.path(groots, "tracks")) {
         return(NULL)
     }
-    .gdb.resolve_db_for_path(gwd) %||% groot
+    db <- .gdb.resolve_db_for_path(gwd)
+    if (is.null(db)) {
+        roots <- groots[vapply(groots, function(g) .gpath_is_within(gwd, g), logical(1))]
+        db <- if (length(roots)) roots[which.max(nchar(roots))] else NA_character_
+    }
+    db
 }
 
 # The directory the names of database `db` are relative to: GWD for NULL and for .gdb.gwd_db(), its
@@ -252,7 +258,7 @@
 
         if (is.null(db)) {
             # in a subdirectory (gdir.cd()), the names under GWD are the database's holding it
-            db <- gwd_db %||% .gdb.resolve_db_for_path(trackdir)
+            db <- if (!is.null(gwd_db) && !is.na(gwd_db)) gwd_db else .gdb.resolve_db_for_path(trackdir)
             if (is.null(db)) {
                 db <- get("GROOT", envir = .misha)
             }
@@ -383,7 +389,8 @@
         assign("GINTERVS", intervals, envir = .misha)
 
         # in a subdirectory (gdir.cd()), the names under GWD are the database's holding it
-        db <- .gdb.gwd_db() %||% .gdb.resolve_db_for_path(fname)
+        gwd_db <- .gdb.gwd_db()
+        db <- if (!is.null(gwd_db) && !is.na(gwd_db)) gwd_db else .gdb.resolve_db_for_path(fname)
         if (is.null(db)) {
             db <- get("GROOT", envir = .misha)
         }

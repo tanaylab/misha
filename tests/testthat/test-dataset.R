@@ -1375,7 +1375,7 @@ test_that("with a dataset loaded, tracks and interval sets in a subdirectory of 
     suppressMessages(gdataset.load(ds))
     expect_equal(gextract("tsub", iv)$tsub, c(1000, 2000))
     # a dataset's track is not converted in this session
-    expect_error(gtrack.convert_to_indexed("tsub"), "is in the loaded dataset")
+    expect_error(gtrack.convert_to_indexed("tsub"), "is not in the working database")
     expect_false(file.exists(file.path(ds, "tracks", "tsub.track", "track.idx")))
 
     gdir.cd("sub")
@@ -1414,6 +1414,38 @@ test_that("with a dataset loaded, tracks and interval sets in a subdirectory of 
     expect_equal(gextract("tsub", iv)$tsub, c(1000, 2000))
     expect_equal(gextract("u", iv)$u, c(5, 5))
     expect_equal(gextract("sub.u", iv)$sub.u, c(3, 6))
+})
+
+test_that("with the working directory outside the working database, db = it means its tracks/ and other tracks are not converted", {
+    local_db_state()
+    td <- withr::local_tempdir()
+    db <- create_db_with_unsorted_chrom_sizes(file.path(td, "db"))
+    other <- create_db_with_unsorted_chrom_sizes(file.path(td, "other"))
+    iv <- gintervals(c("chr1", "chr2"), 0, 10)
+    gsetroot(other)
+    gtrack.create_sparse("x", "x", iv, c(3, 3))
+    ds <- file.path(td, "ds")
+    suppressMessages(gdataset.save(ds, "d", tracks = "x"))
+    ds <- normalizePath(ds)
+    gsetroot(db)
+    gtrack.create_sparse("x", "x", iv, c(1, 1))
+    suppressMessages(gdataset.load(ds, force = TRUE))
+
+    # at the dataset's directory, names are under it
+    gdir.cd(ds)
+    expect_error(gtrack.convert_to_indexed("tracks.x"), "is not in the working database")
+    expect_false(file.exists(file.path(ds, "tracks", "x.track", "track.idx")))
+    gtrack.copy("tracks.x", "y", db = db)
+    expect_true(dir.exists(file.path(db, "tracks", "y.track")))
+    # in a dataset unloaded since, a copy needs its destination
+    gdir.cd(file.path(ds, "tracks"))
+    suppressMessages(gdataset.unload(ds))
+    expect_error(gtrack.copy("x", "z"), "in no loaded database")
+    expect_error(gtrack.convert_to_indexed("x"), "is not in the working database")
+
+    gdir.cd(file.path(db, "tracks"))
+    expect_equal(gextract("x", iv)$x, c(1, 1))
+    expect_equal(gextract("y", iv)$y, c(3, 3))
 })
 
 test_that("gdataset.load refuses a dataset that numbers chromosomes differently and holds indexed tracks", {

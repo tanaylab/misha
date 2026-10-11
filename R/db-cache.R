@@ -312,6 +312,10 @@ gdb.reload <- function(rescan = TRUE) {
 # restoring the original GWD on exit. This is necessary because C++ functions
 # use GWD to resolve track paths.
 .with_track_context <- function(trackname, fn) {
+    # in a subdirectory (gdir.cd()) every listed name is under GWD
+    if (!is.null(.gdb.gwd_db())) {
+        return(fn())
+    }
     .with_db_context(.gtrack_db_path(trackname), fn)
 }
 

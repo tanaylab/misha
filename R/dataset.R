@@ -413,7 +413,7 @@ gdataset.save <- function(path, description, tracks = NULL, intervals = NULL,
         for (track in tracks) {
             source_db <- gtrack_dataset[[track]]
             rel_path <- paste0(gsub("\\.", "/", track), ".track")
-            source_path <- .track_dir(track, source_db)
+            source_path <- .track_dir(track)
             dest_path <- file.path(path, "tracks", rel_path)
             if (!file.exists(source_path)) {
                 stop(sprintf(
@@ -443,7 +443,7 @@ gdataset.save <- function(path, description, tracks = NULL, intervals = NULL,
             source_db <- gintervals_dataset[[interval]]
             # Intervals can be files or directories
             rel_path <- paste0(gsub("\\.", "/", interval), ".interv")
-            source_file <- .intervals_dir(interval, source_db)
+            source_file <- .intervals_dir(interval)
 
             if (!file.exists(source_file)) {
                 stop(sprintf(
