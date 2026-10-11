@@ -5,23 +5,15 @@
 #' Resolve path to .iattr file for an interval set
 #' @noRd
 .gintervals.attr_path <- function(intervals.set) {
-    # Look up which database this interval set belongs to
-    intervals_db <- get("GINTERVALS_DATASET", envir = .misha)
-    if (!is.null(intervals_db) && intervals.set %in% names(intervals_db)) {
-        db_root <- intervals_db[intervals.set]
-    } else {
-        db_root <- get("GROOT", envir = .misha)
-    }
-
-    path <- gsub("\\.", "/", intervals.set)
-    interv_path <- file.path(db_root, "tracks", paste0(path, ".interv"))
+    # in the database this interval set belongs to, or under the working directory
+    interv_path <- .intervals_dir(intervals.set)
 
     if (dir.exists(interv_path)) {
         # Big set: store inside the directory
         file.path(interv_path, ".iattr")
     } else {
         # Small set: replace .interv with .iattr
-        file.path(db_root, "tracks", paste0(path, ".iattr"))
+        sub("\\.interv$", ".iattr", interv_path)
     }
 }
 

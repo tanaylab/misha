@@ -673,6 +673,28 @@ test_that("gtrack.copy of a track onto its own name stops, also in a subdirector
     expect_equal(gextract("sub.t", gintervals("chr1", 0, 10))$sub.t, 2)
 })
 
+test_that("after gdir.cd(), gtrack.copy writes in the subdirectory and its tracks stay readable", {
+    local_db_state()
+    td <- withr::local_tempdir()
+    db <- create_db_with_unsorted_chrom_sizes(file.path(td, "db"))
+    iv <- gintervals(c("chr1", "chr2"), 0, 10)
+    gsetroot(db)
+    gtrack.create_sparse("u", "x", iv, c(5, 5))
+    gdir.create("sub", showWarnings = FALSE)
+    gtrack.create_sparse("sub.u", "x", iv, c(7, 7))
+    gtrack.create_sparse("sub.t", "x", iv, c(3, 6))
+    gdir.cd("sub")
+    gtrack.copy("t", "cp")
+    expect_true(dir.exists(file.path(db, "tracks", "sub", "cp.track")))
+    expect_equal(gextract("cp", iv)$cp, c(3, 6))
+    expect_equal(gextract("u", iv)$u, c(7, 7))
+    gtrack.copy("t", "u", overwrite = TRUE)
+    expect_equal(gextract("u", iv)$u, c(3, 6))
+    gdir.cd("..")
+    expect_equal(gextract("u", iv)$u, c(5, 5))
+    expect_equal(gextract("sub.u", iv)$sub.u, c(3, 6))
+})
+
 test_that("gtrack.copy with overwrite = TRUE stops for the same directory under two names", {
     local_db_state()
     td <- withr::local_tempdir()

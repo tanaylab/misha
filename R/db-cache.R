@@ -312,20 +312,7 @@ gdb.reload <- function(rescan = TRUE) {
 # restoring the original GWD on exit. This is necessary because C++ functions
 # use GWD to resolve track paths.
 .with_track_context <- function(trackname, fn) {
-    db_path <- .gtrack_db_path(trackname)
-    if (is.null(db_path)) {
-        return(fn())
-    }
-
-    correct_gwd <- file.path(db_path, "tracks")
-    current_gwd <- get("GWD", envir = .misha)
-    if (correct_gwd == current_gwd) {
-        return(fn())
-    }
-
-    assign("GWD", correct_gwd, envir = .misha)
-    on.exit(assign("GWD", current_gwd, envir = .misha), add = TRUE)
-    fn()
+    .with_db_context(.gtrack_db_path(trackname), fn)
 }
 
 # Get the database path for a track (returns NULL if not found)
@@ -466,20 +453,19 @@ gdb.reload <- function(rescan = TRUE) {
     }
 }
 
-# Get the directory path for a track, resolving to the correct database.
-# Falls back to current GWD for new tracks not yet in any database.
-.track_dir <- function(trackname) {
-    db_path <- .gtrack_db_path(trackname)
-    base <- if (!is.null(db_path)) file.path(db_path, "tracks") else get("GWD", envir = .misha)
-    file.path(base, paste0(gsub("\\.", "/", trackname), ".track"))
+# Get the directory path for a track, in database `db` (default: the one it is listed in). Names are
+# relative to the database's tracks/, or to GWD when that is a subdirectory of it (gdir.cd()), where
+# the session lists only the names under GWD (.gdb.gwd_db()). Falls back to GWD for new tracks not
+# yet in any database.
+.track_dir <- function(trackname, db = NULL) {
+    if (is.null(db) && is.null(.gdb.gwd_db())) db <- .gtrack_db_path(trackname)
+    file.path(.gdb.names_dir(db), paste0(gsub("\\.", "/", trackname), ".track"))
 }
 
-# Get the directory path for an intervals set, resolving to the correct database.
-# Falls back to current GWD for new intervals not yet in any database.
-.intervals_dir <- function(intervalsname) {
-    db_path <- .gintervals_db_path(intervalsname)
-    base <- if (!is.null(db_path)) file.path(db_path, "tracks") else get("GWD", envir = .misha)
-    file.path(base, paste0(gsub("\\.", "/", intervalsname), ".interv"))
+# Get the directory path for an intervals set, as .track_dir()
+.intervals_dir <- function(intervalsname, db = NULL) {
+    if (is.null(db) && is.null(.gdb.gwd_db())) db <- .gintervals_db_path(intervalsname)
+    file.path(.gdb.names_dir(db), paste0(gsub("\\.", "/", intervalsname), ".interv"))
 }
 
 .gdb.cache_path <- function(groot = NULL) {

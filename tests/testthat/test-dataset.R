@@ -1352,6 +1352,67 @@ test_that("gdataset.save() errors when an interval set's data is missing", {
     })
 })
 
+test_that("with a dataset loaded, tracks and interval sets in a subdirectory of the working directory are found", {
+    local_db_state()
+    td <- withr::local_tempdir()
+    db <- create_db_with_unsorted_chrom_sizes(file.path(td, "db"))
+    other <- create_db_with_unsorted_chrom_sizes(file.path(td, "other"))
+    iv <- gintervals(c("chr1", "chr2"), 0, 10)
+    # a dataset whose track has the short name of a track in the subdirectory
+    gsetroot(other)
+    gtrack.create_sparse("tsub", "x", iv, c(1000, 2000))
+    ds <- file.path(td, "ds")
+    suppressMessages(gdataset.save(ds, "d", tracks = "tsub"))
+
+    gsetroot(db)
+    gtrack.create_sparse("u", "x", iv, c(5, 5))
+    gdir.create("sub", showWarnings = FALSE)
+    gtrack.create_sparse("sub.u", "x", iv, c(7, 7))
+    gtrack.create_sparse("sub.tsub", "x", iv, c(3, 6))
+    gtrack.attr.set("sub.tsub", "note", "mine")
+    gintervals.save("sub.isub", iv)
+    gintervals.attr.set("sub.isub", "note", "set")
+    suppressMessages(gdataset.load(ds))
+    expect_equal(gextract("tsub", iv)$tsub, c(1000, 2000))
+
+    gdir.cd("sub")
+    expect_equal(gtrack.ls(), c("tsub", "u"))
+    expect_true(gtrack.exists("tsub"))
+    expect_equal(gtrack.info("tsub")$type, "sparse")
+    expect_equal(gextract("tsub", iv)$tsub, c(3, 6))
+    expect_equal(gtrack.attr.get("tsub", "note"), "mine")
+    expect_equal(gintervals.ls(), "isub")
+    expect_equal(nrow(gintervals.load("isub")), 2)
+    expect_equal(gintervals.attr.get("isub", "note"), "set")
+    # a track made here lands here
+    gtrack.create_sparse("made", "x", iv, c(7, 8))
+    expect_true(dir.exists(file.path(db, "tracks", "sub", "made.track")))
+    expect_equal(gextract("made", iv)$made, c(7, 8))
+    gtrack.rm("made", force = TRUE)
+    expect_false(dir.exists(file.path(db, "tracks", "sub", "made.track")))
+    # an overwrite here replaces the track here, not the top-level one of that name
+    gtrack.copy("tsub", "u", overwrite = TRUE)
+    expect_equal(gextract("u", iv)$u, c(3, 6))
+    # a dataset saved from here gets the tracks here
+    ds2 <- file.path(td, "ds2")
+    suppressMessages(gdataset.save(ds2, "d2", tracks = "tsub"))
+    sub_files <- list.files(file.path(db, "tracks", "sub", "tsub.track"), full.names = TRUE)
+    expect_equal(
+        unname(tools::md5sum(file.path(ds2, "tracks", "tsub.track", basename(sub_files)))),
+        unname(tools::md5sum(sub_files))
+    )
+    # removing a track here leaves the dataset's of that name
+    gtrack.rm("tsub", force = TRUE)
+    expect_false(dir.exists(file.path(db, "tracks", "sub", "tsub.track")))
+    expect_true(dir.exists(file.path(ds, "tracks", "tsub.track")))
+    expect_false(gtrack.exists("tsub"))
+
+    gdir.cd("..")
+    expect_equal(gextract("tsub", iv)$tsub, c(1000, 2000))
+    expect_equal(gextract("u", iv)$u, c(5, 5))
+    expect_equal(gextract("sub.u", iv)$sub.u, c(3, 6))
+})
+
 test_that("gdataset.load refuses a dataset that numbers chromosomes differently and holds indexed tracks", {
     local_db_state()
     td <- withr::local_tempdir()

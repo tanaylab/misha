@@ -53,7 +53,12 @@
 # Returns character vector of database paths, or NA_character_ if not found.
 .gdb.find_resource_dbs <- function(name, extension, all_dbs) {
     rel_path <- paste0(gsub("\\.", "/", name), extension)
-    resource_paths <- file.path(all_dbs, "tracks", rel_path)
+    # in a subdirectory (gdir.cd()), a name is the one under GWD, in the database holding it
+    gwd_db <- .gdb.gwd_db()
+    if (!is.null(gwd_db)) {
+        all_dbs <- intersect(all_dbs, gwd_db)
+    }
+    resource_paths <- file.path(vapply(all_dbs, .gdb.names_dir, ""), rel_path)
     dbs <- all_dbs[file.exists(resource_paths)]
     if (length(dbs) == 0) NA_character_ else dbs
 }
@@ -145,6 +150,25 @@
     }
 }
 
+# The database GWD is in, when GWD is a subdirectory (gdir.cd()) and not the tracks/ of the working
+# database or of a loaded dataset: the session then lists only the names under GWD (gdb.reload), in
+# this database (GROOT when GWD is in none). NULL otherwise, where names are relative to each
+# database's tracks/.
+.gdb.gwd_db <- function() {
+    gwd <- get("GWD", envir = .misha)
+    groot <- get("GROOT", envir = .misha)
+    if (gwd %in% file.path(c(groot, get("GDATASETS", envir = .misha)), "tracks")) {
+        return(NULL)
+    }
+    .gdb.resolve_db_for_path(gwd) %||% groot
+}
+
+# The directory the names of database `db` are relative to: GWD for NULL and for .gdb.gwd_db(), its
+# tracks/ otherwise
+.gdb.names_dir <- function(db) {
+    if (is.null(db) || identical(db, .gdb.gwd_db())) get("GWD", envir = .misha) else file.path(db, "tracks")
+}
+
 .gdb.resolve_track_db <- function(track) {
     groot <- get("GROOT", envir = .misha)
     gdatasets <- get("GDATASETS", envir = .misha)
@@ -155,14 +179,9 @@
         return(NULL)
     }
 
-    rel_path <- paste0(gsub("\\.", "/", track), ".track")
     # Working db first (wins), then datasets in load order
-    for (g in groots) {
-        if (file.exists(file.path(g, "tracks", rel_path))) {
-            return(g)
-        }
-    }
-    NULL
+    db <- .gdb.find_resource_dbs(track, ".track", groots)[1]
+    if (is.na(db)) NULL else db
 }
 
 .gdb.ensure_dataset_maps <- function() {
@@ -197,12 +216,16 @@
 .gdb.add_track <- function(track, db = NULL) {
     .gcheckroot()
 
-    # Get the track directory, using db if specified
-    if (!is.null(db)) {
-        trackdir <- file.path(db, "tracks", paste0(gsub("\\.", "/", track), ".track"))
-    } else {
-        trackdir <- .track_dir(track)
+    # In a subdirectory (gdir.cd()) the session lists the names under GWD only: a track at the top of
+    # another database's tracks/ is listed once GWD is back there (gdir.cd() rescans)
+    gwd_db <- .gdb.gwd_db()
+    if (!is.null(db) && !is.null(gwd_db) && !identical(db, gwd_db)) {
+        .gdb.cache_mark_dirty(db)
+        return(invisible())
     }
+
+    # Get the track directory, using db if specified
+    trackdir <- .track_dir(track, db)
 
     if (file.exists(trackdir)) {
         tracks <- sort(c(get("GTRACKS", envir = .misha), track))

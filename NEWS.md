@@ -1,3 +1,7 @@
+# misha 5.13.2
+
+* **Behavior fix:** after `gdir.cd()` into a subdirectory, tracks and interval sets there could be looked up at the top of the database instead (by `gtrack.copy()` always, by other functions with a dataset loaded or once a track was created or copied). Reads failed or returned the top-level track of that name, and `gtrack.rm()` or `gtrack.copy(overwrite = TRUE)` could delete or replace it.
+
 # misha 5.13.1
 
 * **Behavior fix:** `gdb.convert_to_indexed()`, and `gtrack.copy()` of an indexed track, could put data on the wrong chromosomes in a per-chromosome database whose `chrom_sizes.txt` is unsorted and lacks "chr". Recreate indexed tracks and interval sets made that way.
