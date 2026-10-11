@@ -1156,6 +1156,11 @@ gtrack.convert_to_indexed <- function(track = NULL) {
     if (any(.gtrack_db_path(trackstr) %in% names(get0("GDATASET_CHROMS", envir = .misha, ifnotfound = NULL)))) {
         stop(sprintf("Track %s is in a dataset that numbers the chromosomes differently from the working database, so it cannot be written in the indexed format in this session; load that database with gsetroot() to do it there.", trackstr), call. = FALSE)
     }
+    # nor written into another loaded dataset (the session may not know its chromosome order)
+    track_db <- .gtrack_db_path(trackstr)
+    if (!is.null(track_db) && track_db != get("GROOT", envir = .misha)) {
+        stop(sprintf("Track %s is in the loaded dataset %s; convert it with gsetroot() on that database.", trackstr, track_db), call. = FALSE)
+    }
 
     trackdir <- .track_dir(trackstr)
     idx_path <- file.path(trackdir, "track.idx")
@@ -1370,6 +1375,11 @@ gtrack.2d.convert_to_indexed <- function(track = NULL, remove.old = FALSE, force
     # the session's chrom ids are not those of a dataset loaded with an order of its own
     if (any(.gtrack_db_path(trackstr) %in% names(get0("GDATASET_CHROMS", envir = .misha, ifnotfound = NULL)))) {
         stop(sprintf("Track %s is in a dataset that numbers the chromosomes differently from the working database, so it cannot be written in the indexed format in this session; load that database with gsetroot() to do it there.", trackstr), call. = FALSE)
+    }
+    # nor written into another loaded dataset (the session may not know its chromosome order)
+    track_db <- .gtrack_db_path(trackstr)
+    if (!is.null(track_db) && track_db != get("GROOT", envir = .misha)) {
+        stop(sprintf("Track %s is in the loaded dataset %s; convert it with gsetroot() on that database.", trackstr, track_db), call. = FALSE)
     }
 
     trackdir <- .track_dir(trackstr)

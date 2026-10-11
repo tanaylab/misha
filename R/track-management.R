@@ -660,6 +660,14 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
             destname
         ), call. = FALSE)
     }
+    gwd_db <- .gdb.gwd_db()
+    if (is_2d && dest_indexed && !src_indexed && !is.null(gwd_db) && !identical(gwd_db, dest_db)) {
+        # converted by its name, which the session lists only under GWD (.gdb.add_track())
+        stop(sprintf(
+            "Copy of 2D track %s with format conversion into %s is not supported from a directory of another database; gdir.cd() into %s first.",
+            destname, dest_db, file.path(dest_db, "tracks")
+        ), call. = FALSE)
+    }
     if (!is_2d) {
         # the per-chromosome files the copy would have (an indexed track splits into one per contig)
         src_files <- if (src_indexed) src_chroms else setdiff(list.files(src_dir), .TRACK_INTERNAL_FILES)

@@ -1374,6 +1374,9 @@ test_that("with a dataset loaded, tracks and interval sets in a subdirectory of 
     gintervals.attr.set("sub.isub", "note", "set")
     suppressMessages(gdataset.load(ds))
     expect_equal(gextract("tsub", iv)$tsub, c(1000, 2000))
+    # a dataset's track is not converted in this session
+    expect_error(gtrack.convert_to_indexed("tsub"), "is in the loaded dataset")
+    expect_false(file.exists(file.path(ds, "tracks", "tsub.track", "track.idx")))
 
     gdir.cd("sub")
     expect_equal(gtrack.ls(), c("tsub", "u"))

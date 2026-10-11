@@ -1,6 +1,6 @@
 # misha 5.13.2
 
-* **Behavior fix:** after `gdir.cd()` into a subdirectory, tracks and interval sets there could be looked up at the top of the database instead (by `gtrack.copy()` always, by other functions with a dataset loaded or once a track was created or copied). Reads failed or returned the top-level track of that name, and `gtrack.rm()` or `gtrack.copy(overwrite = TRUE)` could delete or replace it.
+* **Behavior fix:** after `gdir.cd()` into a subdirectory, tracks and interval sets there could be looked up at the top of the database instead (by `gtrack.copy()` and the indexed-format conversion always, by other functions with a dataset loaded or once a track was created or copied). Reads failed or returned the top-level track of that name, `gtrack.rm()`, `gtrack.copy(overwrite = TRUE)` and `gtrack.convert_to_indexed()` could delete, replace or empty it, and tracks could not be created there in an indexed database.
 
 # misha 5.13.1
 

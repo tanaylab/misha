@@ -99,15 +99,8 @@ SEXP gtrack_convert_to_indexed_format(SEXP _track, SEXP _remove_old, SEXP _envir
 
         bool remove_old = Rf_asLogical(_remove_old);
 
-        // Get track directory
-        const char *groot = get_groot(_envir);
-        if (!groot || !*groot) {
-            verror("Genome root is not defined");
-        }
-
-        string track_dir_name = track;
-        replace(track_dir_name.begin(), track_dir_name.end(), '.', '/');
-        string track_dir = string(groot) + "/tracks/" + track_dir_name + ".track";
+        // Get track directory, where every reader finds the track (also after gdir.cd())
+        string track_dir = track2path(_envir, track);
 
         // Get chromosome list
         IntervUtils iu(_envir);

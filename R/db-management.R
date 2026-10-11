@@ -251,7 +251,8 @@
         assign("GTRACKS", tracks, envir = .misha)
 
         if (is.null(db)) {
-            db <- .gdb.resolve_db_for_path(trackdir)
+            # in a subdirectory (gdir.cd()), the names under GWD are the database's holding it
+            db <- gwd_db %||% .gdb.resolve_db_for_path(trackdir)
             if (is.null(db)) {
                 db <- get("GROOT", envir = .misha)
             }
@@ -381,7 +382,8 @@
 
         assign("GINTERVS", intervals, envir = .misha)
 
-        db <- .gdb.resolve_db_for_path(fname)
+        # in a subdirectory (gdir.cd()), the names under GWD are the database's holding it
+        db <- .gdb.gwd_db() %||% .gdb.resolve_db_for_path(fname)
         if (is.null(db)) {
             db <- get("GROOT", envir = .misha)
         }
