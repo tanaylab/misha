@@ -1427,6 +1427,10 @@ test_that("with the working directory outside the working database, db = it mean
     ds <- file.path(td, "ds")
     suppressMessages(gdataset.save(ds, "d", tracks = "x"))
     ds <- normalizePath(ds)
+    # a database kept in the working database's directory
+    nested <- create_db_with_unsorted_chrom_sizes(file.path(db, "datasets", "n"))
+    gsetroot(nested)
+    gtrack.create_sparse("nt", "x", iv, c(4, 4))
     gsetroot(db)
     gtrack.create_sparse("x", "x", iv, c(1, 1))
     suppressMessages(gdataset.load(ds, force = TRUE))
@@ -1442,6 +1446,9 @@ test_that("with the working directory outside the working database, db = it mean
     suppressMessages(gdataset.unload(ds))
     expect_error(gtrack.copy("x", "z"), "in no loaded database")
     expect_error(gtrack.convert_to_indexed("x"), "is not in the working database")
+    gdir.cd(file.path(nested, "tracks"))
+    expect_error(gtrack.convert_to_indexed("nt"), "is not in the working database")
+    expect_false(file.exists(file.path(nested, "tracks", "nt.track", "track.idx")))
 
     gdir.cd(file.path(db, "tracks"))
     expect_equal(gextract("x", iv)$x, c(1, 1))

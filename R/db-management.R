@@ -151,22 +151,15 @@
 }
 
 # The database GWD is in, when GWD is a subdirectory (gdir.cd()) and not the tracks/ of the working
-# database or of a loaded dataset: the session then lists only the names under GWD (gdb.reload), in
-# this database: the one whose tracks/ holds GWD, else the one whose directory does (gdir.cd() above
-# tracks/), else NA (GWD is in no loaded database). NULL otherwise, where names are relative to each
-# database's tracks/.
+# database or of a loaded dataset: the session then lists only the names under GWD, in the database
+# whose tracks/ holds GWD (as gdb.reload maps them), or NA when none does. NULL otherwise, where names
+# are relative to each database's tracks/.
 .gdb.gwd_db <- function() {
     gwd <- get("GWD", envir = .misha)
-    groots <- c(get("GROOT", envir = .misha), get("GDATASETS", envir = .misha))
-    if (gwd %in% file.path(groots, "tracks")) {
+    if (gwd %in% file.path(c(get("GROOT", envir = .misha), get("GDATASETS", envir = .misha)), "tracks")) {
         return(NULL)
     }
-    db <- .gdb.resolve_db_for_path(gwd)
-    if (is.null(db)) {
-        roots <- groots[vapply(groots, function(g) .gpath_is_within(gwd, g), logical(1))]
-        db <- if (length(roots)) roots[which.max(nchar(roots))] else NA_character_
-    }
-    db
+    .gdb.resolve_db_for_path(gwd) %||% NA_character_
 }
 
 # The directory the names of database `db` are relative to: GWD for NULL and for .gdb.gwd_db(), its

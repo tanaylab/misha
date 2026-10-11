@@ -92,16 +92,20 @@
 #' Check that an interval set belongs to the working database (not read-only)
 #' @noRd
 .gintervals.attr_check_writable <- function(intervals.set) {
-    intervals_db <- get("GINTERVALS_DATASET", envir = .misha)
     groot <- get("GROOT", envir = .misha)
-    if (!is.null(intervals_db) && intervals.set %in% names(intervals_db)) {
-        db <- intervals_db[intervals.set]
-        if (!identical(unname(db), groot)) {
-            stop(sprintf(
-                "Intervals set %s belongs to a read-only dataset and cannot be modified",
-                intervals.set
-            ), call. = FALSE)
+    # in a subdirectory (gdir.cd()) the set is in the database holding GWD (NA: in none)
+    db <- .gdb.gwd_db()
+    if (is.null(db)) {
+        intervals_db <- get("GINTERVALS_DATASET", envir = .misha)
+        if (!is.null(intervals_db) && intervals.set %in% names(intervals_db)) {
+            db <- unname(intervals_db[intervals.set])
         }
+    }
+    if (!is.null(db) && !identical(db, groot)) {
+        stop(sprintf(
+            if (is.na(db)) "Intervals set %s is in no loaded database and cannot be modified" else "Intervals set %s belongs to a read-only dataset and cannot be modified",
+            intervals.set
+        ), call. = FALSE)
     }
 }
 
