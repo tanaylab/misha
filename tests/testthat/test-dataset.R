@@ -1471,6 +1471,23 @@ test_that("with the working directory outside the working database, db = it mean
     expect_equal(gextract("y", iv)$y, c(3, 3))
 })
 
+test_that("gtrack.create works in a loaded dataset's tracks/ when both databases are indexed", {
+    local_db_state()
+    td <- withr::local_tempdir()
+    a <- create_db_with_unsorted_chrom_sizes(file.path(td, "a"))
+    b <- create_db_with_unsorted_chrom_sizes(file.path(td, "b"))
+    for (d in c(a, b)) suppressMessages(gdb.convert_to_indexed(groot = d, force = TRUE, validate = FALSE))
+    iv <- gintervals(c("chr1", "chr2"), 0, 10)
+    gsetroot(a)
+    gtrack.create_sparse("src", "x", iv, c(1, 2))
+    suppressMessages(gdataset.load(b))
+    gdir.cd(file.path(b, "tracks"))
+    suppressMessages(gtrack.create("made", "x", "src", iterator = 10))
+    expect_true(file.exists(file.path(b, "tracks", "made.track", "track.idx")))
+    gsetroot(b)
+    expect_equal(gextract("made", iv)$made, c(1, 2))
+})
+
 test_that("gdataset.load refuses a dataset that numbers chromosomes differently and holds indexed tracks", {
     local_db_state()
     td <- withr::local_tempdir()

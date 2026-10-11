@@ -152,7 +152,8 @@
 
 # The loaded database a path is in: the one whose tracks/ holds it, the most specific one when
 # several do (comparing the directories with links resolved), or NA when none does or when a database
-# root (a directory with chrom_sizes.txt, loaded or not) lies between the path and that tracks/
+# root (a directory with chrom_sizes.txt and tracks/, loaded or not) lies between the path and that
+# tracks/
 .gdb.path_db <- function(path) {
     groots <- c(get("GROOT", envir = .misha), get("GDATASETS", envir = .misha))
     tracks_dirs <- normalizePath(file.path(groots, "tracks"), mustWork = FALSE)
@@ -169,7 +170,7 @@
     }
     best <- which(within)[which.max(nchar(tracks_dirs[within]))]
     while (nchar(path) > nchar(tracks_dirs[best])) {
-        if (file.exists(file.path(path, "chrom_sizes.txt"))) {
+        if (file.exists(file.path(path, "chrom_sizes.txt")) && dir.exists(file.path(path, "tracks"))) {
             return(NA_character_)
         }
         path <- dirname(path)
@@ -314,7 +315,7 @@
     # tracks/ of another database kept below it
     current <- dir
     while (current != tracks_dir && nchar(current) > nchar(tracks_dir)) {
-        if (current == get("GWD", envir = .misha) || file.exists(file.path(dirname(current), "chrom_sizes.txt"))) {
+        if (current == get("GWD", envir = .misha) || (basename(current) == "tracks" && file.exists(file.path(dirname(current), "chrom_sizes.txt")))) {
             break
         }
         if (dir.exists(current) && length(list.files(current, all.files = TRUE, no.. = TRUE)) == 0) {
