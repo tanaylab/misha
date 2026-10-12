@@ -1,5 +1,31 @@
 # Changelog
 
+## misha 5.13.2
+
+- **Behavior fix:** after
+  [`gdir.cd()`](https://tanaylab.github.io/misha/reference/gdir.cd.md)
+  into a subdirectory, tracks and interval sets there could be looked up
+  at the top of the database instead (by
+  [`gtrack.copy()`](https://tanaylab.github.io/misha/reference/gtrack.copy.md)
+  and the indexed-format conversion always, by other functions with a
+  dataset loaded or once a track was created or copied). Reads failed or
+  returned the top-level track of that name,
+  [`gtrack.rm()`](https://tanaylab.github.io/misha/reference/gtrack.rm.md),
+  `gtrack.copy(overwrite = TRUE)` and
+  [`gtrack.convert_to_indexed()`](https://tanaylab.github.io/misha/reference/gtrack.convert_to_indexed.md)
+  could delete, replace or empty it, and tracks could not be created
+  there in an indexed database.
+
+- **Breaking:** after
+  [`gdir.cd()`](https://tanaylab.github.io/misha/reference/gdir.cd.md)
+  into a subdirectory, `db = <working database>` in
+  [`gtrack.rm()`](https://tanaylab.github.io/misha/reference/gtrack.rm.md),
+  [`gintervals.rm()`](https://tanaylab.github.io/misha/reference/gintervals.rm.md)
+  and
+  [`gtrack.copy()`](https://tanaylab.github.io/misha/reference/gtrack.copy.md)
+  means the names listed there, as `db = NULL` does, not the top of its
+  `tracks/`.
+
 ## misha 5.13.1
 
 - **Behavior fix:**

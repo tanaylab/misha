@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">misha</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.13.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.13.2</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -36,9 +36,14 @@
   <main id="main" class="col-md-9"><div class="page-header">
 
       <h1>Changelog</h1>
-      <small>Source: <a href="https://github.com/tanaylab/misha/blob/v5.13.1/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
+      <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="5.13.2" id="misha-5132">misha 5.13.2<a class="anchor" aria-label="anchor" href="#misha-5132"></a></h2>
+<ul><li><p><strong>Behavior fix:</strong> after <code><a href="../reference/gdir.cd.html">gdir.cd()</a></code> into a subdirectory, tracks and interval sets there could be looked up at the top of the database instead (by <code><a href="../reference/gtrack.copy.html">gtrack.copy()</a></code> and the indexed-format conversion always, by other functions with a dataset loaded or once a track was created or copied). Reads failed or returned the top-level track of that name, <code><a href="../reference/gtrack.rm.html">gtrack.rm()</a></code>, <code>gtrack.copy(overwrite = TRUE)</code> and <code><a href="../reference/gtrack.convert_to_indexed.html">gtrack.convert_to_indexed()</a></code> could delete, replace or empty it, and tracks could not be created there in an indexed database.</p></li>
+<li><p><strong>Breaking:</strong> after <code><a href="../reference/gdir.cd.html">gdir.cd()</a></code> into a subdirectory, <code>db = &lt;working database&gt;</code> in <code><a href="../reference/gtrack.rm.html">gtrack.rm()</a></code>, <code><a href="../reference/gintervals.rm.html">gintervals.rm()</a></code> and <code><a href="../reference/gtrack.copy.html">gtrack.copy()</a></code> means the names listed there, as <code>db = NULL</code> does, not the top of its <code>tracks/</code>.</p></li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="5.13.1" id="misha-5131">misha 5.13.1<a class="anchor" aria-label="anchor" href="#misha-5131"></a></h2>
 <ul><li><p><strong>Behavior fix:</strong> <code><a href="../reference/gdb.convert_to_indexed.html">gdb.convert_to_indexed()</a></code>, and <code><a href="../reference/gtrack.copy.html">gtrack.copy()</a></code> of an indexed track, could put data on the wrong chromosomes in a per-chromosome database whose <code>chrom_sizes.txt</code> is unsorted and lacks “chr”. Recreate indexed tracks and interval sets made that way.</p></li>
