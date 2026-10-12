@@ -1314,9 +1314,10 @@ gintervals.convert_to_indexed <- function(set.name = NULL, remove.old = FALSE, f
         return(invisible(NULL))
     }
 
-    # in a subdirectory (gdir.cd()), only a set of the working database (the session may not know the
-    # chromosome order of another, e.g. one reached through a link)
-    if (!is.null(.gdb.gwd_db()) && !identical(.gdb.path_db(intervset_path), get("GROOT", envir = .misha))) {
+    # in a subdirectory (gdir.cd()), only a set of the database the session lists the names in (the
+    # session may not know the chromosome order of another, e.g. one reached through a link)
+    gwd_db <- .gdb.gwd_db()
+    if (!is.null(gwd_db) && (is.na(gwd_db) || !identical(.gdb.path_db(intervset_path), gwd_db))) {
         stop(sprintf("Interval set %s is not in the working database; convert it with gsetroot() on the database it is in.", set.name), call. = FALSE)
     }
 
@@ -1513,9 +1514,10 @@ gintervals.2d.convert_to_indexed <- function(set.name = NULL, remove.old = FALSE
         return(invisible(NULL))
     }
 
-    # in a subdirectory (gdir.cd()), only a set of the working database (the session may not know the
-    # chromosome order of another, e.g. one reached through a link)
-    if (!is.null(.gdb.gwd_db()) && !identical(.gdb.path_db(intervset_path), get("GROOT", envir = .misha))) {
+    # in a subdirectory (gdir.cd()), only a set of the database the session lists the names in (the
+    # session may not know the chromosome order of another, e.g. one reached through a link)
+    gwd_db <- .gdb.gwd_db()
+    if (!is.null(gwd_db) && (is.na(gwd_db) || !identical(.gdb.path_db(intervset_path), gwd_db))) {
         stop(sprintf("Interval set %s is not in the working database; convert it with gsetroot() on the database it is in.", set.name), call. = FALSE)
     }
 

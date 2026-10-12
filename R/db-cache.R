@@ -433,10 +433,11 @@ gdb.reload <- function(rescan = TRUE) {
     }
 
     # In a subdirectory (gdir.cd()), a track of an indexed working database is written in the session's
-    # chromosome ids, so only in that database: not through a link or into a database kept below GWD
-    # (.gdb.path_db()), whose order the session may not know
-    if (!is.null(.gdb.gwd_db()) && .gdb.is_indexed() &&
-        !identical(.gdb.path_db(.track_dir(track)), get("GROOT", envir = .misha))) {
+    # chromosome ids, so only in the database the session lists the names in: not through a link or
+    # into a database kept below GWD (.gdb.path_db()), whose order the session may not know
+    gwd_db <- .gdb.gwd_db()
+    if (!is.null(gwd_db) && .gdb.is_indexed() &&
+        (is.na(gwd_db) || !identical(.gdb.path_db(.track_dir(track)), gwd_db))) {
         stop(sprintf("Track %s would be created outside the working database; create it in a session of the database it belongs to.", track), call. = FALSE)
     }
 
