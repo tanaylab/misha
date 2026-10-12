@@ -1167,6 +1167,13 @@ gtrack.convert_to_indexed <- function(track = NULL) {
         return(invisible(0))
     }
 
+    # Converted only in the working database, not in another loaded dataset or, after gdir.cd(), in a
+    # directory of none (the session may not know their chromosome order)
+    track_db <- if (is.null(.gdb.gwd_db())) .gtrack_db_path(trackstr) %||% get("GROOT", envir = .misha) else .gdb.path_db(trackdir)
+    if (!identical(track_db, get("GROOT", envir = .misha))) {
+        stop(sprintf("Track %s is not in the working database; convert it with gsetroot() on the database it is in.", trackstr), call. = FALSE)
+    }
+
     # Get track info to determine type
     info <- gtrack.info(track)
     track_type <- info$type
@@ -1307,6 +1314,12 @@ gintervals.convert_to_indexed <- function(set.name = NULL, remove.old = FALSE, f
         return(invisible(NULL))
     }
 
+    # in a subdirectory (gdir.cd()), only a set of a loaded database that uses the session's chromosome
+    # ids (.gdb.same_order()), not one reached through a link or of a dataset of unknown order
+    if (!is.null(.gdb.gwd_db()) && !.gdb.same_order(.gdb.path_db(intervset_path))) {
+        stop(sprintf("Interval set %s is in a database that may number the chromosomes differently from this session; convert it with gsetroot() on that database.", set.name), call. = FALSE)
+    }
+
     # Call C++ function to perform the conversion
     tryCatch(
         {
@@ -1380,6 +1393,13 @@ gtrack.2d.convert_to_indexed <- function(track = NULL, remove.old = FALSE, force
     if (file.exists(idx_path) && !force) {
         message(sprintf("Track %s is already in indexed format.", trackstr))
         return(invisible(0))
+    }
+
+    # Converted only in the working database, not in another loaded dataset or, after gdir.cd(), in a
+    # directory of none (the session may not know their chromosome order)
+    track_db <- if (is.null(.gdb.gwd_db())) .gtrack_db_path(trackstr) %||% get("GROOT", envir = .misha) else .gdb.path_db(trackdir)
+    if (!identical(track_db, get("GROOT", envir = .misha))) {
+        stop(sprintf("Track %s is not in the working database; convert it with gsetroot() on the database it is in.", trackstr), call. = FALSE)
     }
 
     # Get track info to determine type
@@ -1491,6 +1511,12 @@ gintervals.2d.convert_to_indexed <- function(set.name = NULL, remove.old = FALSE
     if (file.exists(idx_path) && !force) {
         message(sprintf("2D interval set %s is already in indexed format. Use force=TRUE to re-convert.", set.name))
         return(invisible(NULL))
+    }
+
+    # in a subdirectory (gdir.cd()), only a set of a loaded database that uses the session's chromosome
+    # ids (.gdb.same_order()), not one reached through a link or of a dataset of unknown order
+    if (!is.null(.gdb.gwd_db()) && !.gdb.same_order(.gdb.path_db(intervset_path))) {
+        stop(sprintf("Interval set %s is in a database that may number the chromosomes differently from this session; convert it with gsetroot() on that database.", set.name), call. = FALSE)
     }
 
     # Call C++ function to perform the conversion

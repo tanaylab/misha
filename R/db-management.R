@@ -53,7 +53,12 @@
 # Returns character vector of database paths, or NA_character_ if not found.
 .gdb.find_resource_dbs <- function(name, extension, all_dbs) {
     rel_path <- paste0(gsub("\\.", "/", name), extension)
-    resource_paths <- file.path(all_dbs, "tracks", rel_path)
+    # in a subdirectory (gdir.cd()), a name is the one under GWD, in the database holding it
+    gwd_db <- .gdb.gwd_db()
+    if (!is.null(gwd_db)) {
+        all_dbs <- intersect(all_dbs, gwd_db)
+    }
+    resource_paths <- file.path(vapply(all_dbs, .gdb.names_dir, ""), rel_path)
     dbs <- all_dbs[file.exists(resource_paths)]
     if (length(dbs) == 0) NA_character_ else dbs
 }
@@ -145,6 +150,66 @@
     }
 }
 
+# The loaded database a path is in: the one whose tracks/ holds it, the most specific one when
+# several do (comparing the directories with links resolved), or NA when none does or when a database
+# root (a directory with chrom_sizes.txt and tracks/, loaded or not) lies between the path and that
+# tracks/
+.gdb.path_db <- function(path) {
+    groots <- c(get("GROOT", envir = .misha), get("GDATASETS", envir = .misha))
+    tracks_dirs <- normalizePath(file.path(groots, "tracks"), mustWork = FALSE)
+    # links are followed in the part of the path that exists (a new track's directory does not yet)
+    rest <- character(0)
+    while (!file.exists(path) && dirname(path) != path) {
+        rest <- c(basename(path), rest)
+        path <- dirname(path)
+    }
+    path <- do.call(file.path, as.list(c(normalizePath(path, mustWork = FALSE), rest)))
+    within <- path == tracks_dirs | startsWith(path, paste0(tracks_dirs, "/"))
+    if (!any(within)) {
+        return(NA_character_)
+    }
+    best <- which(within)[which.max(nchar(tracks_dirs[within]))]
+    while (nchar(path) > nchar(tracks_dirs[best])) {
+        if (file.exists(file.path(path, "chrom_sizes.txt")) && dir.exists(file.path(path, "tracks"))) {
+            return(NA_character_)
+        }
+        path <- dirname(path)
+    }
+    groots[best]
+}
+
+# Whether the session's chromosome ids are those of loaded database `db`: the working database's
+# are, and a dataset's only when its order can be read now and is the same (as gdataset.load()
+# compares them); NA or an unreadable order is not
+.gdb.same_order <- function(db) {
+    if (is.na(db)) {
+        return(FALSE)
+    }
+    if (identical(db, get("GROOT", envir = .misha))) {
+        return(TRUE)
+    }
+    chroms <- tryCatch(suppressWarnings(.gdb.chrom_names_at(db, from_disk = TRUE)), error = function(e) NULL)
+    !is.null(chroms) && identical(sub("^chr", "", chroms), sub("^chr", "", as.character(get("ALLGENOME", envir = .misha)[[1]]$chrom)))
+}
+
+# The database GWD is in, when GWD is a subdirectory (gdir.cd()) and not the tracks/ of the working
+# database or of a loaded dataset: the session then lists only the names under GWD (gdb.reload), in
+# this database (.gdb.path_db(), NA: in none). NULL otherwise, where names are relative to each
+# database's tracks/.
+.gdb.gwd_db <- function() {
+    gwd <- get("GWD", envir = .misha)
+    if (gwd %in% file.path(c(get("GROOT", envir = .misha), get("GDATASETS", envir = .misha)), "tracks")) {
+        return(NULL)
+    }
+    .gdb.path_db(gwd)
+}
+
+# The directory the names of database `db` are relative to: GWD for NULL and for .gdb.gwd_db(), its
+# tracks/ otherwise
+.gdb.names_dir <- function(db) {
+    if (is.null(db) || identical(db, .gdb.gwd_db())) get("GWD", envir = .misha) else file.path(db, "tracks")
+}
+
 .gdb.resolve_track_db <- function(track) {
     groot <- get("GROOT", envir = .misha)
     gdatasets <- get("GDATASETS", envir = .misha)
@@ -155,14 +220,9 @@
         return(NULL)
     }
 
-    rel_path <- paste0(gsub("\\.", "/", track), ".track")
     # Working db first (wins), then datasets in load order
-    for (g in groots) {
-        if (file.exists(file.path(g, "tracks", rel_path))) {
-            return(g)
-        }
-    }
-    NULL
+    db <- .gdb.find_resource_dbs(track, ".track", groots)[1]
+    if (is.na(db)) NULL else db
 }
 
 .gdb.ensure_dataset_maps <- function() {
@@ -197,12 +257,16 @@
 .gdb.add_track <- function(track, db = NULL) {
     .gcheckroot()
 
-    # Get the track directory, using db if specified
-    if (!is.null(db)) {
-        trackdir <- file.path(db, "tracks", paste0(gsub("\\.", "/", track), ".track"))
-    } else {
-        trackdir <- .track_dir(track)
+    # In a subdirectory (gdir.cd()) the session lists the names under GWD only: a track at the top of
+    # another database's tracks/ is listed once GWD is back there (gdir.cd() rescans)
+    gwd_db <- .gdb.gwd_db()
+    if (!is.null(db) && !is.null(gwd_db) && !identical(db, gwd_db)) {
+        .gdb.cache_mark_dirty(db)
+        return(invisible())
     }
+
+    # Get the track directory, using db if specified
+    trackdir <- .track_dir(track, db)
 
     if (file.exists(trackdir)) {
         tracks <- sort(c(get("GTRACKS", envir = .misha), track))
@@ -228,7 +292,8 @@
         assign("GTRACKS", tracks, envir = .misha)
 
         if (is.null(db)) {
-            db <- .gdb.resolve_db_for_path(trackdir)
+            # in a subdirectory (gdir.cd()), the names under GWD are the database's holding it
+            db <- if (!is.null(gwd_db) && !is.na(gwd_db)) gwd_db else .gdb.resolve_db_for_path(trackdir)
             if (is.null(db)) {
                 db <- get("GROOT", envir = .misha)
             }
@@ -260,9 +325,13 @@
         tracks_dir <- get("GWD", envir = .misha)
     }
 
-    # Walk up from dir, removing empty directories until we hit tracks_dir
+    # Walk up from dir, removing empty directories until we hit tracks_dir, and never GWD or the
+    # tracks/ of another database kept below it
     current <- dir
     while (current != tracks_dir && nchar(current) > nchar(tracks_dir)) {
+        if (current == get("GWD", envir = .misha) || (basename(current) == "tracks" && file.exists(file.path(dirname(current), "chrom_sizes.txt")))) {
+            break
+        }
         if (dir.exists(current) && length(list.files(current, all.files = TRUE, no.. = TRUE)) == 0) {
             unlink(current, recursive = TRUE)
             current <- dirname(current)
@@ -358,7 +427,9 @@
 
         assign("GINTERVS", intervals, envir = .misha)
 
-        db <- .gdb.resolve_db_for_path(fname)
+        # in a subdirectory (gdir.cd()), the names under GWD are the database's holding it
+        gwd_db <- .gdb.gwd_db()
+        db <- if (!is.null(gwd_db) && !is.na(gwd_db)) gwd_db else .gdb.resolve_db_for_path(fname)
         if (is.null(db)) {
             db <- get("GROOT", envir = .misha)
         }

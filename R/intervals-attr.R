@@ -5,23 +5,15 @@
 #' Resolve path to .iattr file for an interval set
 #' @noRd
 .gintervals.attr_path <- function(intervals.set) {
-    # Look up which database this interval set belongs to
-    intervals_db <- get("GINTERVALS_DATASET", envir = .misha)
-    if (!is.null(intervals_db) && intervals.set %in% names(intervals_db)) {
-        db_root <- intervals_db[intervals.set]
-    } else {
-        db_root <- get("GROOT", envir = .misha)
-    }
-
-    path <- gsub("\\.", "/", intervals.set)
-    interv_path <- file.path(db_root, "tracks", paste0(path, ".interv"))
+    # in the database this interval set belongs to, or under the working directory
+    interv_path <- .intervals_dir(intervals.set)
 
     if (dir.exists(interv_path)) {
         # Big set: store inside the directory
         file.path(interv_path, ".iattr")
     } else {
         # Small set: replace .interv with .iattr
-        file.path(db_root, "tracks", paste0(path, ".iattr"))
+        sub("\\.interv$", ".iattr", interv_path)
     }
 }
 
@@ -100,16 +92,20 @@
 #' Check that an interval set belongs to the working database (not read-only)
 #' @noRd
 .gintervals.attr_check_writable <- function(intervals.set) {
-    intervals_db <- get("GINTERVALS_DATASET", envir = .misha)
     groot <- get("GROOT", envir = .misha)
-    if (!is.null(intervals_db) && intervals.set %in% names(intervals_db)) {
-        db <- intervals_db[intervals.set]
-        if (!identical(unname(db), groot)) {
-            stop(sprintf(
-                "Intervals set %s belongs to a read-only dataset and cannot be modified",
-                intervals.set
-            ), call. = FALSE)
+    # in a subdirectory (gdir.cd()) the set is in the database holding GWD (NA: in none)
+    db <- .gdb.gwd_db()
+    if (is.null(db)) {
+        intervals_db <- get("GINTERVALS_DATASET", envir = .misha)
+        if (!is.null(intervals_db) && intervals.set %in% names(intervals_db)) {
+            db <- unname(intervals_db[intervals.set])
         }
+    }
+    if (!is.null(db) && !identical(db, groot)) {
+        stop(sprintf(
+            if (is.na(db)) "Intervals set %s is in no loaded database and cannot be modified" else "Intervals set %s belongs to a read-only dataset and cannot be modified",
+            intervals.set
+        ), call. = FALSE)
     }
 }
 

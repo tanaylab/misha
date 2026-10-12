@@ -73,9 +73,9 @@ gdb.reload <- function(rescan = TRUE) {
             all_tracks <- res[[1]]
             all_intervals <- res[[2]]
             # Determine which database this GWD belongs to
-            groot_idx <- which(vapply(root_tracks_dirs, function(root) .gpath_is_within(gwd, root), logical(1)))[1]
-            if (!is.na(groot_idx)) {
-                groot <- groots[groot_idx]
+            gwd_db <- .gdb.gwd_db()
+            if (!is.na(gwd_db)) {
+                groot <- gwd_db
                 if (length(all_tracks)) {
                     track_db[all_tracks] <- rep(groot, length(all_tracks))
                     track_dbs[all_tracks] <- rep(list(groot), length(all_tracks))
@@ -312,20 +312,11 @@ gdb.reload <- function(rescan = TRUE) {
 # restoring the original GWD on exit. This is necessary because C++ functions
 # use GWD to resolve track paths.
 .with_track_context <- function(trackname, fn) {
-    db_path <- .gtrack_db_path(trackname)
-    if (is.null(db_path)) {
+    # in a subdirectory (gdir.cd()) every listed name is under GWD
+    if (!is.null(.gdb.gwd_db())) {
         return(fn())
     }
-
-    correct_gwd <- file.path(db_path, "tracks")
-    current_gwd <- get("GWD", envir = .misha)
-    if (correct_gwd == current_gwd) {
-        return(fn())
-    }
-
-    assign("GWD", correct_gwd, envir = .misha)
-    on.exit(assign("GWD", current_gwd, envir = .misha), add = TRUE)
-    fn()
+    .with_db_context(.gtrack_db_path(trackname), fn)
 }
 
 # Get the database path for a track (returns NULL if not found)
@@ -421,8 +412,9 @@ gdb.reload <- function(rescan = TRUE) {
     tracks <- get("GTRACKS", envir = .misha)
     if (!is.null(tracks) && track %in% tracks) {
         gwd <- get("GWD", envir = .misha)
-        target_db <- .gdb.resolve_db_for_path(gwd)
-        if (is.null(target_db)) {
+        # in a subdirectory (gdir.cd()), the database the session lists the names in
+        target_db <- .gdb.gwd_db() %||% .gdb.resolve_db_for_path(gwd)
+        if (is.null(target_db) || is.na(target_db)) {
             target_db <- get("GROOT", envir = .misha)
         }
 
@@ -438,6 +430,13 @@ gdb.reload <- function(rescan = TRUE) {
 
         track_db <- track_db[names(track_db) != track]
         assign("GTRACK_DATASET", track_db, envir = .misha)
+    }
+
+    # In a subdirectory (gdir.cd()), a track of an indexed working database is written in the session's
+    # chromosome ids, so only into a loaded database that uses them (.gdb.same_order()): not through a
+    # link or into a database kept below GWD (.gdb.path_db()), nor into a dataset of unknown order
+    if (!is.null(.gdb.gwd_db()) && .gdb.is_indexed() && !.gdb.same_order(.gdb.path_db(.track_dir(track)))) {
+        stop(sprintf("Track %s would be written into a database that may number the chromosomes differently from this session; create it in a session of that database.", track), call. = FALSE)
     }
 
     path <- gsub(".", "/", track, fixed = TRUE)
@@ -466,20 +465,19 @@ gdb.reload <- function(rescan = TRUE) {
     }
 }
 
-# Get the directory path for a track, resolving to the correct database.
-# Falls back to current GWD for new tracks not yet in any database.
-.track_dir <- function(trackname) {
-    db_path <- .gtrack_db_path(trackname)
-    base <- if (!is.null(db_path)) file.path(db_path, "tracks") else get("GWD", envir = .misha)
-    file.path(base, paste0(gsub("\\.", "/", trackname), ".track"))
+# Get the directory path for a track, in database `db` (default: the one it is listed in). Names are
+# relative to the database's tracks/, or to GWD when that is a subdirectory of it (gdir.cd()), where
+# the session lists only the names under GWD (.gdb.gwd_db()). Falls back to GWD for new tracks not
+# yet in any database.
+.track_dir <- function(trackname, db = NULL) {
+    if (is.null(db) && is.null(.gdb.gwd_db())) db <- .gtrack_db_path(trackname)
+    file.path(.gdb.names_dir(db), paste0(gsub("\\.", "/", trackname), ".track"))
 }
 
-# Get the directory path for an intervals set, resolving to the correct database.
-# Falls back to current GWD for new intervals not yet in any database.
-.intervals_dir <- function(intervalsname) {
-    db_path <- .gintervals_db_path(intervalsname)
-    base <- if (!is.null(db_path)) file.path(db_path, "tracks") else get("GWD", envir = .misha)
-    file.path(base, paste0(gsub("\\.", "/", intervalsname), ".interv"))
+# Get the directory path for an intervals set, as .track_dir()
+.intervals_dir <- function(intervalsname, db = NULL) {
+    if (is.null(db) && is.null(.gdb.gwd_db())) db <- .gintervals_db_path(intervalsname)
+    file.path(.gdb.names_dir(db), paste0(gsub("\\.", "/", intervalsname), ".interv"))
 }
 
 .gdb.cache_path <- function(groot = NULL) {
@@ -728,11 +726,12 @@ gdb.mark_cache_dirty <- function() {
 # and follow the sorted names, not the chrom_sizes.txt order. The loaded database and its
 # loaded datasets (gdataset.load() requires the same chrom_sizes.txt) take the order gsetroot()
 # gave, held in ALLGENOME, rather than probe seq/: a dataset's seq/ link may be gone or empty.
-# Any other database is read from disk, without loading it; one whose seq/ holds no sequence
-# cannot show which order its names take, and is an error rather than a guess.
-.gdb.chrom_names_at <- function(groot) {
+# Any other database is read from disk, without loading it, and so is a loaded one with from_disk =
+# TRUE (the order its own files use); one whose seq/ holds no sequence cannot show which order its
+# names take, and is an error rather than a guess.
+.gdb.chrom_names_at <- function(groot, from_disk = FALSE) {
     loaded <- c(get0("GROOT", envir = .misha, ifnotfound = NULL), get0("GDATASETS", envir = .misha, ifnotfound = NULL))
-    if (length(loaded) && normalizePath(groot, mustWork = FALSE) %in% normalizePath(loaded, mustWork = FALSE)) {
+    if (!from_disk && length(loaded) && normalizePath(groot, mustWork = FALSE) %in% normalizePath(loaded, mustWork = FALSE)) {
         # a dataset loaded with an order of its own (gdataset.load()) keeps it
         own <- get0("GDATASET_CHROMS", envir = .misha, ifnotfound = NULL)[[normalizePath(groot, mustWork = FALSE)]]
         return(if (is.null(own)) as.character(get("ALLGENOME", envir = .misha)[[1]]$chrom) else own)

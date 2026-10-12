@@ -388,9 +388,10 @@ gtrack.mv <- function(src = NULL, dest = NULL) {
     src_dir <- .track_dir(srcname)
     src_db <- .gtrack_db_path(srcname)
 
-    # Destination must be in the same database
-    dest_base <- if (!is.null(src_db)) file.path(src_db, "tracks") else get("GWD", envir = .misha)
-    dest_dir <- file.path(dest_base, paste0(gsub("\\.", "/", destname), ".track"))
+    # Destination must be in the same database, by a name relative to where the source's is (GWD in a
+    # subdirectory)
+    if (!is.null(.gdb.gwd_db())) src_db <- NULL
+    dest_dir <- .track_dir(destname, src_db)
 
     # Check write permission
     .gcheck_write_permission(src_dir, "rename track from")
@@ -536,6 +537,14 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
 # Otherwise validate that the explicit path is loaded.
 .gtrack.copy.resolve_dest_db <- function(db) {
     if (is.null(db)) {
+        # in a subdirectory (gdir.cd()), the database whose names the session lists
+        gwd_db <- .gdb.gwd_db()
+        if (!is.null(gwd_db)) {
+            if (is.na(gwd_db)) {
+                stop("The working directory is in no loaded database; give the destination with db.", call. = FALSE)
+            }
+            return(gwd_db)
+        }
         gwd <- get("GWD", envir = .misha)
         groot <- get("GROOT", envir = .misha)
         gdatasets <- get("GDATASETS", envir = .misha)
@@ -584,7 +593,7 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
     if (is.null(src_db)) src_db <- get("GROOT", envir = .misha)
 
     src_dir <- .track_dir(srcname)
-    dest_dir <- file.path(dest_db, "tracks", paste0(gsub("\\.", "/", destname), ".track"))
+    dest_dir <- .track_dir(destname, dest_db)
 
     # the same name in the same database, or the same directory by two names (a linked directory,
     # another path to the database)
@@ -659,6 +668,18 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
         stop(sprintf(
             "Cross-db copy of 2D track %s with format conversion to a non-active dataset is not yet supported.",
             destname
+        ), call. = FALSE)
+    }
+    gwd_db <- .gdb.gwd_db()
+    if (!is.null(gwd_db) && identical(gwd_db, dest_db) && !identical(.gdb.path_db(dest_dir), dest_db)) {
+        # in a subdirectory (gdir.cd()), a name that leads into another database kept below it
+        stop(sprintf("Track %s would be written inside another database under %s.", destname, get("GWD", envir = .misha)), call. = FALSE)
+    }
+    if (is_2d && dest_indexed && !src_indexed && !is.null(gwd_db) && !identical(gwd_db, dest_db)) {
+        # converted by its name, which the session lists only under GWD (.gdb.add_track())
+        stop(sprintf(
+            "Copy of 2D track %s with format conversion into %s is not supported from a directory of another database; gdir.cd() into %s first.",
+            destname, dest_db, file.path(dest_db, "tracks")
         ), call. = FALSE)
     }
     if (!is_2d) {
@@ -876,10 +897,10 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
     NULL
 }
 
-# Temporarily switch GWD to the given db's tracks/ for the duration of fn().
-# Mirrors .with_track_context (R/db-cache.R:297) but for an explicit dest db path.
+# Temporarily switch GWD to where the given db's names are (.gdb.names_dir()) for the duration of
+# fn(). NULL: GWD.
 .with_db_context <- function(dest_db, fn) {
-    correct_gwd <- file.path(dest_db, "tracks")
+    correct_gwd <- .gdb.names_dir(dest_db)
     current_gwd <- get("GWD", envir = .misha)
     if (correct_gwd == current_gwd) {
         return(fn())
@@ -934,10 +955,8 @@ gtrack.rm <- function(track = NULL, force = FALSE, db = NULL) {
         if (!(db %in% groots)) {
             stop(sprintf("Database %s is not connected", db), call. = FALSE)
         }
-        dirname <- file.path(db, "tracks", paste0(gsub("\\.", "/", trackname), ".track"))
-    } else {
-        dirname <- .track_dir(trackname)
     }
+    dirname <- .track_dir(trackname, db)
 
     # check whether track appears among GTRACKS
     if (!(trackname %in% get("GTRACKS", envir = .misha))) {

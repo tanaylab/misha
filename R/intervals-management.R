@@ -291,7 +291,7 @@ gintervals.rm <- function(intervals.set = NULL, force = FALSE, db = NULL) {
         if (!(db %in% groots)) {
             stop(sprintf("Database %s is not connected", db), call. = FALSE)
         }
-        fname <- file.path(db, "tracks", paste0(gsub("\\.", "/", intervals.set), ".interv"))
+        fname <- .intervals_dir(intervals.set, db)
     } else {
         fname <- sprintf("%s.interv", paste(get("GWD", envir = .misha), gsub("\\.", "/", intervals.set), sep = "/"))
     }

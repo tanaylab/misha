@@ -196,6 +196,11 @@ gtrack.modify <- function(track = NULL, expr = NULL, intervals = NULL) {
     # a bad expression or a full disk leaves it intact instead of durably
     # half-old/half-new under its real name.
     final_dir <- .track_dir(trackstr)
+    # in a subdirectory (gdir.cd()), not an indexed track of no loaded database (reached through a link
+    # or in a database kept below GWD), whose chromosome order the session may not know
+    if (!is.null(.gdb.gwd_db()) && file.exists(file.path(final_dir, "track.idx")) && is.na(.gdb.path_db(final_dir))) {
+        stop(sprintf("Track %s is in no loaded database; modify it in a session of the database it is in.", trackstr), call. = FALSE)
+    }
     parent <- dirname(final_dir)
     if (!dir.exists(parent)) {
         stop(sprintf("Parent directory %s does not exist", parent), call. = FALSE)

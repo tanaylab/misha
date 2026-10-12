@@ -910,12 +910,24 @@ const char *rdb::get_glib_dir(SEXP envir)
 }
 
 // Look up a name in a database mapping (named character vector: name -> db_path).
-// Returns db_path/tracks if found, empty string otherwise.
-static string lookup_db_path(SEXP db_mapping, const string &name)
+// Returns db_path/tracks if found, empty string otherwise. When GWD is a subdirectory (gdir.cd()),
+// not the tracks/ of GROOT or of a loaded dataset, the session lists the names under GWD
+// (.gdb.gwd_db() in R), and the empty string sends the caller there.
+static string lookup_db_path(SEXP envir, SEXP db_mapping, const string &name)
 {
     if (db_mapping == R_NilValue || Rf_isNull(db_mapping) || db_mapping == R_UnboundValue) {
         return "";
     }
+
+    string gwd(get_gwd(envir));
+    bool gwd_is_tracks = gwd == string(get_groot(envir)) + "/tracks";
+    SEXP gdatasets = find_in_misha(envir, "GDATASETS");
+    if (Rf_isString(gdatasets)) {
+        for (int i = 0; i < Rf_length(gdatasets) && !gwd_is_tracks; i++)
+            gwd_is_tracks = gwd == string(CHAR(STRING_ELT(gdatasets, i))) + "/tracks";
+    }
+    if (!gwd_is_tracks)
+        return "";
 
     SEXP names = Rf_getAttrib(db_mapping, R_NamesSymbol);
     if (names == R_NilValue) {
@@ -962,7 +974,7 @@ string rdb::track2path(SEXP envir, const string &trackname)
 	// non-allocating, but pinning the SEXP closes a theoretical GC hole
 	// of the same family as the chromkey cache fix.
 	SEXP gtrack_dataset = PROTECT(find_in_misha(envir, "GTRACK_DATASET"));
-	string db_tracks_dir = lookup_db_path(gtrack_dataset, trackname);
+	string db_tracks_dir = lookup_db_path(envir, gtrack_dataset, trackname);
 	UNPROTECT(1);
 	if (db_tracks_dir.empty()) {
 		db_tracks_dir = get_gwd(envir);
@@ -982,7 +994,7 @@ string rdb::interv2path(SEXP envir, const string &intervname)
 	}
 
 	SEXP gintervals_dataset = PROTECT(find_in_misha(envir, "GINTERVALS_DATASET"));
-	string db_tracks_dir = lookup_db_path(gintervals_dataset, intervname);
+	string db_tracks_dir = lookup_db_path(envir, gintervals_dataset, intervname);
 	UNPROTECT(1);
 	if (db_tracks_dir.empty()) {
 		db_tracks_dir = get_gwd(envir);
