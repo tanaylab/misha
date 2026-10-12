@@ -432,6 +432,14 @@ gdb.reload <- function(rescan = TRUE) {
         assign("GTRACK_DATASET", track_db, envir = .misha)
     }
 
+    # In a subdirectory (gdir.cd()), a track of an indexed working database is written in the session's
+    # chromosome ids, so only in that database: not through a link or into a database kept below GWD
+    # (.gdb.path_db()), whose order the session may not know
+    if (!is.null(.gdb.gwd_db()) && .gdb.is_indexed() &&
+        !identical(.gdb.path_db(.track_dir(track)), get("GROOT", envir = .misha))) {
+        stop(sprintf("Track %s would be created outside the working database; create it in a session of the database it belongs to.", track), call. = FALSE)
+    }
+
     path <- gsub(".", "/", track, fixed = TRUE)
     dir <- dirname(path)
     fulldir <- paste(get("GWD", envir = .misha), dir, sep = "/")

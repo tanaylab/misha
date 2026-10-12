@@ -722,6 +722,11 @@ test_that("in a subdirectory of an indexed database, tracks are converted there 
     expect_equal(gextract("sig", iv)$sig, c(2, 2))
     expect_equal(gextract("p2", gintervals.2d("chr1", 0, 10, "chr1", 0, 10))$p2, 7)
     expect_equal(tools::md5sum(top_files), top_md5)
+    # nor created, already indexed, through a link into another database
+    other <- create_db_with_unsorted_chrom_sizes(file.path(td, "other"))
+    expect_true(file.symlink(file.path(other, "tracks"), file.path(db, "tracks", "sub", "lnk")))
+    expect_error(gtrack.create("lnk.cr", "x", "sig", iterator = 10), "would be created outside the working database")
+    expect_length(list.files(file.path(other, "tracks")), 0)
     gdir.cd("..")
     expect_equal(gextract("sig", iv)$sig, c(1, 11))
     expect_equal(gextract("p2", gintervals.2d("chr1", 0, 10, "chr1", 0, 10))$p2, 9)
