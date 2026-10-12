@@ -178,6 +178,20 @@
     groots[best]
 }
 
+# Whether the session's chromosome ids are those of loaded database `db`: the working database's
+# are, and a dataset's only when its order can be read now and is the same (as gdataset.load()
+# compares them); NA or an unreadable order is not
+.gdb.same_order <- function(db) {
+    if (is.na(db)) {
+        return(FALSE)
+    }
+    if (identical(db, get("GROOT", envir = .misha))) {
+        return(TRUE)
+    }
+    chroms <- tryCatch(suppressWarnings(.gdb.chrom_names_at(db, from_disk = TRUE)), error = function(e) NULL)
+    !is.null(chroms) && identical(sub("^chr", "", chroms), sub("^chr", "", as.character(get("ALLGENOME", envir = .misha)[[1]]$chrom)))
+}
+
 # The database GWD is in, when GWD is a subdirectory (gdir.cd()) and not the tracks/ of the working
 # database or of a loaded dataset: the session then lists only the names under GWD (gdb.reload), in
 # this database (.gdb.path_db(), NA: in none). NULL otherwise, where names are relative to each

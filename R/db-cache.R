@@ -433,12 +433,10 @@ gdb.reload <- function(rescan = TRUE) {
     }
 
     # In a subdirectory (gdir.cd()), a track of an indexed working database is written in the session's
-    # chromosome ids, so only in the database the session lists the names in: not through a link or
-    # into a database kept below GWD (.gdb.path_db()), whose order the session may not know
-    gwd_db <- .gdb.gwd_db()
-    if (!is.null(gwd_db) && .gdb.is_indexed() &&
-        (is.na(gwd_db) || !identical(.gdb.path_db(.track_dir(track)), gwd_db))) {
-        stop(sprintf("Track %s would be created outside the working database; create it in a session of the database it belongs to.", track), call. = FALSE)
+    # chromosome ids, so only into a loaded database that uses them (.gdb.same_order()): not through a
+    # link or into a database kept below GWD (.gdb.path_db()), nor into a dataset of unknown order
+    if (!is.null(.gdb.gwd_db()) && .gdb.is_indexed() && !.gdb.same_order(.gdb.path_db(.track_dir(track)))) {
+        stop(sprintf("Track %s would be written into a database that may number the chromosomes differently from this session; create it in a session of that database.", track), call. = FALSE)
     }
 
     path <- gsub(".", "/", track, fixed = TRUE)
@@ -728,11 +726,12 @@ gdb.mark_cache_dirty <- function() {
 # and follow the sorted names, not the chrom_sizes.txt order. The loaded database and its
 # loaded datasets (gdataset.load() requires the same chrom_sizes.txt) take the order gsetroot()
 # gave, held in ALLGENOME, rather than probe seq/: a dataset's seq/ link may be gone or empty.
-# Any other database is read from disk, without loading it; one whose seq/ holds no sequence
-# cannot show which order its names take, and is an error rather than a guess.
-.gdb.chrom_names_at <- function(groot) {
+# Any other database is read from disk, without loading it, and so is a loaded one with from_disk =
+# TRUE (the order its own files use); one whose seq/ holds no sequence cannot show which order its
+# names take, and is an error rather than a guess.
+.gdb.chrom_names_at <- function(groot, from_disk = FALSE) {
     loaded <- c(get0("GROOT", envir = .misha, ifnotfound = NULL), get0("GDATASETS", envir = .misha, ifnotfound = NULL))
-    if (length(loaded) && normalizePath(groot, mustWork = FALSE) %in% normalizePath(loaded, mustWork = FALSE)) {
+    if (!from_disk && length(loaded) && normalizePath(groot, mustWork = FALSE) %in% normalizePath(loaded, mustWork = FALSE)) {
         # a dataset loaded with an order of its own (gdataset.load()) keeps it
         own <- get0("GDATASET_CHROMS", envir = .misha, ifnotfound = NULL)[[normalizePath(groot, mustWork = FALSE)]]
         return(if (is.null(own)) as.character(get("ALLGENOME", envir = .misha)[[1]]$chrom) else own)

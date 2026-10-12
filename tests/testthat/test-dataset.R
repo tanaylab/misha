@@ -1488,6 +1488,35 @@ test_that("gtrack.create works in a loaded dataset's tracks/ when both databases
     expect_equal(gextract("made", iv)$made, c(1, 2))
 })
 
+test_that("in a subdirectory of a dataset whose chromosome order cannot be read, indexed tracks are not created", {
+    local_db_state()
+    td <- withr::local_tempdir()
+    p0 <- create_db_with_unsorted_chrom_sizes(file.path(td, "p0"))
+    # indexed, the same chrom_sizes.txt as p0, chrom ids in chrom_sizes.txt order
+    i <- file.path(td, "i")
+    dir.create(file.path(i, "tracks"), recursive = TRUE)
+    dir.create(file.path(i, "seq"))
+    cs <- utils::read.delim(file.path(p0, "chrom_sizes.txt"), header = FALSE, colClasses = c("character", "numeric"))
+    fa <- file.path(td, "i.fa")
+    writeLines(unlist(lapply(seq_len(nrow(cs)), function(k) c(paste0(">", cs$V1[k]), strrep("A", cs$V2[k])))), fa)
+    invisible(misha:::.gcall("gseq_multifasta_import", fa, file.path(i, "seq", "genome.seq"), file.path(i, "seq", "genome.idx"), FALSE, misha:::.misha_env()))
+    expect_true(file.copy(file.path(p0, "chrom_sizes.txt"), i))
+    i <- normalizePath(i)
+    iv <- gintervals(c("1", "2"), 0, 10)
+    gsetroot(p0)
+    gdir.create("sub", showWarnings = FALSE)
+    gtrack.create_sparse("sub.sp", "x", iv, c(1, 2))
+    ds <- file.path(td, "ds")
+    suppressMessages(gdataset.save(ds, "d", tracks = "sub.sp"))
+    # the dataset's seq/ links to p0's, which is gone: its order (sorted names) cannot be read
+    expect_true(file.rename(file.path(p0, "seq"), file.path(p0, "seq.away")))
+    gsetroot(i)
+    suppressMessages(gdataset.load(ds))
+    gdir.cd(file.path(ds, "tracks", "sub"))
+    expect_error(gtrack.create("x", "x", "sp", iterator = 10), "may number the chromosomes differently")
+    expect_false(dir.exists(file.path(ds, "tracks", "sub", "x.track")))
+})
+
 test_that("gdataset.load refuses a dataset that numbers chromosomes differently and holds indexed tracks", {
     local_db_state()
     td <- withr::local_tempdir()
