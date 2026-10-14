@@ -8,6 +8,8 @@
 
 * **Breaking:** where a chromosome has two files named by aliases and none by its name, reading or converting them is an error; converting to the indexed format stops at a file not named by a chromosome. A canonically named file wins over an alias-named one, and the conversion's `remove.old` removes both.
 
+* **Breaking:** `gdataset.load()` refuses a dataset with indexed tracks or interval sets whose own `seq/genome.idx` cannot be read when its `chrom_sizes.txt` order differs from the working database's chromosome order. It loaded, and those files could read other chromosomes.
+
 # misha 5.13.1
 
 * **Behavior fix:** `gdb.convert_to_indexed()`, and `gtrack.copy()` of an indexed track, could put data on the wrong chromosomes in a per-chromosome database whose `chrom_sizes.txt` is unsorted and lacks "chr". Recreate indexed tracks and interval sets made that way.
