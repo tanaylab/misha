@@ -1,0 +1,395 @@
+# Per-chromosome files of tracks and big intervals sets that are named by an alias of their
+# chromosomes ("1" for chr1, "MT" for chrM; "1-2", "1-chr2" or "chr1-2" for chr1 and chr2), as earlier
+# pymisha named them in databases whose chrom_sizes.txt names lack "chr". One listing of the
+# directory (GenomeTrack::ChromFiles) maps them to their chromosomes for every reader and converter,
+# so each path below reads the same as with the canonical names.
+
+restore_groot_on_exit()
+
+# A per-chromosome database as create_db_with_unsorted_chrom_sizes(), with a chrM, which has an alias
+# other than its name without "chr" (MT)
+create_alias_test_db <- function(path) {
+    chroms <- c("2", "10", "1", "X", "M")
+    sizes <- c(2000, 1500, 1000, 1200, 500)
+    dir.create(file.path(path, "tracks"), recursive = TRUE, showWarnings = FALSE)
+    dir.create(file.path(path, "seq"), showWarnings = FALSE)
+    for (i in seq_along(chroms)) {
+        writeBin(charToRaw(strrep("A", sizes[i])), file.path(path, "seq", paste0("chr", chroms[i], ".seq")))
+    }
+    writeLines(paste(chroms, sizes, sep = "\t"), file.path(path, "chrom_sizes.txt"))
+    invisible(normalizePath(path))
+}
+
+# "chr1" becomes "1" and "chrM" "MT"; "chr1-chr2" becomes "1-2", "1-chr2" or "chr1-2" in turn
+alias_names <- function(files) {
+    vapply(seq_along(files), function(i) {
+        chroms <- strsplit(files[i], "-", fixed = TRUE)[[1]]
+        strip <- if (length(chroms) == 1) TRUE else list(c(TRUE, TRUE), c(TRUE, FALSE), c(FALSE, TRUE))[[(i - 1) %% 3 + 1]]
+        chroms[strip] <- ifelse(chroms[strip] == "chrM", "MT", sub("^chr", "", chroms[strip]))
+        paste(chroms, collapse = "-")
+    }, "")
+}
+
+alias_test_objects <- c(
+    "sp.track", "dn.track", "arr.track", "rects.track", "pts.track", "bigset.interv", "bigset2d.interv"
+)
+
+# In the database at db: a sparse, a dense and an array track, a rectangles and a points track, and a
+# 1D and a 2D per-chromosome big intervals set, all with files on chrM
+create_alias_test_objects <- function(db) {
+    gsetroot(db)
+    intervs <- gintervals(c("chr1", "chr1", "chr2", "chrX", "chrM"), c(0, 100, 0, 10, 5), c(50, 150, 100, 20, 15))
+    intervs2d <- gintervals.2d(
+        c("chr1", "chr2", "chr1", "chrM"), c(0, 0, 10, 0), c(50, 100, 20, 30),
+        c("chr1", "chr2", "chrX", "chr1"), c(0, 0, 10, 40), c(50, 100, 20, 60)
+    )
+    gtrack.create_sparse("sp", "x", intervs, seq_len(nrow(intervs)))
+    gtrack.create("dn", "x", "sp", iterator = 10)
+    arr_file <- tempfile("arr_", fileext = ".tsv")
+    write.table(cbind(intervs, a = 1:5, b = 6:10), arr_file, sep = "\t", quote = FALSE, row.names = FALSE)
+    suppressMessages(gtrack.array.import("arr", "x", arr_file))
+    gtrack.2d.create("rects", "x", intervs2d, seq_len(nrow(intervs2d)))
+    contacts <- tempfile("contacts_", fileext = ".tsv")
+    pts <- intervs2d
+    pts$end1 <- pts$start1 + 1
+    pts$end2 <- pts$start2 + 1
+    write.table(cbind(pts, value = seq_len(nrow(pts))), contacts, sep = "\t", quote = FALSE, row.names = FALSE)
+    suppressMessages(gtrack.2d.import_contacts("pts", "x", contacts, fends = NULL))
+    withr::with_options(list(gmax.data.size = 1), {
+        gintervals.save("bigset", intervs)
+        gintervals.save("bigset2d", intervs2d)
+    })
+    unlink(c(arr_file, contacts))
+}
+
+# Renames the per-chromosome files of the objects to aliases and removes the tracks' .meta (the stats
+# of a track used as an intervals set, which gintervals.load() saved from the canonical files)
+rename_alias_test_objects <- function(db) {
+    for (obj in alias_test_objects) {
+        dir <- file.path(db, "tracks", obj)
+        files <- grep("^chr", list.files(dir), value = TRUE)
+        expect_gte(length(files), 3)
+        expect_true(all(file.rename(file.path(dir, files), file.path(dir, alias_names(files)))))
+        if (endsWith(obj, ".track")) {
+            unlink(file.path(dir, ".meta"))
+        }
+    }
+}
+
+# Every path that reads the objects
+read_alias_test_objects <- function() {
+    scope <- gintervals.all()
+    scope2d <- gintervals.2d.all()
+    gvtrack.create("v_dn", "dn", "avg")
+    gvtrack.create("v_sp1", "sp", "sum")
+    gvtrack.iterator("v_sp1", dim = 1)
+    withr::defer({
+        gvtrack.rm("v_dn")
+        gvtrack.rm("v_sp1")
+    })
+    suppressMessages(list(
+        # 1D tracks: by their own iterator and by others, in expressions and virtual tracks
+        sp = gextract("sp", scope),
+        sp_bins = gextract("sp", scope, iterator = 50),
+        dn = gextract("dn", scope),
+        dn_vtrack = gextract("v_dn * 2", scope, iterator = 100),
+        arr = gextract("arr", scope),
+        arr_cols = gtrack.array.extract("arr", "b", scope),
+        screen = gscreen("sp > 1", scope),
+        projected = gextract("v_sp1", scope2d, iterator = "rects"),
+        info = lapply(c("sp", "dn", "arr", "rects", "pts"), function(track) gtrack.info(track)[c("type", "dimensions")]),
+        # a 1D track used as an intervals set
+        sp_load = gintervals.load("sp"),
+        sp_as_scope = gextract("dn", "sp"),
+        # 2D tracks
+        rects = gextract("rects", scope2d),
+        rects_bins = gextract("rects", scope2d, iterator = scope2d),
+        pts = gextract("pts", scope2d),
+        pts_bins = gextract("pts", scope2d, iterator = scope2d),
+        # 2D tracks used as intervals sets
+        rects_load = gintervals.load("rects"),
+        pts_load = gintervals.load("pts", chrom1 = "chrM", chrom2 = "chr1"),
+        rects_as_scope = gextract("rects", "rects"),
+        pts_as_scope = gextract("pts", "pts"),
+        # big intervals sets
+        bigset = gintervals.load("bigset"),
+        bigset_chrom = gintervals.load("bigset", chrom = "chrM"),
+        bigset_as_scope = gextract("sp", "bigset"),
+        bigset_as_iterator = gextract("sp", scope, iterator = "bigset"),
+        bigset2d = gintervals.load("bigset2d"),
+        bigset2d_pair = gintervals.load("bigset2d", chrom1 = "chrM", chrom2 = "chr1"),
+        bigset2d_as_scope = gextract("rects", "bigset2d"),
+        bigset2d_as_iterator = gextract("rects", scope2d, iterator = "bigset2d")
+    ))
+}
+
+test_that("tracks and intervals sets whose files are named by chromosome aliases read as with canonical names", {
+    local_db_state()
+    withr::local_options(list(gmulticontig.indexed_format = FALSE))
+    td <- tempfile("alias_read_")
+    dir.create(td)
+    withr::defer(unlink(td, recursive = TRUE))
+    db <- create_alias_test_db(file.path(td, "db"))
+    create_alias_test_objects(db)
+
+    expected <- read_alias_test_objects()
+    expect_equal(nrow(expected$sp), 5)
+    expect_equal(nrow(expected$rects), 4)
+    expect_equal(nrow(expected$bigset2d), 4)
+    expect_equal(nrow(expected$bigset_chrom), 1)
+
+    rename_alias_test_objects(db)
+    expect_true("MT" %in% list.files(file.path(db, "tracks", "sp.track")))
+    expect_equal(read_alias_test_objects(), expected)
+})
+
+test_that("tracks and intervals sets whose files are named by chromosome aliases convert to the indexed format", {
+    local_db_state()
+    withr::local_options(list(gmulticontig.indexed_format = FALSE))
+    td <- tempfile("alias_convert_")
+    dir.create(td)
+    withr::defer(unlink(td, recursive = TRUE))
+    db <- create_alias_test_db(file.path(td, "db"))
+    create_alias_test_objects(db)
+    expected <- read_alias_test_objects()
+    rename_alias_test_objects(db)
+
+    suppressMessages({
+        for (track in c("sp", "dn", "arr", "rects", "pts")) {
+            gtrack.convert_to_indexed(track)
+        }
+        gintervals.convert_to_indexed("bigset", remove.old = TRUE)
+        gintervals.2d.convert_to_indexed("bigset2d", remove.old = TRUE)
+    })
+    for (obj in alias_test_objects) {
+        files <- list.files(file.path(db, "tracks", obj))
+        expect_true(any(c("track.idx", "intervals.idx", "intervals2d.idx") %in% files), info = obj)
+        # no per-chromosome file is left
+        expect_equal(files[!grepl("^(track|intervals|intervals2d)\\.(idx|dat)$", files)], character(0), info = obj)
+    }
+    expect_equal(read_alias_test_objects(), expected)
+})
+
+test_that("tracks and intervals sets whose files are named by chromosome aliases are copied, modified and updated", {
+    local_db_state()
+    withr::local_options(list(gmulticontig.indexed_format = FALSE))
+    td <- tempfile("alias_write_")
+    dir.create(td)
+    withr::defer(unlink(td, recursive = TRUE))
+    db <- create_alias_test_db(file.path(td, "db"))
+    dest_perchrom <- create_alias_test_db(file.path(td, "dest_perchrom"))
+    dest_indexed <- normalizePath(create_test_db(file.path(td, "dest_indexed"), chrom_sizes = data.frame(
+        chrom = c("chr2", "chr10", "chr1", "chrX", "chrM"),
+        size = c(2000, 1500, 1000, 1200, 500)
+    )))
+    gdb.init(dest_indexed)
+    gdb.convert_to_indexed(force = TRUE, verbose = FALSE)
+
+    create_alias_test_objects(db)
+    expected <- read_alias_test_objects()
+    expected_arr <- gtrack.array.extract("arr", NULL, gintervals.all())
+    rename_alias_test_objects(db)
+
+    # tracks written from alias-named ones have files with canonical names
+    gtrack.create("sp_copy", "x", "sp", iterator = "sp")
+    suppressMessages(gtrack.array.import("arr_copy", "x", "arr"))
+    expect_equal(gextract("sp_copy", gintervals.all())$sp_copy, expected$sp$sp)
+    expect_equal(gtrack.array.extract("arr_copy", NULL, gintervals.all()), expected_arr)
+    for (track in c("sp_copy", "arr_copy")) {
+        files <- list.files(file.path(db, "tracks", paste0(track, ".track")))
+        expect_true(all(c("chr1", "chrM") %in% files))
+        expect_true(all(files %in% c(as.character(gintervals.all()$chrom), "vars")))
+    }
+
+    # gtrack.modify() changes the alias-named file in place
+    gtrack.modify("dn", "dn * 2", gintervals.all())
+    expect_equal(gextract("dn", gintervals.all())$dn, expected$dn$dn * 2)
+    expect_true("MT" %in% list.files(file.path(db, "tracks", "dn.track")))
+
+    # gtrack.copy() into a per-chromosome and into an indexed database (which orders the chromosomes
+    # differently)
+    by_chrom <- function(res) {
+        res <- res[order(as.character(res$chrom), res$start), ]
+        paste(res$chrom, res$start, res$end, res$sp)
+    }
+    for (dest in c(dest_perchrom, dest_indexed)) {
+        gsetroot(db)
+        gtrack.copy("sp", "sp", db = dest)
+        gsetroot(dest)
+        expect_equal(by_chrom(gextract("sp", gintervals.all())), by_chrom(expected$sp), info = dest)
+    }
+    gsetroot(db)
+
+    # gintervals.update() of a chromosome leaves no file named by its alias behind
+    withr::with_options(list(gmax.data.size = 1), {
+        gintervals.update("bigset", NULL, chrom = "chrM")
+        gintervals.update("bigset", gintervals("chr1", 300, 400), chrom = "chr1")
+    })
+    files <- list.files(file.path(db, "tracks", "bigset.interv"))
+    expect_false(any(c("MT", "1") %in% files))
+    expect_true("chr1" %in% files)
+    res <- gintervals.load("bigset")
+    expect_equal(paste(res$chrom, res$start, res$end), c("chr1 300 400", "chr2 0 100", "chrX 10 20"))
+})
+
+test_that("a canonically named file wins over a file named by an alias, also when converted", {
+    local_db_state()
+    withr::local_options(list(gmulticontig.indexed_format = FALSE))
+    td <- tempfile("alias_canonical_")
+    dir.create(td)
+    withr::defer(unlink(td, recursive = TRUE))
+    db <- create_alias_test_db(file.path(td, "db"))
+    gsetroot(db)
+
+    gtrack.create_sparse("sp", "x", gintervals("chr1", 0, 100), 1)
+    gtrack.create_sparse("other", "x", gintervals("chr1", 200, 300), 2)
+    rects <- gintervals.2d("chr1", 10, 15, "chr2", 30, 35)
+    gtrack.2d.create("rects", "x", rects, 1)
+    gtrack.2d.create("other2d", "x", gintervals.2d("chr1", 100, 105, "chr2", 300, 305), 2)
+    withr::with_options(list(gmax.data.size = 1), {
+        gintervals.save("set2d", gintervals.2d(c("chr1", "chr2"), 10, 15, "chr2", 30, 35))
+        gintervals.save("other2dset", gintervals.2d(c("chr1", "chr2"), 100, 105, "chr2", 300, 305))
+    })
+    expected <- list(gextract("sp", gintervals.all()), gextract("rects", gintervals.2d.all()), gintervals.load("set2d"))
+
+    # a file named by an alias next to the canonical one
+    tracks <- file.path(db, "tracks")
+    expect_true(file.copy(file.path(tracks, "other.track", "chr1"), file.path(tracks, "sp.track", "1")))
+    expect_true(file.copy(file.path(tracks, "other2d.track", "chr1-chr2"), file.path(tracks, "rects.track", "1-2")))
+    expect_true(file.copy(file.path(tracks, "other2dset.interv", "chr1-chr2"), file.path(tracks, "set2d.interv", "1-chr2")))
+    unlink(file.path(tracks, "rects.track", ".meta"))
+    read <- function() list(gextract("sp", gintervals.all()), gextract("rects", gintervals.2d.all()), gintervals.load("set2d"))
+    expect_equal(read(), expected)
+
+    # converted, the canonical file is packed and remove.old removes both
+    suppressMessages({
+        gtrack.convert_to_indexed("sp")
+        gtrack.2d.convert_to_indexed("rects", remove.old = TRUE)
+        gintervals.2d.convert_to_indexed("set2d", remove.old = TRUE)
+    })
+    expect_false(any(c("chr1", "1") %in% list.files(file.path(tracks, "sp.track"))))
+    expect_false(any(c("chr1-chr2", "1-2") %in% list.files(file.path(tracks, "rects.track"))))
+    expect_false(any(c("chr1-chr2", "1-chr2") %in% list.files(file.path(tracks, "set2d.interv"))))
+    expect_equal(read(), expected)
+})
+
+test_that("two files of a chromosome or pair named by aliases, without a canonical one, are an error", {
+    local_db_state()
+    withr::local_options(list(gmulticontig.indexed_format = FALSE))
+    td <- tempfile("alias_twice_")
+    dir.create(td)
+    withr::defer(unlink(td, recursive = TRUE))
+    db <- create_alias_test_db(file.path(td, "db"))
+    gsetroot(db)
+
+    gtrack.create_sparse("sp", "x", gintervals(c("chr1", "chrM"), 0, 100), c(1, 2))
+    gtrack.create_sparse("other", "x", gintervals("chrM", 200, 300), 3)
+    gtrack.2d.create("rects", "x", gintervals.2d("chr1", 10, 15, "chr2", 30, 35), 1)
+    gtrack.2d.create("other2d", "x", gintervals.2d("chr1", 100, 105, "chr2", 300, 305), 2)
+    withr::with_options(list(gmax.data.size = 1), gintervals.save("set", gintervals(c("chr1", "chrM"), 0, 100)))
+    expected <- gextract("sp", gintervals.all())
+
+    tracks <- file.path(db, "tracks")
+    sp_dir <- file.path(tracks, "sp.track")
+    expect_true(file.rename(file.path(sp_dir, "chrM"), file.path(sp_dir, "M")))
+    expect_true(file.copy(file.path(tracks, "other.track", "chrM"), file.path(sp_dir, "MT")))
+    expect_error(gextract("sp", gintervals.all()), "two files of chromosome chrM, M and MT")
+    expect_error(gextract("other", "sp"), "two files of chromosome chrM")
+    expect_error(suppressMessages(gtrack.convert_to_indexed("sp")), "two files of chromosome chrM")
+
+    # two names of one file are not two files
+    unlink(file.path(sp_dir, "MT"))
+    expect_true(file.symlink(file.path(sp_dir, "M"), file.path(sp_dir, "MT")))
+    expect_equal(gextract("sp", gintervals.all()), expected)
+
+    rects_dir <- file.path(tracks, "rects.track")
+    expect_true(file.rename(file.path(rects_dir, "chr1-chr2"), file.path(rects_dir, "1-2")))
+    expect_true(file.copy(file.path(tracks, "other2d.track", "chr1-chr2"), file.path(rects_dir, "chr1-2")))
+    unlink(file.path(rects_dir, ".meta"))
+    expect_error(gextract("rects", gintervals.2d.all()), "two files of chromosome pair \\(chr1, chr2\\), 1-2 and chr1-2")
+    expect_error(gintervals.load("rects", chrom1 = "chr1", chrom2 = "chr2"), "two files of chromosome pair")
+    expect_error(suppressMessages(gtrack.2d.convert_to_indexed("rects")), "two files of chromosome pair")
+
+    set_dir <- file.path(tracks, "set.interv")
+    expect_true(file.copy(file.path(set_dir, "chr1"), file.path(set_dir, "1")))
+    expect_true(file.rename(file.path(set_dir, "chrM"), file.path(set_dir, "M")))
+    expect_true(file.copy(file.path(set_dir, "1"), file.path(set_dir, "MT")))
+    expect_error(gintervals.load("set"), "two files of chromosome chrM")
+    expect_error(suppressMessages(gintervals.convert_to_indexed("set")), "two files of chromosome chrM")
+})
+
+test_that("a conversion stops at a file whose name is not a chromosome's", {
+    local_db_state()
+    withr::local_options(list(gmulticontig.indexed_format = FALSE))
+    td <- tempfile("alias_unparsed_")
+    dir.create(td)
+    withr::defer(unlink(td, recursive = TRUE))
+    db <- create_alias_test_db(file.path(td, "db"))
+    gsetroot(db)
+
+    gtrack.create_sparse("sp", "x", gintervals("chr1", 0, 100), 1)
+    gtrack.2d.create("rects", "x", gintervals.2d("chr1", 10, 15, "chr2", 30, 35), 1)
+    withr::with_options(list(gmax.data.size = 1), {
+        gintervals.save("set", gintervals(c("chr1", "chr2"), 0, 100))
+        gintervals.save("set2d", gintervals.2d(c("chr1", "chr2"), 0, 100, "chr2", 0, 100))
+    })
+    tracks <- file.path(db, "tracks")
+    for (file in c("sp.track/chr1.bak", "rects.track/chr1-chr7", "set.interv/notes", "set2d.interv/notes")) {
+        writeLines("notes", file.path(tracks, file))
+    }
+
+    expect_error(suppressMessages(gtrack.convert_to_indexed("sp")), "file chr1.bak is not named by a chromosome")
+    expect_error(suppressMessages(gtrack.2d.convert_to_indexed("rects")), "file chr1-chr7 is not named by a chromosome pair")
+    expect_error(suppressMessages(gintervals.convert_to_indexed("set")), "file notes is not named by a chromosome")
+    expect_error(suppressMessages(gintervals.2d.convert_to_indexed("set2d")), "file notes is not named by a chromosome pair")
+    for (obj in c("sp.track", "rects.track", "set.interv", "set2d.interv")) {
+        expect_false(any(grepl("\\.(idx|dat)", list.files(file.path(tracks, obj)))), info = obj)
+    }
+})
+
+test_that("dangling symlinks are ignored, and a symlink counts only when named by a chromosome", {
+    local_db_state()
+    withr::local_options(list(gmulticontig.indexed_format = FALSE))
+    td <- tempfile("alias_links_")
+    dir.create(td)
+    withr::defer(unlink(td, recursive = TRUE))
+    db <- create_alias_test_db(file.path(td, "db"))
+    dest <- create_alias_test_db(file.path(td, "dest"))
+    gsetroot(db)
+
+    gtrack.create_sparse("sp", "x", gintervals(c("chr1", "chr2"), 0, 100), c(1, 2))
+    gtrack.2d.create("rects", "x", gintervals.2d(c("chr1", "chr2"), 10, 15, "chr2", 30, 35), c(1, 2))
+    withr::with_options(list(gmax.data.size = 1), gintervals.save("set2d", gintervals.2d(c("chr1", "chr2"), 0, 100, "chr2", 0, 100)))
+    expected <- list(gextract("sp", gintervals.all()), gextract("rects", gintervals.2d.all()), gintervals.load("set2d"))
+    read <- function() list(gextract("sp", gintervals.all()), gextract("rects", gintervals.2d.all()), gintervals.load("set2d"))
+
+    # each canonical file moves away and is read through a symlink named by an alias; a dangling
+    # symlink keeps its name, and a link to a notes file is not named by a chromosome
+    writeLines("Notes on this track", file.path(td, "notes.txt"))
+    tracks <- file.path(db, "tracks")
+    for (file in c("sp.track/chr1", "rects.track/chr1-chr2", "set2d.interv/chr1-chr2")) {
+        real <- file.path(td, gsub("/", "_", file))
+        expect_true(file.rename(file.path(tracks, file), real))
+        expect_true(file.symlink(real, file.path(tracks, sub("chr1", "1", file))))
+        expect_true(file.symlink(file.path(td, "missing"), file.path(tracks, file)))
+        expect_true(file.symlink(file.path(td, "notes.txt"), file.path(tracks, dirname(file), "README")))
+    }
+    unlink(file.path(tracks, "rects.track", ".meta"))
+    gdb.reload()
+    expect_equal(gtrack.info("sp")$type, "sparse")
+    expect_equal(gtrack.info("rects")$type, "rectangles")
+    expect_equal(read(), expected)
+
+    unlink(file.path(tracks, c("sp.track", "rects.track", "set2d.interv"), "README"))
+    gtrack.copy("sp", "sp", db = dest)
+    gtrack.copy("rects", "rects", db = dest)
+    suppressMessages({
+        gtrack.convert_to_indexed("sp")
+        gtrack.2d.convert_to_indexed("rects", remove.old = TRUE)
+        gintervals.2d.convert_to_indexed("set2d", remove.old = TRUE)
+    })
+    expect_equal(read(), expected)
+    gsetroot(dest)
+    expect_equal(gextract("sp", gintervals.all()), expected[[1]])
+    expect_equal(gextract("rects", gintervals.2d.all()), expected[[2]])
+})

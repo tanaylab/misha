@@ -140,7 +140,7 @@ unsigned IntervalConverter::convert_rintervs(SEXP rintervals, GIntervalsFetcher1
 
 				if (GIntervalsMeta1D::is1d(meta)) {
 					if (intervals1d) {
-						GenomeTrack::Type track_type = GenomeTrack::get_type(trackpath.c_str(), m_iu.get_chromkey(), true);
+						GenomeTrack::Type track_type = GenomeTrack::get_type(m_iu.get_chrom_files(trackpath), true);
 
 						if (track_type == GenomeTrack::FIXED_BIN)
 							verror("%s is track of %s type which cannot be used as a replacement for intervals",
@@ -157,7 +157,7 @@ unsigned IntervalConverter::convert_rintervs(SEXP rintervals, GIntervalsFetcher1
 					verror("%sExpecting 2D intervals while receiving 1D intervals set %s", error_msg_prefix, full_interv_name);
 				} else {
 					if (intervals2d) {
-						GenomeTrack::Type track_type = GenomeTrack::get_type(trackpath.c_str(), m_iu.get_chromkey(), true);
+						GenomeTrack::Type track_type = GenomeTrack::get_type(m_iu.get_chrom_files(trackpath), true);
 
 						if (track_type == GenomeTrack::RECTS)
 							*intervals2d = new GTrackIntervalsFetcher2D<GenomeTrackRectsRects>(full_interv_name, meta, m_iu);

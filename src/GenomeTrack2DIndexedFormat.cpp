@@ -6,7 +6,6 @@
  */
 
 #include <cstdint>
-#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -15,7 +14,6 @@
 #include <vector>
 #include <string>
 #include <algorithm>
-#include <tuple>
 
 #include "GenomeTrack.h"
 #include "TrackIndex2D.h"
@@ -169,71 +167,19 @@ SEXP gtrack2d_convert_to_indexed(SEXP _track, SEXP _remove_old, SEXP _envir) {
             TrackIndex2D::clear_cache();
         }
 
-        // Enumerate existing per-pair files in the track directory
-        DIR *dir = opendir(track_dir.c_str());
-        if (!dir) {
-            verror("Cannot open track directory %s: %s",
-                   track_dir.c_str(), strerror(errno));
+        // The per-pair files, listed once. Not the call's listing: the conversion writes into the directory.
+        const GenomeTrack::ChromFiles files(chromkey, track_dir);
+        for (const GenomeTrack::ChromFiles::File &file : files.files()) {
+            if (file.chromid1 < 0)
+                verror("Track %s: file %s is not named by a chromosome pair", track.c_str(), file.name.c_str());
         }
 
-        // Collect (chromid1, chromid2, filename) tuples for all valid pair files
-        vector<tuple<int, int, string>> pair_files;
-        struct dirent *dentry;
-        while ((dentry = readdir(dir)) != nullptr) {
-            string filename = dentry->d_name;
+        // Sorted by (chromid1, chromid2) for deterministic output
+        const vector<pair<int, int>> chrom_pairs = files.chrom_pairs();
 
-            // Skip . and .. and hidden files
-            if (filename.empty() || filename[0] == '.') continue;
-
-            // Skip track.dat, track.idx, and any .tmp files
-            if (filename == "track.dat" || filename == "track.idx") continue;
-            if (filename.size() > 4 && filename.substr(filename.size() - 4) == ".tmp") continue;
-
-            // Look for files matching the chrom1-chrom2 pattern
-            size_t dash_pos = filename.find('-');
-            if (dash_pos == string::npos || dash_pos == 0 || dash_pos >= filename.length() - 1) {
-                continue;
-            }
-
-            string chrom1_name = filename.substr(0, dash_pos);
-            string chrom2_name = filename.substr(dash_pos + 1);
-
-            // Try to map to chromids (handle chr prefix mismatch)
-            int chromid1 = chromkey.chrom2id(chrom1_name.c_str());
-            int chromid2 = chromkey.chrom2id(chrom2_name.c_str());
-
-            // If not found, try with/without chr prefix
-            if (chromid1 < 0) {
-                if (chrom1_name.substr(0, 3) == "chr") {
-                    chromid1 = chromkey.chrom2id(chrom1_name.substr(3).c_str());
-                } else {
-                    chromid1 = chromkey.chrom2id(("chr" + chrom1_name).c_str());
-                }
-            }
-            if (chromid2 < 0) {
-                if (chrom2_name.substr(0, 3) == "chr") {
-                    chromid2 = chromkey.chrom2id(chrom2_name.substr(3).c_str());
-                } else {
-                    chromid2 = chromkey.chrom2id(("chr" + chrom2_name).c_str());
-                }
-            }
-
-            if (chromid1 >= 0 && chromid2 >= 0) {
-                pair_files.push_back(make_tuple(chromid1, chromid2, filename));
-            }
-        }
-        closedir(dir);
-
-        if (pair_files.empty()) {
+        if (chrom_pairs.empty()) {
             verror("No valid chromosome pair files found in track directory %s", track_dir.c_str());
         }
-
-        // Sort pairs by (chromid1, chromid2) for deterministic output
-        sort(pair_files.begin(), pair_files.end(),
-             [](const tuple<int, int, string> &a, const tuple<int, int, string> &b) {
-                 if (get<0>(a) != get<0>(b)) return get<0>(a) < get<0>(b);
-                 return get<1>(a) < get<1>(b);
-             });
 
         // Prepare temporary file paths
         dat_path_tmp = track_dir + "/track.dat.tmp";
@@ -247,14 +193,12 @@ SEXP gtrack2d_convert_to_indexed(SEXP _track, SEXP _remove_old, SEXP _envir) {
 
         // Collect index entries and concatenate pair file contents
         vector<Track2DPairEntry> entries;
-        vector<string> pair_files_to_remove;
         uint64_t current_offset = 0;
 
-        for (const auto &pair_tuple : pair_files) {
-            int chromid1 = get<0>(pair_tuple);
-            int chromid2 = get<1>(pair_tuple);
-            string filename = get<2>(pair_tuple);
-            string pair_file = track_dir + "/" + filename;
+        for (const auto &chrom_pair : chrom_pairs) {
+            int chromid1 = chrom_pair.first;
+            int chromid2 = chrom_pair.second;
+            string pair_file = files.path(chromid1, chromid2);
 
             Track2DPairEntry entry(chromid1, chromid2, current_offset, 0);
 
@@ -262,7 +206,6 @@ SEXP gtrack2d_convert_to_indexed(SEXP _track, SEXP _remove_old, SEXP _envir) {
             if (copy_file_contents_2d(pair_file, dat_fp, bytes_written)) {
                 entry.length = bytes_written;
                 current_offset += bytes_written;
-                pair_files_to_remove.push_back(pair_file);
             }
 
             entries.push_back(entry);
@@ -326,11 +269,10 @@ SEXP gtrack2d_convert_to_indexed(SEXP _track, SEXP _remove_old, SEXP _envir) {
             }
         }
 
-        // Remove old per-pair files if requested
+        // Remove old per-pair files if requested, also those that the packed ones hid
         if (remove_old) {
-            for (const string &pair_file : pair_files_to_remove) {
-                unlink(pair_file.c_str());
-            }
+            for (const GenomeTrack::ChromFiles::File &file : files.files())
+                unlink((track_dir + "/" + file.name).c_str());
         }
 
         return R_NilValue;

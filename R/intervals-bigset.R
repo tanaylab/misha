@@ -172,6 +172,21 @@
     res
 }
 
+# The files of the given chromosomes (pairs) of a big intervals set, as the readers find them
+# (.gchrom_files), NA where there is none (e.g. in an indexed set). NA for a track used as a set.
+.gintervals.big.chrom_files <- function(intervals.set, chrom = NULL, chrom1 = NULL, chrom2 = NULL) {
+    if (intervals.set %in% get("GTRACKS", envir = .misha)) {
+        return(rep(NA_character_, length(c(chrom, chrom1))))
+    }
+    files <- .gchrom_files(.intervals_dir(intervals.set), is.null(chrom))
+    files <- files[files$used, ]
+    if (!is.null(chrom)) {
+        files$file[match(as.character(chrom), files$chrom)]
+    } else {
+        files$file[match(paste(chrom1, chrom2), paste(files$chrom1, files$chrom2))]
+    }
+}
+
 .gintervals.big.save_meta <- function(path, stats, zeroline) {
     .gwith_umask({
         f <- file(sprintf("%s/.meta", path), "wb")

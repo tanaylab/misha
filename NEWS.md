@@ -4,6 +4,10 @@
 
 * **Breaking:** after `gdir.cd()` into a subdirectory, `db = <working database>` in `gtrack.rm()`, `gintervals.rm()` and `gtrack.copy()` means the names listed there, as `db = NULL` does, not the top of its `tracks/`.
 
+* **Behavior fix:** per-chromosome files of tracks and big intervals sets named by a chromosome alias (`1` for `chr1`, `1-chr2` for a pair, as earlier pymisha wrote them) are read, converted, copied and lifted over as canonically named ones. 2D tracks read as empty, big sets failed to load and lifted tracks came out empty. Delete the `.meta` of such a 2D track if an earlier version saved one.
+
+* **Breaking:** where a chromosome has two files named by aliases and none by its name, reading or converting them is an error; converting to the indexed format stops at a file not named by a chromosome. A canonically named file wins over an alias-named one, and the conversion's `remove.old` removes both.
+
 # misha 5.13.1
 
 * **Behavior fix:** `gdb.convert_to_indexed()`, and `gtrack.copy()` of an indexed track, could put data on the wrong chromosomes in a per-chromosome database whose `chrom_sizes.txt` is unsorted and lacks "chr". Recreate indexed tracks and interval sets made that way.

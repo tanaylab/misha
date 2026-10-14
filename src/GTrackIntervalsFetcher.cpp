@@ -3,7 +3,6 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
-#include <dirent.h>
 #include <cstring>
 #include <set>
 
@@ -43,7 +42,8 @@ void GTrackIntervalsFetcher::init(const char *track_name, const IntervUtils &iu)
 void GTrackIntervalsFetcher::create_track_meta(const char *track_name, const IntervUtils &iu)
 {
 	string trackpath(track2path(iu.get_env(), track_name));
-	GenomeTrack::Type track_type = GenomeTrack::get_type(trackpath.c_str(), iu.get_chromkey(), true);
+	const GenomeTrack::ChromFiles &files = iu.get_chrom_files(trackpath);
+	GenomeTrack::Type track_type = GenomeTrack::get_type(files, true);
 
 	if (track_type == GenomeTrack::FIXED_BIN)
 		verror("Track %s is of type %s which cannot be used as a substitute for an intervals set", track_name, GenomeTrack::TYPE_NAMES[track_type]);
@@ -55,10 +55,7 @@ void GTrackIntervalsFetcher::create_track_meta(const char *track_name, const Int
 		vector<GIntervalsMeta1D::ChromStat> chromstats(num_chroms);
 
 		// For indexed tracks, the on-disk track.idx tells us exactly which
-		// chromids have data (length > 0). This lets us skip O(N) per-chrom
-		// find_existing_1d_filename + access() syscalls on indexed-only tracks
-		// (where the per-chrom files don't exist anyway). On a 1M-contig DB
-		// this drops ~3-5M syscalls per meta creation to ~N.
+		// chromids have data (length > 0).
 		const string idx_path = trackpath + "/track.idx";
 		struct stat idx_st;
 		const bool indexed = (::stat(idx_path.c_str(), &idx_st) == 0);
@@ -107,17 +104,12 @@ void GTrackIntervalsFetcher::create_track_meta(const char *track_name, const Int
 			}
 			progress.report_last();
 		} else {
+			const vector<int> chromids = files.chromids();
 			Progress_reporter progress;
-			progress.init(num_chroms, 1);
+			progress.init(chromids.size(), 1);
 
-			for (uint64_t chromid = 0; chromid < num_chroms; chromid++) {
-				string resolved = GenomeTrack::find_existing_1d_filename(iu.get_chromkey(), trackpath, chromid);
-				string filename(trackpath + "/" + resolved);
-
-				if (access(filename.c_str(), R_OK) && errno == ENOENT) {
-					progress.report(1);
-					continue;
-				}
+			for (int chromid : chromids) {
+				string filename(files.path(chromid));
 
 				if (track_type == GenomeTrack::SPARSE) {
 					GenomeTrackSparse track;
@@ -177,32 +169,10 @@ void GTrackIntervalsFetcher::create_track_meta(const char *track_name, const Int
 		}
 
 		if (!indexed_2d) {
-			// Legacy per-pair files: scan the track directory and match
-			// "chrom1-chrom2" names against the chromkey. This is O(num files)
-			// rather than O(N*N), which is the only tractable choice when N is
-			// large.
-			DIR *d = opendir(trackpath.c_str());
-			if (d) {
-				struct dirent *de;
-				while ((de = readdir(d)) != NULL) {
-					if (de->d_name[0] == '.')
-						continue;
-					const char *dash = strrchr(de->d_name, '-');
-					if (!dash || dash == de->d_name)
-						continue;
-					string chrom1_str(de->d_name, dash - de->d_name);
-					string chrom2_str(dash + 1);
-					try {
-						int c1 = iu.get_chromkey().chrom2id(chrom1_str);
-						int c2 = iu.get_chromkey().chrom2id(chrom2_str);
-						pairs.emplace_back((uint64_t)c1, (uint64_t)c2);
-					} catch (TGLException &) {
-						// not a chrom-pair file (attributes, etc.)
-						continue;
-					}
-				}
-				closedir(d);
-			}
+			// Legacy per-pair files: O(num files) rather than O(N*N), which is
+			// the only tractable choice when N is large.
+			for (const pair<int, int> &chrom_pair : files.chrom_pairs())
+				pairs.emplace_back((uint64_t)chrom_pair.first, (uint64_t)chrom_pair.second);
 		}
 
 		Progress_reporter progress;
@@ -211,7 +181,7 @@ void GTrackIntervalsFetcher::create_track_meta(const char *track_name, const Int
 		for (const auto &p : pairs) {
 			uint64_t chromid1 = p.first;
 			uint64_t chromid2 = p.second;
-			string filename(trackpath + "/" + GenomeTrack::get_2d_filename(iu.get_chromkey(), chromid1, chromid2));
+			string filename(files.path(chromid1, chromid2));
 			unique_ptr<GenomeTrack2D> track;
 
 			if (track_type == GenomeTrack::RECTS) {

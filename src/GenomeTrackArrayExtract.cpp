@@ -87,7 +87,7 @@ SEXP garrayextract(SEXP _track, SEXP _slice, SEXP _colnames, SEXP _file, SEXP _i
 		IntervUtils iu(_envir);
 		const char *track_str = CHAR(STRING_ELT(_track, 0));
 		string track_path = track2path(iu.get_env(), track_str);
-		GenomeTrack::Type track_type = GenomeTrack::get_type(track_path.c_str(), iu.get_chromkey());
+		GenomeTrack::Type track_type = GenomeTrack::get_type(iu.get_chrom_files(track_path));
 		vector<unsigned> slice;
 
 		if (track_type != GenomeTrack::ARRAYS) 

@@ -684,7 +684,7 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
     }
     if (!is_2d) {
         # the per-chromosome files the copy would have (an indexed track splits into one per contig)
-        src_files <- if (src_indexed) src_chroms else setdiff(list.files(src_dir), .TRACK_INTERNAL_FILES)
+        src_files <- if (src_indexed) src_chroms else .gchrom_files(src_dir, FALSE)$chrom
         if (length(src_files) && all(vapply(src_files, function(f) is.null(.gtrack.copy.match_chrom_alias(f, dest_chroms)), logical(1)))) {
             stop(sprintf(
                 "gtrack.copy(%s): no chromosomes from source database are present in destination; refusing to create empty track.",
@@ -788,6 +788,15 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
 
     if (src_indexed) {
         .gtrack.split_indexed_to_per_chrom(dest_dir, src_chroms, remove_indexed = TRUE)
+    } else {
+        # the files the source is read from, by its canonical names; the files they hid go
+        # (.gchrom_files)
+        files <- .gchrom_files(src_dir, FALSE)
+        unlink(file.path(dest_dir, files$file[!files$used]))
+        files <- files[files$used & files$file != files$chrom, ]
+        if (!all(file.rename(file.path(dest_dir, files$file), file.path(dest_dir, files$chrom)))) {
+            stop(sprintf("Failed to rename the chromosome files of %s in %s", destname, dest_dir), call. = FALSE)
+        }
     }
 
     # Drop per-chrom files for chroms not in dest_chroms.
@@ -863,6 +872,8 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
         stop(sprintf("Failed to create %s", dest_dir), call. = FALSE)
     }
     contents <- list.files(src_dir, full.names = TRUE, all.files = TRUE, no.. = TRUE)
+    # not a dangling symlink
+    contents <- contents[file.exists(contents)]
     for (item in contents) {
         if (!.gwith_umask(file.copy(item, dest_dir, recursive = TRUE, copy.mode = TRUE))) {
             unlink(dest_dir, recursive = TRUE)

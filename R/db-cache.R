@@ -698,6 +698,14 @@ gdb.mark_cache_dirty <- function() {
 # by big interval sets. Keep in sync with src/ when adding new sidecar files.
 .TRACK_INTERNAL_FILES <- c("track.idx", "track.dat", ".attributes", "vars", ".meta")
 
+# The per-chromosome files of a track or intervals set directory, as the readers find them (C++
+# GenomeTrack::ChromFiles): a row per file named by a chromosome (by a pair if is_2d), named by its
+# canonical name or by an alias, with the canonical chrom (chrom1, chrom2), the file, and used:
+# whether it is the file that the readers open
+.gchrom_files <- function(dir, is_2d) {
+    as.data.frame(.gcall("gchrom_files", dir, is_2d, .misha_env()), stringsAsFactors = FALSE)
+}
+
 # Check whether a database at the given path is in indexed format.
 # Unlike .gdb.is_indexed(), does not depend on the loaded GROOT.
 .gdb.is_indexed_at <- function(groot) {

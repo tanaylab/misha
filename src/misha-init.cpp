@@ -90,6 +90,7 @@ extern "C" {
     extern SEXP gtrackimportwig(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gtrackinfo(SEXP, SEXP, SEXP);
     extern SEXP gtrack_intervals_load(SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP gchrom_files(SEXP, SEXP, SEXP);
     extern SEXP gbigintervs_load_chrom(SEXP, SEXP, SEXP);
     extern SEXP gbigintervs_load_chrom2d(SEXP, SEXP, SEXP, SEXP);
     extern SEXP gbigintervs_load_all(SEXP, SEXP);
@@ -211,6 +212,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"gtrackimportwig", (DL_FUNC)&gtrackimportwig, 6},
     {"gtrackinfo", (DL_FUNC)&gtrackinfo, 3},
     {"gtrack_intervals_load", (DL_FUNC)&gtrack_intervals_load, 5},
+    {"gchrom_files", (DL_FUNC)&gchrom_files, 3},
     {"gbigintervs_load_chrom", (DL_FUNC)&gbigintervs_load_chrom, 3},
     {"gbigintervs_load_chrom2d", (DL_FUNC)&gbigintervs_load_chrom2d, 4},
     {"gbigintervs_load_all", (DL_FUNC)&gbigintervs_load_all, 2},

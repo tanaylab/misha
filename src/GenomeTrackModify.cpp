@@ -223,7 +223,9 @@ SEXP gtrack_modify(SEXP _track, SEXP _track_expr, SEXP _intervals, SEXP _iterato
 		GenomeTrackFixedBin gtrack;
 		GInterval last_interval(-1, -1, -1, -1);
 
-		if (GenomeTrack::get_type(trackpath.c_str(), iu.get_chromkey()) != GenomeTrack::FIXED_BIN)
+		const GenomeTrack::ChromFiles &files = iu.get_chrom_files(trackpath);
+
+		if (GenomeTrack::get_type(files) != GenomeTrack::FIXED_BIN)
 			verror("Cannot modify track %s: modification is supported only for dense tracks", track);
 
 		Stager stager(trackpath, stage_dir);
@@ -237,7 +239,7 @@ SEXP gtrack_modify(SEXP _track, SEXP _track_expr, SEXP _intervals, SEXP _iterato
 			const GInterval &cur_interval = scanner.last_interval1d();
 
 			if (last_interval.chromid != cur_interval.chromid) {
-				string resolved = GenomeTrack::find_existing_1d_filename(iu.get_chromkey(), trackpath, cur_interval.chromid);
+				const string &resolved = files.filename(cur_interval.chromid);
 				snprintf(filename, sizeof(filename), "%s/%s", trackpath.c_str(), resolved.c_str());
 				gtrack.init_read(filename, cur_interval.chromid);
 				if (gtrack.get_bin_size() != ((TrackExpressionFixedBinIterator *)scanner.get_iterator())->get_bin_size())
