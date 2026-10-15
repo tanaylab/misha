@@ -409,7 +409,7 @@
                     df_list <- list(df_list) # no entry with data
                 }
                 # the index keeps the entries of chromosomes deleted since (gintervals.update(NULL)), .meta not
-                df_list <- df_list[vapply(df_list, function(d) as.character(d$chrom[1]) %in% meta$stats$chrom, logical(1))]
+                df_list <- df_list[vapply(df_list, function(d) as.character(d$chrom[1]), "") %in% meta$stats$chrom]
                 res <- if (length(df_list)) do.call(rbind, df_list) else meta$zeroline
             } else if (nrow(meta$stats) > 1) {
                 # Slow path: per-chromosome iteration (for per-chromosome format or single-chrom load)
@@ -491,7 +491,7 @@
                 }
                 # the index keeps the entries of pairs deleted since (gintervals.update(NULL)), .meta not
                 pairs <- paste(meta$stats$chrom1, meta$stats$chrom2)
-                df_list <- df_list[vapply(df_list, function(d) paste(d$chrom1[1], d$chrom2[1]) %in% pairs, logical(1))]
+                df_list <- df_list[vapply(df_list, function(d) paste(d$chrom1[1], d$chrom2[1]), "") %in% pairs]
                 res <- if (length(df_list)) do.call(rbind, df_list) else meta$zeroline
             } else if (nrow(meta$stats) > 1) {
                 # Slow path: per-chromosome-pair iteration (for per-chromosome format or filtered load)
