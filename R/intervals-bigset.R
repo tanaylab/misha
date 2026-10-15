@@ -185,6 +185,11 @@
     if (length(canonical) == 1 && file_test("-f", file.path(dir, canonical))) {
         return(canonical)
     }
+    # without it, next to the set's index only the canonical file would count (GenomeTrack::ChromFiles)
+    if (length(canonical) == 1 && !file.exists(file.path(dir, canonical)) &&
+        file.exists(file.path(dir, if (is.null(chrom)) "intervals2d.idx" else "intervals.idx"))) {
+        return(NA_character_)
+    }
     files <- .gchrom_files(dir, is.null(chrom))
     files <- files[files$used, ]
     if (!is.null(chrom)) {

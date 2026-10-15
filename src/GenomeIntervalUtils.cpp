@@ -957,14 +957,18 @@ SEXP gbigintervs_load_chrom(SEXP _intervset, SEXP _chrom, SEXP _envir)
 		const char *chrom = Rf_isString(_chrom) ? CHAR(STRING_ELT(_chrom, 0)) : CHAR(STRING_ELT(chrom_levels, INTEGER(_chrom)[0] - 1));
 		int chromid = iu.chrom2id(chrom);
 
-		// Try per-chromosome file first
-		const GenomeTrack::ChromFiles &files = iu.get_chrom_files(intervset_path);
-		string chrom_filename = files.path(chromid);
+		// Try per-chromosome file first. Next to the set's index only the canonically named file counts
+		// (GenomeTrack::ChromFiles), so without one the index is read with no listing (a loop over the
+		// set's chromosomes would list its directory once per chromosome).
 		struct stat st;
+		string canonical_path = intervset_path + "/" + GenomeTrack::get_1d_filename(iu.get_chromkey(), chromid);
+		bool index_only = lstat(canonical_path.c_str(), &st) && errno == ENOENT && !stat((intervset_path + "/intervals.idx").c_str(), &st);
+		const GenomeTrack::ChromFiles *files = index_only ? NULL : &iu.get_chrom_files(intervset_path);
+		string chrom_filename = files ? files->path(chromid) : canonical_path;
 
 		SEXP rintervals = R_NilValue;
 
-		if (files.exists(chromid)) {
+		if (files && files->exists(chromid)) {
 			// PER-CHROMOSOME PATH: Per-chromosome file exists
 			rintervals = rprotect_ptr(RSaneUnserialize(chrom_filename.c_str()));
 			runprotect(1);
@@ -1062,14 +1066,17 @@ SEXP gbigintervs_load_chrom2d(SEXP _intervset, SEXP _chrom1, SEXP _chrom2, SEXP 
 		int chromid1 = iu.chrom2id(chrom1);
 		int chromid2 = iu.chrom2id(chrom2);
 
-		// Try per-pair file first
-		const GenomeTrack::ChromFiles &files = iu.get_chrom_files(intervset_path);
-		string pair_filename = files.path(chromid1, chromid2);
+		// Try per-pair file first; without a canonically named one next to the set's index, the index with
+		// no listing (as for 1D above)
 		struct stat st;
+		string canonical_path = intervset_path + "/" + GenomeTrack::get_2d_filename(iu.get_chromkey(), chromid1, chromid2);
+		bool index_only = lstat(canonical_path.c_str(), &st) && errno == ENOENT && !stat((intervset_path + "/intervals2d.idx").c_str(), &st);
+		const GenomeTrack::ChromFiles *files = index_only ? NULL : &iu.get_chrom_files(intervset_path);
+		string pair_filename = files ? files->path(chromid1, chromid2) : canonical_path;
 
 		SEXP rintervals = R_NilValue;
 
-		if (files.exists(chromid1, chromid2)) {
+		if (files && files->exists(chromid1, chromid2)) {
 			// PER-PAIR PATH: Per-pair file exists
 			rintervals = rprotect_ptr(RSaneUnserialize(pair_filename.c_str()));
 			runprotect(1);

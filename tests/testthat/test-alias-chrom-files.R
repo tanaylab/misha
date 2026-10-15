@@ -1195,3 +1195,37 @@ test_that("a failed overwriting copy restores the destination even when the copy
     gsetroot(d)
     expect_equal(gextract("t", gintervals("chr1", 0, 100))$t, 2)
 })
+
+test_that("an indexed set with alias-named files left next to its index loads a chromosome without listing", {
+    local_db_state()
+    withr::local_options(list(gmulticontig.indexed_format = FALSE))
+    td <- tempfile("alias_index_leftovers_")
+    dir.create(td)
+    withr::defer(unlink(td, recursive = TRUE))
+    db <- create_alias_test_db(file.path(td, "db"))
+    gsetroot(db)
+
+    withr::with_options(list(gmax.data.size = 1, gbig.intervals.size = 1), {
+        gintervals.save("s", data.frame(gintervals(c("chr1", "chr2"), 0, 10), v = 1:2))
+        gintervals.save("s2d", data.frame(gintervals.2d(c("chr1", "chr2"), 0, 10, "chr2", 0, 10), v = 1:2))
+    })
+    tracks <- file.path(db, "tracks")
+    for (set in c("s.interv", "s2d.interv")) {
+        files <- list.files(file.path(tracks, set))
+        expect_true(all(file.rename(file.path(tracks, set, files), file.path(tracks, set, alias_names(files)))))
+    }
+    # converted keeping the alias-named files (the default)
+    suppressMessages({
+        gintervals.convert_to_indexed("s")
+        gintervals.2d.convert_to_indexed("s2d")
+    })
+    listed <- 0
+    gchrom_files <- .gchrom_files
+    local_mocked_bindings(.gchrom_files = function(...) {
+        listed <<- listed + 1
+        gchrom_files(...)
+    })
+    expect_equal(gintervals.load("s", chrom = "chr2")$v, 2)
+    expect_equal(gintervals.load("s2d", chrom1 = "chr1", chrom2 = "chr2")$v, 1)
+    expect_equal(listed, 0)
+})
