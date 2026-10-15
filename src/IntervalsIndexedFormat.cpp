@@ -99,7 +99,7 @@ static void write_2d_index_header(FILE *fp, uint32_t num_entries, uint64_t check
 static bool copy_file_contents(const string &src, FILE *dest, uint64_t &bytes_written) {
     FILE *src_fp = fopen(src.c_str(), "rb");
     if (!src_fp) {
-        return false; // File doesn't exist or can't be opened
+        TGLError("Failed to open %s: %s", src.c_str(), strerror(errno));
     }
 
     // Get file size

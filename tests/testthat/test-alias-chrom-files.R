@@ -393,3 +393,92 @@ test_that("dangling symlinks are ignored, and a symlink counts only when named b
     expect_equal(gextract("sp", gintervals.all()), expected[[1]])
     expect_equal(gextract("rects", gintervals.2d.all()), expected[[2]])
 })
+
+test_that("a conversion stops at a file it cannot read, and removes nothing", {
+    local_db_state()
+    withr::local_options(list(gmulticontig.indexed_format = FALSE))
+    td <- tempfile("alias_unreadable_")
+    dir.create(td)
+    withr::defer(unlink(td, recursive = TRUE))
+    db <- create_alias_test_db(file.path(td, "db"))
+    gsetroot(db)
+
+    gtrack.create_sparse("sp", "x", gintervals(c("chr1", "chr2"), 0, 100), c(1, 2))
+    gtrack.2d.create("rects", "x", gintervals.2d(c("chr1", "chr2"), 10, 15, "chr2", 30, 35), c(1, 2))
+    withr::with_options(list(gmax.data.size = 1), {
+        gintervals.save("set", gintervals(c("chr1", "chr2"), 0, 100))
+        gintervals.save("set2d", gintervals.2d(c("chr1", "chr2"), 0, 100, "chr2", 0, 100))
+    })
+    tracks <- file.path(db, "tracks")
+    files <- file.path(tracks, c("sp.track/chr2", "rects.track/chr2-chr2", "set.interv/chr2", "set2d.interv/chr2-chr2"))
+    Sys.chmod(files, "000")
+    skip_if(any(file.access(files, 4) == 0), "the files stay readable to this user")
+
+    expect_error(suppressMessages(gtrack.convert_to_indexed("sp")), "Failed to open")
+    expect_error(suppressMessages(gtrack.2d.convert_to_indexed("rects", remove.old = TRUE)), "Failed to open")
+    expect_error(suppressMessages(gintervals.convert_to_indexed("set", remove.old = TRUE)), "Failed to open")
+    expect_error(suppressMessages(gintervals.2d.convert_to_indexed("set2d", remove.old = TRUE)), "Failed to open")
+    expect_true(all(file.exists(files)))
+    for (obj in c("sp.track", "rects.track", "set.interv", "set2d.interv")) {
+        expect_false(any(grepl("\\.(idx|dat)", list.files(file.path(tracks, obj)))), info = obj)
+    }
+})
+
+test_that("a forced conversion of an indexed 2D track keeps its index when the per-pair files fail the checks", {
+    local_db_state()
+    withr::local_options(list(gmulticontig.indexed_format = FALSE))
+    td <- tempfile("alias_force2d_")
+    dir.create(td)
+    withr::defer(unlink(td, recursive = TRUE))
+    db <- create_alias_test_db(file.path(td, "db"))
+    gsetroot(db)
+
+    gtrack.2d.create("rects", "x", gintervals.2d(c("chr1", "chr2"), 10, 15, c("chr1", "chrX"), 30, 35), c(1, 2))
+    suppressMessages(gtrack.2d.convert_to_indexed("rects", remove.old = TRUE))
+    expected <- gextract("rects", gintervals.2d.all())
+    dir <- file.path(db, "tracks", "rects.track")
+    writeLines("notes", file.path(dir, "README"))
+
+    expect_error(
+        suppressMessages(gtrack.2d.convert_to_indexed("rects", remove.old = TRUE, force = TRUE)),
+        "file README is not named by a chromosome pair"
+    )
+    expect_true(all(file.exists(file.path(dir, c("track.idx", "track.dat")))))
+    expect_equal(gextract("rects", gintervals.2d.all()), expected)
+})
+
+test_that("files named by the \"chr\" toggle convert in a database of over 1000 contigs without \"chr\"", {
+    local_db_state()
+    withr::local_options(list(gmulticontig.indexed_format = FALSE))
+    td <- tempfile("alias_toggle_")
+    dir.create(td)
+    withr::defer(unlink(td, recursive = TRUE))
+    # a per-chromosome database names its files chr<contig>; the indexed one names its chromosomes as
+    # chrom_sizes.txt does, and with over 1000 such contigs its aliases leave out the toggle (.compute_chrom_aliases)
+    chroms <- paste0("s", 1:1001)
+    pc <- file.path(td, "pc")
+    dir.create(file.path(pc, "tracks"), recursive = TRUE)
+    dir.create(file.path(pc, "seq"))
+    for (chrom in chroms) writeBin(charToRaw(strrep("A", 100)), file.path(pc, "seq", paste0("chr", chrom, ".seq")))
+    writeLines(paste(chroms, 100, sep = "\t"), file.path(pc, "chrom_sizes.txt"))
+    fasta <- file.path(td, "genome.fa")
+    writeLines(rbind(paste0(">", chroms), strrep("A", 100)), fasta)
+    ix <- file.path(td, "ix")
+    suppressMessages(gdb.create(ix, fasta, format = "indexed"))
+
+    gsetroot(pc)
+    intervs <- gintervals(c("chrs1", "chrs2", "chrs500"), c(0, 0, 10), c(50, 60, 20))
+    gtrack.create_sparse("sp", "x", intervs, 1:3)
+    withr::with_options(list(gmax.data.size = 1), gintervals.save("set", data.frame(intervs, v = 1:3)))
+    expect_true(file.exists(file.path(pc, "tracks", "sp.track", "chrs500")))
+    expect_true(all(file.copy(file.path(pc, "tracks", c("sp.track", "set.interv")), file.path(ix, "tracks"), recursive = TRUE)))
+
+    gsetroot(ix)
+    intervs <- gintervals(c("s1", "s2", "s500"), c(0, 0, 10), c(50, 60, 20))
+    suppressMessages({
+        gtrack.convert_to_indexed("sp")
+        gintervals.convert_to_indexed("set", remove.old = TRUE)
+    })
+    expect_equal(gextract("sp", intervs, colnames = "v")$v, 1:3)
+    expect_equal(gintervals.load("set")$v, 1:3)
+})

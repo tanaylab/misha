@@ -31,7 +31,7 @@ using namespace rdb;
 static bool copy_file_contents_2d(const string &src, FILE *dest, uint64_t &bytes_written) {
     FILE *src_fp = fopen(src.c_str(), "rb");
     if (!src_fp) {
-        return false; // File doesn't exist or can't be opened
+        TGLError<GenomeTrack>("Failed to open %s: %s", src.c_str(), strerror(errno));
     }
 
     // Get file size
@@ -81,6 +81,8 @@ SEXP gtrack2d_convert_to_indexed(SEXP _track, SEXP _remove_old, SEXP _envir) {
     // Declare paths outside try block for cleanup access
     string dat_path_tmp;
     string idx_path_tmp;
+    // track.idx.tmp: the index of an indexed track, set aside until its per-pair files pass the checks
+    string old_idx_path;
 
     try {
         RdbInitializer rdb_init;
@@ -160,9 +162,10 @@ SEXP gtrack2d_convert_to_indexed(SEXP _track, SEXP _remove_old, SEXP _envir) {
                 // If index is corrupted, just proceed - per-pair files might still exist
             }
 
-            // Now remove the old index files
-            unlink(idx_path.c_str());
-            unlink(dat_path.c_str());
+            // Set the old index aside, where the listing does not see it
+            if (rename(idx_path.c_str(), (idx_path + ".tmp").c_str()))
+                TGLError<GenomeTrack>("Failed to rename %s: %s", idx_path.c_str(), strerror(errno));
+            old_idx_path = idx_path + ".tmp";
             // Clear the index cache so stale entries are not used
             TrackIndex2D::clear_cache();
         }
@@ -184,6 +187,8 @@ SEXP gtrack2d_convert_to_indexed(SEXP _track, SEXP _remove_old, SEXP _envir) {
         // Prepare temporary file paths
         dat_path_tmp = track_dir + "/track.dat.tmp";
         idx_path_tmp = track_dir + "/track.idx.tmp";
+        if (!old_idx_path.empty())
+            unlink(dat_path.c_str());
 
         // Open temporary data file
         FILE *dat_fp = fopen(dat_path_tmp.c_str(), "wb");
@@ -278,11 +283,17 @@ SEXP gtrack2d_convert_to_indexed(SEXP _track, SEXP _remove_old, SEXP _envir) {
         return R_NilValue;
 
     } catch (TGLException &e) {
+        // The per-pair files failed the checks: the track stays indexed
+        if (!old_idx_path.empty() && idx_path_tmp.empty())
+            rename(old_idx_path.c_str(), old_idx_path.substr(0, old_idx_path.size() - 4).c_str());
         // Clean up temporary files on error
         if (!dat_path_tmp.empty()) unlink(dat_path_tmp.c_str());
         if (!idx_path_tmp.empty()) unlink(idx_path_tmp.c_str());
         verror("%s", e.msg());
     } catch (const bad_alloc &e) {
+        // The per-pair files failed the checks: the track stays indexed
+        if (!old_idx_path.empty() && idx_path_tmp.empty())
+            rename(old_idx_path.c_str(), old_idx_path.substr(0, old_idx_path.size() - 4).c_str());
         // Clean up temporary files on error
         if (!dat_path_tmp.empty()) unlink(dat_path_tmp.c_str());
         if (!idx_path_tmp.empty()) unlink(idx_path_tmp.c_str());

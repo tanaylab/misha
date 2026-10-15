@@ -93,6 +93,12 @@ GenomeTrack::ChromFiles::ChromFiles(const GenomeChromKey &chromkey, const string
 	};
 	struct dirent *dirp;
 
+	// also by the "chr" toggle, which the aliases of over 1000 contigs without "chr" leave out (.compute_chrom_aliases)
+	auto find_chromid = [&chromkey](const string &name) {
+		int chromid = chromkey.find_chromid(name);
+		return chromid >= 0 ? chromid : chromkey.find_chromid(name.compare(0, 3, "chr") ? "chr" + name : name.substr(3));
+	};
+
 	while ((dirp = readdir(d))) {
 		const string name(dirp->d_name);
 
@@ -109,10 +115,10 @@ GenomeTrack::ChromFiles::ChromFiles(const GenomeChromKey &chromkey, const string
 		} else if (dirp->d_type != DT_REG)
 			continue;
 
-		File file{name, chromkey.find_chromid(name), -1, -1};
+		File file{name, find_chromid(name), -1, -1};
 		for (uint64_t pos = name.find('-'); pos != string::npos; pos = name.find('-', pos + 1)) {
-			int chromid1 = chromkey.find_chromid(name.substr(0, pos));
-			int chromid2 = chromid1 < 0 ? -1 : chromkey.find_chromid(name.substr(pos + 1));
+			int chromid1 = find_chromid(name.substr(0, pos));
+			int chromid2 = chromid1 < 0 ? -1 : find_chromid(name.substr(pos + 1));
 			if (chromid2 >= 0) {
 				file.chromid1 = chromid1;
 				file.chromid2 = chromid2;
