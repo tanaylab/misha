@@ -899,14 +899,20 @@ SEXP gchrom_files(SEXP _dir, SEXP _is_2d, SEXP _envir)
 
 		for (size_t i = 0; i < rows.size(); ++i) {
 			const GenomeTrack::ChromFiles::File &file = *rows[i];
+			// used: the file read for its chromosome (pair); none in a dimension whose files the readers stop
+			// at (a conflict, a file that cannot be reached), so the listing serves gintervals.update, which
+			// removes a chromosome's alias-named files whatever another chromosome's are
+			bool used = false;
+			try {
+				used = is_2d ? files.filename(file.chromid1, file.chromid2) == file.name : files.filename(file.chromid) == file.name;
+			} catch (TGLException &) {
+			}
 			if (is_2d) {
 				SET_STRING_ELT(rchroms1, i, RSaneMkChar(chromkey.id2chrom(file.chromid1).c_str()));
 				SET_STRING_ELT(rchroms2, i, RSaneMkChar(chromkey.id2chrom(file.chromid2).c_str()));
-				LOGICAL(rused)[i] = files.filename(file.chromid1, file.chromid2) == file.name;
-			} else {
+			} else
 				SET_STRING_ELT(rchroms1, i, RSaneMkChar(chromkey.id2chrom(file.chromid).c_str()));
-				LOGICAL(rused)[i] = files.filename(file.chromid) == file.name;
-			}
+			LOGICAL(rused)[i] = used;
 			SET_STRING_ELT(rfiles, i, RSaneMkChar(file.name.c_str()));
 		}
 

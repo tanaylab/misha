@@ -1071,6 +1071,20 @@ test_that("a leftover *.tmp file does not stop a 2D conversion, and gintervals.u
         gintervals.update("s", data.frame(gintervals("chrM", 0, 20), v = 9L), chrom = "chrM")
     })
     expect_equal(gintervals.load("s")$v, c(1, 9))
+
+    # a conflict on another chromosome does not stop an update or a deletion, and deleting the
+    # conflicting chromosome removes its files
+    withr::with_options(list(gmax.data.size = 1, gbig.intervals.size = 1), {
+        gintervals.save("s2", data.frame(gintervals(c("chr1", "chr2", "chrM"), 0, 10), v = 1:3))
+        dir <- file.path(tracks, "s2.interv")
+        expect_true(file.rename(file.path(dir, "chrM"), file.path(dir, "MT")))
+        expect_true(file.copy(file.path(dir, "chr1"), file.path(dir, "chrMT")))
+        gintervals.update("s2", NULL, chrom = "chr1")
+    })
+    expect_error(gintervals.load("s2"), "two files of chromosome chrM")
+    withr::with_options(list(gmax.data.size = 1, gbig.intervals.size = 1), gintervals.update("s2", NULL, chrom = "chrM"))
+    expect_false(any(c("MT", "chrMT") %in% list.files(dir)))
+    expect_equal(gintervals.load("s2")$v, 2)
 })
 
 test_that("a chromosome whose name ends in .tmp is read, and a copy matches a destination by a file's own name", {

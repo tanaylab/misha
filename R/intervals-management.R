@@ -544,13 +544,9 @@ gintervals.update <- function(intervals.set = NULL, intervals = "", chrom = NULL
             # the directory once per chromosome)
             aliases <- character(0)
             if (is.null(intervals) || !nrow(intervals) || !file_test("-f", file.path(fullpath, chrom))) {
-                # a conflict among its files does not stop a write: the canonical file wins over them
-                files <- tryCatch(.gchrom_files(fullpath, FALSE), error = function(e) {
-                    if (is.null(intervals) || !nrow(intervals) || !grepl("has two files of", conditionMessage(e), fixed = TRUE)) {
-                        stop(e)
-                    }
-                    NULL
-                })
+                # (also where its files or another chromosome's conflict, or cannot be reached: the
+                # canonical file written wins, and a deleted chromosome's go)
+                files <- .gchrom_files(fullpath, FALSE)
                 aliases <- files$file[files$chrom == chrom & files$file != chrom]
             }
             # removed once the write succeeded: they may hold the chromosome's only data
@@ -571,12 +567,7 @@ gintervals.update <- function(intervals.set = NULL, intervals = "", chrom = NULL
             }
             aliases <- character(0)
             if (is.null(intervals) || !nrow(intervals) || !file_test("-f", file.path(fullpath, paste(chrom1, chrom2, sep = "-")))) {
-                files <- tryCatch(.gchrom_files(fullpath, TRUE), error = function(e) {
-                    if (is.null(intervals) || !nrow(intervals) || !grepl("has two files of", conditionMessage(e), fixed = TRUE)) {
-                        stop(e)
-                    }
-                    NULL
-                })
+                files <- .gchrom_files(fullpath, TRUE)
                 aliases <- files$file[files$chrom1 == chrom1 & files$chrom2 == chrom2 & files$file != paste(chrom1, chrom2, sep = "-")]
             }
             # removed once the write succeeded: they may hold the pair's only data
