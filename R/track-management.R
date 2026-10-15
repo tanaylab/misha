@@ -709,8 +709,8 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
         # the per-chromosome files the copy would have (an indexed track splits into one per contig)
         # (by their chromosomes' names or their own, which the pipeline below matches too)
         src_files <- if (src_indexed) src_chroms else unlist(.gchrom_files(src_dir, FALSE)[c("chrom", "file")], use.names = FALSE)
-        # none named by a chromosome (a computed track's pair files): its files, as before
-        if (!src_indexed && !length(src_files)) {
+        # a computed track's pair files, or none named by a chromosome: its files, as before
+        if (!src_indexed && (info$type == "computed" || !length(src_files))) {
             src_files <- setdiff(list.files(src_dir), .TRACK_INTERNAL_FILES)
         }
         if (length(src_files) && all(vapply(src_files, function(f) is.null(.gtrack.copy.match_chrom_alias(f, dest_chroms)), logical(1)))) {
@@ -742,17 +742,30 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
                 dest_dir
             ), call. = FALSE)
         }
+        # dated now: another host's sweep of staging directories goes by their age
+        Sys.setFileTime(aside, Sys.time())
         .gdb.invalidate_dir_cache(dest_dir)
+        tracks_before <- get("GTRACKS", envir = .misha)
+        track_db_before <- get("GTRACK_DATASET", envir = .misha)
         on.exit(
             if (!is.null(aside)) {
-                unlink(dest_dir, recursive = TRUE)
-                if (file.rename(aside, dest_dir)) {
+                # the failed copy is moved away first (it may not be removable at once, e.g. read-only
+                # files kept by copy.mode), then the existing track comes back, with the session's
+                # track list as it was
+                failed <- file.path(dest_parent, .gdb.staging_name(basename(dest_dir)))
+                if (dir.exists(dest_dir) && !suppressWarnings(file.rename(dest_dir, failed))) {
+                    failed <- NULL
+                }
+                if (!dir.exists(dest_dir) && suppressWarnings(file.rename(aside, dest_dir))) {
                     .gdb.invalidate_dir_cache(dest_dir)
-                    if (dest_db_loaded) {
-                        .gdb.add_track(destname, dest_db)
-                    } else {
-                        .gdb.cache_mark_dirty(dest_db)
-                    }
+                    assign("GTRACKS", tracks_before, envir = .misha)
+                    assign("GTRACK_DATASET", track_db_before, envir = .misha)
+                    .gdb.cache_mark_dirty(dest_db)
+                } else {
+                    warning(sprintf("The copy over %s failed; the track that was there is kept at %s", dest_dir, aside), call. = FALSE)
+                }
+                if (!is.null(failed) && dir.exists(failed)) {
+                    .gdb.trash(failed)
                 }
             },
             add = TRUE
@@ -799,8 +812,10 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
         }
     )
     if (!is.null(aside)) {
-        .gdb.trash(aside)
+        # cleared first: an interrupt from here on must not bring the old track back over the copy
+        old <- aside
         aside <- NULL
+        .gdb.trash(old)
     }
     destname
 }

@@ -1151,10 +1151,47 @@ test_that("an overwriting gtrack.copy that fails keeps the existing destination"
     expect_equal(gextract("victim", gintervals.all())$victim, c(1, 2))
     expect_length(list.files(tracks, all.files = TRUE, pattern = "^\\.victim\\.track\\.tmp\\."), 0)
 
-    # a destination that cannot be set aside stops the copy before anything is written
+    # a database that cannot be written stops the copy before anything is touched
     gtrack.create_sparse("other", "x", gintervals("chr2", 0, 100), 5)
     Sys.chmod(tracks, "555")
     expect_error(gtrack.copy("other", "victim", overwrite = TRUE), "copy aborted|read-only")
     Sys.chmod(tracks, "755")
     expect_equal(gextract("victim", gintervals.all())$victim, c(1, 2))
+})
+
+test_that("a failed overwriting copy restores the destination even when the copy cannot be removed, and its registration", {
+    local_db_state()
+    withr::local_options(list(gmulticontig.indexed_format = FALSE))
+    td <- tempfile("alias_copy_restore_")
+    dir.create(td)
+    withr::defer({
+        system(paste("chmod -R u+rwx", shQuote(td)))
+        unlink(td, recursive = TRUE)
+    })
+    w <- create_alias_test_db(file.path(td, "w"))
+    d <- create_alias_test_db(file.path(td, "d"))
+    gsetroot(d)
+    gtrack.create_sparse("t", "x", gintervals("chr1", 0, 100), 2)
+    gsetroot(w)
+    gtrack.create_sparse("t", "x", gintervals("chr1", 0, 100), 1)
+    gtrack.create_sparse("src", "x", gintervals(c("chr1", "chr2"), 0, 100), c(5, 6))
+    gtrack.var.set("src", "v", 1)
+    src_dir <- file.path(w, "tracks", "src.track")
+    # copied read-only (copy.mode), so the failed copy cannot be removed; then a file the copy cannot read
+    Sys.chmod(file.path(src_dir, "vars"), "555")
+    writeLines("x", file.path(src_dir, "zz.tmp"))
+    Sys.chmod(file.path(src_dir, "zz.tmp"), "000")
+    skip_if(file.access(file.path(src_dir, "zz.tmp"), 4) == 0, "the file stays readable to this user")
+    suppressMessages(gdataset.load(d, force = TRUE))
+    expect_equal(gextract("t", gintervals("chr1", 0, 100))$t, 1)
+
+    # into the dataset's t, which the working database's t shadows
+    expect_error(suppressWarnings(gtrack.copy("src", "t", db = d, overwrite = TRUE)), "Failed to copy")
+    expect_equal(gextract("t", gintervals("chr1", 0, 100))$t, 1)
+    expect_equal(gtrack.dataset("t"), w)
+    expect_true(file.exists(file.path(d, "tracks", "t.track", "chr1")))
+    gdb.reload()
+    expect_equal(gextract("t", gintervals("chr1", 0, 100))$t, 1)
+    gsetroot(d)
+    expect_equal(gextract("t", gintervals("chr1", 0, 100))$t, 2)
 })
