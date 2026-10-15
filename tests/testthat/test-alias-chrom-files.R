@@ -201,13 +201,12 @@ test_that("tracks and intervals sets whose files are named by chromosome aliases
         expect_true(all(files %in% c(as.character(gintervals.all()$chrom), "vars")))
     }
 
-    # gtrack.modify() writes the alias-named file's chromosome under its canonical name, and the alias
-    # names the same file
+    # gtrack.modify() changes the alias-named file, as earlier pymisha, which reads it too, does
     gtrack.modify("dn", "dn * 2", gintervals.all())
     expect_equal(gextract("dn", gintervals.all())$dn, expected$dn$dn * 2)
-    dn_dir <- file.path(db, "tracks", "dn.track")
-    expect_true("chrM" %in% list.files(dn_dir))
-    expect_equal(tools::md5sum(file.path(dn_dir, "MT")), tools::md5sum(file.path(dn_dir, "chrM")), ignore_attr = TRUE)
+    dn_files <- list.files(file.path(db, "tracks", "dn.track"))
+    expect_true("MT" %in% dn_files)
+    expect_false("chrM" %in% dn_files)
 
     # gtrack.copy() into a per-chromosome and into an indexed database (which orders the chromosomes
     # differently)
@@ -746,7 +745,7 @@ test_that("a copy of a file with two names (a symlink, a hard link), neither can
     expect_error(gextract("sp2", gintervals.all()), "two files of chromosome chrM")
 })
 
-test_that("gtrack.modify of a chromosome with two names, neither canonical, writes it under its canonical name", {
+test_that("gtrack.modify of a chromosome with two names, neither canonical, leaves both naming the new data", {
     local_db_state()
     withr::local_options(list(gmulticontig.indexed_format = FALSE))
     td <- tempfile("alias_modify_")
@@ -769,9 +768,10 @@ test_that("gtrack.modify of a chromosome with two names, neither canonical, writ
         gtrack.modify("d", "d * 7", gintervals("chrM", 0, 30))
         expect_equal(gextract("d", gintervals("chrM", 0, 30))$d, c(7, 7, 7), info = how)
         expect_equal(gextract("d", gintervals("chr1", 0, 30))$d, c(1, 1, 1), info = how)
-        # the aliases name the modified file, so what links to them reads it too
-        sums <- tools::md5sum(file.path(dir, c("chrM", "M", "MT")))
+        # both name the modified file, so what links to them reads it too; no canonical name is added
+        sums <- tools::md5sum(file.path(dir, c("M", "MT")))
         expect_true(all(sums == sums[1]), info = how)
+        expect_false("chrM" %in% list.files(dir), info = how)
         gtrack.rm("d", force = TRUE)
     }
 })
@@ -878,4 +878,31 @@ test_that("gintervals.update over a canonically named file does not list the set
     })
     expect_false(file.exists(file.path(db, "tracks", "s.interv", "2")))
     expect_equal(gintervals.load("s")$v, c(5, 3))
+})
+
+test_that("gtrack.modify keeps a file named by an alias where earlier pymisha also writes it", {
+    local_db_state()
+    withr::local_options(list(gmulticontig.indexed_format = FALSE))
+    td <- tempfile("alias_modify_pymisha_")
+    dir.create(td)
+    withr::defer(unlink(td, recursive = TRUE))
+    db <- create_alias_test_db(file.path(td, "db"))
+    gsetroot(db)
+
+    gtrack.create_dense("d", "x", gintervals(c("chr1", "chr2"), 0, 30), c(1, 2), 10, 0)
+    dir <- file.path(db, "tracks", "d.track")
+    files <- list.files(dir)
+    expect_true(all(file.rename(file.path(dir, files), file.path(dir, alias_names(files)))))
+    gdb.reload()
+    gtrack.modify("d", "d + 100", gintervals("chr1", 0, 30))
+    expect_equal(sort(list.files(dir)), sort(alias_names(files)))
+
+    # earlier pymisha writes by renaming a new file over "1": misha reads what it wrote
+    saved <- file.path(td, "chr1_101")
+    expect_true(file.copy(file.path(dir, "1"), saved))
+    gtrack.modify("d", "d + 1000", gintervals("chr1", 0, 30))
+    expect_equal(gextract("d", gintervals("chr1", 0, 30))$d, c(1101, 1101, 1101))
+    expect_true(file.rename(saved, file.path(dir, "1")))
+    gdb.reload()
+    expect_equal(gextract("d", gintervals("chr1", 0, 30))$d, c(101, 101, 101))
 })

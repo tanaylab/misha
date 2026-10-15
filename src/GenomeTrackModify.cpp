@@ -50,10 +50,8 @@ public:
 	bool enabled() const { return !m_stage_dir.empty(); }
 
 	// Returns the path that should be opened for update for this chromosome.
-	// Copies whatever backing file the chromosome lives in on first use: on a
-	// per-chromosome track the file it is read from (from), committed under the
-	// chromosome's canonical name (chrom_filename), which wins over its other names.
-	string stage(const string &chrom_filename, const string &from)
+	// Copies whatever backing file the chromosome lives in on first use.
+	string stage(const string &chrom_filename)
 	{
 		if (m_indexed) {
 			// All chromosomes share track.dat; the index is needed alongside it
@@ -61,7 +59,7 @@ public:
 			stage_file("track.idx", false);
 			stage_file("track.dat", true);
 		} else
-			stage_file(chrom_filename, true, from);
+			stage_file(chrom_filename, true);
 
 		return m_stage_dir + "/" + chrom_filename;
 	}
@@ -114,11 +112,11 @@ private:
 			verror("Failed to fsync %s: %s", path.c_str(), strerror(err));
 	}
 
-	void stage_file(const string &name, bool committable, const string &from = "")
+	void stage_file(const string &name, bool committable)
 	{
 		if (!m_staged.insert(name).second)
 			return;
-		copy_file(m_track_dir + "/" + (from.empty() ? name : from), m_stage_dir + "/" + name);
+		copy_file(m_track_dir + "/" + name, m_stage_dir + "/" + name);
 		if (committable)
 			m_committable.push_back(name);
 	}
@@ -251,7 +249,7 @@ SEXP gtrack_modify(SEXP _track, SEXP _track_expr, SEXP _intervals, SEXP _iterato
 				// The values go to the staging copy; the live track keeps the
 				// old ones until commit() below.
 				if (stager.enabled()) {
-					string staged = stager.stage(GenomeTrack::get_1d_filename(iu.get_chromkey(), cur_interval.chromid), resolved);
+					string staged = stager.stage(resolved);
 					gtrack.init_update(staged.c_str(), cur_interval.chromid);
 					modified.insert(cur_interval.chromid);
 				} else
@@ -271,16 +269,18 @@ SEXP gtrack_modify(SEXP _track, SEXP _track_expr, SEXP _intervals, SEXP _iterato
 		gtrack.flush_writes();
 		stager.commit();
 
-		// The canonically named files committed hold the data of their chromosomes now. Their other names
-		// (aliases, which hold the old data) become names of those files, so that whatever links to them reads
-		// the new data, as when master wrote over them; where that fails they stay, hidden by the canonical name.
+		// The commit replaced the file each modified chromosome was read from. Its other names (links to the
+		// same file, copies with the same bytes, or files the read one hid) become names of the committed file,
+		// so they do not differ from it and whatever links to them reads the new data.
 		for (const GenomeTrack::ChromFiles::File &file : files.files()) {
-			const string &canonical = GenomeTrack::get_1d_filename(iu.get_chromkey(), file.chromid);
-			if (modified.count(file.chromid) && file.name != canonical) {
-				string alias = trackpath + "/" + file.name;
+			if (file.chromid < 0 || !modified.count(file.chromid))
+				continue;
+			const string &committed = files.filename(file.chromid);
+			if (file.name != committed) {
+				string name = trackpath + "/" + file.name;
 				string tmp = trackpath + "/." + file.name + ".link";  // hidden from the listing
 				unlink(tmp.c_str());
-				if (!link((trackpath + "/" + canonical).c_str(), tmp.c_str()) && rename(tmp.c_str(), alias.c_str()))
+				if (!link((trackpath + "/" + committed).c_str(), tmp.c_str()) && rename(tmp.c_str(), name.c_str()))
 					unlink(tmp.c_str());
 			}
 		}

@@ -405,6 +405,9 @@
             # (which correctly merges factor levels, unlike C++ grbind)
             if (is.null(chrom) && .gintervals.is_indexed_bigset(intervals.set)) {
                 df_list <- .gcall("gbigintervs_load_all", intervals.set, .misha_env())
+                if (is.data.frame(df_list)) {
+                    df_list <- list(df_list) # no entry with data
+                }
                 # the index keeps the entries of chromosomes deleted since (gintervals.update(NULL)), .meta not
                 df_list <- df_list[vapply(df_list, function(d) as.character(d$chrom[1]) %in% meta$stats$chrom, logical(1))]
                 res <- if (length(df_list)) do.call(rbind, df_list) else meta$zeroline
@@ -483,6 +486,9 @@
             # (which correctly merges factor levels, unlike C++ grbind)
             if (is.null(chrom1) && is.null(chrom2) && .gintervals.is_indexed_bigset(intervals.set)) {
                 df_list <- .gcall("gbigintervs_load_all_2d", intervals.set, .misha_env())
+                if (is.data.frame(df_list)) {
+                    df_list <- list(df_list) # no entry with data
+                }
                 # the index keeps the entries of pairs deleted since (gintervals.update(NULL)), .meta not
                 pairs <- paste(meta$stats$chrom1, meta$stats$chrom2)
                 df_list <- df_list[vapply(df_list, function(d) paste(d$chrom1[1], d$chrom2[1]) %in% pairs, logical(1))]
