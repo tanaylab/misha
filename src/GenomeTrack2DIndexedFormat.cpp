@@ -154,7 +154,8 @@ SEXP gtrack2d_convert_to_indexed(SEXP _track, SEXP _remove_old, SEXP _envir) {
                                     break;
                                 }
                                 FILE *pf = fopen(pair_file.c_str(), "wb");
-                                extracted.push_back(pair_file);
+                                if (pf)
+                                    extracted.push_back(pair_file);
                                 bool written = pf && fwrite(buf.data(), 1, entry.length, pf) == entry.length;
                                 if ((pf && fclose(pf)) || !written) {
                                     extract_error = "Failed to write " + pair_file + ": " + strerror(errno);

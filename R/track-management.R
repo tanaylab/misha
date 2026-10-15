@@ -813,11 +813,24 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
         # the files the source is read from, by its canonical names; the files they hid go
         # (.gchrom_files)
         files <- .gchrom_files(src_dir, FALSE)
+        in_dest <- function(names) !vapply(names, function(f) is.null(.gtrack.copy.match_chrom_alias(f, dest_chroms)), logical(1))
+        # of the files of a chromosome with the same bytes (names of one file, or copies of them), one whose
+        # own name the destination has, where neither the used one's name nor its chromosome's is there
+        same_bytes <- function(f1, f2) {
+            identical(readBin(f1, "raw", file.size(f1)), readBin(f2, "raw", file.size(f2)))
+        }
+        for (i in which(files$used & !in_dest(files$chrom) & !in_dest(files$file))) {
+            for (j in which(!files$used & files$chrom == files$chrom[i] & in_dest(files$file))) {
+                if (same_bytes(file.path(src_dir, files$file[i]), file.path(src_dir, files$file[j]))) {
+                    files$used[c(i, j)] <- c(FALSE, TRUE)
+                    break
+                }
+            }
+        }
         unlink(file.path(dest_dir, files$file[!files$used]))
         files <- files[files$used & files$file != files$chrom, ]
         # one whose own name the destination has, and its chromosome's name not (as "M" for chrMT into
         # a database with chrM), keeps its name, as before
-        in_dest <- function(names) !vapply(names, function(f) is.null(.gtrack.copy.match_chrom_alias(f, dest_chroms)), logical(1))
         files <- files[in_dest(files$chrom) | !in_dest(files$file), ]
         if (!all(file.rename(file.path(dest_dir, files$file), file.path(dest_dir, files$chrom)))) {
             stop(sprintf("Failed to rename the chromosome files of %s in %s", destname, dest_dir), call. = FALSE)

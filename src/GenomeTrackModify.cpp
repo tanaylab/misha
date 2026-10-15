@@ -50,8 +50,10 @@ public:
 	bool enabled() const { return !m_stage_dir.empty(); }
 
 	// Returns the path that should be opened for update for this chromosome.
-	// Copies whatever backing file the chromosome lives in on first use.
-	string stage(const string &chrom_filename)
+	// Copies whatever backing file the chromosome lives in on first use: on a
+	// per-chromosome track the file it is read from (from), committed under the
+	// chromosome's canonical name (chrom_filename), which wins over its other names.
+	string stage(const string &chrom_filename, const string &from)
 	{
 		if (m_indexed) {
 			// All chromosomes share track.dat; the index is needed alongside it
@@ -59,7 +61,7 @@ public:
 			stage_file("track.idx", false);
 			stage_file("track.dat", true);
 		} else
-			stage_file(chrom_filename, true);
+			stage_file(chrom_filename, true, from);
 
 		return m_stage_dir + "/" + chrom_filename;
 	}
@@ -112,11 +114,11 @@ private:
 			verror("Failed to fsync %s: %s", path.c_str(), strerror(err));
 	}
 
-	void stage_file(const string &name, bool committable)
+	void stage_file(const string &name, bool committable, const string &from = "")
 	{
 		if (!m_staged.insert(name).second)
 			return;
-		copy_file(m_track_dir + "/" + name, m_stage_dir + "/" + name);
+		copy_file(m_track_dir + "/" + (from.empty() ? name : from), m_stage_dir + "/" + name);
 		if (committable)
 			m_committable.push_back(name);
 	}
@@ -224,6 +226,7 @@ SEXP gtrack_modify(SEXP _track, SEXP _track_expr, SEXP _intervals, SEXP _iterato
 		GInterval last_interval(-1, -1, -1, -1);
 
 		const GenomeTrack::ChromFiles &files = iu.get_chrom_files(trackpath);
+		set<int> modified;
 
 		if (GenomeTrack::get_type(files) != GenomeTrack::FIXED_BIN)
 			verror("Cannot modify track %s: modification is supported only for dense tracks", track);
@@ -248,8 +251,9 @@ SEXP gtrack_modify(SEXP _track, SEXP _track_expr, SEXP _intervals, SEXP _iterato
 				// The values go to the staging copy; the live track keeps the
 				// old ones until commit() below.
 				if (stager.enabled()) {
-					string staged = stager.stage(resolved);
+					string staged = stager.stage(GenomeTrack::get_1d_filename(iu.get_chromkey(), cur_interval.chromid), resolved);
 					gtrack.init_update(staged.c_str(), cur_interval.chromid);
+					modified.insert(cur_interval.chromid);
 				} else
 					gtrack.init_update(filename, cur_interval.chromid);
 			}
@@ -266,6 +270,13 @@ SEXP gtrack_modify(SEXP _track, SEXP _track_expr, SEXP _intervals, SEXP _iterato
 		// short write must fail here, not silently at fclose() after commit.
 		gtrack.flush_writes();
 		stager.commit();
+
+		// The canonically named files committed hold the data of their chromosomes now; their other names
+		// (aliases, which may differ from the modified file) would only be stale copies
+		for (const GenomeTrack::ChromFiles::File &file : files.files()) {
+			if (modified.count(file.chromid) && file.name != GenomeTrack::get_1d_filename(iu.get_chromkey(), file.chromid))
+				unlink((trackpath + "/" + file.name).c_str());
+		}
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
     } catch (const bad_alloc &e) {

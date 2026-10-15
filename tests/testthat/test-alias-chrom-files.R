@@ -201,10 +201,12 @@ test_that("tracks and intervals sets whose files are named by chromosome aliases
         expect_true(all(files %in% c(as.character(gintervals.all()$chrom), "vars")))
     }
 
-    # gtrack.modify() changes the alias-named file in place
+    # gtrack.modify() writes the alias-named file's chromosome under its canonical name
     gtrack.modify("dn", "dn * 2", gintervals.all())
     expect_equal(gextract("dn", gintervals.all())$dn, expected$dn$dn * 2)
-    expect_true("MT" %in% list.files(file.path(db, "tracks", "dn.track")))
+    files <- list.files(file.path(db, "tracks", "dn.track"))
+    expect_true("chrM" %in% files)
+    expect_false("MT" %in% files)
 
     # gtrack.copy() into a per-chromosome and into an indexed database (which orders the chromosomes
     # differently)
@@ -741,4 +743,60 @@ test_that("a copy of a file with two names (a symlink, a hard link), neither can
     expect_true(file.copy(file.path(dir2, "chr1"), file.path(dir2, "M"), overwrite = TRUE))
     gdb.reload()
     expect_error(gextract("sp2", gintervals.all()), "two files of chromosome chrM")
+})
+
+test_that("gtrack.modify of a chromosome with two names, neither canonical, writes it under its canonical name", {
+    local_db_state()
+    withr::local_options(list(gmulticontig.indexed_format = FALSE))
+    td <- tempfile("alias_modify_")
+    dir.create(td)
+    withr::defer(unlink(td, recursive = TRUE))
+    db <- create_alias_test_db(file.path(td, "db"))
+    gsetroot(db)
+
+    two_names <- list(
+        symlink = function(dir) file.symlink("MT", file.path(dir, "M")),
+        hardlink = function(dir) file.link(file.path(dir, "MT"), file.path(dir, "M")),
+        copy = function(dir) file.copy(file.path(dir, "MT"), file.path(dir, "M"))
+    )
+    for (how in names(two_names)) {
+        gtrack.create_dense("d", "x", gintervals(c("chr1", "chrM"), 0, 30), c(1, 1), 10, 0)
+        dir <- file.path(db, "tracks", "d.track")
+        expect_true(file.rename(file.path(dir, "chrM"), file.path(dir, "MT")), info = how)
+        expect_true(two_names[[how]](dir), info = how)
+        gdb.reload()
+        gtrack.modify("d", "d * 7", gintervals("chrM", 0, 30))
+        expect_equal(gextract("d", gintervals("chrM", 0, 30))$d, c(7, 7, 7), info = how)
+        expect_equal(gextract("d", gintervals("chr1", 0, 30))$d, c(1, 1, 1), info = how)
+        expect_false(any(c("M", "MT") %in% list.files(dir)), info = how)
+        gtrack.rm("d", force = TRUE)
+    }
+})
+
+test_that("a copy across genomes takes the name of a chromosome's file the destination has", {
+    local_db_state()
+    withr::local_options(list(gmulticontig.indexed_format = FALSE))
+    td <- tempfile("alias_copy_dups_")
+    dir.create(td)
+    withr::defer(unlink(td, recursive = TRUE))
+    mkdb <- function(path, chroms) {
+        dir.create(file.path(path, "tracks"), recursive = TRUE)
+        dir.create(file.path(path, "seq"))
+        for (chrom in chroms) writeBin(charToRaw(strrep("A", 1000)), file.path(path, "seq", paste0("chr", chrom, ".seq")))
+        writeLines(paste(chroms, 1000, sep = "\t"), file.path(path, "chrom_sizes.txt"))
+        normalizePath(path)
+    }
+    src <- mkdb(file.path(td, "src"), c("1", "M"))
+    dest <- mkdb(file.path(td, "dest"), c("1", "MT"))
+    gsetroot(src)
+    gtrack.create_sparse("sp", "x", gintervals(c("chr1", "chrM"), 0, 100), c(1, 2))
+    # chrM in "M" and the same bytes in "MT"; dest knows chrMT
+    dir <- file.path(src, "tracks", "sp.track")
+    expect_true(file.rename(file.path(dir, "chrM"), file.path(dir, "M")))
+    expect_true(file.copy(file.path(dir, "M"), file.path(dir, "MT")))
+    gdb.reload()
+
+    suppressWarnings(gtrack.copy("sp", "sp", db = dest))
+    gsetroot(dest)
+    expect_equal(gextract("sp", gintervals(c("chr1", "chrMT"), 0, 1000))$sp, c(1, 2))
 })
