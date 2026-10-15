@@ -542,11 +542,14 @@ gintervals.update <- function(intervals.set = NULL, intervals = "", chrom = NULL
             # a file named by an alias of chrom (.gchrom_files) would be read in place of the one deleted
             # here; one written over the canonical file hides them already (a loop of updates would list
             # the directory once per chromosome)
+            aliases <- character(0)
             if (is.null(intervals) || !nrow(intervals) || !file_test("-f", file.path(fullpath, chrom))) {
                 files <- .gchrom_files(fullpath, FALSE)
-                unlink(file.path(fullpath, files$file[files$chrom == chrom & files$file != chrom]))
+                aliases <- files$file[files$chrom == chrom & files$file != chrom]
             }
+            # removed once the write succeeded: they may hold the chromosome's only data
             .gintervals.big.save(fullpath, intervals, chrom = chrom)
+            unlink(file.path(fullpath, aliases))
         } else {
             if (is.null(chrom1) || is.null(chrom2)) {
                 stop("chrom1 and chrom2 parameters must be specified", call. = FALSE)
@@ -560,11 +563,14 @@ gintervals.update <- function(intervals.set = NULL, intervals = "", chrom = NULL
                 stats <- rbind(stats, data.frame(chrom1 = chrom1, chrom2 = chrom2, stat))
                 stats <- stats[order(stats$chrom1, stats$chrom2), ]
             }
+            aliases <- character(0)
             if (is.null(intervals) || !nrow(intervals) || !file_test("-f", file.path(fullpath, paste(chrom1, chrom2, sep = "-")))) {
                 files <- .gchrom_files(fullpath, TRUE)
-                unlink(file.path(fullpath, files$file[files$chrom1 == chrom1 & files$chrom2 == chrom2 & files$file != paste(chrom1, chrom2, sep = "-")]))
+                aliases <- files$file[files$chrom1 == chrom1 & files$chrom2 == chrom2 & files$file != paste(chrom1, chrom2, sep = "-")]
             }
+            # removed once the write succeeded: they may hold the pair's only data
             .gintervals.big.save(fullpath, intervals, chrom1 = chrom1, chrom2 = chrom2)
+            unlink(file.path(fullpath, aliases))
         }
 
         if (nrow(stats) > 1) {

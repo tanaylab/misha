@@ -945,3 +945,68 @@ test_that("after gtrack.modify, earlier pymisha's write of the \"chr\"-toggled n
         gtrack.rm("d", force = TRUE)
     }
 })
+
+test_that("a file read through a symlink that cannot be reached is an error, not a missing chromosome", {
+    local_db_state()
+    withr::local_options(list(gmulticontig.indexed_format = FALSE))
+    td <- tempfile("alias_unreachable_")
+    dir.create(td)
+    withr::defer({
+        Sys.chmod(file.path(td, "closed"), "755")
+        unlink(td, recursive = TRUE)
+    })
+    db <- create_alias_test_db(file.path(td, "db"))
+    gsetroot(db)
+
+    gtrack.create_sparse("sp", "x", gintervals(c("chr1", "chr2"), 0, 100), c(1, 2))
+    gtrack.2d.create("rects", "x", gintervals.2d(c("chr1", "chr2"), 10, 15, "chr2", 30, 35), c(1, 2))
+    expected <- gextract("sp", gintervals.all())
+    tracks <- file.path(db, "tracks")
+    closed <- file.path(td, "closed")
+    dir.create(closed)
+    for (file in c("sp.track/chr2", "rects.track/chr1-chr2")) {
+        target <- file.path(closed, basename(file))
+        expect_true(file.rename(file.path(tracks, file), target))
+        expect_true(file.symlink(target, file.path(tracks, file)))
+    }
+    unlink(file.path(tracks, "rects.track", ".meta"))
+    Sys.chmod(closed, "000")
+    skip_if(file.access(file.path(closed, "chr2"), 0) == 0, "the directory stays searchable to this user")
+    gdb.reload()
+
+    expect_error(gextract("sp", gintervals.all()), "Permission denied")
+    expect_error(gextract("rects", gintervals.2d.all()), "Permission denied")
+    expect_error(gintervals.load("sp"), "Permission denied")
+    expect_error(gtrack.copy("rects", "rects2"))
+    expect_false(gtrack.exists("rects2"))
+    # a canonically named file wins over it, as master read
+    Sys.chmod(closed, "755")
+    unlink(file.path(tracks, "sp.track", "chr2"))
+    expect_true(file.copy(file.path(closed, "chr2"), file.path(tracks, "sp.track", "chr2")))
+    expect_true(file.symlink(file.path(closed, "chr2"), file.path(tracks, "sp.track", "2")))
+    Sys.chmod(closed, "000")
+    gdb.reload()
+    expect_equal(gextract("sp", gintervals.all()), expected)
+})
+
+test_that("gintervals.update removes a chromosome's alias-named files only once its write succeeded", {
+    local_db_state()
+    withr::local_options(list(gmulticontig.indexed_format = FALSE))
+    td <- tempfile("alias_update_fail_")
+    dir.create(td)
+    withr::defer(unlink(td, recursive = TRUE))
+    db <- create_alias_test_db(file.path(td, "db"))
+    gsetroot(db)
+
+    withr::with_options(list(gmax.data.size = 1, gbig.intervals.size = 1), {
+        gintervals.save("s", data.frame(gintervals(c("chr1", "chr2", "chrX"), 0, 10), v = 1:3))
+        dir <- file.path(db, "tracks", "s.interv")
+        expect_true(file.rename(file.path(dir, "chr1"), file.path(dir, "1")))
+        # the write of chr1 fails (a directory in its place)
+        dir.create(file.path(dir, "chr1"))
+        expect_error(suppressWarnings(gintervals.update("s", data.frame(gintervals("chr1", 0, 20), v = 5L), chrom = "chr1")))
+        expect_true(file.exists(file.path(dir, "1")))
+        unlink(file.path(dir, "chr1"), recursive = TRUE)
+    })
+    expect_equal(gintervals.load("s")$v, 1:3)
+})

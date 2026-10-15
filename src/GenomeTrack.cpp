@@ -103,6 +103,8 @@ GenomeTrack::ChromFiles::ChromFiles(const GenomeChromKey &chromkey, const string
 		return chromid >= 0 ? chromid : chromkey.find_chromid(toggled(name));
 	};
 
+	unordered_map<string, string> unreachable;
+
 	// a listing cut short by an I/O error (EIO, ESTALE on NFS) would silently miss files
 	for (;;) {
 		errno = 0;
@@ -119,7 +121,21 @@ GenomeTrack::ChromFiles::ChromFiles(const GenomeChromKey &chromkey, const string
 		if (name[0] == '.' || index_files.count(name))
 			continue;
 
-		bool is_symlink = dirp->d_type == DT_LNK;
+		if (dirp->d_type != DT_LNK && dirp->d_type != DT_UNKNOWN && dirp->d_type != DT_REG)
+			continue;
+
+		File file{name, find_chromid(name), -1, -1, dirp->d_type == DT_LNK};
+		for (uint64_t pos = name.find('-'); pos != string::npos; pos = name.find('-', pos + 1)) {
+			int chromid1 = find_chromid(name.substr(0, pos));
+			int chromid2 = chromid1 < 0 ? -1 : find_chromid(name.substr(pos + 1));
+			if (chromid2 >= 0) {
+				file.chromid1 = chromid1;
+				file.chromid2 = chromid2;
+				break;
+			}
+		}
+
+		bool &is_symlink = file.link;
 		if (is_symlink || dirp->d_type == DT_UNKNOWN) {
 			string path = dir + "/" + name;
 			if (!lstat(path.c_str(), &st) && S_ISLNK(st.st_mode))
@@ -130,22 +146,16 @@ GenomeTrack::ChromFiles::ChromFiles(const GenomeChromKey &chromkey, const string
 					closedir(d);
 					TGLError<GenomeTrack>(FILE_ERROR, "Accessing %s: %s\n", path.c_str(), strerror(err));
 				}
-				continue;  // a dangling symlink, ...
+				// a dangling symlink is skipped; one named by a chromosome or pair whose file cannot be reached
+				// (EACCES, ELOOP, ...) is an error where it is the file read, below
+				if (errno != ENOENT && (file.chromid >= 0 || file.chromid1 >= 0)) {
+					unreachable.emplace(name, path + ": " + strerror(errno));
+					m_files.push_back(file);
+				}
+				continue;
 			}
 			if (!S_ISREG(st.st_mode))  // a directory, ...
 				continue;
-		} else if (dirp->d_type != DT_REG)
-			continue;
-
-		File file{name, find_chromid(name), -1, -1, is_symlink};
-		for (uint64_t pos = name.find('-'); pos != string::npos; pos = name.find('-', pos + 1)) {
-			int chromid1 = find_chromid(name.substr(0, pos));
-			int chromid2 = chromid1 < 0 ? -1 : find_chromid(name.substr(pos + 1));
-			if (chromid2 >= 0) {
-				file.chromid1 = chromid1;
-				file.chromid2 = chromid2;
-				break;
-			}
 		}
 
 		if (!is_symlink || file.chromid >= 0 || file.chromid1 >= 0)
@@ -176,6 +186,22 @@ GenomeTrack::ChromFiles::ChromFiles(const GenomeChromKey &chromkey, const string
 			if (!rank || !indexed2d)
 				choose(m_pair2file, pair_key(file.chromid1, file.chromid2), i, rank);
 		}
+	}
+
+	// a file read that cannot be reached is an error when the files are read as 1D (2D), as a conflict
+	for (const auto &ichoice : m_chrom2file) {
+		if (unreachable.empty())
+			break;
+		auto iunreachable = unreachable.find(m_files[ichoice.second.file].name);
+		if (iunreachable != unreachable.end() && m_conflict1d.empty())
+			m_conflict1d = "Accessing " + iunreachable->second;
+	}
+	for (const auto &ichoice : m_pair2file) {
+		if (unreachable.empty())
+			break;
+		auto iunreachable = unreachable.find(m_files[ichoice.second.file].name);
+		if (iunreachable != unreachable.end() && m_conflict2d.empty())
+			m_conflict2d = "Accessing " + iunreachable->second;
 	}
 
 	// the error names the conflict of the first chromosome (pair) by chrom id
