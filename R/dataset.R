@@ -84,7 +84,9 @@ gdataset.load <- function(path, force = FALSE, verbose = FALSE) {
     # chrom_sizes.txt is the dataset's (chrom ids then follow chrom_sizes.txt, the order gsetroot()
     # holds the index to); that database decides only this. A dataset whose order cannot be read
     # (no sequence, the unreadable index of a linked seq/) loads. One with an indexed seq/ of its own
-    # whose index cannot be read is indexed, so in chrom_sizes.txt order. One in another order, or
+    # whose index cannot be read is taken to be in chrom_sizes.txt order, as an indexed database
+    # numbers its chromosomes (earlier versions could also write files into it in the working
+    # database's order, so its indexed files cannot be checked). One in another order, or
     # whose index does not match its own chrom_sizes.txt (a seq/ linked to a database converted
     # since), is refused if it holds files keyed by chrom id (indexed tracks and interval sets),
     # which would read other chromosomes; otherwise it loads, and GDATASET_CHROMS keeps its order
@@ -143,7 +145,7 @@ gdataset.load <- function(path, force = FALSE, verbose = FALSE) {
             i <- which(is.na(dataset_chroms[k]) | is.na(groot_chroms[k]) | sub("^chr", "", dataset_chroms[k]) != sub("^chr", "", groot_chroms[k]))[1]
             if (!is.null(index_unreadable)) {
                 stop(sprintf(
-                    "Cannot load dataset '%s': its seq/genome.idx could not be read (%s); its indexed tracks and interval sets follow its chrom_sizes.txt order, which differs from the working database's (chrom id %d is %s in the dataset and %s in the working database), so they would read other chromosomes",
+                    "Cannot load dataset '%s': its seq/genome.idx could not be read (%s), so the chrom ids of its indexed tracks and interval sets cannot be checked; an indexed database numbers its chromosomes in chrom_sizes.txt order, which differs from the working database's (chrom id %d is %s in the dataset and %s in the working database)",
                     path, index_unreadable, i - 1L, dataset_chroms[i], groot_chroms[i]
                 ), call. = FALSE)
             }

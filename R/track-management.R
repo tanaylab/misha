@@ -650,7 +650,8 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
             srcname
         ), call. = FALSE)
     }
-    if (is_2d && !src_indexed && !setequal(src_chroms, dest_chroms)) {
+    # (a loaded dataset's recorded order has its chrom_sizes.txt names, which may lack "chr")
+    if (is_2d && !src_indexed && !setequal(sub("^chr", "", src_chroms), sub("^chr", "", dest_chroms))) {
         stop(sprintf(
             "Cross-db copy of 2D track %s requires the same chromosome names in source and destination.",
             srcname

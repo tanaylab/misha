@@ -1875,8 +1875,10 @@ test_that("gdataset.load refuses a dataset with an indexed seq/ of its own whose
     e <- indexed_like(p, file.path(td, "E"), FALSE)
     gsetroot(p)
     gtrack.create_sparse("pt", "x", gintervals("chr1", 0, 10), 1)
-    expect_true(file.copy(file.path(p, "tracks", "pt.track"), file.path(e, "tracks"), recursive = TRUE))
+    gtrack.2d.create("pr", "x", gintervals.2d("chr1", 0, 10, "chr2", 0, 10), 1)
+    expect_true(all(file.copy(file.path(p, "tracks", c("pt.track", "pr.track")), file.path(e, "tracks"), recursive = TRUE)))
     gtrack.rm("pt", force = TRUE)
+    gtrack.rm("pr", force = TRUE)
     gsetroot(f)
     truth <- gextract("t", gintervals.all())
     gsetroot(p)
@@ -1896,13 +1898,17 @@ test_that("gdataset.load refuses a dataset with an indexed seq/ of its own whose
 
         # in chrom_sizes.txt order, unlike P's chrom ids: refused for its indexed track
         gsetroot(p)
-        expect_error(gdataset.load(d), "seq/genome.idx could not be read .*would read other chromosomes", info = how)
+        expect_error(gdataset.load(d), "seq/genome.idx could not be read .*cannot be checked", info = how)
         expect_equal(get("GDATASETS", envir = misha:::.misha), character(0), info = how)
         # without indexed files it loads, and keeps that order
         suppressMessages(gdataset.load(e))
         expect_equal(get("GDATASETS", envir = misha:::.misha), e, info = how)
         expect_equal(gextract("pt", gintervals("chr1", 0, 10))$pt, 1, info = how)
         expect_equal(sub("^chr", "", .gdb.chrom_names_at(e)), c("2", "10", "1", "X", "1_KI270706v1_random"), info = how)
+        # its per-pair 2D track copies out, though its recorded names lack "chr"
+        gtrack.copy("pr", "prcopy", db = p)
+        expect_equal(gextract("prcopy", gintervals.2d.all())$prcopy, 1, info = how)
+        gtrack.rm("prcopy", force = TRUE)
         # in the order of the working database's chrom ids it loads and reads right
         gsetroot(q)
         suppressMessages(gdataset.load(f))
