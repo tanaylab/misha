@@ -683,6 +683,19 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
             destname, dest_db, file.path(dest_db, "tracks")
         ), call. = FALSE)
     }
+    if (is_2d && dest_indexed && !src_indexed) {
+        # the conversion after the copy stops at a file not named by a chromosome pair (symlinks
+        # count only when named by one, GenomeTrack::ChromFiles)
+        names <- list.files(src_dir)
+        paths <- file.path(src_dir, names)
+        stray <- setdiff(names[file_test("-f", paths) & !nzchar(Sys.readlink(paths))], c(.gchrom_files(src_dir, TRUE)$file, .TRACK_INTERNAL_FILES))
+        if (length(stray)) {
+            stop(sprintf(
+                "Cannot copy 2D track %s: its file %s is not named by a chromosome pair, so the copy could not be converted to the indexed format.",
+                srcname, stray[1]
+            ), call. = FALSE)
+        }
+    }
     if (!is_2d) {
         # the per-chromosome files the copy would have (an indexed track splits into one per contig)
         src_files <- if (src_indexed) src_chroms else .gchrom_files(src_dir, FALSE)$chrom

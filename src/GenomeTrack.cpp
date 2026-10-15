@@ -133,12 +133,19 @@ GenomeTrack::ChromFiles::ChromFiles(const GenomeChromKey &chromkey, const string
 
 	sort(m_files.begin(), m_files.end(), [](const File &f1, const File &f2) { return f1.name < f2.name; });
 
+	// Next to an intervals set's index only a canonically named file holds data newer than it: no misha writes a
+	// file named by an alias there, and one left by an earlier conversion is older than the index
+	const bool indexed1d = !stat((dir + "/intervals.idx").c_str(), &st);
+	const bool indexed2d = !stat((dir + "/intervals2d.idx").c_str(), &st);
+
 	for (size_t i = 0; i < m_files.size(); ++i) {
 		const File &file = m_files[i];
-		if (file.chromid >= 0)
-			choose(m_chrom2file, file.chromid, i, file.name == chromkey.id2chrom(file.chromid));
-		if (file.chromid1 >= 0)
-			choose(m_pair2file, pair_key(file.chromid1, file.chromid2), i, file.name == get_2d_filename(chromkey, file.chromid1, file.chromid2));
+		bool canonical = file.chromid >= 0 && file.name == chromkey.id2chrom(file.chromid);
+		if (file.chromid >= 0 && (canonical || !indexed1d))
+			choose(m_chrom2file, file.chromid, i, canonical);
+		canonical = file.chromid1 >= 0 && file.name == get_2d_filename(chromkey, file.chromid1, file.chromid2);
+		if (file.chromid1 >= 0 && (canonical || !indexed2d))
+			choose(m_pair2file, pair_key(file.chromid1, file.chromid2), i, canonical);
 	}
 
 	// the error names the conflict of the first chromosome (pair) by chrom id

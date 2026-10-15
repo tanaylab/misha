@@ -529,3 +529,62 @@ test_that("loading one chromosome (pair) of a big set lists its directory only w
     expect_equal(nrow(gintervals.load("set2d", chrom1 = "chr1", chrom2 = "chr2")), 1)
     expect_equal(listed, 2)
 })
+
+test_that("next to an intervals set's index a file named by an alias is ignored, as older than the index", {
+    local_db_state()
+    withr::local_options(list(gmulticontig.indexed_format = FALSE))
+    td <- tempfile("alias_stale_")
+    dir.create(td)
+    withr::defer(unlink(td, recursive = TRUE))
+    db <- create_alias_test_db(file.path(td, "db"))
+    gsetroot(db)
+
+    withr::with_options(list(gmax.data.size = 1), {
+        gintervals.save("old", data.frame(gintervals(c("chr1", "chr2"), 0, 10), v = 1))
+        gintervals.save("s", data.frame(gintervals(c("chr1", "chr2"), c(500, 0), c(600, 10)), v = c(99, 2)))
+        gintervals.save("old2d", data.frame(gintervals.2d(c("chr1", "chr2"), 0, 10, "chr2", 0, 10), v = 1))
+        gintervals.save("s2d", data.frame(gintervals.2d(c("chr1", "chr2"), c(500, 0), c(600, 10), "chr2", c(500, 0), c(600, 10)), v = c(99, 2)))
+    })
+    suppressMessages({
+        gintervals.convert_to_indexed("s", remove.old = TRUE)
+        gintervals.2d.convert_to_indexed("s2d", remove.old = TRUE)
+    })
+    expected <- list(gintervals.load("s"), gintervals.load("s2d"))
+    # as an earlier conversion left them: the canonical file packed, an older one named by an alias kept
+    tracks <- file.path(db, "tracks")
+    expect_true(file.copy(file.path(tracks, "old.interv", "chr1"), file.path(tracks, "s.interv", "1")))
+    expect_true(file.copy(file.path(tracks, "old2d.interv", "chr1-chr2"), file.path(tracks, "s2d.interv", "1-2")))
+
+    expect_equal(list(gintervals.load("s"), gintervals.load("s2d")), expected)
+    expect_equal(gintervals.load("s", chrom = "chr1")$v, 99)
+    expect_equal(gintervals.load("s2d", chrom1 = "chr1", chrom2 = "chr2")$v, 99)
+    gtrack.create_sparse("sp", "x", gintervals(c("chr1", "chr2"), 0, 1000), 1:2)
+    expect_equal(gextract("sp", intervals = "s", iterator = "s")$start, c(500, 0))
+})
+
+test_that("a 2D copy that is converted stops before the destination at a file not named by a pair", {
+    local_db_state()
+    withr::local_options(list(gmulticontig.indexed_format = FALSE))
+    td <- tempfile("alias_copy2d_")
+    dir.create(td)
+    withr::defer(unlink(td, recursive = TRUE))
+    p <- create_alias_test_db(file.path(td, "p"))
+    fasta <- file.path(td, "genome.fa")
+    writeLines(c(">chr1", strrep("A", 1000), ">chr2", strrep("A", 2000)), fasta)
+    w <- file.path(td, "w")
+    suppressMessages(gdb.create(w, fasta, format = "indexed"))
+
+    gsetroot(p)
+    intervs <- gintervals.2d(c("chr1", "chr2"), 10, 15, "chr2", 30, 35)
+    gtrack.2d.create("src", "x", intervs, c(1, 2))
+    gtrack.2d.create("dst", "x", intervs, c(7, 8))
+    expect_true(all(file.copy(file.path(p, "tracks", c("src.track", "dst.track")), file.path(w, "tracks"), recursive = TRUE)))
+    writeLines("notes", file.path(w, "tracks", "src.track", "README"))
+    gsetroot(w)
+    gdb.reload()
+    suppressMessages(gtrack.2d.convert_to_indexed("dst", remove.old = TRUE))
+    expected <- gextract("dst", gintervals.2d.all())
+
+    expect_error(gtrack.copy("src", "dst", overwrite = TRUE), "file README is not named by a chromosome pair")
+    expect_equal(gextract("dst", gintervals.2d.all()), expected)
+})
