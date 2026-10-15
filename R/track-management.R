@@ -643,7 +643,7 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
     }
 
     # Every check that can stop the copy comes before the destination is touched (overwrite = TRUE
-    # deletes the track there)
+    # sets the track there aside, and puts it back if the copy fails later)
     if (is_2d && src_indexed && !identical(src_chroms, dest_chroms)) {
         stop(sprintf(
             "Cross-db copy of 2D track %s requires identical chromosome order in source and destination.",
@@ -730,16 +730,33 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
     if (!dir.exists(dest_parent)) {
         .gwith_umask(dir.create(dest_parent, recursive = TRUE, showWarnings = FALSE))
     }
+    aside <- NULL
     if (dir.exists(dest_dir)) {
-        # Bypass gtrack.rm (which insists db is loaded) and clean up directly.
-        # If trash failed and residue remains, abort so we don't create on top
-        # of stale files.
-        if (!.gdb.trash(dest_dir) && dir.exists(dest_dir)) {
+        # The existing track is set aside (hidden, as a staging directory) until the copy has
+        # succeeded, and comes back if any step of it fails (bypassing gtrack.rm, which insists the
+        # database is loaded)
+        aside <- file.path(dest_parent, .gdb.staging_name(basename(dest_dir)))
+        if (!suppressWarnings(file.rename(dest_dir, aside))) {
             stop(sprintf(
-                "Failed to remove existing destination %s; copy aborted.",
+                "Failed to set the existing destination %s aside; copy aborted.",
                 dest_dir
             ), call. = FALSE)
         }
+        .gdb.invalidate_dir_cache(dest_dir)
+        on.exit(
+            if (!is.null(aside)) {
+                unlink(dest_dir, recursive = TRUE)
+                if (file.rename(aside, dest_dir)) {
+                    .gdb.invalidate_dir_cache(dest_dir)
+                    if (dest_db_loaded) {
+                        .gdb.add_track(destname, dest_db)
+                    } else {
+                        .gdb.cache_mark_dirty(dest_db)
+                    }
+                }
+            },
+            add = TRUE
+        )
         # the session's track list is updated only for a loaded destination (.gdb.rm_track writes it
         # into the database's .db.cache); an unloaded one is rescanned when loaded
         if (dest_db_loaded) {
@@ -781,6 +798,10 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
             stop(e)
         }
     )
+    if (!is.null(aside)) {
+        .gdb.trash(aside)
+        aside <- NULL
+    }
     destname
 }
 

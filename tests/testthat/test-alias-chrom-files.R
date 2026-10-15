@@ -1104,3 +1104,36 @@ test_that("a chromosome whose name ends in .tmp is read, and a copy matches a de
     gsetroot(dest)
     expect_equal(gextract("m", gintervals.all())$m, 3)
 })
+
+test_that("an overwriting gtrack.copy that fails keeps the existing destination", {
+    local_db_state()
+    withr::local_options(list(gmulticontig.indexed_format = FALSE))
+    td <- tempfile("alias_copy_aside_")
+    dir.create(td)
+    withr::defer({
+        Sys.chmod(list.files(td, recursive = TRUE, full.names = TRUE, all.files = TRUE), "644")
+        unlink(td, recursive = TRUE)
+    })
+    db <- create_alias_test_db(file.path(td, "db"))
+    gsetroot(db)
+
+    gtrack.create_sparse("src", "x", gintervals(c("chr1", "chr2"), 0, 100), c(1, 2))
+    gtrack.create_sparse("victim", "x", gintervals("chr1", 500, 600), 42)
+    tracks <- file.path(db, "tracks")
+    # a leftover the listing skips, which the copy cannot read
+    unreadable <- file.path(tracks, "src.track", "notes.tmp")
+    writeLines("x", unreadable)
+    Sys.chmod(unreadable, "000")
+    skip_if(file.access(unreadable, 4) == 0, "the file stays readable to this user")
+
+    expect_error(suppressWarnings(gtrack.copy("src", "victim", overwrite = TRUE)), "Failed to copy")
+    expect_equal(gextract("victim", gintervals.all())$victim, 42)
+    expect_true(gtrack.exists("victim"))
+    expect_length(list.files(tracks, all.files = TRUE, pattern = "^\\\\.victim\\\\.track\\\\.tmp\\\\."), 0)
+
+    # once the copy can succeed it replaces the destination and leaves nothing aside
+    Sys.chmod(unreadable, "644")
+    gtrack.copy("src", "victim", overwrite = TRUE)
+    expect_equal(gextract("victim", gintervals.all())$victim, c(1, 2))
+    expect_length(list.files(tracks, all.files = TRUE, pattern = "^\\\\.victim\\\\.track\\\\.tmp\\\\."), 0)
+})
