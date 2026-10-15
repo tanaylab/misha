@@ -143,6 +143,7 @@ SEXP gtrack2d_convert_to_indexed(SEXP _track, SEXP _remove_old, SEXP _envir) {
                     if (!have_pair_files) {
                         // Extract per-pair data from track.dat back to per-pair files
                         FILE *dat_fp = fopen(dat_path.c_str(), "rb");
+                        vector<string> extracted;
                         if (dat_fp) {
                             for (const auto &entry : old_idx->entries()) {
                                 string pair_file = track_dir + "/" + GenomeTrack::get_2d_filename(chromkey, entry.chrom1_id, entry.chrom2_id);
@@ -153,8 +154,13 @@ SEXP gtrack2d_convert_to_indexed(SEXP _track, SEXP _remove_old, SEXP _envir) {
                                     bool written = pf && fwrite(buf.data(), 1, entry.length, pf) == entry.length;
                                     if ((pf && fclose(pf)) || !written) {
                                         extract_error = "Failed to write " + pair_file + ": " + strerror(errno);
+                                        // a run with these files would not extract again, and pack them as they are
+                                        extracted.push_back(pair_file);
+                                        for (const string &file : extracted)
+                                            unlink(file.c_str());
                                         break;
                                     }
+                                    extracted.push_back(pair_file);
                                 }
                             }
                             fclose(dat_fp);
@@ -181,7 +187,7 @@ SEXP gtrack2d_convert_to_indexed(SEXP _track, SEXP _remove_old, SEXP _envir) {
         // The per-pair files, listed once. Not the call's listing: the conversion writes into the directory.
         const GenomeTrack::ChromFiles files(chromkey, track_dir);
         for (const GenomeTrack::ChromFiles::File &file : files.files()) {
-            if (file.chromid1 < 0)
+            if (!file.link && file.chromid1 < 0)
                 verror("Track %s: file %s is not named by a chromosome pair", track.c_str(), file.name.c_str());
         }
 

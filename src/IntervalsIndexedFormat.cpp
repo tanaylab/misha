@@ -13,6 +13,7 @@
 #include <vector>
 #include <string>
 #include <algorithm>
+#include <memory>
 
 #include "IntervalsIndex1D.h"
 #include "IntervalsIndex2D.h"
@@ -95,6 +96,21 @@ static void write_2d_index_header(FILE *fp, uint32_t num_entries, uint64_t check
     }
 }
 
+// Copies length bytes at offset of src_fp (the old data file, src) to dest
+static void copy_range(FILE *src_fp, const string &src, uint64_t offset, uint64_t length, FILE *dest) {
+    vector<char> buffer(min(length, (uint64_t)1024 * 1024));
+    if (fseeko(src_fp, offset, SEEK_SET))
+        TGLError("Failed to seek in %s", src.c_str());
+    for (uint64_t left = length; left; ) {
+        size_t n = min(left, (uint64_t)buffer.size());
+        if (fread(buffer.data(), 1, n, src_fp) != n)
+            TGLError("Failed to read from %s", src.c_str());
+        if (fwrite(buffer.data(), 1, n, dest) != n)
+            TGLError("Failed to write to data file");
+        left -= n;
+    }
+}
+
 // Helper function to copy file contents
 static bool copy_file_contents(const string &src, FILE *dest, uint64_t &bytes_written) {
     FILE *src_fp = fopen(src.c_str(), "rb");
@@ -171,7 +187,7 @@ SEXP ginterv_convert(SEXP _intervset, SEXP _remove_old, SEXP _envir) {
         // The chromosome files, listed once. Not the call's listing: the conversion writes into the directory.
         const GenomeTrack::ChromFiles files(chromkey, intervset_dir);
         for (const GenomeTrack::ChromFiles::File &file : files.files()) {
-            if (file.chromid < 0)
+            if (!file.link && file.chromid < 0)
                 verror("Intervals set %s: file %s is not named by a chromosome", intervset.c_str(), file.name.c_str());
         }
 
@@ -180,6 +196,22 @@ SEXP ginterv_convert(SEXP _intervset, SEXP _remove_old, SEXP _envir) {
         idx_path_tmp = intervset_dir + "/intervals.idx.tmp";
         string dat_path = intervset_dir + "/intervals.dat";
         string idx_path = intervset_dir + "/intervals.idx";
+
+        // A forced re-conversion of an indexed set: a chromosome without a canonically named file (the only
+        // files the listing counts next to an index) keeps its data from the index. An index that cannot be
+        // read holds nothing to keep.
+        IntervalsIndex1D old_index;
+        unique_ptr<FILE, int (*)(FILE *)> old_dat(NULL, fclose);
+        bool old_loaded = false;
+        try {
+            old_loaded = old_index.load(idx_path);
+        } catch (TGLException &) {
+        }
+        if (old_loaded) {
+            old_dat.reset(fopen(dat_path.c_str(), "rb"));
+            if (!old_dat)
+                TGLError("Failed to open %s: %s", dat_path.c_str(), strerror(errno));
+        }
 
         // Open temporary files
         FILE *dat_fp = fopen(dat_path_tmp.c_str(), "wb");
@@ -212,9 +244,14 @@ SEXP ginterv_convert(SEXP _intervset, SEXP _remove_old, SEXP _envir) {
             entry.reserved = 0;
 
             uint64_t bytes_written = 0;
+            const IntervalsContigEntry *old_entry = old_dat ? old_index.get_entry(chromid) : NULL;
             if (found && copy_file_contents(chr_file, dat_fp, bytes_written)) {
                 entry.length = bytes_written;
                 current_offset += bytes_written;
+            } else if (old_entry && old_entry->length) {
+                copy_range(old_dat.get(), dat_path, old_entry->offset, old_entry->length, dat_fp);
+                entry.length = old_entry->length;
+                current_offset += old_entry->length;
             }
 
             // Write entry to index in one call (24 bytes)
@@ -347,18 +384,39 @@ SEXP ginterv2d_convert(SEXP _intervset, SEXP _remove_old, SEXP _envir) {
         // The per-pair files, listed once. Not the call's listing: the conversion writes into the directory.
         const GenomeTrack::ChromFiles files(chromkey, intervset_dir);
         for (const GenomeTrack::ChromFiles::File &file : files.files()) {
-            if (file.chromid1 < 0)
+            if (!file.link && file.chromid1 < 0)
                 verror("Intervals set %s: file %s is not named by a chromosome pair", intervset.c_str(), file.name.c_str());
         }
 
         // Sorted by (chromid1, chromid2) for stable ordering
-        const vector<pair<int, int>> chrom_pairs = files.chrom_pairs();
+        vector<pair<int, int>> chrom_pairs = files.chrom_pairs();
 
         // Prepare paths
         dat_path_tmp = intervset_dir + "/intervals2d.dat.tmp";
         idx_path_tmp = intervset_dir + "/intervals2d.idx.tmp";
         string dat_path = intervset_dir + "/intervals2d.dat";
         string idx_path = intervset_dir + "/intervals2d.idx";
+
+        // A forced re-conversion of an indexed set: a pair without a canonically named file (the only files
+        // the listing counts next to an index) keeps its data from the index. An index that cannot be read
+        // holds nothing to keep.
+        IntervalsIndex2D old_index;
+        unique_ptr<FILE, int (*)(FILE *)> old_dat(NULL, fclose);
+        bool old_loaded = false;
+        try {
+            old_loaded = old_index.load(idx_path);
+        } catch (TGLException &) {
+        }
+        if (old_loaded) {
+            old_dat.reset(fopen(dat_path.c_str(), "rb"));
+            if (!old_dat)
+                TGLError("Failed to open %s: %s", dat_path.c_str(), strerror(errno));
+            for (const IntervalsPairEntry &old_entry : old_index.get_all_entries()) {
+                if (old_entry.length && !files.exists(old_entry.chrom1_id, old_entry.chrom2_id))
+                    chrom_pairs.emplace_back(old_entry.chrom1_id, old_entry.chrom2_id);
+            }
+            sort(chrom_pairs.begin(), chrom_pairs.end());
+        }
 
         // Open temporary files
         FILE *dat_fp = fopen(dat_path_tmp.c_str(), "wb");
@@ -393,9 +451,14 @@ SEXP ginterv2d_convert(SEXP _intervset, SEXP _remove_old, SEXP _envir) {
             entry.reserved = 0;
 
             uint64_t bytes_written = 0;
-            if (copy_file_contents(pair_file, dat_fp, bytes_written)) {
+            if (files.exists(chromid1, chromid2) && copy_file_contents(pair_file, dat_fp, bytes_written)) {
                 entry.length = bytes_written;
                 current_offset += bytes_written;
+            } else {
+                const IntervalsPairEntry *old_entry = old_index.get_entry(chromid1, chromid2);
+                copy_range(old_dat.get(), dat_path, old_entry->offset, old_entry->length, dat_fp);
+                entry.length = old_entry->length;
+                current_offset += old_entry->length;
             }
 
             // Write entry to index in one call (28 bytes total)

@@ -684,16 +684,21 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
         ), call. = FALSE)
     }
     if (is_2d && dest_indexed && !src_indexed) {
-        # the conversion after the copy stops at a file not named by a chromosome pair (symlinks
-        # count only when named by one, GenomeTrack::ChromFiles)
+        # the conversion after the copy stops at a file not named by a chromosome pair (it skips index
+        # and temporary files, GenomeTrack::ChromFiles), and the copy makes a file of each symlink
         names <- list.files(src_dir)
-        paths <- file.path(src_dir, names)
-        stray <- setdiff(names[file_test("-f", paths) & !nzchar(Sys.readlink(paths))], c(.gchrom_files(src_dir, TRUE)$file, .TRACK_INTERNAL_FILES))
+        names <- names[file_test("-f", file.path(src_dir, names))]
+        skipped <- c(.TRACK_INTERNAL_FILES, outer(c("track", "intervals", "intervals2d"), c(".idx", ".dat", ".idx.tmp", ".dat.tmp"), paste0))
+        stray <- setdiff(names, c(.gchrom_files(src_dir, TRUE)$file, skipped))
         if (length(stray)) {
             stop(sprintf(
                 "Cannot copy 2D track %s: its file %s is not named by a chromosome pair, so the copy could not be converted to the indexed format.",
                 srcname, stray[1]
             ), call. = FALSE)
+        }
+        unreadable <- names[file.access(file.path(src_dir, names), 4) != 0]
+        if (length(unreadable)) {
+            stop(sprintf("Cannot copy 2D track %s: its file %s cannot be read.", srcname, unreadable[1]), call. = FALSE)
         }
     }
     if (!is_2d) {
@@ -808,6 +813,10 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
         files <- .gchrom_files(src_dir, FALSE)
         unlink(file.path(dest_dir, files$file[!files$used]))
         files <- files[files$used & files$file != files$chrom, ]
+        # one whose own name the destination has, and its chromosome's name not (as "M" for chrMT into
+        # a database with chrM), keeps its name, as before
+        in_dest <- function(names) !vapply(names, function(f) is.null(.gtrack.copy.match_chrom_alias(f, dest_chroms)), logical(1))
+        files <- files[in_dest(files$chrom) | !in_dest(files$file), ]
         if (!all(file.rename(file.path(dest_dir, files$file), file.path(dest_dir, files$chrom)))) {
             stop(sprintf("Failed to rename the chromosome files of %s in %s", destname, dest_dir), call. = FALSE)
         }

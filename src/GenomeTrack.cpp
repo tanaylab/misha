@@ -115,7 +115,7 @@ GenomeTrack::ChromFiles::ChromFiles(const GenomeChromKey &chromkey, const string
 		} else if (dirp->d_type != DT_REG)
 			continue;
 
-		File file{name, find_chromid(name), -1, -1};
+		File file{name, find_chromid(name), -1, -1, is_symlink};
 		for (uint64_t pos = name.find('-'); pos != string::npos; pos = name.find('-', pos + 1)) {
 			int chromid1 = find_chromid(name.substr(0, pos));
 			int chromid2 = chromid1 < 0 ? -1 : find_chromid(name.substr(pos + 1));
@@ -308,8 +308,16 @@ GenomeTrack::Type GenomeTrack::get_type(const ChromFiles &files, bool return_obs
 		}
 	}
 
-	// Fall back to per-chromosome probing (per-chrom files)
-	for (const ChromFiles::File &file : files.files()) {
+	// Fall back to per-chromosome probing (per-chrom files), regular files before symlinks (master listed no symlinks)
+	vector<const ChromFiles::File *> probed;
+	for (bool link : {false, true}) {
+		for (const ChromFiles::File &file : files.files()) {
+			if (file.link == link)
+				probed.push_back(&file);
+		}
+	}
+	for (const ChromFiles::File *pfile : probed) {
+		const ChromFiles::File &file = *pfile;
 		// not named by a chromosome or a pair (attributes, notes, ...)
 		if (file.chromid < 0 && file.chromid1 < 0)
 			continue;

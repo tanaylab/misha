@@ -1183,7 +1183,7 @@ for (unsigned ivar = 0; ivar < vars.get_num_track_vars(); ++ivar) {
 				}
 			} else {
 				for (const GenomeTrack::ChromFiles::File &file : files.files()) {
-					if (GenomeTrack::is_1d(track_type) ? file.chromid < 0 : file.chromid1 < 0)
+					if (!file.link && (GenomeTrack::is_1d(track_type) ? file.chromid < 0 : file.chromid1 < 0))
 						verror("Track %s: file %s is not named by a chromosome%s\n", itrack_name->c_str(), file.name.c_str(),
 							   GenomeTrack::is_1d(track_type) ? "" : " pair");
 				}

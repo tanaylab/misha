@@ -587,4 +587,114 @@ test_that("a 2D copy that is converted stops before the destination at a file no
 
     expect_error(gtrack.copy("src", "dst", overwrite = TRUE), "file README is not named by a chromosome pair")
     expect_equal(gextract("dst", gintervals.2d.all()), expected)
+    # the copy makes a file of a symlink, which the conversion stops at when it is not named by a pair
+    src_dir <- file.path(w, "tracks", "src.track")
+    unlink(file.path(src_dir, "README"))
+    expect_true(file.symlink(file.path(src_dir, "chr1-chr2"), file.path(src_dir, "chr1")))
+    expect_error(gtrack.copy("src", "dst", overwrite = TRUE), "file chr1 is not named by a chromosome pair")
+    expect_equal(gextract("dst", gintervals.2d.all()), expected)
+    # a file the conversion skips does not stop it
+    unlink(file.path(src_dir, "chr1"))
+    writeLines("x", file.path(src_dir, "track.dat.tmp"))
+    gtrack.copy("src", "dst", overwrite = TRUE)
+    expect_equal(gextract("dst", gintervals.2d.all())$dst, c(1, 2))
+})
+
+test_that("a forced re-conversion of an indexed set keeps the index's data where no file has the canonical name", {
+    local_db_state()
+    withr::local_options(list(gmulticontig.indexed_format = FALSE))
+    td <- tempfile("alias_force_set_")
+    dir.create(td)
+    withr::defer(unlink(td, recursive = TRUE))
+    db <- create_alias_test_db(file.path(td, "db"))
+    gsetroot(db)
+
+    withr::with_options(list(gmax.data.size = 1), {
+        gintervals.save("s", data.frame(gintervals(c("chr1", "chr2", "chrX"), 0, c(10, 20, 30)), v = 1:3))
+        gintervals.save("s2d", data.frame(gintervals.2d(c("chr1", "chr2", "chrX"), 0, 10, "chr2", 0, 10), v = 1:3))
+    })
+    # named by aliases, as earlier pymisha wrote them, and converted keeping the files
+    tracks <- file.path(db, "tracks")
+    for (set in c("s.interv", "s2d.interv")) {
+        files <- list.files(file.path(tracks, set))
+        expect_true(all(file.rename(file.path(tracks, set, files), file.path(tracks, set, alias_names(files)))))
+    }
+    suppressMessages({
+        gintervals.convert_to_indexed("s")
+        gintervals.2d.convert_to_indexed("s2d")
+    })
+    withr::with_options(list(gmax.data.size = 1), {
+        gintervals.update("s", data.frame(gintervals("chr1", 500, 600), v = 99L), chrom = "chr1")
+        gintervals.update("s2d", data.frame(gintervals.2d("chr1", 500, 600, "chr2", 500, 600), v = 99L), chrom1 = "chr1", chrom2 = "chr2")
+    })
+    expected <- list(gintervals.load("s"), gintervals.load("s2d"))
+    expect_equal(expected[[1]]$v, c(99, 2, 3))
+
+    repack <- function() {
+        suppressMessages({
+            gintervals.convert_to_indexed("s", remove.old = TRUE, force = TRUE)
+            gintervals.2d.convert_to_indexed("s2d", remove.old = TRUE, force = TRUE)
+        })
+        list(gintervals.load("s"), gintervals.load("s2d"))
+    }
+    expect_equal(repack(), expected)
+    expect_equal(list.files(file.path(tracks, "s.interv")), c("intervals.dat", "intervals.idx"))
+    expect_equal(list.files(file.path(tracks, "s2d.interv")), c("intervals2d.dat", "intervals2d.idx"))
+    # with no per-chromosome files at all
+    expect_equal(repack(), expected)
+})
+
+test_that("a symlink named only by the other dimension's names is ignored", {
+    local_db_state()
+    withr::local_options(list(gmulticontig.indexed_format = FALSE))
+    td <- tempfile("alias_link_dim_")
+    dir.create(td)
+    withr::defer(unlink(td, recursive = TRUE))
+    db <- create_alias_test_db(file.path(td, "db"))
+    gsetroot(db)
+
+    gtrack.create_sparse("sp", "x", gintervals(c("chr1", "chr2"), 0, 100), c(1, 2))
+    gtrack.2d.create("rects", "x", gintervals.2d(c("chr1", "chr2"), 10, 15, "chr2", 30, 35), c(1, 2))
+    expected <- list(gextract("sp", gintervals.all()), gextract("rects", gintervals.2d.all()))
+    tracks <- file.path(db, "tracks")
+    expect_true(file.symlink(file.path(tracks, "rects.track", "chr1-chr2"), file.path(tracks, "sp.track", "chr1-chr2")))
+    expect_true(file.symlink(file.path(tracks, "sp.track", "chr1"), file.path(tracks, "rects.track", "chr1")))
+    unlink(file.path(tracks, "rects.track", ".meta"))
+    gdb.reload()
+
+    expect_equal(gtrack.info("sp")$type, "sparse")
+    expect_equal(gtrack.info("rects")$type, "rectangles")
+    expect_equal(list(gextract("sp", gintervals.all()), gextract("rects", gintervals.2d.all())), expected)
+    suppressMessages({
+        gtrack.convert_to_indexed("sp")
+        gtrack.2d.convert_to_indexed("rects", remove.old = TRUE)
+    })
+    expect_equal(list(gextract("sp", gintervals.all()), gextract("rects", gintervals.2d.all())), expected)
+})
+
+test_that("a file named by the destination's mitochondrial name is copied to it across genomes", {
+    local_db_state()
+    withr::local_options(list(gmulticontig.indexed_format = FALSE))
+    td <- tempfile("alias_copy_mito_")
+    dir.create(td)
+    withr::defer(unlink(td, recursive = TRUE))
+    mkdb <- function(path, chroms) {
+        dir.create(file.path(path, "tracks"), recursive = TRUE)
+        dir.create(file.path(path, "seq"))
+        for (chrom in chroms) writeBin(charToRaw(strrep("A", 1000)), file.path(path, "seq", paste0("chr", chrom, ".seq")))
+        writeLines(paste(chroms, 1000, sep = "\t"), file.path(path, "chrom_sizes.txt"))
+        normalizePath(path)
+    }
+    src <- mkdb(file.path(td, "src"), c("1", "MT"))
+    dest <- mkdb(file.path(td, "dest"), c("1", "M"))
+    gsetroot(src)
+    gtrack.create_sparse("sp", "x", gintervals(c("chr1", "chrMT"), 0, 100), c(1, 2))
+    # chrMT's file named "M", an alias of chrMT here and the name of chrM in dest
+    expect_true(file.rename(file.path(src, "tracks", "sp.track", "chrMT"), file.path(src, "tracks", "sp.track", "M")))
+    gdb.reload()
+    expect_equal(gextract("sp", gintervals("chrMT", 0, 1000))$sp, 2)
+
+    gtrack.copy("sp", "sp", db = dest)
+    gsetroot(dest)
+    expect_equal(gextract("sp", gintervals(c("chr1", "chrM"), 0, 1000))$sp, c(1, 2))
 })

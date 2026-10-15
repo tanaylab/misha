@@ -65,6 +65,7 @@ public:
 			string name;
 			int    chromid;             // the chromosome it is named by, -1 if none
 			int    chromid1, chromid2;  // the chromosome pair it is named by, -1 if none
+			bool   link;                // a symlink; one named only by the other dimension's names is ignored
 		};
 
 		ChromFiles(const GenomeChromKey &chromkey, const string &dir);

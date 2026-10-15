@@ -107,7 +107,7 @@ SEXP gtrack_convert_to_indexed_format(SEXP _track, SEXP _remove_old, SEXP _envir
         // The chromosome files, listed once. Not the call's listing: the conversion writes into the directory.
         const GenomeTrack::ChromFiles files(chromkey, track_dir);
         for (const GenomeTrack::ChromFiles::File &file : files.files()) {
-            if (file.chromid < 0)
+            if (!file.link && file.chromid < 0)
                 verror("Track %s: file %s is not named by a chromosome", track.c_str(), file.name.c_str());
         }
 
