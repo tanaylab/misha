@@ -8,7 +8,7 @@
 
 * **Breaking:** where a chromosome has two files named by aliases and none by its name, reading or converting them is an error; converting to the indexed format stops at a file not named by a chromosome or that cannot be read (an unreadable file was packed as empty). A canonically named file wins over an alias-named one, and the conversion's `remove.old` removes both.
 
-* **Bug fix:** `gintervals.convert_to_indexed()` and `gintervals.2d.convert_to_indexed()` with `force = TRUE` on an indexed set dropped every chromosome that had no per-chromosome file (all of them when there were none). A forced `gtrack.2d.convert_to_indexed()` that fails now leaves the track as it was.
+* **Bug fix:** a forced `gtrack.2d.convert_to_indexed()` that failed (a pair file it could not read, a full disk) could remove the track's index and data; it now leaves the track as it was.
 
 * **Breaking:** `gdataset.load()` refuses a dataset with indexed tracks or interval sets whose own `seq/genome.idx` cannot be read when its `chrom_sizes.txt` order differs from the working database's chromosome order. It loaded, and those files could read other chromosomes.
 

@@ -696,7 +696,9 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
                 srcname, stray[1]
             ), call. = FALSE)
         }
-        unreadable <- names[file.access(file.path(src_dir, names), 4) != 0]
+        all_names <- list.files(src_dir, all.files = TRUE, no.. = TRUE)
+        all_names <- all_names[file_test("-f", file.path(src_dir, all_names))]
+        unreadable <- all_names[file.access(file.path(src_dir, all_names), 4) != 0]
         if (length(unreadable)) {
             stop(sprintf("Cannot copy 2D track %s: its file %s cannot be read.", srcname, unreadable[1]), call. = FALSE)
         }

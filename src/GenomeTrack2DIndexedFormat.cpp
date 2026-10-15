@@ -14,6 +14,7 @@
 #include <vector>
 #include <string>
 #include <algorithm>
+#include <memory>
 
 #include "GenomeTrack.h"
 #include "TrackIndex2D.h"
@@ -124,6 +125,7 @@ SEXP gtrack2d_convert_to_indexed(SEXP _track, SEXP _remove_old, SEXP _envir) {
         struct stat st;
         if (stat(idx_path.c_str(), &st) == 0) {
             string extract_error;
+            vector<string> extracted;
             // Already indexed. Before removing, check if per-pair files exist.
             // If not (removed by previous remove.old=TRUE), extract them from track.dat.
             try {
@@ -142,37 +144,40 @@ SEXP gtrack2d_convert_to_indexed(SEXP _track, SEXP _remove_old, SEXP _envir) {
 
                     if (!have_pair_files) {
                         // Extract per-pair data from track.dat back to per-pair files
-                        FILE *dat_fp = fopen(dat_path.c_str(), "rb");
-                        vector<string> extracted;
+                        unique_ptr<FILE, int (*)(FILE *)> dat_fp(fopen(dat_path.c_str(), "rb"), fclose);
                         if (dat_fp) {
                             for (const auto &entry : old_idx->entries()) {
                                 string pair_file = track_dir + "/" + GenomeTrack::get_2d_filename(chromkey, entry.chrom1_id, entry.chrom2_id);
                                 vector<char> buf(entry.length);
-                                if (fseek(dat_fp, entry.offset, SEEK_SET) == 0 &&
-                                    fread(buf.data(), 1, entry.length, dat_fp) == entry.length) {
-                                    FILE *pf = fopen(pair_file.c_str(), "wb");
-                                    bool written = pf && fwrite(buf.data(), 1, entry.length, pf) == entry.length;
-                                    if ((pf && fclose(pf)) || !written) {
-                                        extract_error = "Failed to write " + pair_file + ": " + strerror(errno);
-                                        // a run with these files would not extract again, and pack them as they are
-                                        extracted.push_back(pair_file);
-                                        for (const string &file : extracted)
-                                            unlink(file.c_str());
-                                        break;
-                                    }
-                                    extracted.push_back(pair_file);
+                                if (fseek(dat_fp.get(), entry.offset, SEEK_SET) || fread(buf.data(), 1, entry.length, dat_fp.get()) != entry.length) {
+                                    extract_error = "Failed to read " + dat_path;
+                                    break;
+                                }
+                                FILE *pf = fopen(pair_file.c_str(), "wb");
+                                extracted.push_back(pair_file);
+                                bool written = pf && fwrite(buf.data(), 1, entry.length, pf) == entry.length;
+                                if ((pf && fclose(pf)) || !written) {
+                                    extract_error = "Failed to write " + pair_file + ": " + strerror(errno);
+                                    break;
                                 }
                             }
-                            fclose(dat_fp);
                         }
                     }
                 }
+            } catch (const bad_alloc &) {
+                extract_error = "Out of memory extracting the pairs of " + dat_path;
             } catch (...) {
                 // If index is corrupted, just proceed - per-pair files might still exist
+                if (!extracted.empty())
+                    extract_error = "Failed to extract the pairs of " + dat_path;
             }
-            // a pair file cut short (a full disk) would be packed as it is, and the old data removed
-            if (!extract_error.empty())
+            // Pairs cut short or missing (a full disk, too little memory) would be packed as they are and the old data
+            // removed, also by a later run, which does not extract again when it finds pair files
+            if (!extract_error.empty()) {
+                for (const string &file : extracted)
+                    unlink(file.c_str());
                 TGLError<GenomeTrack>("%s", extract_error.c_str());
+            }
 
             // Set the old index and data aside, hidden from the listing; they are put back if the conversion fails
             if (rename(idx_path.c_str(), (track_dir + "/.track.idx.old").c_str()))
@@ -288,8 +293,10 @@ SEXP gtrack2d_convert_to_indexed(SEXP _track, SEXP _remove_old, SEXP _envir) {
 
         // Remove old per-pair files if requested, also those that the packed ones hid
         if (remove_old) {
-            for (const GenomeTrack::ChromFiles::File &file : files.files())
-                unlink((track_dir + "/" + file.name).c_str());
+            for (const GenomeTrack::ChromFiles::File &file : files.files()) {
+                if (!file.link || file.chromid1 >= 0)  // not a symlink the conversion ignored
+                    unlink((track_dir + "/" + file.name).c_str());
+            }
         }
 
         if (!old_idx_path.empty()) {

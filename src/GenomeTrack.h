@@ -68,7 +68,8 @@ public:
 			bool   link;                // a symlink; one named only by the other dimension's names is ignored
 		};
 
-		ChromFiles(const GenomeChromKey &chromkey, const string &dir);
+		// converting: count the files next to an intervals set's index as without it, as a conversion packs them
+		ChromFiles(const GenomeChromKey &chromkey, const string &dir, bool converting = false);
 
 		const string &dir() const { return m_dir; }
 

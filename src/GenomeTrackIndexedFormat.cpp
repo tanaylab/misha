@@ -230,8 +230,10 @@ SEXP gtrack_convert_to_indexed_format(SEXP _track, SEXP _remove_old, SEXP _envir
 
         // Remove old per-chromosome files if requested, also those that the packed ones hid
         if (remove_old) {
-            for (const GenomeTrack::ChromFiles::File &file : files.files())
-                unlink((track_dir + "/" + file.name).c_str());
+            for (const GenomeTrack::ChromFiles::File &file : files.files()) {
+                if (!file.link || file.chromid >= 0)  // not a symlink the conversion ignored
+                    unlink((track_dir + "/" + file.name).c_str());
+            }
         }
 
         return R_NilValue;

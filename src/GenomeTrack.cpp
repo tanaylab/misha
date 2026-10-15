@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <dirent.h>
 #include <errno.h>
+#include <fstream>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -75,7 +76,7 @@ std::string GenomeTrack::get_track_dir(const std::string &filename) {
 	return filename.substr(0, pos);
 }
 
-GenomeTrack::ChromFiles::ChromFiles(const GenomeChromKey &chromkey, const string &dir) : m_chromkey(&chromkey), m_dir(dir)
+GenomeTrack::ChromFiles::ChromFiles(const GenomeChromKey &chromkey, const string &dir, bool converting) : m_chromkey(&chromkey), m_dir(dir)
 {
 	struct stat st;
 
@@ -134,9 +135,10 @@ GenomeTrack::ChromFiles::ChromFiles(const GenomeChromKey &chromkey, const string
 	sort(m_files.begin(), m_files.end(), [](const File &f1, const File &f2) { return f1.name < f2.name; });
 
 	// Next to an intervals set's index only a canonically named file holds data newer than it: no misha writes a
-	// file named by an alias there, and one left by an earlier conversion is older than the index
-	const bool indexed1d = !stat((dir + "/intervals.idx").c_str(), &st);
-	const bool indexed2d = !stat((dir + "/intervals2d.idx").c_str(), &st);
+	// file named by an alias there, and one left by an earlier conversion is older than the index. A conversion
+	// packs them all, as master did.
+	const bool indexed1d = !converting && !stat((dir + "/intervals.idx").c_str(), &st);
+	const bool indexed2d = !converting && !stat((dir + "/intervals2d.idx").c_str(), &st);
 
 	for (size_t i = 0; i < m_files.size(); ++i) {
 		const File &file = m_files[i];
@@ -178,6 +180,22 @@ GenomeTrack::ChromFiles::ChromFiles(const GenomeChromKey &chromkey, const string
 	}
 }
 
+// whether two files hold the same bytes
+static bool same_contents(const string &path1, const string &path2, off_t size1, off_t size2)
+{
+	if (size1 != size2)
+		return false;
+	ifstream f1(path1, ios::binary), f2(path2, ios::binary);
+	vector<char> buf1(1 << 20), buf2(1 << 20);
+	while (f1 && f2) {
+		f1.read(buf1.data(), buf1.size());
+		f2.read(buf2.data(), buf2.size());
+		if (f1.gcount() != f2.gcount() || memcmp(buf1.data(), buf2.data(), f1.gcount()))
+			return false;
+	}
+	return f1.eof() && f2.eof();
+}
+
 template <class Key>
 void GenomeTrack::ChromFiles::choose(unordered_map<Key, Choice> &choices, const Key &key, size_t ifile, bool canonical)
 {
@@ -192,11 +210,14 @@ void GenomeTrack::ChromFiles::choose(unordered_map<Key, Choice> &choices, const 
 		return;
 	}
 
-	// two names of one file (a symlink, a hard link) are not a conflict
+	// two names of one file (a symlink, a hard link) are not a conflict, nor two files with the same bytes (a copy
+	// of such names, which makes a file of each)
+	const string path1 = m_dir + "/" + m_files[choice.file].name;
+	const string path2 = m_dir + "/" + m_files[ifile].name;
 	struct stat st1, st2;
 	if (choice.conflict == NONE &&
-		(stat((m_dir + "/" + m_files[choice.file].name).c_str(), &st1) || stat((m_dir + "/" + m_files[ifile].name).c_str(), &st2) ||
-		 st1.st_dev != st2.st_dev || st1.st_ino != st2.st_ino))
+		(stat(path1.c_str(), &st1) || stat(path2.c_str(), &st2) ||
+		 ((st1.st_dev != st2.st_dev || st1.st_ino != st2.st_ino) && !same_contents(path1, path2, st1.st_size, st2.st_size))))
 		choice.conflict = ifile;
 }
 

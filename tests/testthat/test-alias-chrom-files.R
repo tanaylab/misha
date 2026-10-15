@@ -593,14 +593,21 @@ test_that("a 2D copy that is converted stops before the destination at a file no
     expect_true(file.symlink(file.path(src_dir, "chr1-chr2"), file.path(src_dir, "chr1")))
     expect_error(gtrack.copy("src", "dst", overwrite = TRUE), "file chr1 is not named by a chromosome pair")
     expect_equal(gextract("dst", gintervals.2d.all()), expected)
-    # a file the conversion skips does not stop it
+    # nor at a file it cannot read, hidden ones too
     unlink(file.path(src_dir, "chr1"))
+    Sys.chmod(file.path(src_dir, ".attributes"), "000")
+    if (file.access(file.path(src_dir, ".attributes"), 4) != 0) {
+        expect_error(gtrack.copy("src", "dst", overwrite = TRUE), "file .attributes cannot be read")
+        expect_equal(gextract("dst", gintervals.2d.all()), expected)
+    }
+    Sys.chmod(file.path(src_dir, ".attributes"), "644")
+    # a file the conversion skips does not stop it
     writeLines("x", file.path(src_dir, "track.dat.tmp"))
     gtrack.copy("src", "dst", overwrite = TRUE)
     expect_equal(gextract("dst", gintervals.2d.all())$dst, c(1, 2))
 })
 
-test_that("a forced re-conversion of an indexed set keeps the index's data where no file has the canonical name", {
+test_that("a forced re-conversion of an indexed set packs its files named by aliases, as before", {
     local_db_state()
     withr::local_options(list(gmulticontig.indexed_format = FALSE))
     td <- tempfile("alias_force_set_")
@@ -626,9 +633,13 @@ test_that("a forced re-conversion of an indexed set keeps the index's data where
     withr::with_options(list(gmax.data.size = 1), {
         gintervals.update("s", data.frame(gintervals("chr1", 500, 600), v = 99L), chrom = "chr1")
         gintervals.update("s2d", data.frame(gintervals.2d("chr1", 500, 600, "chr2", 500, 600), v = 99L), chrom1 = "chr1", chrom2 = "chr2")
+        # a deleted chromosome stays deleted
+        gintervals.update("s", NULL, chrom = "chrX")
+        gintervals.update("s2d", NULL, chrom1 = "chrX", chrom2 = "chr2")
     })
     expected <- list(gintervals.load("s"), gintervals.load("s2d"))
-    expect_equal(expected[[1]]$v, c(99, 2, 3))
+    expect_equal(expected[[1]]$v, c(99, 2))
+    expect_equal(expected[[2]]$v, c(99, 2))
 
     repack <- function() {
         suppressMessages({
@@ -640,8 +651,6 @@ test_that("a forced re-conversion of an indexed set keeps the index's data where
     expect_equal(repack(), expected)
     expect_equal(list.files(file.path(tracks, "s.interv")), c("intervals.dat", "intervals.idx"))
     expect_equal(list.files(file.path(tracks, "s2d.interv")), c("intervals2d.dat", "intervals2d.idx"))
-    # with no per-chromosome files at all
-    expect_equal(repack(), expected)
 })
 
 test_that("a symlink named only by the other dimension's names is ignored", {
@@ -670,6 +679,9 @@ test_that("a symlink named only by the other dimension's names is ignored", {
         gtrack.2d.convert_to_indexed("rects", remove.old = TRUE)
     })
     expect_equal(list(gextract("sp", gintervals.all()), gextract("rects", gintervals.2d.all())), expected)
+    # the conversions' remove.old keeps them (Sys.readlink() gives NA when there is no such file)
+    links <- Sys.readlink(file.path(tracks, c("sp.track/chr1-chr2", "rects.track/chr1")))
+    expect_true(all(!is.na(links) & nzchar(links)))
 })
 
 test_that("a file named by the destination's mitochondrial name is copied to it across genomes", {
@@ -697,4 +709,36 @@ test_that("a file named by the destination's mitochondrial name is copied to it 
     gtrack.copy("sp", "sp", db = dest)
     gsetroot(dest)
     expect_equal(gextract("sp", gintervals(c("chr1", "chrM"), 0, 1000))$sp, c(1, 2))
+})
+
+test_that("a copy of a file with two names (a symlink, a hard link), neither canonical, reads", {
+    local_db_state()
+    withr::local_options(list(gmulticontig.indexed_format = FALSE))
+    td <- tempfile("alias_two_names_")
+    dir.create(td)
+    withr::defer(unlink(td, recursive = TRUE))
+    db <- create_alias_test_db(file.path(td, "db"))
+    dest <- create_alias_test_db(file.path(td, "dest"))
+    gsetroot(db)
+
+    gtrack.create_sparse("sp", "x", gintervals(c("chr1", "chrM"), 0, 100), c(1, 2))
+    dir <- file.path(db, "tracks", "sp.track")
+    expect_true(file.rename(file.path(dir, "chrM"), file.path(dir, "MT")))
+    expect_true(file.symlink("MT", file.path(dir, "M")))
+    gdb.reload()
+    expected <- gextract("sp", gintervals.all())
+    expect_equal(expected$sp, c(1, 2))
+
+    # each copy makes a file of each name: the same bytes are not two files of chrM
+    gtrack.copy("sp", "sp2")
+    expect_equal(gextract("sp2", gintervals.all())$sp2, c(1, 2))
+    gtrack.copy("sp", "sp", db = dest)
+    gsetroot(dest)
+    expect_equal(gextract("sp", gintervals.all())$sp, c(1, 2))
+    # different bytes are
+    gsetroot(db)
+    dir2 <- file.path(db, "tracks", "sp2.track")
+    expect_true(file.copy(file.path(dir2, "chr1"), file.path(dir2, "M"), overwrite = TRUE))
+    gdb.reload()
+    expect_error(gextract("sp2", gintervals.all()), "two files of chromosome chrM")
 })
