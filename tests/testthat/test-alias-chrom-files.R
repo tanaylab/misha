@@ -482,3 +482,34 @@ test_that("files named by the \"chr\" toggle convert in a database of over 1000 
     expect_equal(gextract("sp", intervs, colnames = "v")$v, 1:3)
     expect_equal(gintervals.load("set")$v, 1:3)
 })
+
+test_that("loading one chromosome (pair) of a big set lists its directory only when the canonical file is missing", {
+    local_db_state()
+    withr::local_options(list(gmulticontig.indexed_format = FALSE))
+    td <- tempfile("alias_load_one_")
+    dir.create(td)
+    withr::defer(unlink(td, recursive = TRUE))
+    db <- create_alias_test_db(file.path(td, "db"))
+    gsetroot(db)
+
+    withr::with_options(list(gmax.data.size = 1), {
+        gintervals.save("set", gintervals(c("chr1", "chr2"), 0, 100))
+        gintervals.save("set2d", gintervals.2d(c("chr1", "chr2"), 0, 100, "chr2", 0, 100))
+    })
+    listed <- 0
+    gchrom_files <- .gchrom_files
+    local_mocked_bindings(.gchrom_files = function(...) {
+        listed <<- listed + 1
+        gchrom_files(...)
+    })
+    expect_equal(nrow(gintervals.load("set", chrom = "chr2")), 1)
+    expect_equal(nrow(gintervals.load("set2d", chrom1 = "chr1", chrom2 = "chr2")), 1)
+    expect_equal(listed, 0)
+
+    tracks <- file.path(db, "tracks")
+    file.rename(file.path(tracks, "set.interv", "chr2"), file.path(tracks, "set.interv", "2"))
+    file.rename(file.path(tracks, "set2d.interv", "chr1-chr2"), file.path(tracks, "set2d.interv", "1-2"))
+    expect_equal(nrow(gintervals.load("set", chrom = "chr2")), 1)
+    expect_equal(nrow(gintervals.load("set2d", chrom1 = "chr1", chrom2 = "chr2")), 1)
+    expect_equal(listed, 2)
+})

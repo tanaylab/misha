@@ -178,7 +178,14 @@
     if (intervals.set %in% get("GTRACKS", envir = .misha)) {
         return(rep(NA_character_, length(c(chrom, chrom1))))
     }
-    files <- .gchrom_files(.intervals_dir(intervals.set), is.null(chrom))
+    dir <- .intervals_dir(intervals.set)
+    # The canonically named file wins: a load of one chromosome (pair) that has one does not list the
+    # directory, which loops over the chromosomes of a set would otherwise list once per chromosome
+    canonical <- if (!is.null(chrom)) as.character(chrom) else paste(chrom1, chrom2, sep = "-")
+    if (length(canonical) == 1 && file_test("-f", file.path(dir, canonical))) {
+        return(canonical)
+    }
+    files <- .gchrom_files(dir, is.null(chrom))
     files <- files[files$used, ]
     if (!is.null(chrom)) {
         files$file[match(as.character(chrom), files$chrom)]
