@@ -117,15 +117,21 @@ SEXP gtrackinfo(SEXP _track, SEXP _validate, SEXP _envir)
 		} else {
 			// For per-chromosome tracks, sum the per-chromosome files that are not symlinks, as master listed
 			// no symlinks. The files read are checked as the readers check them (a conflict, a symlink to a
-			// file that cannot be reached); a file that cannot be stat'ed is not read (it would have stopped
-			// that check), so it is left out of the size.
+			// file that cannot be reached); a symlink that cannot be reached and is not read is passed over,
+			// and any other file that cannot be stat'ed stops (gtrack.copy relies on that before it removes
+			// an existing destination).
 			if (GenomeTrack::is_1d(type))
 				files.chromids();
 			else
 				files.chrom_pairs();
 			for (const GenomeTrack::ChromFiles::File &file : files.files()) {
 				string fullpath(trackpath + "/" + file.name);
-				if (!file.link && !stat(fullpath.c_str(), &buf))
+				if (stat(fullpath.c_str(), &buf)) {
+					if (file.link)
+						continue;
+					verror("Cannot stat %s: %s", fullpath.c_str(), strerror(errno));
+				}
+				if (!file.link)
 					totsize += buf.st_size;
 			}
 		}

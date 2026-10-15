@@ -1072,3 +1072,35 @@ test_that("a leftover *.tmp file does not stop a 2D conversion, and gintervals.u
     })
     expect_equal(gintervals.load("s")$v, c(1, 9))
 })
+
+test_that("a chromosome whose name ends in .tmp is read, and a copy matches a destination by a file's own name", {
+    local_db_state()
+    withr::local_options(list(gmulticontig.indexed_format = FALSE))
+    td <- tempfile("alias_tmp_contig_")
+    dir.create(td)
+    withr::defer(unlink(td, recursive = TRUE))
+    mkdb <- function(path, chroms) {
+        dir.create(file.path(path, "tracks"), recursive = TRUE)
+        dir.create(file.path(path, "seq"))
+        for (chrom in chroms) writeBin(charToRaw(strrep("A", 1000)), file.path(path, "seq", paste0("chr", chrom, ".seq")))
+        writeLines(paste(chroms, 1000, sep = "\t"), file.path(path, "chrom_sizes.txt"))
+        normalizePath(path)
+    }
+    db <- mkdb(file.path(td, "db"), c("1", "Un.tmp"))
+    gsetroot(db)
+    gtrack.create_sparse("sp", "x", gintervals(c("chr1", "chrUn.tmp"), 0, 100), c(1, 2))
+    expect_equal(gextract("sp", gintervals.all())$sp, c(1, 2))
+    suppressMessages(gtrack.convert_to_indexed("sp"))
+    expect_equal(gextract("sp", gintervals.all())$sp, c(1, 2))
+
+    # chrM's file named "MT", copied into a database whose only chromosome is chrMT
+    src <- mkdb(file.path(td, "src"), c("1", "M"))
+    dest <- mkdb(file.path(td, "dest"), "MT")
+    gsetroot(src)
+    gtrack.create_sparse("m", "x", gintervals("chrM", 0, 100), 3)
+    expect_true(file.rename(file.path(src, "tracks", "m.track", "chrM"), file.path(src, "tracks", "m.track", "MT")))
+    gdb.reload()
+    suppressWarnings(gtrack.copy("m", "m", db = dest))
+    gsetroot(dest)
+    expect_equal(gextract("m", gintervals.all())$m, 3)
+})

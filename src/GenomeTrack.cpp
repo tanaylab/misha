@@ -118,8 +118,7 @@ GenomeTrack::ChromFiles::ChromFiles(const GenomeChromKey &chromkey, const string
 		}
 		const string name(dirp->d_name);
 
-		// hidden files, index files, and leftovers of interrupted writes (*.tmp, which master's 2D converter skipped)
-		if (name[0] == '.' || index_files.count(name) || (name.size() > 4 && !name.compare(name.size() - 4, 4, ".tmp")))
+		if (name[0] == '.' || index_files.count(name))
 			continue;
 
 		if (dirp->d_type != DT_LNK && dirp->d_type != DT_UNKNOWN && dirp->d_type != DT_REG)
@@ -135,6 +134,10 @@ GenomeTrack::ChromFiles::ChromFiles(const GenomeChromKey &chromkey, const string
 				break;
 			}
 		}
+
+		// leftovers of interrupted writes (*.tmp, which master's 2D converter skipped), unless named by a chromosome
+		if (file.chromid < 0 && file.chromid1 < 0 && name.size() > 4 && !name.compare(name.size() - 4, 4, ".tmp"))
+			continue;
 
 		bool &is_symlink = file.link;
 		if (is_symlink || dirp->d_type == DT_UNKNOWN) {

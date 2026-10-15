@@ -689,7 +689,9 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
         names <- list.files(src_dir)
         names <- names[file_test("-f", file.path(src_dir, names))]
         skipped <- c(.TRACK_INTERNAL_FILES, outer(c("track", "intervals", "intervals2d"), c(".idx", ".dat", ".idx.tmp", ".dat.tmp"), paste0))
-        stray <- setdiff(names[!endsWith(names, ".tmp")], c(.gchrom_files(src_dir, TRUE)$file, skipped))
+        # and leftovers named *.tmp that are not named by a chromosome
+        tmp <- setdiff(names[endsWith(names, ".tmp")], .gchrom_files(src_dir, FALSE)$file)
+        stray <- setdiff(names, c(.gchrom_files(src_dir, TRUE)$file, skipped, tmp))
         if (length(stray)) {
             stop(sprintf(
                 "Cannot copy 2D track %s: its file %s is not named by a chromosome pair, so the copy could not be converted to the indexed format.",
@@ -705,7 +707,8 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
     }
     if (!is_2d) {
         # the per-chromosome files the copy would have (an indexed track splits into one per contig)
-        src_files <- if (src_indexed) src_chroms else .gchrom_files(src_dir, FALSE)$chrom
+        # (by their chromosomes' names or their own, which the pipeline below matches too)
+        src_files <- if (src_indexed) src_chroms else unlist(.gchrom_files(src_dir, FALSE)[c("chrom", "file")], use.names = FALSE)
         # none named by a chromosome (a computed track's pair files): its files, as before
         if (!src_indexed && !length(src_files)) {
             src_files <- setdiff(list.files(src_dir), .TRACK_INTERNAL_FILES)
