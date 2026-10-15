@@ -115,11 +115,21 @@ SEXP gtrackinfo(SEXP _track, SEXP _validate, SEXP _envir)
 			}
 			totsize += idx_stat.st_size;
 		} else {
-			// For per-chromosome tracks, sum all per-chromosome files
+			// For per-chromosome tracks, sum all per-chromosome files. The files read are checked as the
+			// readers check them (a conflict, a symlink to a file that cannot be reached); a symlink that
+			// cannot be reached and is not read (hidden by a better-ranked name, of the other dimension) is
+			// left out, as master listed no symlinks.
+			if (GenomeTrack::is_1d(type))
+				files.chromids();
+			else
+				files.chrom_pairs();
 			for (const GenomeTrack::ChromFiles::File &file : files.files()) {
 				string fullpath(trackpath + "/" + file.name);
-				if (stat(fullpath.c_str(), &buf))
+				if (stat(fullpath.c_str(), &buf)) {
+					if (file.link)
+						continue;
 					verror("Cannot stat %s: %s", fullpath.c_str(), strerror(errno));
+				}
 				totsize += buf.st_size;
 			}
 		}

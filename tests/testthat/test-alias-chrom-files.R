@@ -389,6 +389,9 @@ test_that("dangling symlinks are ignored, and a symlink counts only when named b
     expect_equal(read(), expected)
 
     unlink(file.path(tracks, c("sp.track", "rects.track", "set2d.interv"), "README"))
+    # a copy stops at a dangling symlink (its target may come back), as on master
+    expect_error(suppressWarnings(gtrack.copy("rects", "rects", db = dest)), "Failed to copy")
+    unlink(file.path(tracks, c("sp.track/chr1", "rects.track/chr1-chr2", "set2d.interv/chr1-chr2")))
     gtrack.copy("sp", "sp", db = dest)
     gtrack.copy("rects", "rects", db = dest)
     suppressMessages({
@@ -987,6 +990,16 @@ test_that("a file read through a symlink that cannot be reached is an error, not
     Sys.chmod(closed, "000")
     gdb.reload()
     expect_equal(gextract("sp", gintervals.all()), expected)
+    expect_equal(gtrack.info("sp")$type, "sparse")
+
+    # a copy stops at an entry it cannot follow (vars), where it skips a dangling symlink
+    Sys.chmod(closed, "755")
+    gtrack.var.set("sp", "v", 1)
+    expect_true(file.rename(file.path(tracks, "sp.track", "vars"), file.path(closed, "vars")))
+    expect_true(file.symlink(file.path(closed, "vars"), file.path(tracks, "sp.track", "vars")))
+    Sys.chmod(closed, "000")
+    expect_error(suppressWarnings(gtrack.copy("sp", "sp_copy")))
+    Sys.chmod(closed, "755")
 })
 
 test_that("gintervals.update removes a chromosome's alias-named files only once its write succeeded", {

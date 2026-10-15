@@ -910,8 +910,6 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
         stop(sprintf("Failed to create %s", dest_dir), call. = FALSE)
     }
     contents <- list.files(src_dir, full.names = TRUE, all.files = TRUE, no.. = TRUE)
-    # not a dangling symlink
-    contents <- contents[file.exists(contents)]
     for (item in contents) {
         if (!.gwith_umask(file.copy(item, dest_dir, recursive = TRUE, copy.mode = TRUE))) {
             unlink(dest_dir, recursive = TRUE)
