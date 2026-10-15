@@ -141,13 +141,9 @@ GenomeTrack::ChromFiles::ChromFiles(const GenomeChromKey &chromkey, const string
 			if (!lstat(path.c_str(), &st) && S_ISLNK(st.st_mode))
 				is_symlink = true;
 			if (stat(path.c_str(), &st)) {
-				if (errno == EIO || errno == ESTALE) {
-					int err = errno;
-					closedir(d);
-					TGLError<GenomeTrack>(FILE_ERROR, "Accessing %s: %s\n", path.c_str(), strerror(err));
-				}
-				// a dangling symlink is skipped; one named by a chromosome or pair whose file cannot be reached
-				// (EACCES, ELOOP, ...) is an error where it is the file read, below
+				// a dangling symlink is skipped, as is any file not named by a chromosome; one named by a chromosome
+				// or pair that cannot be reached (EACCES, ELOOP, an I/O error) is an error where it is the file
+				// read, below
 				if (errno != ENOENT && (file.chromid >= 0 || file.chromid1 >= 0)) {
 					unreachable.emplace(name, path + ": " + strerror(errno));
 					m_files.push_back(file);
