@@ -271,11 +271,18 @@ SEXP gtrack_modify(SEXP _track, SEXP _track_expr, SEXP _intervals, SEXP _iterato
 		gtrack.flush_writes();
 		stager.commit();
 
-		// The canonically named files committed hold the data of their chromosomes now; their other names
-		// (aliases, which may differ from the modified file) would only be stale copies
+		// The canonically named files committed hold the data of their chromosomes now. Their other names
+		// (aliases, which hold the old data) become names of those files, so that whatever links to them reads
+		// the new data, as when master wrote over them; where that fails they stay, hidden by the canonical name.
 		for (const GenomeTrack::ChromFiles::File &file : files.files()) {
-			if (modified.count(file.chromid) && file.name != GenomeTrack::get_1d_filename(iu.get_chromkey(), file.chromid))
-				unlink((trackpath + "/" + file.name).c_str());
+			const string &canonical = GenomeTrack::get_1d_filename(iu.get_chromkey(), file.chromid);
+			if (modified.count(file.chromid) && file.name != canonical) {
+				string alias = trackpath + "/" + file.name;
+				string tmp = trackpath + "/." + file.name + ".link";  // hidden from the listing
+				unlink(tmp.c_str());
+				if (!link((trackpath + "/" + canonical).c_str(), tmp.c_str()) && rename(tmp.c_str(), alias.c_str()))
+					unlink(tmp.c_str());
+			}
 		}
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());

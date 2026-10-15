@@ -201,12 +201,13 @@ test_that("tracks and intervals sets whose files are named by chromosome aliases
         expect_true(all(files %in% c(as.character(gintervals.all()$chrom), "vars")))
     }
 
-    # gtrack.modify() writes the alias-named file's chromosome under its canonical name
+    # gtrack.modify() writes the alias-named file's chromosome under its canonical name, and the alias
+    # names the same file
     gtrack.modify("dn", "dn * 2", gintervals.all())
     expect_equal(gextract("dn", gintervals.all())$dn, expected$dn$dn * 2)
-    files <- list.files(file.path(db, "tracks", "dn.track"))
-    expect_true("chrM" %in% files)
-    expect_false("MT" %in% files)
+    dn_dir <- file.path(db, "tracks", "dn.track")
+    expect_true("chrM" %in% list.files(dn_dir))
+    expect_equal(tools::md5sum(file.path(dn_dir, "MT")), tools::md5sum(file.path(dn_dir, "chrM")), ignore_attr = TRUE)
 
     # gtrack.copy() into a per-chromosome and into an indexed database (which orders the chromosomes
     # differently)
@@ -768,7 +769,9 @@ test_that("gtrack.modify of a chromosome with two names, neither canonical, writ
         gtrack.modify("d", "d * 7", gintervals("chrM", 0, 30))
         expect_equal(gextract("d", gintervals("chrM", 0, 30))$d, c(7, 7, 7), info = how)
         expect_equal(gextract("d", gintervals("chr1", 0, 30))$d, c(1, 1, 1), info = how)
-        expect_false(any(c("M", "MT") %in% list.files(dir)), info = how)
+        # the aliases name the modified file, so what links to them reads it too
+        sums <- tools::md5sum(file.path(dir, c("chrM", "M", "MT")))
+        expect_true(all(sums == sums[1]), info = how)
         gtrack.rm("d", force = TRUE)
     }
 })
@@ -799,4 +802,80 @@ test_that("a copy across genomes takes the name of a chromosome's file the desti
     suppressWarnings(gtrack.copy("sp", "sp", db = dest))
     gsetroot(dest)
     expect_equal(gextract("sp", gintervals(c("chr1", "chrMT"), 0, 1000))$sp, c(1, 2))
+})
+
+test_that("a symlink to a file that gtrack.modify replaced reads the new data", {
+    local_db_state()
+    withr::local_options(list(gmulticontig.indexed_format = FALSE))
+    td <- tempfile("alias_modify_link_")
+    dir.create(td)
+    withr::defer(unlink(td, recursive = TRUE))
+    db <- create_alias_test_db(file.path(td, "db"))
+    gsetroot(db)
+
+    gtrack.create_dense("d", "x", gintervals(c("chr1", "chr2"), 0, 30), c(1, 2), 10, 0)
+    tracks <- file.path(db, "tracks")
+    expect_true(file.rename(file.path(tracks, "d.track", "chr1"), file.path(tracks, "d.track", "1")))
+    # another track's chr1 is d's file
+    dir.create(file.path(tracks, "e.track"))
+    files <- setdiff(list.files(file.path(tracks, "d.track"), all.files = TRUE, no.. = TRUE), "1")
+    expect_true(all(file.copy(file.path(tracks, "d.track", files), file.path(tracks, "e.track"))))
+    expect_true(file.symlink(file.path(tracks, "d.track", "1"), file.path(tracks, "e.track", "chr1")))
+    gdb.reload()
+    expect_equal(gextract("e", gintervals("chr1", 0, 30))$e, c(1, 1, 1))
+
+    gtrack.modify("d", "d * 7", gintervals("chr1", 0, 30))
+    expect_equal(gextract("d", gintervals("chr1", 0, 30))$d, c(7, 7, 7))
+    expect_equal(gextract("e", gintervals("chr1", 0, 30))$e, c(7, 7, 7))
+})
+
+test_that("an indexed big set does not return a chromosome deleted with gintervals.update(NULL)", {
+    local_db_state()
+    withr::local_options(list(gmulticontig.indexed_format = FALSE))
+    td <- tempfile("alias_deleted_")
+    dir.create(td)
+    withr::defer(unlink(td, recursive = TRUE))
+    db <- create_alias_test_db(file.path(td, "db"))
+    gsetroot(db)
+
+    withr::with_options(list(gmax.data.size = 1, gbig.intervals.size = 1), {
+        gintervals.save("s", data.frame(gintervals(c("chr1", "chr2", "chrX"), 0, 10), v = 1:3))
+        gintervals.save("s2d", data.frame(gintervals.2d(c("chr1", "chr2", "chrX"), 0, 10, "chr2", 0, 10), v = 1:3))
+        suppressMessages({
+            gintervals.convert_to_indexed("s", remove.old = TRUE)
+            gintervals.2d.convert_to_indexed("s2d", remove.old = TRUE)
+        })
+        gintervals.update("s", NULL, chrom = "chr1")
+        gintervals.update("s2d", NULL, chrom1 = "chr1", chrom2 = "chr2")
+    })
+    expect_equal(gintervals.load("s")$v, 2:3)
+    expect_equal(gintervals.load("s2d")$v, 2:3)
+})
+
+test_that("gintervals.update over a canonically named file does not list the set's directory", {
+    local_db_state()
+    withr::local_options(list(gmulticontig.indexed_format = FALSE))
+    td <- tempfile("alias_update_list_")
+    dir.create(td)
+    withr::defer(unlink(td, recursive = TRUE))
+    db <- create_alias_test_db(file.path(td, "db"))
+    gsetroot(db)
+
+    listed <- 0
+    gchrom_files <- .gchrom_files
+    local_mocked_bindings(.gchrom_files = function(...) {
+        listed <<- listed + 1
+        gchrom_files(...)
+    })
+    withr::with_options(list(gmax.data.size = 1, gbig.intervals.size = 1), {
+        gintervals.save("s", data.frame(gintervals(c("chr1", "chr2", "chrX"), 0, 10), v = 1:3))
+        gintervals.update("s", data.frame(gintervals("chr1", 0, 20), v = 5L), chrom = "chr1")
+        expect_equal(listed, 0)
+        # a deletion lists it: a file named by an alias would come back
+        writeLines("x", file.path(db, "tracks", "s.interv", "2"))
+        gintervals.update("s", NULL, chrom = "chr2")
+        expect_equal(listed, 1)
+    })
+    expect_false(file.exists(file.path(db, "tracks", "s.interv", "2")))
+    expect_equal(gintervals.load("s")$v, c(5, 3))
 })
