@@ -706,6 +706,10 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
     if (!is_2d) {
         # the per-chromosome files the copy would have (an indexed track splits into one per contig)
         src_files <- if (src_indexed) src_chroms else .gchrom_files(src_dir, FALSE)$chrom
+        # none named by a chromosome (a computed track's pair files): its files, as before
+        if (!src_indexed && !length(src_files)) {
+            src_files <- setdiff(list.files(src_dir), .TRACK_INTERNAL_FILES)
+        }
         if (length(src_files) && all(vapply(src_files, function(f) is.null(.gtrack.copy.match_chrom_alias(f, dest_chroms)), logical(1)))) {
             stop(sprintf(
                 "gtrack.copy(%s): no chromosomes from source database are present in destination; refusing to create empty track.",
