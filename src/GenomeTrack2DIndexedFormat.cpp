@@ -81,8 +81,9 @@ SEXP gtrack2d_convert_to_indexed(SEXP _track, SEXP _remove_old, SEXP _envir) {
     // Declare paths outside try block for cleanup access
     string dat_path_tmp;
     string idx_path_tmp;
-    // track.idx.tmp: the index of an indexed track, set aside until its per-pair files pass the checks
+    // the index and data of an indexed track, set aside until the new ones are in place
     string old_idx_path;
+    string old_dat_path;
 
     try {
         RdbInitializer rdb_init;
@@ -122,6 +123,7 @@ SEXP gtrack2d_convert_to_indexed(SEXP _track, SEXP _remove_old, SEXP _envir) {
         string dat_path = track_dir + "/track.dat";
         struct stat st;
         if (stat(idx_path.c_str(), &st) == 0) {
+            string extract_error;
             // Already indexed. Before removing, check if per-pair files exist.
             // If not (removed by previous remove.old=TRUE), extract them from track.dat.
             try {
@@ -148,9 +150,10 @@ SEXP gtrack2d_convert_to_indexed(SEXP _track, SEXP _remove_old, SEXP _envir) {
                                 if (fseek(dat_fp, entry.offset, SEEK_SET) == 0 &&
                                     fread(buf.data(), 1, entry.length, dat_fp) == entry.length) {
                                     FILE *pf = fopen(pair_file.c_str(), "wb");
-                                    if (pf) {
-                                        fwrite(buf.data(), 1, entry.length, pf);
-                                        fclose(pf);
+                                    bool written = pf && fwrite(buf.data(), 1, entry.length, pf) == entry.length;
+                                    if ((pf && fclose(pf)) || !written) {
+                                        extract_error = "Failed to write " + pair_file + ": " + strerror(errno);
+                                        break;
                                     }
                                 }
                             }
@@ -161,11 +164,16 @@ SEXP gtrack2d_convert_to_indexed(SEXP _track, SEXP _remove_old, SEXP _envir) {
             } catch (...) {
                 // If index is corrupted, just proceed - per-pair files might still exist
             }
+            // a pair file cut short (a full disk) would be packed as it is, and the old data removed
+            if (!extract_error.empty())
+                TGLError<GenomeTrack>("%s", extract_error.c_str());
 
-            // Set the old index aside, where the listing does not see it
-            if (rename(idx_path.c_str(), (idx_path + ".tmp").c_str()))
+            // Set the old index and data aside, hidden from the listing; they are put back if the conversion fails
+            if (rename(idx_path.c_str(), (track_dir + "/.track.idx.old").c_str()))
                 TGLError<GenomeTrack>("Failed to rename %s: %s", idx_path.c_str(), strerror(errno));
-            old_idx_path = idx_path + ".tmp";
+            old_idx_path = track_dir + "/.track.idx.old";
+            old_dat_path = track_dir + "/.track.dat.old";
+            rename(dat_path.c_str(), old_dat_path.c_str());
             // Clear the index cache so stale entries are not used
             TrackIndex2D::clear_cache();
         }
@@ -187,8 +195,6 @@ SEXP gtrack2d_convert_to_indexed(SEXP _track, SEXP _remove_old, SEXP _envir) {
         // Prepare temporary file paths
         dat_path_tmp = track_dir + "/track.dat.tmp";
         idx_path_tmp = track_dir + "/track.idx.tmp";
-        if (!old_idx_path.empty())
-            unlink(dat_path.c_str());
 
         // Open temporary data file
         FILE *dat_fp = fopen(dat_path_tmp.c_str(), "wb");
@@ -280,20 +286,33 @@ SEXP gtrack2d_convert_to_indexed(SEXP _track, SEXP _remove_old, SEXP _envir) {
                 unlink((track_dir + "/" + file.name).c_str());
         }
 
+        if (!old_idx_path.empty()) {
+            unlink(old_idx_path.c_str());
+            unlink(old_dat_path.c_str());
+        }
+
         return R_NilValue;
 
     } catch (TGLException &e) {
-        // The per-pair files failed the checks: the track stays indexed
-        if (!old_idx_path.empty() && idx_path_tmp.empty())
-            rename(old_idx_path.c_str(), old_idx_path.substr(0, old_idx_path.size() - 4).c_str());
+        // The conversion failed: the old index and data come back
+        if (!old_idx_path.empty()) {
+            string dir = old_idx_path.substr(0, old_idx_path.rfind('/'));
+            rename(old_dat_path.c_str(), (dir + "/track.dat").c_str());
+            rename(old_idx_path.c_str(), (dir + "/track.idx").c_str());
+            TrackIndex2D::clear_cache();
+        }
         // Clean up temporary files on error
         if (!dat_path_tmp.empty()) unlink(dat_path_tmp.c_str());
         if (!idx_path_tmp.empty()) unlink(idx_path_tmp.c_str());
         verror("%s", e.msg());
     } catch (const bad_alloc &e) {
-        // The per-pair files failed the checks: the track stays indexed
-        if (!old_idx_path.empty() && idx_path_tmp.empty())
-            rename(old_idx_path.c_str(), old_idx_path.substr(0, old_idx_path.size() - 4).c_str());
+        // The conversion failed: the old index and data come back
+        if (!old_idx_path.empty()) {
+            string dir = old_idx_path.substr(0, old_idx_path.rfind('/'));
+            rename(old_dat_path.c_str(), (dir + "/track.dat").c_str());
+            rename(old_idx_path.c_str(), (dir + "/track.idx").c_str());
+            TrackIndex2D::clear_cache();
+        }
         // Clean up temporary files on error
         if (!dat_path_tmp.empty()) unlink(dat_path_tmp.c_str());
         if (!idx_path_tmp.empty()) unlink(idx_path_tmp.c_str());

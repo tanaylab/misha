@@ -445,6 +445,22 @@ test_that("a forced conversion of an indexed 2D track keeps its index when the p
     )
     expect_true(all(file.exists(file.path(dir, c("track.idx", "track.dat")))))
     expect_equal(gextract("rects", gintervals.2d.all()), expected)
+
+    # a pair file it cannot open stops it later, after the new files are begun: the old ones come back too
+    unlink(file.path(dir, "README"))
+    writeLines("x", file.path(dir, "chr1-chr2"))
+    Sys.chmod(file.path(dir, "chr1-chr2"), "000")
+    if (file.access(file.path(dir, "chr1-chr2"), 4) != 0) {
+        expect_error(suppressMessages(gtrack.2d.convert_to_indexed("rects", remove.old = TRUE, force = TRUE)), "Failed to open")
+        expect_true(all(file.exists(file.path(dir, c("track.idx", "track.dat")))))
+        expect_equal(gextract("rects", gintervals.2d.all()), expected)
+    }
+
+    # once it succeeds nothing is left aside
+    unlink(file.path(dir, "chr1-chr2"))
+    suppressMessages(gtrack.2d.convert_to_indexed("rects", remove.old = TRUE, force = TRUE))
+    expect_equal(gextract("rects", gintervals.2d.all()), expected)
+    expect_equal(sort(list.files(dir, all.files = TRUE, no.. = TRUE)), c(".attributes", "track.dat", "track.idx"))
 })
 
 test_that("files named by the \"chr\" toggle convert in a database of over 1000 contigs without \"chr\"", {
