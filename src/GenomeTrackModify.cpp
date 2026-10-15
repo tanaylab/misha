@@ -276,8 +276,11 @@ SEXP gtrack_modify(SEXP _track, SEXP _track_expr, SEXP _intervals, SEXP _iterato
 			if (file.chromid < 0 || !modified.count(file.chromid))
 				continue;
 			const string &committed = files.filename(file.chromid);
-			if (file.name != committed) {
-				string name = trackpath + "/" + file.name;
+			string name = trackpath + "/" + file.name;
+			struct stat st1, st2;
+			// not one that leads to the committed file already (a symlink to it)
+			if (file.name != committed && (stat(name.c_str(), &st1) || stat((trackpath + "/" + committed).c_str(), &st2) ||
+										   st1.st_dev != st2.st_dev || st1.st_ino != st2.st_ino)) {
 				string tmp = trackpath + "/." + file.name + ".link";  // hidden from the listing
 				unlink(tmp.c_str());
 				if (!link((trackpath + "/" + committed).c_str(), tmp.c_str()) && rename(tmp.c_str(), name.c_str()))

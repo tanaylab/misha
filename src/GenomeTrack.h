@@ -54,9 +54,10 @@ public:
 	// The per-chromosome files of a track or intervals set directory, from one listing of it. A file
 	// is named by a chromosome (1D) or by two chromosomes joined by "-" (2D), each by its canonical
 	// name or by an alias (e.g. "1" for chr1; "1-2", "1-chr2" or "chr1-2" for chr1 and chr2). The
-	// file of a chromosome or pair is the one with the canonical name; without one, the one named by
-	// aliases. Two different files of a chromosome or pair, neither with the canonical name, are an
-	// error when the files are read as 1D (2D). A symlink counts only when it leads to a regular
+	// file of a chromosome or pair is the one with the canonical name; without one, the one named with
+	// "chr" added or removed (as earlier pymisha named them, and the order master looked them up in);
+	// without that, the one named by other aliases. Two different files of a chromosome or pair of the
+	// best of these ranks are an error when the files are read as 1D (2D). A symlink counts only when it leads to a regular
 	// file and is named by a chromosome or pair. An indexed track (track.idx) has no files listed,
 	// and the index files of an intervals set are not listed.
 	class ChromFiles {
@@ -90,10 +91,11 @@ public:
 		vector<pair<int, int>> chrom_pairs() const;
 
 	private:
-		// indices to m_files; conflict: another file with no canonical name, NONE if there is none
+		// indices to m_files; rank: 0 for the canonical name, 1 for the name with "chr" added or removed,
+		// 2 for another alias; conflict: another file of the same rank, NONE if there is none
 		struct Choice {
 			size_t file;
-			bool   canonical;
+			int    rank;
 			size_t conflict;
 		};
 		static const size_t NONE = (size_t)-1;
@@ -108,7 +110,7 @@ public:
 		string                            m_conflict2d;
 
 		static uint64_t pair_key(int chromid1, int chromid2) { return (uint64_t)(uint32_t)chromid1 << 32 | (uint32_t)chromid2; }
-		template <class Key> void choose(unordered_map<Key, Choice> &choices, const Key &key, size_t ifile, bool canonical);
+		template <class Key> void choose(unordered_map<Key, Choice> &choices, const Key &key, size_t ifile, int rank);
 		template <class Key> const Choice *find(const unordered_map<Key, Choice> &choices, const string &conflict, const Key &key) const;
 	};
 

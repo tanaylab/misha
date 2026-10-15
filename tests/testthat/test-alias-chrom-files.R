@@ -275,7 +275,7 @@ test_that("a canonically named file wins over a file named by an alias, also whe
     expect_equal(read(), expected)
 })
 
-test_that("two files of a chromosome or pair named by aliases, without a canonical one, are an error", {
+test_that("without a canonical name, the \"chr\"-toggled one wins, and two other alias-named files are an error", {
     local_db_state()
     withr::local_options(list(gmulticontig.indexed_format = FALSE))
     td <- tempfile("alias_twice_")
@@ -290,32 +290,38 @@ test_that("two files of a chromosome or pair named by aliases, without a canonic
     gtrack.2d.create("other2d", "x", gintervals.2d("chr1", 100, 105, "chr2", 300, 305), 2)
     withr::with_options(list(gmax.data.size = 1), gintervals.save("set", gintervals(c("chr1", "chrM"), 0, 100)))
     expected <- gextract("sp", gintervals.all())
+    expected2d <- gextract("rects", gintervals.2d.all())
 
+    # chrM's chrom_sizes.txt name is "M": "M" wins over the other aliases ("MT", "chrMT"), as earlier
+    # pymisha writes it and master looked it up
     tracks <- file.path(db, "tracks")
     sp_dir <- file.path(tracks, "sp.track")
     expect_true(file.rename(file.path(sp_dir, "chrM"), file.path(sp_dir, "M")))
     expect_true(file.copy(file.path(tracks, "other.track", "chrM"), file.path(sp_dir, "MT")))
-    expect_error(gextract("sp", gintervals.all()), "two files of chromosome chrM, M and MT")
+    expect_equal(gextract("sp", gintervals.all()), expected)
+    # without it, two other aliases
+    expect_true(file.rename(file.path(sp_dir, "M"), file.path(sp_dir, "chrMT")))
+    expect_error(gextract("sp", gintervals.all()), "two files of chromosome chrM, MT and chrMT, and none named chrM or M")
     expect_error(gextract("other", "sp"), "two files of chromosome chrM")
     expect_error(suppressMessages(gtrack.convert_to_indexed("sp")), "two files of chromosome chrM")
-
     # two names of one file are not two files
     unlink(file.path(sp_dir, "MT"))
-    expect_true(file.symlink(file.path(sp_dir, "M"), file.path(sp_dir, "MT")))
+    expect_true(file.symlink(file.path(sp_dir, "chrMT"), file.path(sp_dir, "MT")))
     expect_equal(gextract("sp", gintervals.all()), expected)
 
     rects_dir <- file.path(tracks, "rects.track")
     expect_true(file.rename(file.path(rects_dir, "chr1-chr2"), file.path(rects_dir, "1-2")))
     expect_true(file.copy(file.path(tracks, "other2d.track", "chr1-chr2"), file.path(rects_dir, "chr1-2")))
     unlink(file.path(rects_dir, ".meta"))
-    expect_error(gextract("rects", gintervals.2d.all()), "two files of chromosome pair \\(chr1, chr2\\), 1-2 and chr1-2")
+    expect_equal(gextract("rects", gintervals.2d.all()), expected2d)
+    expect_true(file.rename(file.path(rects_dir, "1-2"), file.path(rects_dir, "1-chr2")))
+    expect_error(gextract("rects", gintervals.2d.all()), "two files of chromosome pair \\(chr1, chr2\\), 1-chr2 and chr1-2")
     expect_error(gintervals.load("rects", chrom1 = "chr1", chrom2 = "chr2"), "two files of chromosome pair")
     expect_error(suppressMessages(gtrack.2d.convert_to_indexed("rects")), "two files of chromosome pair")
 
     set_dir <- file.path(tracks, "set.interv")
-    expect_true(file.copy(file.path(set_dir, "chr1"), file.path(set_dir, "1")))
-    expect_true(file.rename(file.path(set_dir, "chrM"), file.path(set_dir, "M")))
-    expect_true(file.copy(file.path(set_dir, "1"), file.path(set_dir, "MT")))
+    expect_true(file.rename(file.path(set_dir, "chrM"), file.path(set_dir, "MT")))
+    expect_true(file.copy(file.path(set_dir, "chr1"), file.path(set_dir, "chrMT")))
     expect_error(gintervals.load("set"), "two files of chromosome chrM")
     expect_error(suppressMessages(gintervals.convert_to_indexed("set")), "two files of chromosome chrM")
 })
@@ -726,7 +732,7 @@ test_that("a copy of a file with two names (a symlink, a hard link), neither can
     gtrack.create_sparse("sp", "x", gintervals(c("chr1", "chrM"), 0, 100), c(1, 2))
     dir <- file.path(db, "tracks", "sp.track")
     expect_true(file.rename(file.path(dir, "chrM"), file.path(dir, "MT")))
-    expect_true(file.symlink("MT", file.path(dir, "M")))
+    expect_true(file.symlink("MT", file.path(dir, "chrMT")))
     gdb.reload()
     expected <- gextract("sp", gintervals.all())
     expect_equal(expected$sp, c(1, 2))
@@ -740,7 +746,7 @@ test_that("a copy of a file with two names (a symlink, a hard link), neither can
     # different bytes are
     gsetroot(db)
     dir2 <- file.path(db, "tracks", "sp2.track")
-    expect_true(file.copy(file.path(dir2, "chr1"), file.path(dir2, "M"), overwrite = TRUE))
+    expect_true(file.copy(file.path(dir2, "chr1"), file.path(dir2, "chrMT"), overwrite = TRUE))
     gdb.reload()
     expect_error(gextract("sp2", gintervals.all()), "two files of chromosome chrM")
 })
@@ -905,4 +911,37 @@ test_that("gtrack.modify keeps a file named by an alias where earlier pymisha al
     expect_true(file.rename(saved, file.path(dir, "1")))
     gdb.reload()
     expect_equal(gextract("d", gintervals("chr1", 0, 30))$d, c(101, 101, 101))
+})
+
+test_that("after gtrack.modify, earlier pymisha's write of the \"chr\"-toggled name is read", {
+    local_db_state()
+    withr::local_options(list(gmulticontig.indexed_format = FALSE))
+    td <- tempfile("alias_modify_toggled_")
+    dir.create(td)
+    withr::defer(unlink(td, recursive = TRUE))
+    db <- create_alias_test_db(file.path(td, "db"))
+    gsetroot(db)
+
+    second_name <- list(
+        symlink = function(dir) file.symlink("M", file.path(dir, "MT")),
+        hardlink = function(dir) file.link(file.path(dir, "M"), file.path(dir, "MT")),
+        copy = function(dir) file.copy(file.path(dir, "M"), file.path(dir, "MT"))
+    )
+    for (how in names(second_name)) {
+        gtrack.create_dense("d", "x", gintervals(c("chr1", "chrM"), 0, 30), c(1, 5), 10, 0)
+        dir <- file.path(db, "tracks", "d.track")
+        expect_true(file.rename(file.path(dir, "chrM"), file.path(dir, "M")), info = how)
+        expect_true(second_name[[how]](dir), info = how)
+        gdb.reload()
+        saved <- file.path(td, "M_5")
+        expect_true(file.copy(file.path(dir, "M"), saved, overwrite = TRUE), info = how)
+        gtrack.modify("d", "d + 100", gintervals("chrM", 0, 30))
+        expect_equal(gextract("d", gintervals("chrM", 0, 30))$d, c(105, 105, 105), info = how)
+        # earlier pymisha writes chrM's data by renaming a new file over "M", its name for it
+        expect_true(file.rename(saved, file.path(dir, "M")), info = how)
+        gdb.reload()
+        expect_equal(gextract("d", gintervals("chrM", 0, 30))$d, c(5, 5, 5), info = how)
+        expect_equal(gextract("d", gintervals("chr1", 0, 30))$d, c(1, 1, 1), info = how)
+        gtrack.rm("d", force = TRUE)
+    }
 })

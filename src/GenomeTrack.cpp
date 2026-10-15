@@ -94,10 +94,13 @@ GenomeTrack::ChromFiles::ChromFiles(const GenomeChromKey &chromkey, const string
 	};
 	struct dirent *dirp;
 
+	// the name with "chr" added or removed
+	auto toggled = [](const string &name) { return name.compare(0, 3, "chr") ? "chr" + name : name.substr(3); };
+
 	// also by the "chr" toggle, which the aliases of over 1000 contigs without "chr" leave out (.compute_chrom_aliases)
-	auto find_chromid = [&chromkey](const string &name) {
+	auto find_chromid = [&chromkey, &toggled](const string &name) {
 		int chromid = chromkey.find_chromid(name);
-		return chromid >= 0 ? chromid : chromkey.find_chromid(name.compare(0, 3, "chr") ? "chr" + name : name.substr(3));
+		return chromid >= 0 ? chromid : chromkey.find_chromid(toggled(name));
 	};
 
 	// a listing cut short by an I/O error (EIO, ESTALE on NFS) would silently miss files
@@ -160,12 +163,19 @@ GenomeTrack::ChromFiles::ChromFiles(const GenomeChromKey &chromkey, const string
 
 	for (size_t i = 0; i < m_files.size(); ++i) {
 		const File &file = m_files[i];
-		bool canonical = file.chromid >= 0 && file.name == chromkey.id2chrom(file.chromid);
-		if (file.chromid >= 0 && (canonical || !indexed1d))
-			choose(m_chrom2file, file.chromid, i, canonical);
-		canonical = file.chromid1 >= 0 && file.name == get_2d_filename(chromkey, file.chromid1, file.chromid2);
-		if (file.chromid1 >= 0 && (canonical || !indexed2d))
-			choose(m_pair2file, pair_key(file.chromid1, file.chromid2), i, canonical);
+		if (file.chromid >= 0) {
+			const string &name = chromkey.id2chrom(file.chromid);
+			int rank = file.name == name ? 0 : file.name == toggled(name) ? 1 : 2;
+			if (!rank || !indexed1d)
+				choose(m_chrom2file, file.chromid, i, rank);
+		}
+		if (file.chromid1 >= 0) {
+			const string &name1 = chromkey.id2chrom(file.chromid1);
+			const string &name2 = chromkey.id2chrom(file.chromid2);
+			int rank = file.name == name1 + "-" + name2 ? 0 : file.name == toggled(name1) + "-" + toggled(name2) ? 1 : 2;
+			if (!rank || !indexed2d)
+				choose(m_pair2file, pair_key(file.chromid1, file.chromid2), i, rank);
+		}
 	}
 
 	// the error names the conflict of the first chromosome (pair) by chrom id
@@ -180,7 +190,7 @@ GenomeTrack::ChromFiles::ChromFiles(const GenomeChromKey &chromkey, const string
 	if (conflict)
 		m_conflict1d = "Directory " + dir + " has two files of chromosome " + chromkey.id2chrom(conflict_chromid) + ", " +
 			m_files[conflict->file].name + " and " + m_files[conflict->conflict].name + ", and none named " +
-			chromkey.id2chrom(conflict_chromid) + "; remove one of them";
+			chromkey.id2chrom(conflict_chromid) + " or " + toggled(chromkey.id2chrom(conflict_chromid)) + "; remove one of them";
 
 	conflict = NULL;
 	uint64_t conflict_key = 0;
@@ -194,7 +204,8 @@ GenomeTrack::ChromFiles::ChromFiles(const GenomeChromKey &chromkey, const string
 		const File &file = m_files[conflict->file];
 		m_conflict2d = "Directory " + dir + " has two files of chromosome pair (" + chromkey.id2chrom(file.chromid1) + ", " +
 			chromkey.id2chrom(file.chromid2) + "), " + file.name + " and " + m_files[conflict->conflict].name + ", and none named " +
-			get_2d_filename(chromkey, file.chromid1, file.chromid2) + "; remove one of them";
+			get_2d_filename(chromkey, file.chromid1, file.chromid2) + " or " + toggled(chromkey.id2chrom(file.chromid1)) + "-" +
+			toggled(chromkey.id2chrom(file.chromid2)) + "; remove one of them";
 	}
 }
 
@@ -215,20 +226,20 @@ static bool same_contents(const string &path1, const string &path2, off_t size1,
 }
 
 template <class Key>
-void GenomeTrack::ChromFiles::choose(unordered_map<Key, Choice> &choices, const Key &key, size_t ifile, bool canonical)
+void GenomeTrack::ChromFiles::choose(unordered_map<Key, Choice> &choices, const Key &key, size_t ifile, int rank)
 {
-	auto res = choices.emplace(key, Choice{ifile, canonical, NONE});
+	auto res = choices.emplace(key, Choice{ifile, rank, NONE});
 	Choice &choice = res.first->second;
 
-	if (res.second || choice.canonical)
+	if (res.second || rank > choice.rank)
 		return;
 
-	if (canonical) {
-		choice = Choice{ifile, true, NONE};
+	if (rank < choice.rank) {
+		choice = Choice{ifile, rank, NONE};
 		return;
 	}
 
-	// two names of one file (a symlink, a hard link) are not a conflict, nor two files with the same bytes (a copy
+	// two files of one rank (not the canonical one, a single name): two names of one file (a symlink, a hard link) are not a conflict, nor two files with the same bytes (a copy
 	// of such names, which makes a file of each)
 	const string path1 = m_dir + "/" + m_files[choice.file].name;
 	const string path2 = m_dir + "/" + m_files[ifile].name;

@@ -6,7 +6,7 @@
 
 * **Behavior fix:** per-chromosome files of tracks and big intervals sets named by a chromosome alias (`1` for `chr1`, `1-chr2` for a pair, as earlier pymisha wrote them) are read, converted, copied and lifted over as canonically named ones. 2D tracks read as empty, big sets failed to load and lifted tracks came out empty. Delete the `.meta` of such a 2D track if an earlier version saved one.
 
-* **Breaking:** where a chromosome has two files named by aliases and none by its name, reading or converting them is an error; converting to the indexed format stops at a file not named by a chromosome or that cannot be read (an unreadable file was packed as empty). A canonically named file wins over an alias-named one, and the conversion's `remove.old` removes both.
+* **Breaking:** where a chromosome has no file named by its name, nor by that name with "chr" added or removed, and two different files named by other aliases, reading or converting them is an error; converting to the indexed format stops at a file not named by a chromosome or that cannot be read (an unreadable file was packed as empty). A canonically named file wins over an alias-named one, and the conversion's `remove.old` removes both.
 
 * **Bug fix:** `gintervals.load()` of an indexed big set returned the chromosomes deleted from it with `gintervals.update(NULL)`.
 
