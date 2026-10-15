@@ -689,7 +689,7 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
         names <- list.files(src_dir)
         names <- names[file_test("-f", file.path(src_dir, names))]
         skipped <- c(.TRACK_INTERNAL_FILES, outer(c("track", "intervals", "intervals2d"), c(".idx", ".dat", ".idx.tmp", ".dat.tmp"), paste0))
-        stray <- setdiff(names, c(.gchrom_files(src_dir, TRUE)$file, skipped))
+        stray <- setdiff(names[!endsWith(names, ".tmp")], c(.gchrom_files(src_dir, TRUE)$file, skipped))
         if (length(stray)) {
             stop(sprintf(
                 "Cannot copy 2D track %s: its file %s is not named by a chromosome pair, so the copy could not be converted to the indexed format.",

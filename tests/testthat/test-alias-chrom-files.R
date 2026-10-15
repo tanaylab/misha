@@ -1045,3 +1045,30 @@ test_that("an overwriting copy of a computed track into a database without its c
     gsetroot(dest)
     expect_equal(gextract("victim", gintervals.all())$victim, c(7, 8))
 })
+
+test_that("a leftover *.tmp file does not stop a 2D conversion, and gintervals.update writes over a conflict", {
+    local_db_state()
+    withr::local_options(list(gmulticontig.indexed_format = FALSE))
+    td <- tempfile("alias_tmp_conflict_")
+    dir.create(td)
+    withr::defer(unlink(td, recursive = TRUE))
+    db <- create_alias_test_db(file.path(td, "db"))
+    gsetroot(db)
+
+    gtrack.2d.create("rects", "x", gintervals.2d(c("chr1", "chr2"), 10, 15, "chr2", 30, 35), c(1, 2))
+    expected <- gextract("rects", gintervals.2d.all())
+    tracks <- file.path(db, "tracks")
+    writeLines("x", file.path(tracks, "rects.track", "chr1-chr2.tmp"))
+    suppressMessages(gtrack.2d.convert_to_indexed("rects", remove.old = TRUE))
+    expect_equal(gextract("rects", gintervals.2d.all()), expected)
+
+    # chrM's files "MT" and "chrMT" differ and none is named chrM or M: an update of chrM writes "chrM", which wins
+    withr::with_options(list(gmax.data.size = 1, gbig.intervals.size = 1), {
+        gintervals.save("s", data.frame(gintervals(c("chr1", "chrM"), 0, 10), v = 1:2))
+        dir <- file.path(tracks, "s.interv")
+        expect_true(file.rename(file.path(dir, "chrM"), file.path(dir, "MT")))
+        expect_true(file.copy(file.path(dir, "chr1"), file.path(dir, "chrMT")))
+        gintervals.update("s", data.frame(gintervals("chrM", 0, 20), v = 9L), chrom = "chrM")
+    })
+    expect_equal(gintervals.load("s")$v, c(1, 9))
+})
