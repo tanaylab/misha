@@ -1129,11 +1129,18 @@ test_that("an overwriting gtrack.copy that fails keeps the existing destination"
     expect_error(suppressWarnings(gtrack.copy("src", "victim", overwrite = TRUE)), "Failed to copy")
     expect_equal(gextract("victim", gintervals.all())$victim, 42)
     expect_true(gtrack.exists("victim"))
-    expect_length(list.files(tracks, all.files = TRUE, pattern = "^\\\\.victim\\\\.track\\\\.tmp\\\\."), 0)
+    expect_length(list.files(tracks, all.files = TRUE, pattern = "^\\.victim\\.track\\.tmp\\."), 0)
 
     # once the copy can succeed it replaces the destination and leaves nothing aside
     Sys.chmod(unreadable, "644")
     gtrack.copy("src", "victim", overwrite = TRUE)
     expect_equal(gextract("victim", gintervals.all())$victim, c(1, 2))
-    expect_length(list.files(tracks, all.files = TRUE, pattern = "^\\\\.victim\\\\.track\\\\.tmp\\\\."), 0)
+    expect_length(list.files(tracks, all.files = TRUE, pattern = "^\\.victim\\.track\\.tmp\\."), 0)
+
+    # a destination that cannot be set aside stops the copy before anything is written
+    gtrack.create_sparse("other", "x", gintervals("chr2", 0, 100), 5)
+    Sys.chmod(tracks, "555")
+    expect_error(gtrack.copy("other", "victim", overwrite = TRUE), "copy aborted|read-only")
+    Sys.chmod(tracks, "755")
+    expect_equal(gextract("victim", gintervals.all())$victim, c(1, 2))
 })
