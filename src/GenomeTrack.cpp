@@ -100,7 +100,17 @@ GenomeTrack::ChromFiles::ChromFiles(const GenomeChromKey &chromkey, const string
 		return chromid >= 0 ? chromid : chromkey.find_chromid(name.compare(0, 3, "chr") ? "chr" + name : name.substr(3));
 	};
 
-	while ((dirp = readdir(d))) {
+	// a listing cut short by an I/O error (EIO, ESTALE on NFS) would silently miss files
+	for (;;) {
+		errno = 0;
+		if (!(dirp = readdir(d))) {
+			if (errno) {
+				int err = errno;
+				closedir(d);
+				TGLError<GenomeTrack>(FILE_ERROR, "Reading directory %s: %s\n", dir.c_str(), strerror(err));
+			}
+			break;
+		}
 		const string name(dirp->d_name);
 
 		if (name[0] == '.' || index_files.count(name))
@@ -111,7 +121,15 @@ GenomeTrack::ChromFiles::ChromFiles(const GenomeChromKey &chromkey, const string
 			string path = dir + "/" + name;
 			if (!lstat(path.c_str(), &st) && S_ISLNK(st.st_mode))
 				is_symlink = true;
-			if (stat(path.c_str(), &st) || !S_ISREG(st.st_mode))  // a dangling symlink, a directory, ...
+			if (stat(path.c_str(), &st)) {
+				if (errno == EIO || errno == ESTALE) {
+					int err = errno;
+					closedir(d);
+					TGLError<GenomeTrack>(FILE_ERROR, "Accessing %s: %s\n", path.c_str(), strerror(err));
+				}
+				continue;  // a dangling symlink, ...
+			}
+			if (!S_ISREG(st.st_mode))  // a directory, ...
 				continue;
 		} else if (dirp->d_type != DT_REG)
 			continue;
