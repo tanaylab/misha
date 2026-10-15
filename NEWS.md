@@ -8,6 +8,8 @@
 
 * **Breaking:** where a chromosome has no file named by its name, nor by that name with "chr" added or removed, and two different files named by other aliases, reading or converting them is an error; converting to the indexed format stops at a file not named by a chromosome or that cannot be read (an unreadable file was packed as empty). A canonically named file wins over an alias-named one, and the conversion's `remove.old` removes both.
 
+* **Bug fix:** `gtrack.copy(overwrite = TRUE)` removed the existing destination before copying, so a copy that then failed (an entry it could not copy, a check that stopped late) lost it; the destination is now kept until the copy succeeds.
+
 * **Bug fix:** `gintervals.load()` of an indexed big set returned the chromosomes deleted from it with `gintervals.update(NULL)`.
 
 * **Bug fix:** a forced `gtrack.2d.convert_to_indexed()` that failed (a pair file it could not read, a full disk) could remove the track's index and data; it now leaves the track as it was.
