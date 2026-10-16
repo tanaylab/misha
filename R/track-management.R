@@ -683,28 +683,6 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
             destname, dest_db, file.path(dest_db, "tracks")
         ), call. = FALSE)
     }
-    if (is_2d && dest_indexed && !src_indexed) {
-        # the conversion after the copy stops at a file not named by a chromosome pair (it skips index
-        # and temporary files, GenomeTrack::ChromFiles), and the copy makes a file of each symlink
-        names <- list.files(src_dir)
-        names <- names[file_test("-f", file.path(src_dir, names))]
-        skipped <- c(.TRACK_INTERNAL_FILES, outer(c("track", "intervals", "intervals2d"), c(".idx", ".dat", ".idx.tmp", ".dat.tmp"), paste0))
-        # and leftovers named *.tmp that are not named by a chromosome
-        tmp <- setdiff(names[endsWith(names, ".tmp")], .gchrom_files(src_dir, FALSE)$file)
-        stray <- setdiff(names, c(.gchrom_files(src_dir, TRUE)$file, skipped, tmp))
-        if (length(stray)) {
-            stop(sprintf(
-                "Cannot copy 2D track %s: its file %s is not named by a chromosome pair, so the copy could not be converted to the indexed format.",
-                srcname, stray[1]
-            ), call. = FALSE)
-        }
-        all_names <- list.files(src_dir, all.files = TRUE, no.. = TRUE)
-        all_names <- all_names[file_test("-f", file.path(src_dir, all_names))]
-        unreadable <- all_names[file.access(file.path(src_dir, all_names), 4) != 0]
-        if (length(unreadable)) {
-            stop(sprintf("Cannot copy 2D track %s: its file %s cannot be read.", srcname, unreadable[1]), call. = FALSE)
-        }
-    }
     if (!is_2d) {
         # the per-chromosome files the copy would have (an indexed track splits into one per contig)
         # (by their chromosomes' names or their own, which the pipeline below matches too)
@@ -874,8 +852,10 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
         same_bytes <- function(f1, f2) {
             identical(readBin(f1, "raw", file.size(f1)), readBin(f2, "raw", file.size(f2)))
         }
-        for (i in which(files$used & !in_dest(files$chrom) & !in_dest(files$file))) {
-            for (j in which(!files$used & files$chrom == files$chrom[i] & in_dest(files$file))) {
+        file_in_dest <- in_dest(files$file)
+        others <- which(!files$used & file_in_dest)
+        for (i in which(files$used & !in_dest(files$chrom) & !file_in_dest & files$chrom %in% files$chrom[others])) {
+            for (j in others[files$chrom[others] == files$chrom[i]]) {
                 if (same_bytes(file.path(src_dir, files$file[i]), file.path(src_dir, files$file[j]))) {
                     files$used[c(i, j)] <- c(FALSE, TRUE)
                     break

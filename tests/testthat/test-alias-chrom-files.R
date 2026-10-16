@@ -575,7 +575,7 @@ test_that("next to an intervals set's index a file named by an alias is ignored,
     expect_equal(gextract("sp", intervals = "s", iterator = "s")$start, c(500, 0))
 })
 
-test_that("a 2D copy that is converted stops before the destination at a file not named by a pair", {
+test_that("a converted 2D copy that stops at a file not named by a pair keeps the destination", {
     local_db_state()
     withr::local_options(list(gmulticontig.indexed_format = FALSE))
     td <- tempfile("alias_copy2d_")
@@ -610,7 +610,7 @@ test_that("a 2D copy that is converted stops before the destination at a file no
     unlink(file.path(src_dir, "chr1"))
     Sys.chmod(file.path(src_dir, ".attributes"), "000")
     if (file.access(file.path(src_dir, ".attributes"), 4) != 0) {
-        expect_error(gtrack.copy("src", "dst", overwrite = TRUE), "file .attributes cannot be read")
+        expect_error(gtrack.copy("src", "dst", overwrite = TRUE), "Failed to copy .*attributes")
         expect_equal(gextract("dst", gintervals.2d.all()), expected)
     }
     Sys.chmod(file.path(src_dir, ".attributes"), "644")
