@@ -863,7 +863,7 @@ test_that("an indexed big set does not return a chromosome deleted with ginterva
     expect_equal(gintervals.load("s2d")$v, 2:3)
 })
 
-test_that("gintervals.update over a canonically named file does not list the set's directory", {
+test_that("gintervals.update does not list the set's directory", {
     local_db_state()
     withr::local_options(list(gmulticontig.indexed_format = FALSE))
     td <- tempfile("alias_update_list_")
@@ -882,10 +882,10 @@ test_that("gintervals.update over a canonically named file does not list the set
         gintervals.save("s", data.frame(gintervals(c("chr1", "chr2", "chrX"), 0, 10), v = 1:3))
         gintervals.update("s", data.frame(gintervals("chr1", 0, 20), v = 5L), chrom = "chr1")
         expect_equal(listed, 0)
-        # a deletion lists it: a file named by an alias would come back
+        # nor does a deletion, which removes a file named by an alias that would come back
         writeLines("x", file.path(db, "tracks", "s.interv", "2"))
         gintervals.update("s", NULL, chrom = "chr2")
-        expect_equal(listed, 1)
+        expect_equal(listed, 0)
     })
     expect_false(file.exists(file.path(db, "tracks", "s.interv", "2")))
     expect_equal(gintervals.load("s")$v, c(5, 3))

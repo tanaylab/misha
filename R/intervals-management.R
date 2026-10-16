@@ -517,6 +517,18 @@ gintervals.update <- function(intervals.set = NULL, intervals = "", chrom = NULL
 
     # big: update stats (including delete), save chrom (or delete), convert to small if needed
     if (.gintervals.is_bigset(intervals.set)) {
+        # The names GenomeTrack::ChromFiles maps to a chromosome: its own, its aliases (CHROM_ALIAS), and
+        # these with "chr" added or removed. Its files under them other than the canonical one are removed
+        # with the update: they would be read in place of a deleted one, and earlier pymisha reads them
+        # before the canonical one. Checked by name, not by listing the directory, which a loop of updates
+        # would do once per chromosome.
+        alias <- get0("CHROM_ALIAS", envir = .misha, inherits = FALSE, ifnotfound = character(0))
+        names_of <- function(chrom) {
+            chrom <- as.character(chrom)
+            names <- unique(c(chrom, names(alias)[alias == chrom]))
+            names <- unique(c(names, ifelse(startsWith(names, "chr"), substring(names, 4), paste0("chr", names))))
+            names[nzchar(names)]
+        }
         is1d <- .gintervals.big.is1d(intervals.set)
         meta <- .gintervals.big.meta(intervals.set)
         stats <- meta$stats
@@ -539,16 +551,8 @@ gintervals.update <- function(intervals.set = NULL, intervals = "", chrom = NULL
                 stats <- rbind(stats, data.frame(chrom = chrom, stat))
                 stats <- stats[order(stats$chrom), ]
             }
-            # a file named by an alias of chrom (.gchrom_files) would be read in place of the one deleted
-            # here; one written over the canonical file hides them already (a loop of updates would list
-            # the directory once per chromosome)
-            aliases <- character(0)
-            if (is.null(intervals) || !nrow(intervals) || !file_test("-f", file.path(fullpath, chrom))) {
-                # (also where its files or another chromosome's conflict, or cannot be reached: the
-                # canonical file written wins, and a deleted chromosome's go)
-                files <- .gchrom_files(fullpath, FALSE)
-                aliases <- files$file[files$chrom == chrom & files$file != chrom]
-            }
+            aliases <- setdiff(names_of(chrom), chrom)
+            aliases <- aliases[file.exists(file.path(fullpath, aliases))]
             # removed once the write succeeded: they may hold the chromosome's only data
             .gintervals.big.save(fullpath, intervals, chrom = chrom)
             unlink(file.path(fullpath, aliases))
@@ -565,11 +569,8 @@ gintervals.update <- function(intervals.set = NULL, intervals = "", chrom = NULL
                 stats <- rbind(stats, data.frame(chrom1 = chrom1, chrom2 = chrom2, stat))
                 stats <- stats[order(stats$chrom1, stats$chrom2), ]
             }
-            aliases <- character(0)
-            if (is.null(intervals) || !nrow(intervals) || !file_test("-f", file.path(fullpath, paste(chrom1, chrom2, sep = "-")))) {
-                files <- .gchrom_files(fullpath, TRUE)
-                aliases <- files$file[files$chrom1 == chrom1 & files$chrom2 == chrom2 & files$file != paste(chrom1, chrom2, sep = "-")]
-            }
+            aliases <- setdiff(as.vector(outer(names_of(chrom1), names_of(chrom2), paste, sep = "-")), paste(chrom1, chrom2, sep = "-"))
+            aliases <- aliases[file.exists(file.path(fullpath, aliases))]
             # removed once the write succeeded: they may hold the pair's only data
             .gintervals.big.save(fullpath, intervals, chrom1 = chrom1, chrom2 = chrom2)
             unlink(file.path(fullpath, aliases))

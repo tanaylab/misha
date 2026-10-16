@@ -713,7 +713,10 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
         if (!src_indexed && (info$type == "computed" || !length(src_files))) {
             src_files <- setdiff(list.files(src_dir), .TRACK_INTERNAL_FILES)
         }
-        if (length(src_files) && all(vapply(src_files, function(f) is.null(.gtrack.copy.match_chrom_alias(f, dest_chroms)), logical(1)))) {
+        # matched as .gtrack.copy.match_chrom_alias() does (the name or its "chr" toggle), at once
+        src_files <- unique(src_files)
+        toggled <- ifelse(startsWith(src_files, "chr"), substring(src_files, 4), paste0("chr", src_files))
+        if (length(src_files) && !any(src_files %in% dest_chroms | toggled %in% dest_chroms)) {
             stop(sprintf(
                 "gtrack.copy(%s): no chromosomes from source database are present in destination; refusing to create empty track.",
                 destname
@@ -735,24 +738,10 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
         # The existing track is set aside (hidden, as a staging directory) until the copy has
         # succeeded, and comes back if any step of it fails (bypassing gtrack.rm, which insists the
         # database is loaded)
-        aside <- file.path(dest_parent, .gdb.staging_name(basename(dest_dir)))
-        if (!suppressWarnings(file.rename(dest_dir, aside))) {
-            stop(sprintf(
-                "Failed to set the existing destination %s aside; copy aborted.",
-                dest_dir
-            ), call. = FALSE)
-        }
-        # dated now: another host's sweep of staging directories goes by their age (setting the time needs
-        # to own the directory; an entry created and removed in it needs only write access)
-        if (!isTRUE(Sys.setFileTime(aside, Sys.time()))) {
-            touch <- file.path(aside, ".misha.touch")
-            if (file.create(touch, showWarnings = FALSE)) {
-                unlink(touch)
-            }
-        }
-        .gdb.invalidate_dir_cache(dest_dir)
+        aside_path <- file.path(dest_parent, .gdb.staging_name(basename(dest_dir)))
         tracks_before <- get("GTRACKS", envir = .misha)
         track_db_before <- get("GTRACK_DATASET", envir = .misha)
+        # registered before the rename, so that an interrupt right after it still brings the track back
         on.exit(
             if (!is.null(aside)) {
                 # the failed copy is moved away first (it may not be removable at once, e.g. read-only
@@ -776,6 +765,22 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
             },
             add = TRUE
         )
+        if (!suppressWarnings(file.rename(dest_dir, aside_path))) {
+            stop(sprintf(
+                "Failed to set the existing destination %s aside; copy aborted.",
+                dest_dir
+            ), call. = FALSE)
+        }
+        aside <- aside_path
+        # dated now: another host's sweep of staging directories goes by their age (setting the time needs
+        # to own the directory; an entry created and removed in it needs only write access)
+        if (!isTRUE(Sys.setFileTime(aside, Sys.time()))) {
+            touch <- file.path(aside, ".misha.touch")
+            if (file.create(touch, showWarnings = FALSE)) {
+                unlink(touch)
+            }
+        }
+        .gdb.invalidate_dir_cache(dest_dir)
         # the session's track list is updated only for a loaded destination (.gdb.rm_track writes it
         # into the database's .db.cache); an unloaded one is rescanned when loaded
         if (dest_db_loaded) {
@@ -862,7 +867,8 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
         # the files the source is read from, by its canonical names; the files they hid go
         # (.gchrom_files)
         files <- .gchrom_files(src_dir, FALSE)
-        in_dest <- function(names) !vapply(names, function(f) is.null(.gtrack.copy.match_chrom_alias(f, dest_chroms)), logical(1))
+        # whether the destination has a name, as .gtrack.copy.match_chrom_alias() matches it (the name or its "chr" toggle)
+        in_dest <- function(names) names %in% dest_chroms | ifelse(startsWith(names, "chr"), substring(names, 4), paste0("chr", names)) %in% dest_chroms
         # of the files of a chromosome with the same bytes (names of one file, or copies of them), one whose
         # own name the destination has, where neither the used one's name nor its chromosome's is there
         same_bytes <- function(f1, f2) {
