@@ -531,6 +531,8 @@ test_that("loading one chromosome (pair) of a big set lists its directory only w
     })
     expect_equal(nrow(gintervals.load("set", chrom = "chr2")), 1)
     expect_equal(nrow(gintervals.load("set2d", chrom1 = "chr1", chrom2 = "chr2")), 1)
+    # also of all pairs of a chromosome
+    expect_equal(nrow(gintervals.load("set2d", chrom2 = "chr2")), 2)
     expect_equal(listed, 0)
 
     tracks <- file.path(db, "tracks")

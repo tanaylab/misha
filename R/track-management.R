@@ -742,8 +742,14 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
                 dest_dir
             ), call. = FALSE)
         }
-        # dated now: another host's sweep of staging directories goes by their age
-        Sys.setFileTime(aside, Sys.time())
+        # dated now: another host's sweep of staging directories goes by their age (setting the time needs
+        # to own the directory; an entry created and removed in it needs only write access)
+        if (!isTRUE(Sys.setFileTime(aside, Sys.time()))) {
+            touch <- file.path(aside, ".misha.touch")
+            if (file.create(touch, showWarnings = FALSE)) {
+                unlink(touch)
+            }
+        }
         .gdb.invalidate_dir_cache(dest_dir)
         tracks_before <- get("GTRACKS", envir = .misha)
         track_db_before <- get("GTRACK_DATASET", envir = .misha)

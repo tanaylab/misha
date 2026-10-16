@@ -179,10 +179,10 @@
         return(rep(NA_character_, length(c(chrom, chrom1))))
     }
     dir <- .intervals_dir(intervals.set)
-    # The canonically named file wins: a load of one chromosome (pair) that has one does not list the
+    # The canonically named files win: a load of chromosomes (pairs) that all have one does not list the
     # directory, which loops over the chromosomes of a set would otherwise list once per chromosome
     canonical <- if (!is.null(chrom)) as.character(chrom) else paste(chrom1, chrom2, sep = "-")
-    if (length(canonical) == 1 && file_test("-f", file.path(dir, canonical))) {
+    if (length(canonical) && all(file_test("-f", file.path(dir, canonical)))) {
         return(canonical)
     }
     # without it, next to the set's index only the canonical file would count (GenomeTrack::ChromFiles)
