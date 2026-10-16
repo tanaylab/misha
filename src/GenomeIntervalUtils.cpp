@@ -805,8 +805,10 @@ SEXP gtrack_intervals_load(SEXP _track, SEXP _chrom, SEXP _chrom1, SEXP _chrom2,
 			canonical = trackpath + "/" + (is_1d ? GenomeTrack::get_1d_filename(iu.get_chromkey(), iu.chrom2id(chrom_arg(_chrom))) :
 										   GenomeTrack::get_2d_filename(iu.get_chromkey(), iu.chrom2id(chrom_arg(_chrom1)), iu.chrom2id(chrom_arg(_chrom2))));
 			if (!stat(canonical.c_str(), &st) && S_ISREG(st.st_mode)) {
+				// a current type of the requested dimension; anything else (an obsolete format) the listing reports
 				track_type = GenomeTrack::s_read_type(canonical.c_str());
-				if (is_1d ? !GenomeTrack::is_1d(track_type) : !GenomeTrack::is_2d(track_type))
+				if (is_1d ? track_type != GenomeTrack::FIXED_BIN && track_type != GenomeTrack::SPARSE && track_type != GenomeTrack::ARRAYS :
+							track_type != GenomeTrack::RECTS && track_type != GenomeTrack::POINTS && track_type != GenomeTrack::COMPUTED)
 					canonical.clear();
 			} else
 				canonical.clear();

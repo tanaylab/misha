@@ -168,8 +168,10 @@ GenomeTrack::ChromFiles::ChromFiles(const GenomeChromKey &chromkey, const string
 	// Next to an intervals set's index only a canonically named file holds data newer than it: no misha writes a
 	// file named by an alias there, and one left by an earlier conversion is older than the index. A conversion
 	// packs them all, as master did.
-	// (an index that cannot be stat'ed for a reason other than its absence counts as there, so readers report it)
-	auto has_index = [&st](const string &path) { return !stat(path.c_str(), &st) || errno != ENOENT; };
+	// (only an intervals set's directory has one, so only there is it looked for; one that cannot be stat'ed
+	// for a reason other than its absence counts as there, and the readers of the index report the error)
+	const bool is_set = dir.size() > 7 && !dir.compare(dir.size() - 7, 7, ".interv");
+	auto has_index = [&st, is_set](const string &path) { return is_set && (!stat(path.c_str(), &st) || errno != ENOENT); };
 	const bool indexed1d = !converting && has_index(dir + "/intervals.idx");
 	const bool indexed2d = !converting && has_index(dir + "/intervals2d.idx");
 
