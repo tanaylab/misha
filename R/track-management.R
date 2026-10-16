@@ -721,7 +721,7 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
         track_db_before <- get("GTRACK_DATASET", envir = .misha)
         # registered before the rename, so that an interrupt right after it still brings the track back
         on.exit(
-            if (!is.null(aside)) {
+            if (!is.null(aside) && dir.exists(aside)) {
                 # the failed copy is moved away first (it may not be removable at once, e.g. read-only
                 # files kept by copy.mode), then the existing track comes back, with the session's
                 # track list as it was
@@ -743,13 +743,15 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
             },
             add = TRUE
         )
+        # set before the rename, so that an interrupt right after it still finds the track there
+        aside <- aside_path
         if (!suppressWarnings(file.rename(dest_dir, aside_path))) {
+            aside <- NULL
             stop(sprintf(
                 "Failed to set the existing destination %s aside; copy aborted.",
                 dest_dir
             ), call. = FALSE)
         }
-        aside <- aside_path
         # dated now: another host's sweep of staging directories goes by their age (setting the time needs
         # to own the directory; an entry created and removed in it needs only write access)
         if (!isTRUE(Sys.setFileTime(aside, Sys.time()))) {

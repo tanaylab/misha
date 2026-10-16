@@ -1231,3 +1231,72 @@ test_that("an indexed set with alias-named files left next to its index loads a 
     expect_equal(gintervals.load("s2d", chrom1 = "chr1", chrom2 = "chr2")$v, 1)
     expect_equal(listed, 0)
 })
+
+test_that("gintervals.update removes only its chromosome's alias-named files, not the one it wrote through", {
+    local_db_state()
+    withr::local_options(list(gmulticontig.indexed_format = FALSE))
+    td <- tempfile("alias_update_names_")
+    dir.create(td)
+    withr::defer(unlink(td, recursive = TRUE))
+    # a per-chromosome database with these names, its sequence files named by them
+    mkdb <- function(path, chroms) {
+        dir.create(file.path(path, "tracks"), recursive = TRUE)
+        dir.create(file.path(path, "seq"))
+        for (chrom in chroms) {
+            writeBin(charToRaw(strrep("A", 1000)), file.path(path, "seq", paste0(chrom, ".seq")))
+        }
+        writeLines(paste(chroms, 1000, sep = "\t"), file.path(path, "chrom_sizes.txt"))
+        normalizePath(path)
+    }
+    opts <- list(gmax.data.size = 1, gbig.intervals.size = 1)
+
+    # canonical names that are symlinks to alias-named files (as made for earlier pymisha's files)
+    a <- mkdb(file.path(td, "a"), c("chr1", "chr2", "chrX"))
+    gsetroot(a)
+    withr::with_options(opts, {
+        gintervals.save("s", gintervals(c("chr1", "chr2"), 10, 20))
+        gintervals.save("s2d", gintervals.2d(c("chr1", "chr2"), 10, 20, "chr2", 0, 10))
+    })
+    dir <- file.path(a, "tracks", "s.interv")
+    dir2d <- file.path(a, "tracks", "s2d.interv")
+    expect_true(file.rename(file.path(dir, "chr1"), file.path(dir, "1")))
+    expect_true(file.symlink("1", file.path(dir, "chr1")))
+    expect_true(file.rename(file.path(dir2d, "chr1-chr2"), file.path(dir2d, "1-2")))
+    expect_true(file.symlink("1-2", file.path(dir2d, "chr1-chr2")))
+    withr::with_options(opts, {
+        gintervals.update("s", gintervals("chr1", c(500, 700), c(600, 800)), chrom = "chr1")
+        gintervals.update("s2d", gintervals.2d("chr1", 500, 600, "chr2", 0, 10), chrom1 = "chr1", chrom2 = "chr2")
+    })
+    expect_equal(gintervals.load("s")$start, c(500, 700, 10))
+    expect_equal(gintervals.load("s2d")$start1, c(500, 10))
+
+    # an alias-named symlink that cannot be followed goes with the chromosome's deletion (the set stays big)
+    expect_true(file.symlink("2", file.path(dir, "2")))
+    withr::with_options(opts, gintervals.update("s", NULL, chrom = "chr2"))
+    expect_true(dir.exists(dir))
+    expect_false("2" %in% list.files(dir))
+    expect_equal(gintervals.load("s")$start, c(500, 700))
+
+    # names that differ only by "chr" are two chromosomes' names
+    b <- mkdb(file.path(td, "b"), c("1", "chr1", "chr2", "M", "chrM"))
+    gsetroot(b)
+    withr::with_options(opts, {
+        gintervals.save("s", gintervals(c("1", "chr1", "M", "chrM"), 10, 20 + 1:4))
+        gintervals.save("s2d", gintervals.2d(c("1", "chr1"), 0, 1:2, "chr2", 0, 10))
+        gintervals.update("s", gintervals("1", 500, 600), chrom = "1")
+        gintervals.update("s", NULL, chrom = "M")
+        gintervals.update("s2d", gintervals.2d("1", 0, 7, "chr2", 0, 10), chrom1 = "1", chrom2 = "chr2")
+    })
+    expect_equal(as.character(gintervals.load("s")$chrom), c("1", "chr1", "chrM"))
+    expect_equal(gintervals.load("s")$end, c(600, 22, 24))
+    expect_equal(gintervals.load("s2d")$end1, c(7, 2))
+
+    # an alias name with a wildcard matches no other file
+    d <- mkdb(file.path(td, "d"), c("chr1", "a*b", "a1b"))
+    gsetroot(d)
+    withr::with_options(opts, gintervals.save("s", gintervals(c("chr1", "a*b", "a1b"), 10, 20)))
+    dir <- file.path(d, "tracks", "s.interv")
+    expect_true(all(file.rename(file.path(dir, c("a*b", "a1b")), file.path(dir, c("chra*b", "chra1b")))))
+    withr::with_options(opts, gintervals.update("s", gintervals("a*b", 500, 600), chrom = "a*b"))
+    expect_equal(gintervals.load("s", chrom = "a1b")$start, 10)
+})
