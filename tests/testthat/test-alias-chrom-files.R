@@ -1299,4 +1299,9 @@ test_that("gintervals.update removes only its chromosome's alias-named files, no
     expect_true(all(file.rename(file.path(dir, c("a*b", "a1b")), file.path(dir, c("chra*b", "chra1b")))))
     withr::with_options(opts, gintervals.update("s", gintervals("a*b", 500, 600), chrom = "a*b"))
     expect_equal(gintervals.load("s", chrom = "a1b")$start, 10)
+
+    # a directory named by an alias is not one of the chromosome's files
+    expect_true(dir.create(file.path(dir, "1")))
+    withr::with_options(opts, gintervals.update("s", gintervals("chr1", 500, 600), chrom = "chr1"))
+    expect_true(dir.exists(file.path(dir, "1")))
 })

@@ -541,9 +541,9 @@ gintervals.update <- function(intervals.set = NULL, intervals = "", chrom = NULL
             id <- by_name(names)
             ifelse(is.na(id), by_name(toggled(names)), id)
         }
-        # of the names, those with a file or a symlink (one that cannot be followed too), other than the file
-        # the canonical name was written through (a symlink to an alias-named file, as made for earlier
-        # pymisha); removed by file.remove(), which takes no wildcards
+        # of the names, those with a file (not a directory: the listing skips those) or a symlink that cannot be
+        # followed, other than the file the canonical name was written through (a symlink to an alias-named
+        # file, as made for earlier pymisha); removed by file.remove(), which takes no wildcards
         remove_aliases <- function(names, canonical) {
             paths <- file.path(fullpath, names)
             canonical <- file.path(fullpath, canonical)
@@ -557,7 +557,7 @@ gintervals.update <- function(intervals.set = NULL, intervals = "", chrom = NULL
         exists_or_link <- function(names) {
             paths <- file.path(fullpath, names)
             links <- Sys.readlink(paths)
-            names[file.exists(paths) | (!is.na(links) & nzchar(links))]
+            names[file_test("-f", paths) | (!is.na(links) & nzchar(links) & !file.exists(paths))]
         }
         is1d <- .gintervals.big.is1d(intervals.set)
         meta <- .gintervals.big.meta(intervals.set)

@@ -743,9 +743,10 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
             },
             add = TRUE
         )
-        # set before the rename, so that an interrupt right after it still finds the track there
-        aside <- aside_path
-        if (!suppressWarnings(file.rename(dest_dir, aside_path))) {
+        # set before the rename, so that an interrupt right after it still finds the track there (unless the
+        # name is taken: what is there is not this track)
+        aside <- if (!file.exists(aside_path)) aside_path
+        if (is.null(aside) || !suppressWarnings(file.rename(dest_dir, aside_path))) {
             aside <- NULL
             stop(sprintf(
                 "Failed to set the existing destination %s aside; copy aborted.",
