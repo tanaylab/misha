@@ -71,15 +71,14 @@ void GIntervalsBigSet1D::load_chrom(int chromid)
 		if (m_intervals.empty() || m_intervals.front().chromid != chromid) {
 			// Construct per-chromosome filename
 			string intervset_dir = interv2path(m_iu->get_env(), m_intervset);
-			string filename = intervset_dir + "/" + m_iu->id2chrom(chromid);
+			const GenomeTrack::ChromFiles &files = m_iu->get_chrom_files(intervset_dir);
 
 			// SURGICAL PIVOT: Check for per-chromosome file first
-			struct stat st;
 			SEXP rintervals = R_NilValue;
 
-			if (stat(filename.c_str(), &st) == 0) {
+			if (files.exists(chromid)) {
 				// PER-CHROMOSOME PATH: Per-chromosome file exists
-				rintervals = rprotect_ptr(RSaneUnserialize(filename.c_str()));
+				rintervals = rprotect_ptr(RSaneUnserialize(files.path(chromid).c_str()));
 			} else {
 				// INDEXED PATH: Use intervals.dat with index
 				string dat_path = intervset_dir + "/intervals.dat";

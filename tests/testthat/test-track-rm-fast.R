@@ -91,7 +91,7 @@ test_that("gtrack.rm force-branch with no on-disk residue scrubs cache silently"
     expect_silent(gtrack.rm("test_rm_neverexisted", force = TRUE))
 })
 
-test_that("gtrack.copy overwrite aborts when trash fails", {
+test_that("gtrack.copy overwrite completes when removing the replaced destination fails", {
     skip_if(is.null(test_db_root()), "Shared test database not available")
     gsetroot(test_db_root())
     on.exit(gdb.reload(), add = TRUE)
@@ -105,10 +105,13 @@ test_that("gtrack.copy overwrite aborts when trash fails", {
         gtrack.rm("test_copy_dst", force = TRUE)
     }), add = TRUE)
 
+    # the replaced destination is set aside before the copy and trashed after it; a failed trash
+    # leaves it hidden, for the sweep of staging directories, and the copy stands
     local_mocked_bindings(.gdb.trash = function(...) FALSE)
-
-    expect_error(
-        gtrack.copy("test_copy_src", "test_copy_dst", overwrite = TRUE),
-        regexp = "Failed to remove existing destination|copy aborted"
-    )
+    gtrack.copy("test_copy_src", "test_copy_dst", overwrite = TRUE)
+    expect_equal(gextract("test_copy_dst", gintervals(1, 0, 1000))$test_copy_dst, gextract("test_copy_src", gintervals(1, 0, 1000))$test_copy_src)
+    tracks <- file.path(test_db_root(), "tracks")
+    aside <- list.files(tracks, pattern = "^\\.test_copy_dst\\.track\\.tmp\\.", all.files = TRUE, full.names = TRUE)
+    expect_length(aside, 1)
+    unlink(aside, recursive = TRUE)
 })

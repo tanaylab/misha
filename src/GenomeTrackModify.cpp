@@ -223,7 +223,10 @@ SEXP gtrack_modify(SEXP _track, SEXP _track_expr, SEXP _intervals, SEXP _iterato
 		GenomeTrackFixedBin gtrack;
 		GInterval last_interval(-1, -1, -1, -1);
 
-		if (GenomeTrack::get_type(trackpath.c_str(), iu.get_chromkey()) != GenomeTrack::FIXED_BIN)
+		const GenomeTrack::ChromFiles &files = iu.get_chrom_files(trackpath);
+		set<int> modified;
+
+		if (GenomeTrack::get_type(files) != GenomeTrack::FIXED_BIN)
 			verror("Cannot modify track %s: modification is supported only for dense tracks", track);
 
 		Stager stager(trackpath, stage_dir);
@@ -237,7 +240,7 @@ SEXP gtrack_modify(SEXP _track, SEXP _track_expr, SEXP _intervals, SEXP _iterato
 			const GInterval &cur_interval = scanner.last_interval1d();
 
 			if (last_interval.chromid != cur_interval.chromid) {
-				string resolved = GenomeTrack::find_existing_1d_filename(iu.get_chromkey(), trackpath, cur_interval.chromid);
+				const string &resolved = files.filename(cur_interval.chromid);
 				snprintf(filename, sizeof(filename), "%s/%s", trackpath.c_str(), resolved.c_str());
 				gtrack.init_read(filename, cur_interval.chromid);
 				if (gtrack.get_bin_size() != ((TrackExpressionFixedBinIterator *)scanner.get_iterator())->get_bin_size())
@@ -248,6 +251,7 @@ SEXP gtrack_modify(SEXP _track, SEXP _track_expr, SEXP _intervals, SEXP _iterato
 				if (stager.enabled()) {
 					string staged = stager.stage(resolved);
 					gtrack.init_update(staged.c_str(), cur_interval.chromid);
+					modified.insert(cur_interval.chromid);
 				} else
 					gtrack.init_update(filename, cur_interval.chromid);
 			}
@@ -264,6 +268,25 @@ SEXP gtrack_modify(SEXP _track, SEXP _track_expr, SEXP _intervals, SEXP _iterato
 		// short write must fail here, not silently at fclose() after commit.
 		gtrack.flush_writes();
 		stager.commit();
+
+		// The commit replaced the file each modified chromosome was read from. Its other names (links to the
+		// same file, copies with the same bytes, or files the read one hid) become names of the committed file,
+		// so they do not differ from it and whatever links to them reads the new data.
+		for (const GenomeTrack::ChromFiles::File &file : files.files()) {
+			if (file.chromid < 0 || !modified.count(file.chromid))
+				continue;
+			const string &committed = files.filename(file.chromid);
+			string name = trackpath + "/" + file.name;
+			struct stat st1, st2;
+			// not one that leads to the committed file already (a symlink to it)
+			if (file.name != committed && (stat(name.c_str(), &st1) || stat((trackpath + "/" + committed).c_str(), &st2) ||
+										   st1.st_dev != st2.st_dev || st1.st_ino != st2.st_ino)) {
+				string tmp = trackpath + "/." + file.name + ".link";  // hidden from the listing
+				unlink(tmp.c_str());
+				if (!link((trackpath + "/" + committed).c_str(), tmp.c_str()) && rename(tmp.c_str(), name.c_str()))
+					unlink(tmp.c_str());
+			}
+		}
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
     } catch (const bad_alloc &e) {

@@ -22,7 +22,9 @@ public:
 	virtual bool next();
 
 protected:
+	IntervUtils                  &m_iu;
 	string                        m_track_dir;
+	const GenomeTrack::ChromFiles *m_chrom_files;
 	GenomeChromKey               *m_chromkey;
 	uint64_t                      m_max_data_size;
 	GenomeTrack2D                *m_track;

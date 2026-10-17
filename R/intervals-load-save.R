@@ -405,14 +405,19 @@
             # (which correctly merges factor levels, unlike C++ grbind)
             if (is.null(chrom) && .gintervals.is_indexed_bigset(intervals.set)) {
                 df_list <- .gcall("gbigintervs_load_all", intervals.set, .misha_env())
-                res <- do.call(rbind, df_list)
+                if (is.data.frame(df_list)) {
+                    df_list <- list(df_list) # no entry with data
+                }
+                # the index keeps the entries of chromosomes deleted since (gintervals.update(NULL)), .meta not
+                df_list <- df_list[vapply(df_list, function(d) as.character(d$chrom[1]), "") %in% meta$stats$chrom]
+                res <- if (length(df_list)) do.call(rbind, df_list) else meta$zeroline
             } else if (nrow(meta$stats) > 1) {
                 # Slow path: per-chromosome iteration (for per-chromosome format or single-chrom load)
                 res <- list(zeroline)
-                lapply(
-                    meta$stats$chrom,
-                    function(chrom) {
-                        loaded_intervs <- .gintervals.load_file(intervals.set, chrom = chrom)
+                files <- .gintervals.big.chrom_files(intervals.set, chrom = meta$stats$chrom)
+                mapply(
+                    function(chrom, file) {
+                        loaded_intervs <- .gintervals.load_file(intervals.set, chrom = chrom, file = file)
                         if (!identical(sapply(loaded_intervs, "class"), sapply(zeroline, "class"))) {
                             stop(sprintf("Intervals set %s, chrom %s: invalid columns definition", intervals.set, chrom), call. = FALSE)
                         }
@@ -425,11 +430,12 @@
                                 progress.percentage <<- percentage
                             }
                         }
-                    }
+                    },
+                    meta$stats$chrom, files
                 )
                 res <- do.call(.grbind, res) # much faster than calling rbind incrementally in mapply
             } else if (nrow(meta$stats) == 1) {
-                res <- .gintervals.load_file(intervals.set, chrom = meta$stats$chrom[1])
+                res <- .gintervals.load_file(intervals.set, chrom = meta$stats$chrom[1], file = .gintervals.big.chrom_files(intervals.set, chrom = meta$stats$chrom[1]))
                 if (!identical(sapply(res, "class"), sapply(zeroline, "class"))) {
                     stop(sprintf("Intervals set %s, chrom %s: invalid columns definition", intervals.set, meta$stats$chrom[1]), call. = FALSE)
                 }
@@ -480,13 +486,20 @@
             # (which correctly merges factor levels, unlike C++ grbind)
             if (is.null(chrom1) && is.null(chrom2) && .gintervals.is_indexed_bigset(intervals.set)) {
                 df_list <- .gcall("gbigintervs_load_all_2d", intervals.set, .misha_env())
-                res <- do.call(rbind, df_list)
+                if (is.data.frame(df_list)) {
+                    df_list <- list(df_list) # no entry with data
+                }
+                # the index keeps the entries of pairs deleted since (gintervals.update(NULL)), .meta not
+                pairs <- paste(meta$stats$chrom1, meta$stats$chrom2)
+                df_list <- df_list[vapply(df_list, function(d) paste(d$chrom1[1], d$chrom2[1]), "") %in% pairs]
+                res <- if (length(df_list)) do.call(rbind, df_list) else meta$zeroline
             } else if (nrow(meta$stats) > 1) {
                 # Slow path: per-chromosome-pair iteration (for per-chromosome format or filtered load)
                 res <- list(zeroline)
+                files <- .gintervals.big.chrom_files(intervals.set, chrom1 = meta$stats$chrom1, chrom2 = meta$stats$chrom2)
                 mapply(
-                    function(chrom1, chrom2) {
-                        loaded_intervs <- .gintervals.load_file(intervals.set, chrom1 = chrom1, chrom2 = chrom2)
+                    function(chrom1, chrom2, file) {
+                        loaded_intervs <- .gintervals.load_file(intervals.set, chrom1 = chrom1, chrom2 = chrom2, file = file)
                         if (!identical(sapply(loaded_intervs, "class"), sapply(zeroline, "class"))) {
                             stop(sprintf("Interval set %s, chrom1 %s, chrom2 %s: invalid columns definition", intervals.set, chrom1, chrom2), call. = FALSE)
                         }
@@ -500,11 +513,15 @@
                             }
                         }
                     },
-                    meta$stats$chrom1, meta$stats$chrom2
+                    meta$stats$chrom1, meta$stats$chrom2, files
                 )
                 res <- do.call(.grbind, res) # much faster than calling rbind incrementally in mapply
             } else if (nrow(meta$stats) == 1) {
-                res <- .gintervals.load_file(intervals.set, chrom1 = meta$stats$chrom1[1], chrom2 = meta$stats$chrom2[1])
+                res <- .gintervals.load_file(
+                    intervals.set,
+                    chrom1 = meta$stats$chrom1[1], chrom2 = meta$stats$chrom2[1],
+                    file = .gintervals.big.chrom_files(intervals.set, chrom1 = meta$stats$chrom1[1], chrom2 = meta$stats$chrom2[1])
+                )
                 if (!identical(sapply(res, "class"), sapply(zeroline, "class"))) {
                     stop(sprintf("Interval set %s, chrom1 %s, chrom2 %s: invalid columns definition", intervals.set, meta$stats$chrom1[1], meta$stats$chrom2[1]), call. = FALSE)
                 }
@@ -556,9 +573,12 @@
     res
 }
 
-.gintervals.load_file <- function(intervals.set, chrom = NULL, chrom1 = NULL, chrom2 = NULL) {
+# file: the file of the chromosome (pair) in a big intervals set (.gintervals.big.chrom_files)
+.gintervals.load_file <- function(intervals.set, chrom = NULL, chrom1 = NULL, chrom2 = NULL, file = NA) {
     intervfname <- .intervals_dir(intervals.set)
-    if (!is.null(chrom)) {
+    if (!is.na(file)) {
+        intervfname <- file.path(intervfname, file)
+    } else if (!is.null(chrom)) {
         chrom <- .gchroms(chrom)
         intervfname <- sprintf("%s/%s", intervfname, chrom)
     } else if (!is.null(chrom1) && !is.null(chrom2)) {

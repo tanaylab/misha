@@ -22,6 +22,8 @@ public:
 
 	int           chrom2id(const string &chrom) const;
 	int           chrom2id(const char *chrom) const;
+	// the id of a chromosome or of an alias of one, -1 if chrom is neither
+	int           find_chromid(const string &chrom) const;
 	const string &id2chrom(int id) const;
 	uint64_t      get_chrom_size(int id) const;
 	uint64_t        get_num_chroms() const { return m_id2chrom.size(); }
@@ -85,6 +87,15 @@ inline int GenomeChromKey::chrom2id(const char *name) const
 		return ialias2id->second;
 	TGLError<GenomeChromKey>(CHROM_NOEXISTS, "Chromosome \"%s\" does not exist", name);
 	return 0;
+}
+
+inline int GenomeChromKey::find_chromid(const string &name) const
+{
+	Name2id::const_iterator iname2id = m_name2id.find(name);
+	if (iname2id != m_name2id.end())
+		return iname2id->second;
+	Name2id::const_iterator ialias2id = m_alias2id.find(name);
+	return ialias2id == m_alias2id.end() ? -1 : ialias2id->second;
 }
 
 inline const string &GenomeChromKey::id2chrom(int id) const

@@ -1053,7 +1053,7 @@ for (unsigned ivar = 0; ivar < vars.get_num_track_vars(); ++ivar) {
 				}
                         }
 			track_names.push_back(iter_val);
-			track_types.push_back(GenomeTrack::get_type(track2path(m_iu.get_env(), iter_val).c_str(), m_iu.get_chromkey()));
+			track_types.push_back(GenomeTrack::get_type(m_iu.get_chrom_files(track2path(m_iu.get_env(), iter_val))));
 		}
 	}
 
@@ -1061,18 +1061,19 @@ for (unsigned ivar = 0; ivar < vars.get_num_track_vars(); ++ivar) {
 		for (vector<string>::const_iterator itrack_name = track_names.begin(); itrack_name != track_names.end(); ++itrack_name) {
 			string trackpath(track2path(m_iu.get_env(), *itrack_name));
 			GenomeTrack::Type track_type = track_types[itrack_name - track_names.begin()];
-			vector<string> filenames;
 			unsigned binsize = 0;
 
-			// read the list of chrom files
-			get_chrom_files(trackpath.c_str(), filenames);
+			// the chrom files, which the iterator and the track variables then read
+			const GenomeTrack::ChromFiles &files = m_iu.get_chrom_files(trackpath);
+			vector<int> chromids;
+			vector<pair<int, int>> chrom_pairs;
 
 			// Indexed 1D fast path: when track.idx is present, validate via the
 			// in-memory index instead of synthesizing one filename per chromosome
 			// and stat()'ing track.idx for every one. On large-contig genomes
 			// (~1M+ chroms) the synthetic loop hits ~4 syscalls × N_chroms per
 			// gextract setup, with stat(track.idx) dominating.
-			if (filenames.empty() && GenomeTrack::is_1d(track_type)) {
+			if (files.files().empty() && GenomeTrack::is_1d(track_type)) {
 				auto idx = GenomeTrack::get_track_index(trackpath);
 				if (idx) {
 					const auto &entries = idx->get_all_entries();
@@ -1166,47 +1167,47 @@ for (unsigned ivar = 0; ivar < vars.get_num_track_vars(); ++ivar) {
 				}
 				// No index found: fall through to legacy per-chrom synthesis.
 				for (unsigned i = 0; i < m_iu.get_chromkey().get_num_chroms(); ++i) {
-					filenames.push_back(m_iu.get_chromkey().id2chrom(i));
+					chromids.push_back(i);
 				}
-			} else if (filenames.empty() && GenomeTrack::is_2d(track_type)) {
-				// For indexed 2D tracks, populate filenames from the index entries
+			} else if (files.files().empty() && GenomeTrack::is_2d(track_type)) {
+				// For indexed 2D tracks, the pairs are the index entries
 				try {
 					auto idx2d = TrackIndex2D::get_track_index_2d(trackpath);
 					if (idx2d && idx2d->is_loaded()) {
 						for (const auto &entry : idx2d->entries()) {
-							filenames.push_back(GenomeTrack::get_2d_filename(m_iu.get_chromkey(), entry.chrom1_id, entry.chrom2_id));
+							chrom_pairs.push_back(make_pair((int)entry.chrom1_id, (int)entry.chrom2_id));
 						}
 					}
 				} catch (...) {
-					// Fall through - filenames stays empty
+					// Fall through - chrom_pairs stays empty
 				}
+			} else {
+				for (const GenomeTrack::ChromFiles::File &file : files.files()) {
+					if (!file.link && (GenomeTrack::is_1d(track_type) ? file.chromid < 0 : file.chromid1 < 0))
+						verror("Track %s: file %s is not named by a chromosome%s\n", itrack_name->c_str(), file.name.c_str(),
+							   GenomeTrack::is_1d(track_type) ? "" : " pair");
+				}
+				if (GenomeTrack::is_1d(track_type))
+					chromids = files.chromids();
+				else
+					chrom_pairs = files.chrom_pairs();
 			}
 
-			sort(filenames.begin(), filenames.end());
-
 			if (GenomeTrack::is_1d(track_type)) {
-				set<int> chromids;
 				// Declare outside the loop so init_read can reuse mmap for indexed
 				// tracks (single track.dat) instead of re-mmapping per chromosome.
 				GenomeTrackFixedBin gtrack_fbin;
 
-				for (vector<string>::const_iterator ifilename = filenames.begin(); ifilename != filenames.end(); ++ifilename) {
-					int chromid = -1;
+				for (vector<int>::const_iterator ichromid = chromids.begin(); ichromid != chromids.end(); ++ichromid) {
+					int chromid = *ichromid;
 
-					try {
-						 chromid = GenomeTrack::get_chromid_1d(m_iu.get_chromkey(), *ifilename);
-					} catch (TGLException &e) {
-						verror("Track %s: %s\n", itrack_name->c_str(), e.msg());
-					}
-
-					chromids.insert(chromid);
 					if (track_type == GenomeTrack::FIXED_BIN) {
                         // Metadata-only: this loop only validates bin_size and
                         // num_samples, so skip the mmap setup that init_read
                         // otherwise does. With many tracks × many chromosomes
                         // the per-call open+mmap+madvise+close was dominating
                         // gextract setup time.
-                        gtrack_fbin.init_read_metadata((trackpath + "/" + *ifilename).c_str(), chromid);
+                        gtrack_fbin.init_read_metadata(files.path(chromid).c_str(), chromid);
                         int64_t expected_num_bins = (int64_t)ceil(all_genome_intervs[chromid].end / (double)gtrack_fbin.get_bin_size());
 
                         if (gtrack_fbin.get_num_samples() != expected_num_bins){
@@ -1215,7 +1216,7 @@ for (unsigned ivar = 0; ivar < vars.get_num_track_vars(); ++ivar) {
 						}
 					}
 
-					if (ifilename == filenames.begin()) {
+					if (ichromid == chromids.begin()) {
 						if (Rf_isString(giterator)) {
 							if (*itrack_name == CHAR(STRING_ELT(giterator, 0)))
 								common_track_type = track_type;
@@ -1241,32 +1242,25 @@ for (unsigned ivar = 0; ivar < vars.get_num_track_vars(); ++ivar) {
 						}
 					} else if (track_type == GenomeTrack::FIXED_BIN && binsize != gtrack_fbin.get_bin_size())
 						verror("Track %s: bin size of chroms %s and %s differ (%d and %d respectively)",
-								itrack_name->c_str(), m_iu.id2chrom(GenomeTrack::get_chromid_1d(m_iu.get_chromkey(), *(ifilename - 1))).c_str(),
+								itrack_name->c_str(), m_iu.id2chrom(*(ichromid - 1)).c_str(),
 								m_iu.id2chrom(chromid).c_str(), binsize, gtrack_fbin.get_bin_size());
 				}
 
+				set<int> chromids_set(chromids.begin(), chromids.end());
 				for (GIntervals::const_iterator iinterv = all_genome_intervs.begin(); iinterv != all_genome_intervs.end(); ++iinterv) {
-					if (chromids.find(iinterv->chromid) == chromids.end())
+					if (chromids_set.find(iinterv->chromid) == chromids_set.end())
 						verror("Chrom %s presented in the global chrom list is missing in track %s", m_iu.id2chrom(iinterv->chromid).c_str(), itrack_name->c_str());
 				}
 			} else if (GenomeTrack::is_2d(track_type)) {
-				for (vector<string>::const_iterator ifilename = filenames.begin(); ifilename != filenames.end(); ++ifilename) {
-					try {
-						 GenomeTrack::get_chromid_2d(m_iu.get_chromkey(), *ifilename);
-					} catch (TGLException &e) {
-						verror("Track %s: %s\n", itrack_name->c_str(), e.msg());
-					}
-
-					if (ifilename == filenames.begin()) {
-						if (Rf_isString(giterator)) {
-							if (*itrack_name == CHAR(STRING_ELT(giterator, 0)))
-								common_track_type = track_type;
-						} else {
-							if (itrack_name == track_names.begin())
-								common_track_type = track_type;
-							else if (common_track_type != track_type)
-								common_track_type = -1;
-						}
+				if (!chrom_pairs.empty()) {
+					if (Rf_isString(giterator)) {
+						if (*itrack_name == CHAR(STRING_ELT(giterator, 0)))
+							common_track_type = track_type;
+					} else {
+						if (itrack_name == track_names.begin())
+							common_track_type = track_type;
+						else if (common_track_type != track_type)
+							common_track_type = -1;
 					}
 				}
 			} else

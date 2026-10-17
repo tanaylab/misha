@@ -6,6 +6,8 @@
 
 TrackExpressionTrackRectsIterator::TrackExpressionTrackRectsIterator(IntervUtils &iu) :
 	TrackExpression2DIterator(INTERVALS2D),
+	m_iu(iu),
+	m_chrom_files(NULL),
 	m_chromkey((GenomeChromKey *)&iu.get_chromkey()),
 	m_track_rects(iu.get_track_chunk_size(), iu.get_track_num_chunks()),
 	m_track_points(iu.get_track_chunk_size(), iu.get_track_num_chunks()),
@@ -16,6 +18,7 @@ bool TrackExpressionTrackRectsIterator::begin(const string &track_dir, GenomeTra
 {
 	m_track = NULL;
 	m_track_dir = track_dir;
+	m_chrom_files = &m_iu.get_chrom_files(track_dir);
 	m_track_type = track_type;
 
 	TrackExpression2DIterator::begin(scope, band);
@@ -74,13 +77,16 @@ bool TrackExpressionTrackRectsIterator::next()
 		else if (!m_scope->get_next_chroms(&m_chromid1, &m_chromid2))
 			break;
 
-		string track_filename = m_track_dir + "/" + GenomeTrack::get_2d_filename(*m_chromkey, m_chromid1, m_chromid2);
-
-		if ((m_band.is_non_empty_area() && m_chromid1 != m_chromid2) || !m_scope->size(m_chromid1, m_chromid2))
+		// A per-pair track lists all its files, so a pair without one has nothing to read; an
+		// indexed track lists none
+		if ((m_band.is_non_empty_area() && m_chromid1 != m_chromid2) || !m_scope->size(m_chromid1, m_chromid2) ||
+			(!m_chrom_files->files().empty() && !m_chrom_files->exists(m_chromid1, m_chromid2)))
 		{
 			m_track = NULL;
 			continue;
 		}
+
+		string track_filename = m_chrom_files->path(m_chromid1, m_chromid2);
 
 		if (m_track_type == GenomeTrack::RECTS) {
 			m_track_rects.init_read(track_filename.c_str(), m_chromid1, m_chromid2);

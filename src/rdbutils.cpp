@@ -838,53 +838,6 @@ void rdb::runprotect_all()
 	RdbInitializer::s_protect_counter = 0;
 }
 
-void rdb::get_chrom_files(const char *dirname, vector<string> &chrom_files)
-{
-	// Check for indexed format first
-	string idx_path = string(dirname) + "/track.idx";
-	struct stat idx_st;
-
-	if (stat(idx_path.c_str(), &idx_st) == 0) {
-		// Indexed format exists - return empty list
-		// The scanner will need to handle this case differently
-		return;
-	}
-
-	// Per-chromosome format - scan directory for per-chromosome files
-	DIR *dir = opendir(dirname);
-
-	if (!dir)
-		verror("Failed to read directory %s: %s\n", dirname, strerror(errno));
-
-	struct dirent *dirp;
-
-	while ((dirp = readdir(dir))) {
-		if (!strcmp(dirp->d_name, ".") || !strcmp(dirp->d_name, ".."))
-			continue;
-		if (dirp->d_name[0] == '.')
-			continue;
-
-		// Skip indexed format files (shouldn't exist if we got here, but just in case)
-		if (!strcmp(dirp->d_name, "track.dat") || !strcmp(dirp->d_name, "track.idx"))
-			continue;
-		if (!strcmp(dirp->d_name, "track.dat.tmp") || !strcmp(dirp->d_name, "track.idx.tmp"))
-			continue;
-
-		if (dirp->d_type == DT_REG)
-			chrom_files.push_back(dirp->d_name);
-		else if (dirp->d_type == DT_UNKNOWN) {
-			struct stat sbuf;
-			char filename[PATH_MAX];
-
-			snprintf(filename, sizeof(filename), "%s/%s", dirname, dirp->d_name);
-			if (!stat(filename, &sbuf) && S_ISREG(sbuf.st_mode))
-				chrom_files.push_back(dirp->d_name);
-		}
-	}
-
-	closedir(dir);
-}
-
 const char *rdb::get_groot(SEXP envir)
 {
     SEXP groot = find_in_misha(envir, "GROOT");

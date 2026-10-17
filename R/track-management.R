@@ -643,14 +643,15 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
     }
 
     # Every check that can stop the copy comes before the destination is touched (overwrite = TRUE
-    # deletes the track there)
+    # sets the track there aside, and puts it back if the copy fails later)
     if (is_2d && src_indexed && !identical(src_chroms, dest_chroms)) {
         stop(sprintf(
             "Cross-db copy of 2D track %s requires identical chromosome order in source and destination.",
             srcname
         ), call. = FALSE)
     }
-    if (is_2d && !src_indexed && !setequal(src_chroms, dest_chroms)) {
+    # (a loaded dataset's recorded order has its chrom_sizes.txt names, which may lack "chr")
+    if (is_2d && !src_indexed && !setequal(sub("^chr", "", src_chroms), sub("^chr", "", dest_chroms))) {
         stop(sprintf(
             "Cross-db copy of 2D track %s requires the same chromosome names in source and destination.",
             srcname
@@ -684,8 +685,16 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
     }
     if (!is_2d) {
         # the per-chromosome files the copy would have (an indexed track splits into one per contig)
-        src_files <- if (src_indexed) src_chroms else setdiff(list.files(src_dir), .TRACK_INTERNAL_FILES)
-        if (length(src_files) && all(vapply(src_files, function(f) is.null(.gtrack.copy.match_chrom_alias(f, dest_chroms)), logical(1)))) {
+        # (by their chromosomes' names or their own, which the pipeline below matches too)
+        src_files <- if (src_indexed) src_chroms else unlist(.gchrom_files(src_dir, FALSE)[c("chrom", "file")], use.names = FALSE)
+        # a computed track's pair files, or none named by a chromosome: its files, as before
+        if (!src_indexed && (info$type == "computed" || !length(src_files))) {
+            src_files <- setdiff(list.files(src_dir), .TRACK_INTERNAL_FILES)
+        }
+        # matched as .gtrack.copy.match_chrom_alias() does (the name or its "chr" toggle), at once
+        src_files <- unique(src_files)
+        toggled <- ifelse(startsWith(src_files, "chr"), substring(src_files, 4), paste0("chr", src_files))
+        if (length(src_files) && !any(src_files %in% dest_chroms | toggled %in% dest_chroms)) {
             stop(sprintf(
                 "gtrack.copy(%s): no chromosomes from source database are present in destination; refusing to create empty track.",
                 destname
@@ -702,16 +711,57 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
     if (!dir.exists(dest_parent)) {
         .gwith_umask(dir.create(dest_parent, recursive = TRUE, showWarnings = FALSE))
     }
+    aside <- NULL
     if (dir.exists(dest_dir)) {
-        # Bypass gtrack.rm (which insists db is loaded) and clean up directly.
-        # If trash failed and residue remains, abort so we don't create on top
-        # of stale files.
-        if (!.gdb.trash(dest_dir) && dir.exists(dest_dir)) {
+        # The existing track is set aside (hidden, as a staging directory) until the copy has
+        # succeeded, and comes back if any step of it fails (bypassing gtrack.rm, which insists the
+        # database is loaded)
+        aside_path <- file.path(dest_parent, .gdb.staging_name(basename(dest_dir)))
+        tracks_before <- get("GTRACKS", envir = .misha)
+        track_db_before <- get("GTRACK_DATASET", envir = .misha)
+        # registered before the rename, so that an interrupt right after it still brings the track back
+        on.exit(
+            if (!is.null(aside) && dir.exists(aside)) {
+                # the failed copy is moved away first (it may not be removable at once, e.g. read-only
+                # files kept by copy.mode), then the existing track comes back, with the session's
+                # track list as it was
+                failed <- file.path(dest_parent, .gdb.staging_name(basename(dest_dir)))
+                if (dir.exists(dest_dir) && !suppressWarnings(file.rename(dest_dir, failed))) {
+                    failed <- NULL
+                }
+                if (!dir.exists(dest_dir) && suppressWarnings(file.rename(aside, dest_dir))) {
+                    .gdb.invalidate_dir_cache(dest_dir)
+                    assign("GTRACKS", tracks_before, envir = .misha)
+                    assign("GTRACK_DATASET", track_db_before, envir = .misha)
+                    .gdb.cache_mark_dirty(dest_db)
+                } else {
+                    warning(sprintf("The copy over %s failed; the track that was there is kept at %s", dest_dir, aside), call. = FALSE)
+                }
+                if (!is.null(failed) && dir.exists(failed)) {
+                    .gdb.trash(failed)
+                }
+            },
+            add = TRUE
+        )
+        # set before the rename, so that an interrupt right after it still finds the track there (unless the
+        # name is taken: what is there is not this track)
+        aside <- if (!file.exists(aside_path)) aside_path
+        if (is.null(aside) || !suppressWarnings(file.rename(dest_dir, aside_path))) {
+            aside <- NULL
             stop(sprintf(
-                "Failed to remove existing destination %s; copy aborted.",
+                "Failed to set the existing destination %s aside; copy aborted.",
                 dest_dir
             ), call. = FALSE)
         }
+        # dated now: another host's sweep of staging directories goes by their age (setting the time needs
+        # to own the directory; an entry created and removed in it needs only write access)
+        if (!isTRUE(Sys.setFileTime(aside, Sys.time()))) {
+            touch <- file.path(aside, ".misha.touch")
+            if (file.create(touch, showWarnings = FALSE)) {
+                unlink(touch)
+            }
+        }
+        .gdb.invalidate_dir_cache(dest_dir)
         # the session's track list is updated only for a loaded destination (.gdb.rm_track writes it
         # into the database's .db.cache); an unloaded one is rescanned when loaded
         if (dest_db_loaded) {
@@ -753,6 +803,12 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
             stop(e)
         }
     )
+    if (!is.null(aside)) {
+        # cleared first: an interrupt from here on must not bring the old track back over the copy
+        old <- aside
+        aside <- NULL
+        .gdb.trash(old)
+    }
     destname
 }
 
@@ -788,6 +844,35 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
 
     if (src_indexed) {
         .gtrack.split_indexed_to_per_chrom(dest_dir, src_chroms, remove_indexed = TRUE)
+    } else {
+        # the files the source is read from, by its canonical names; the files they hid go
+        # (.gchrom_files)
+        files <- .gchrom_files(src_dir, FALSE)
+        # whether the destination has a name, as .gtrack.copy.match_chrom_alias() matches it (the name or its "chr" toggle)
+        in_dest <- function(names) names %in% dest_chroms | ifelse(startsWith(names, "chr"), substring(names, 4), paste0("chr", names)) %in% dest_chroms
+        # of the files of a chromosome with the same bytes (names of one file, or copies of them), one whose
+        # own name the destination has, where neither the used one's name nor its chromosome's is there
+        same_bytes <- function(f1, f2) {
+            identical(readBin(f1, "raw", file.size(f1)), readBin(f2, "raw", file.size(f2)))
+        }
+        file_in_dest <- in_dest(files$file)
+        others <- which(!files$used & file_in_dest)
+        for (i in which(files$used & !in_dest(files$chrom) & !file_in_dest & files$chrom %in% files$chrom[others])) {
+            for (j in others[files$chrom[others] == files$chrom[i]]) {
+                if (same_bytes(file.path(src_dir, files$file[i]), file.path(src_dir, files$file[j]))) {
+                    files$used[c(i, j)] <- c(FALSE, TRUE)
+                    break
+                }
+            }
+        }
+        unlink(file.path(dest_dir, files$file[!files$used]))
+        files <- files[files$used & files$file != files$chrom, ]
+        # one whose own name the destination has, and its chromosome's name not (as "M" for chrMT into
+        # a database with chrM), keeps its name, as before
+        files <- files[in_dest(files$chrom) | !in_dest(files$file), ]
+        if (!all(file.rename(file.path(dest_dir, files$file), file.path(dest_dir, files$chrom)))) {
+            stop(sprintf("Failed to rename the chromosome files of %s in %s", destname, dest_dir), call. = FALSE)
+        }
     }
 
     # Drop per-chrom files for chroms not in dest_chroms.

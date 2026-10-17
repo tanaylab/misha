@@ -1057,7 +1057,7 @@ TrackExpressionVars::Track_var &TrackExpressionVars::add_track_var(const string 
 			return *ivar;
 	}
 
-	GenomeTrack::Type track_type = GenomeTrack::get_type(track2path(m_iu.get_env(), track).c_str(), m_iu.get_chromkey());
+	GenomeTrack::Type track_type = GenomeTrack::get_type(m_iu.get_chrom_files(track2path(m_iu.get_env(), track)));
 	Track_n_imdf &track_n_imdf = add_track_n_imdf(track, track_type, vector<unsigned>(), GenomeTrackArrays::S_AVG, 0, Iterator_modifier1D(), Iterator_modifier2D());
 
 	m_track_vars.push_back(Track_var());
@@ -1072,7 +1072,7 @@ TrackExpressionVars::Track_var &TrackExpressionVars::add_track_var(const string 
 
 TrackExpressionVars::Track_var &TrackExpressionVars::add_vtrack_var_src_track(SEXP rvtrack, const string &vtrack, const string &track)
 {
-	GenomeTrack::Type track_type = GenomeTrack::get_type(track2path(m_iu.get_env(), track).c_str(), m_iu.get_chromkey());
+	GenomeTrack::Type track_type = GenomeTrack::get_type(m_iu.get_chrom_files(track2path(m_iu.get_env(), track)));
 	Iterator_modifier1D imdf1d;
 	Iterator_modifier2D imdf2d;
 
@@ -1779,32 +1779,25 @@ void TrackExpressionVars::init(const TrackExpressionIteratorBase &expr_itr)
 			{
 				string trackpath(track2path(m_iu.get_env(), *itrack_name));
 				GenomeTrack::Type track_type = track_types[itrack_name - track_names.begin()];
-				vector<string> filenames;
+				const GenomeTrack::ChromFiles &files = m_iu.get_chrom_files(trackpath);
 				unsigned binsize = 0;
 
-				// read the list of chrom files
-				get_chrom_files(trackpath.c_str(), filenames);
-				sort(filenames.begin(), filenames.end());
+				for (const GenomeTrack::ChromFiles::File &file : files.files())
+				{
+					if (!file.link && (GenomeTrack::is_1d(track_type) ? file.chromid < 0 : file.chromid1 < 0))
+						verror("Track %s: file %s is not named by a chromosome%s\n", itrack_name->c_str(), file.name.c_str(),
+							   GenomeTrack::is_1d(track_type) ? "" : " pair");
+				}
 
 				if (GenomeTrack::is_1d(track_type))
 				{
-					set<int> chromids;
 					GenomeTrackFixedBin gtrack_fbin;
+					vector<int> chromids = files.chromids();
 
-					for (vector<string>::const_iterator ifilename = filenames.begin(); ifilename != filenames.end(); ++ifilename)
+					for (vector<int>::const_iterator ichromid = chromids.begin(); ichromid != chromids.end(); ++ichromid)
 					{
-						int chromid = -1;
+						int chromid = *ichromid;
 
-						try
-						{
-							chromid = GenomeTrack::get_chromid_1d(m_iu.get_chromkey(), *ifilename);
-						}
-						catch (TGLException &e)
-						{
-							verror("Track %s: %s\n", itrack_name->c_str(), e.msg());
-						}
-
-						chromids.insert(chromid);
 						if (track_type == GenomeTrack::FIXED_BIN)
 						{
 							// Metadata-only: this loop only validates bin_size
@@ -1812,32 +1805,20 @@ void TrackExpressionVars::init(const TrackExpressionIteratorBase &expr_itr)
 							// otherwise does. With many tracks × many
 							// chromosomes the per-call open + mmap + madvise +
 							// close was dominating gextract setup time.
-							gtrack_fbin.init_read_metadata((trackpath + "/" + *ifilename).c_str(), chromid);
-							if (ifilename == filenames.begin())
+							gtrack_fbin.init_read_metadata(files.path(chromid).c_str(), chromid);
+							if (ichromid == chromids.begin())
 							{
 								binsize = gtrack_fbin.get_bin_size();
 							}
 							else if (binsize != gtrack_fbin.get_bin_size())
 								verror("Track %s: bin size of chroms %s and %s differ (%d and %d respectively)",
-									   itrack_name->c_str(), m_iu.id2chrom(GenomeTrack::get_chromid_1d(m_iu.get_chromkey(), *(ifilename - 1))).c_str(),
+									   itrack_name->c_str(), m_iu.id2chrom(*(ichromid - 1)).c_str(),
 									   m_iu.id2chrom(chromid).c_str(), binsize, gtrack_fbin.get_bin_size());
 						}
 					}
 				}
 				else if (GenomeTrack::is_2d(track_type))
-				{
-					for (vector<string>::const_iterator ifilename = filenames.begin(); ifilename != filenames.end(); ++ifilename)
-					{
-						try
-						{
-							GenomeTrack::get_chromid_2d(m_iu.get_chromkey(), *ifilename);
-						}
-						catch (TGLException &e)
-						{
-							verror("Track %s: %s\n", itrack_name->c_str(), e.msg());
-						}
-					}
-				}
+					files.chrom_pairs();  // two files of a pair are an error
 			}
 		}
 		catch (TGLException &e)
@@ -1977,8 +1958,7 @@ void TrackExpressionVars::start_chrom(const GInterval &interval)
 		try
 		{
 			string track_dir = track2path(m_iu.get_env(), itrack_n_imdf->name);
-			string resolved = GenomeTrack::find_existing_1d_filename(m_iu.get_chromkey(), track_dir, interval.chromid);
-			string filename(track_dir + "/" + resolved);
+			string filename(m_iu.get_chrom_files(track_dir).path(interval.chromid));
 
 			// For indexed tracks, reuse the persistent backend to avoid
 			// re-mmapping the entire track.dat on every chromosome transition.
@@ -2065,12 +2045,10 @@ void TrackExpressionVars::start_chrom(const GInterval2D &interval)
 					(shared_1d_backend_enabled || !prev_shared_1d_track_masters.empty() || !m_shared_1d_track_masters.empty());
 
 				string track_dir;
-				string resolved;
 				string filename;
 				if (chromid != itrack_n_imdf->imdf1d->interval.chromid || should_manage_shared_masters) {
 					track_dir = track2path(m_iu.get_env(), itrack_n_imdf->name);
-					resolved = GenomeTrack::find_existing_1d_filename(m_iu.get_chromkey(), track_dir, chromid);
-					filename = track_dir + "/" + resolved;
+					filename = m_iu.get_chrom_files(track_dir).path(chromid);
 				}
 
 				if (chromid != itrack_n_imdf->imdf1d->interval.chromid) {
@@ -2133,7 +2111,7 @@ void TrackExpressionVars::start_chrom(const GInterval2D &interval)
 					}
 				}
 			} else if (!m_interval2d.is_same_chrom(interval)) {
-				string filename(track2path(m_iu.get_env(), itrack_n_imdf->name) + "/" + GenomeTrack::get_2d_filename(m_iu.get_chromkey(), interval.chromid1(), interval.chromid2()));
+				string filename(m_iu.get_chrom_files(track2path(m_iu.get_env(), itrack_n_imdf->name)).path(interval.chromid1(), interval.chromid2()));
 				if (itrack_n_imdf->type == GenomeTrack::RECTS) {
 					auto t = make_shared<GenomeTrackRectsRects>(m_iu.get_track_chunk_size(), m_iu.get_track_num_chunks());
 					t->init_read(filename.c_str(), interval.chromid1(), interval.chromid2());

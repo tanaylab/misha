@@ -665,9 +665,13 @@ SEXP gtrack_liftover(SEXP _track,
 		// Set the target overlap policy for score-based selection during liftover
 		chain_intervs.set_tgt_overlap_policy(effective_tgt_policy);
 
+		// The chain's source names, and as their aliases the names with the "chr" prefix toggled: a
+		// per-chromosome source track may name its files either way (as earlier pymisha did)
 		GenomeChromKey src_chromkey;
 		for (vector<string>::const_iterator ichrom = src_id2chrom.begin(); ichrom != src_id2chrom.end(); ++ichrom)
 			src_chromkey.add_chrom(*ichrom, numeric_limits<int64_t>::max());
+		for (vector<string>::const_iterator ichrom = src_id2chrom.begin(); ichrom != src_id2chrom.end(); ++ichrom)
+			src_chromkey.add_chrom_alias(ichrom->compare(0, 3, "chr") ? "chr" + *ichrom : ichrom->substr(3), ichrom - src_id2chrom.begin());
 
 		struct stat idx_st;
 		bool src_indexed = stat((string(src_track_dir) + "/track.idx").c_str(), &idx_st) == 0;
@@ -675,7 +679,13 @@ SEXP gtrack_liftover(SEXP _track,
 
 		string dirname = create_track_dir(_envir, track);
 
-		GenomeTrack::Type src_track_type = GenomeTrack::get_type(src_track_dir, src_chromkey);
+		const GenomeTrack::ChromFiles src_files(src_chromkey, src_track_dir);
+		GenomeTrack::Type src_track_type = GenomeTrack::get_type(src_files);
+		// two files of a chromosome are an error here, not a chromosome missing in the source below
+		if (GenomeTrack::is_1d(src_track_type))
+			src_files.chromids();
+		else
+			src_files.chrom_pairs();
 
 		if (GenomeTrack::is_1d(src_track_type)) {
 			GIntervals all_genome_intervs;
@@ -704,11 +714,11 @@ SEXP gtrack_liftover(SEXP _track,
 					}
 
 					try {
-						snprintf(filename, sizeof(filename), "%s/%s", src_track_dir, ichrom->c_str());
+						snprintf(filename, sizeof(filename), "%s", src_files.path(src_chromid_in_chain).c_str());
 						src_track.init_read(filename, chromid_to_use);
 						if (binsize > 0 && binsize != src_track.get_bin_size()) {
 							char filename2[FILENAME_MAX];
-							snprintf(filename2, sizeof(filename2), "%s/%s", src_track_dir, (ichrom - 1)->c_str());
+							snprintf(filename2, sizeof(filename2), "%s", src_files.path(src_chromid_in_chain - 1).c_str());
 							TGLError("Binsize of track file %s differs from the binsize of track file %s (%d vs. %d)",
 									filename, filename2, src_track.get_bin_size(), binsize);
 						} else
@@ -758,7 +768,7 @@ SEXP gtrack_liftover(SEXP _track,
 					}
 
 					try {
-						snprintf(filename, sizeof(filename), "%s/%s", src_track_dir, ichrom->c_str());
+						snprintf(filename, sizeof(filename), "%s", src_files.path(src_chromid_in_chain).c_str());
 						src_track.init_read(filename, chromid_to_use);
 					} catch (TGLException &) {  // some of source chroms might be missing, this is normal
 						progress.report(1);
@@ -1073,7 +1083,7 @@ SEXP gtrack_liftover(SEXP _track,
 					}
 
 					try {
-						snprintf(filename, sizeof(filename), "%s/%s-%s", src_track_dir, ichrom1->c_str(), ichrom2->c_str());
+						snprintf(filename, sizeof(filename), "%s", src_files.path(chromid1, chromid2).c_str());
 						src_track->init_read(filename, read_chromid1, read_chromid2);
 						if (!src_track->has_data_for_pair()) {
 							progress.report(1);

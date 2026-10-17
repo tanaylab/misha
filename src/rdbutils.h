@@ -195,8 +195,6 @@ struct SEXPCleaner {
     SEXP *var;
 };
 
-void get_chrom_files(const char *dirname, vector<string> &chrom_files);
-
 const char *get_groot(SEXP envir);
 
 const char *get_gwd(SEXP envir);
