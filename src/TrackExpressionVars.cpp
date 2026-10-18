@@ -165,6 +165,21 @@ TrackExpressionVars::TrackExpressionVars(rdb::IntervUtils &iu) :
 	m_sequence_processor = std::make_unique<SequenceVarProcessor>(iu, m_shared_seqfetch);
 }
 
+void TrackExpressionVars::set_substitution(const SeqSubstitution &sub)
+{
+	if (sub == m_substitution)
+		return;
+	m_substitution = sub;
+	m_shared_seqfetch.set_substitution(sub);
+	// The pwm and potts scorers keep scores of earlier reads between calls.
+	for (Track_var &var : m_track_vars) {
+		if (var.pwm_scorer)
+			var.pwm_scorer->invalidate_cache();
+		if (var.potts_scorer)
+			var.potts_scorer->invalidate_cache();
+	}
+}
+
 TrackExpressionVars::~TrackExpressionVars()
 {
 	for (Track_vars::iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ivar++)

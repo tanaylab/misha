@@ -62,6 +62,8 @@ using namespace std;
 
 class TrackExpressionVars {
 public:
+	void set_substitution(const SeqSubstitution &sub);
+
     struct Binned_pv {
    		vector<double> bins;
         BinFinder  binfinder;
@@ -351,6 +353,7 @@ private:
 
 	// Shared sequence fetcher for all sequence-based vtracks to enable caching
 	GenomeSeqFetch          m_shared_seqfetch;
+	SeqSubstitution         m_substitution;
 
 	// Processors for different variable types (using pointers to avoid circular dependency)
 	std::unique_ptr<TrackVarProcessor>       m_track_processor;

@@ -32,6 +32,11 @@ public:
 	bool begin(string &track_expr, GIntervalsFetcher1D *scope1d, GIntervalsFetcher2D *scope2d, SEXP iterator_policy, SEXP band = R_NilValue);
 	bool begin(const vector<string> &track_exprs, GIntervalsFetcher1D *scope1d, GIntervalsFetcher2D *scope2d, SEXP iterator_policy, SEXP band = R_NilValue);
 	bool begin(SEXP track_exprs, GIntervalsFetcher1D *scope1d, GIntervalsFetcher2D *scope2d, SEXP iterator_policy, SEXP band = R_NilValue);
+	// Evaluate exactly these rows, in this order, with (*subs)[i] applied to
+	// the sequence while row i's variables are computed (gextract.variants).
+	// Call before begin(); begin()'s iterator policy is then ignored.
+	void set_rows(const GIntervals *rows, const vector<SeqSubstitution> *subs) { m_rows = rows; m_row_subs = subs; }
+
 	bool next();
 	bool isend() { return m_isend; }
 
@@ -68,6 +73,9 @@ public:
 													  SEXP iterator_policy, SEXP band, bool call_begin = true);
 
 private:
+	const GIntervals              *m_rows{NULL};
+	const vector<SeqSubstitution> *m_row_subs{NULL};
+
 	rdb::IntervUtils &m_iu;
 
 	vector<string>   m_track_exprs;	
