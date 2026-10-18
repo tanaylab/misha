@@ -1,3 +1,7 @@
+# misha 5.13.3
+
+* **Behavior fix:** `kmer.count` and `kmer.frac` virtual tracks were wrong in calls whose expressions use 4 or more sequence virtual tracks (k-mer, PWM, Potts, masked): with `strand = 0` or `-1` and `extend = TRUE` they counted reverse-strand k-mers anchored up to k-1 bases left of the interval instead of those in its last k-1 bases, and with `extend = FALSE` a k-mer missed matches near the interval edges when a longer k-mer on the same strand was in the call. They now equal the same virtual track used alone.
+
 # misha 5.13.2
 
 * **Behavior fix:** after `gdir.cd()` into a subdirectory, tracks and interval sets there could be looked up at the top of the database instead (by `gtrack.copy()` and the indexed-format conversion always, by other functions with a dataset loaded or once a track was created or copied). Reads failed or returned the top-level track of that name, `gtrack.rm()`, `gtrack.copy(overwrite = TRUE)` and `gtrack.convert_to_indexed()` could delete, replace or empty it, and tracks could not be created there in an indexed database.

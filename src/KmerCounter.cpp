@@ -207,9 +207,14 @@ float KmerCounter::score_from_positions(const std::vector<size_t> &fwd_positions
 
     // Count reverse strand if needed
     if (m_strand == 0 || m_strand == -1) {
+        // rev_positions index the reverse complement of fetch_interval. Anchor a
+        // match at its genomic start, forward offset fetch_len - pos - kmer_len,
+        // as the forward strand and count_in_interval() do.
+        const size_t fetch_len = fetch_interval.end - fetch_interval.start;
         size_t rev_count = 0;
         for (size_t pos : rev_positions) {
-            if (pos >= original_start_pos && pos < original_end_pos) {
+            const size_t fwd_pos = fetch_len - pos - kmer_len;
+            if (fwd_pos >= original_start_pos && fwd_pos < original_end_pos) {
                 rev_count++;
             }
         }
