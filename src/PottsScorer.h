@@ -62,6 +62,9 @@ public:
     // this.
     double get_last_max_score() const { return m_last_max_score; }
 
+protected:
+    int64_t pattern_length() const override { return (int64_t)m_model.width(); }
+
 private:
     // The value of the anchor at m_codes[i], in the ORIGINAL genome's
     // orientation. `union_max` picks the strand union: false is log-sum-exp

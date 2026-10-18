@@ -87,6 +87,9 @@ public:
     float get_last_n_mutations() const { return m_last_metrics.n_mutations; }
     int get_max_indels() const { return m_max_indels; }
 
+protected:
+    int64_t pattern_length() const override { return (int64_t)m_pssm.length() + m_max_indels; }
+
 private:
     struct ScanMetrics {
         float min_edits = std::numeric_limits<float>::quiet_NaN();
