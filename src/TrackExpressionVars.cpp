@@ -2220,3 +2220,24 @@ void TrackExpressionVars::set_vars(unsigned idx)
 	// Process value variables
 	m_value_processor->process_value_vars(m_value_vars, m_interval1d, idx);
 }
+
+
+std::vector<std::pair<int64_t, int64_t>> TrackExpressionVars::seq_read_offsets() const
+{
+	std::vector<std::pair<int64_t, int64_t>> offs;
+	for (const Track_var &var : m_track_vars) {
+		const GenomeSeqScorer *scorer =
+			var.pwm_scorer ? (const GenomeSeqScorer *)var.pwm_scorer.get() :
+			var.potts_scorer ? (const GenomeSeqScorer *)var.potts_scorer.get() :
+			var.pwm_edit_distance_scorer ? (const GenomeSeqScorer *)var.pwm_edit_distance_scorer.get() :
+			var.pwm_lse_edit_distance_scorer ? (const GenomeSeqScorer *)var.pwm_lse_edit_distance_scorer.get() :
+			var.kmer_counter ? (const GenomeSeqScorer *)var.kmer_counter.get() :
+			var.masked_counter ? (const GenomeSeqScorer *)var.masked_counter.get() : nullptr;
+		if (!scorer)
+			continue;
+		const int64_t sshift = var.seq_imdf1d ? var.seq_imdf1d->sshift : 0;
+		const int64_t eshift = var.seq_imdf1d ? var.seq_imdf1d->eshift : 0;
+		offs.emplace_back(sshift, eshift + scorer->read_extension());
+	}
+	return offs;
+}
