@@ -62,9 +62,15 @@ test_that("max_edits is validated", {
     m <- potts_ref_model(W = 5L, npair_mode = "full", seed = 5L)
     expect_error(gvtrack.create("bad", NULL, "potts.max", params = c(m, list(max_edits = 2))), "0 or 1")
     expect_error(gvtrack.create("bad", NULL, "potts.max", params = c(m, list(max_edits = NA))), "0 or 1")
+    expect_error(gvtrack.create("bad", NULL, "potts.max", params = c(m, list(max_edits = TRUE))), "0 or 1")
     for (f in c("potts", "potts.max.pos")) {
         expect_error(gvtrack.create("bad", NULL, f, params = c(m, list(max_edits = 1))), "potts.max only")
+        expect_error(gvtrack.create("bad", NULL, f, params = c(m, list(max_edits = 0))), "potts.max only")
     }
+    expect_error(
+        gvtrack.create("bad", NULL, "potts.count", params = c(m, list(score.thresh = 0, max_edits = 0))),
+        "potts.max only"
+    )
     expect_error(
         gvtrack.create("bad", NULL, "potts.count", params = c(m, list(score.thresh = 0, max_edits = 1))),
         "potts.max only"

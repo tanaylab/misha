@@ -352,12 +352,12 @@
     # existing potts vtracks keep their params unchanged.
     max_edits <- dots[["max_edits"]]
     if (!is.null(max_edits)) {
-        if (!is.numeric(max_edits) && !is.logical(max_edits) || length(max_edits) != 1L ||
+        if (!identical(func, "potts.max")) {
+            stop(sprintf("max_edits is supported by potts.max only, not by '%s'", func), call. = FALSE)
+        }
+        if (!is.numeric(max_edits) || length(max_edits) != 1L ||
             is.na(max_edits) || !(max_edits %in% c(0, 1))) {
             stop(sprintf("virtual track function '%s': max_edits must be 0 or 1", func), call. = FALSE)
-        }
-        if (max_edits == 1 && !identical(func, "potts.max")) {
-            stop(sprintf("max_edits = 1 is supported by potts.max only, not by '%s'", func), call. = FALSE)
         }
         if (max_edits == 1) {
             p$max_edits <- 1L
