@@ -113,7 +113,7 @@ gextract.variants <- function(expr = NULL, intervals = NULL, variants = NULL, it
         variants$ok <- genome_ref == variants$ref
         if (!all(variants$ok)) {
             warning(sprintf(
-                "%d of %d variants have a ref that does not match the genome; their values are NA",
+                "%d of %d variants have a ref that does not match the genome; their substituted values are NA",
                 sum(!variants$ok), nrow(variants)
             ), call. = FALSE)
         }
@@ -126,6 +126,7 @@ gextract.variants <- function(expr = NULL, intervals = NULL, variants = NULL, it
     if (is.null(chunk)) {
         # About 3e6 (bin, substitution) rows per chunk, whatever the reach.
         span <- max(reach[, "hi"]) - min(reach[, "lo"]) + max(bins$end - bins$start)
+        span <- max(1, span)
         chunk <- max(1L, as.integer(floor(3e6 / (3 * span))))
     }
     chrom_order <- match(as.character(bins$chrom), as.character(gintervals.all()$chrom))
