@@ -236,3 +236,10 @@ test_that("intervals on two chromosomes sort the way the engine needs", {
     res <- gextract.variants("v_pwm", gintervals(c(1, 2), 1000, 1003), iterator = 1)
     expect_setequal(as.character(unique(res$chrom)), c("chr1", "chr2"))
 })
+
+test_that("a reach with zero span reads nothing and gives NULL", {
+    define_variant_vtracks()
+    gvtrack.create("v_empty", NULL, "pwm.max", params = list(pssm = variant_test_pssm(), extend = FALSE))
+    gvtrack.iterator("v_empty", sshift = 0, eshift = -1)
+    expect_null(gextract.variants("v_empty", gintervals(1, 1000, 1003), iterator = 1))
+})
