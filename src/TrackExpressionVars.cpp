@@ -2237,7 +2237,12 @@ std::vector<std::pair<int64_t, int64_t>> TrackExpressionVars::seq_read_offsets()
 			continue;
 		const int64_t sshift = var.seq_imdf1d ? var.seq_imdf1d->sshift : 0;
 		const int64_t eshift = var.seq_imdf1d ? var.seq_imdf1d->eshift : 0;
-		offs.emplace_back(sshift, eshift + scorer->read_extension());
+		int64_t lo = sshift;
+		// The batched sequence path counts reverse-strand k-mers anchored up to
+		// k - 1 bases left of the interval, so those bases can change the value.
+		if (var.kmer_counter && var.kmer_counter->get_strand() != 1)
+			lo -= scorer->read_extension();
+		offs.emplace_back(lo, eshift + scorer->read_extension());
 	}
 	return offs;
 }
