@@ -28,12 +28,19 @@
 #' A bin \code{[s, e)} of a sequence virtual track reads \code{[s + sshift, e +
 #' eshift + W - 1)}, where the shifts come from \code{\link{gvtrack.iterator}}
 #' and \code{W - 1} is added when the track extends (\code{extend = TRUE}, motif
-#' or model width \code{W}). A substitution is paired with every bin whose reach,
+#' or model width \code{W}). Two families read further: \code{kmer.count} and
+#' \code{kmer.frac} with \code{strand} 0 or -1 start at \code{s + sshift - (k -
+#' 1)} for a k-mer of length \code{k} (when \code{extend = TRUE}), and
+#' \code{pwm.edit_distance} with \code{max_indels} ends \code{max_indels} bases
+#' later, at \code{e + eshift + W - 1 + max_indels}. A substitution is paired with every bin whose reach,
 #' the union over the expression's sequence virtual tracks, contains it. Tracks
 #' and non-sequence virtual tracks in \code{expr} are read as usual, so they
 #' contribute the same value to both columns. The substituted base takes the
 #' case of the reference base, so \code{masked.*} tracks see the same mask.
 #' Only single-base substitutions are supported.
+#'
+#' The exact pass runs in one process. For genome-scale runs, split
+#' \code{intervals} by chromosome and run the pieces in parallel.
 #'
 #' Run genome-wide, every bin returns about three rows per base in reach. To
 #' find the bins one substitution can move across a threshold, screen first with
@@ -46,7 +53,8 @@
 #' @param variants \code{NULL} for every substitution in reach, or a data frame
 #'   with columns \code{chrom}, \code{start} (0-based), \code{ref} and \code{alt},
 #'   such as the output of \code{\link{gintervals.import_vcf}}. A variant whose
-#'   \code{ref} does not match the genome gets \code{NA} values and a warning.
+#'   \code{ref} does not match the genome gets a warning and \code{NA} in
+#'   \code{<name>.alt}; \code{<name>.ref} keeps the reference value.
 #' @param iterator track expression iterator, as in \code{\link{gextract}}.
 #' @param score.thresh if not \code{NULL}, keep only the rows where the reference
 #'   value and the substituted value fall on different sides of it.
@@ -86,7 +94,7 @@ gextract.variants <- function(expr = NULL, intervals = NULL, variants = NULL, it
 }
 
 .gextract_variants_impl <- function(expr, intervals, variants, iterator, score.thresh, colnames,
-                                    chunk = 20000L) {
+                                    chunk = NULL) {
     if (length(expr) != 1L) {
         stop("gextract.variants takes a single track expression", call. = FALSE)
     }
@@ -111,9 +119,14 @@ gextract.variants <- function(expr = NULL, intervals = NULL, variants = NULL, it
         }
     }
 
-    bins <- do.call(gextract, list(expr, intervals = intervals, iterator = iterator, colnames = "value"))
+    bins <- do.call(gextract, list(expr, intervals = quote(intervals), iterator = iterator, colnames = "value"))
     if (is.null(bins) || !nrow(bins)) {
         return(NULL)
+    }
+    if (is.null(chunk)) {
+        # About 3e6 (bin, substitution) rows per chunk, whatever the reach.
+        span <- max(reach[, "hi"]) - min(reach[, "lo"]) + max(bins$end - bins$start)
+        chunk <- max(1L, as.integer(floor(3e6 / (3 * span))))
     }
     chrom_order <- match(as.character(bins$chrom), as.character(gintervals.all()$chrom))
 
@@ -121,14 +134,19 @@ gextract.variants <- function(expr = NULL, intervals = NULL, variants = NULL, it
     for (from in seq(1L, nrow(bins), by = chunk)) {
         rng <- from:min(from + chunk - 1L, nrow(bins))
         b <- bins[rng, , drop = FALSE]
-        p <- .gvariants_bin_positions(b, reach)
+        p <- .gvariants_bin_positions(b, reach, with_ref = is.null(variants))
         if (is.null(variants)) {
             r <- .gvariants_saturate(p)
             r$ok <- rep(TRUE, nrow(r))
         } else {
             p$chrom <- as.character(b$chrom[p$bin])
-            p$ref <- NULL
-            r <- merge(p, variants, by = c("chrom", "pos"))
+            if (!nrow(p)) {
+                next
+            }
+            # Only the variants this chunk can reach go into the join.
+            v <- variants[variants$chrom %in% unique(p$chrom) &
+                variants$pos >= min(p$pos) & variants$pos <= max(p$pos), , drop = FALSE]
+            r <- merge(p, v, by = c("chrom", "pos"))
             r <- r[order(r$bin, r$pos, r$alt), c("bin", "pos", "ref", "alt", "ok"), drop = FALSE]
         }
         if (!nrow(r)) {
@@ -169,8 +187,9 @@ gextract.variants <- function(expr = NULL, intervals = NULL, variants = NULL, it
 }
 
 # One row per (bin, position) a bin reads, with the genome base (upper case) at
-# it: `bins` has chrom, start, end; `reach` is .gvariants_reach()'s matrix.
-.gvariants_bin_positions <- function(bins, reach) {
+# it (unless `with_ref` is FALSE): `bins` has chrom, start, end; `reach` is
+# .gvariants_reach()'s matrix.
+.gvariants_bin_positions <- function(bins, reach, with_ref = TRUE) {
     sizes <- gintervals.all()
     chrom_size <- sizes$end[match(as.character(bins$chrom), as.character(sizes$chrom))]
     parts <- lapply(seq_len(nrow(reach)), function(v) {
@@ -184,6 +203,9 @@ gextract.variants <- function(expr = NULL, intervals = NULL, variants = NULL, it
     p <- p[!duplicated(p$bin * 4294967296 + p$pos), , drop = FALSE]
     p <- p[order(p$bin, p$pos), , drop = FALSE]
 
+    if (!with_ref) {
+        return(p)
+    }
     span_lo <- pmax(bins$start + min(reach[, "lo"]), 0)
     span_hi <- pmin(bins$end + max(reach[, "hi"]), chrom_size)
     has <- span_hi > span_lo
