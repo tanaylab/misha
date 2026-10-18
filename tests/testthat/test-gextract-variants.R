@@ -145,6 +145,7 @@ test_that("chromosome ends clip the reach", {
     define_variant_vtracks()
     res <- gextract.variants("v_pwm", gintervals("chr1", c(0, 398), c(2, 400)), iterator = 1)
     expect_true(all(res$pos >= 0 & res$pos < 400))
+    expect_setequal(unique(res$pos), c(0:7, 393:399))
 })
 
 test_that("N bases are not substituted, and a listed variant on an N is a ref mismatch", {
@@ -158,6 +159,7 @@ test_that("N bases are not substituted, and a listed variant on an N is a ref mi
     expect_false(any(res$pos %in% 100:102))
     v <- data.frame(chrom = "chr1", start = 100, end = 101, ref = "A", alt = "C")
     expect_warning(res2 <- gextract.variants("v_pwm", gintervals("chr1", 100, 101), variants = v, iterator = 1), "1 of 1 variants")
+    expect_equal(nrow(res2), 1L)
     expect_true(all(is.na(res2[["v_pwm.alt"]])))
 })
 

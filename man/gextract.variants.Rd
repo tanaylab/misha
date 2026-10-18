@@ -21,7 +21,8 @@ gextract.variants(
 \item{variants}{\code{NULL} for every substitution in reach, or a data frame
 with columns \code{chrom}, \code{start} (0-based), \code{ref} and \code{alt},
 such as the output of \code{\link{gintervals.import_vcf}}. A variant whose
-\code{ref} does not match the genome gets \code{NA} values and a warning.}
+\code{ref} does not match the genome gets a warning and \code{NA} in
+\code{<name>.alt}; \code{<name>.ref} keeps the reference value.}
 
 \item{iterator}{track expression iterator, as in \code{\link{gextract}}.}
 
@@ -48,12 +49,19 @@ variants listed in \code{variants}.
 A bin \code{[s, e)} of a sequence virtual track reads \code{[s + sshift, e +
 eshift + W - 1)}, where the shifts come from \code{\link{gvtrack.iterator}}
 and \code{W - 1} is added when the track extends (\code{extend = TRUE}, motif
-or model width \code{W}). A substitution is paired with every bin whose reach,
+or model width \code{W}). Two families read further: \code{kmer.count} and
+\code{kmer.frac} with \code{strand} 0 or -1 start at \code{s + sshift - (k -
+1)} for a k-mer of length \code{k} (when \code{extend = TRUE}), and
+\code{pwm.edit_distance} with \code{max_indels} ends \code{max_indels} bases
+later, at \code{e + eshift + W - 1 + max_indels}. A substitution is paired with every bin whose reach,
 the union over the expression's sequence virtual tracks, contains it. Tracks
 and non-sequence virtual tracks in \code{expr} are read as usual, so they
 contribute the same value to both columns. The substituted base takes the
 case of the reference base, so \code{masked.*} tracks see the same mask.
 Only single-base substitutions are supported.
+
+The exact pass runs in one process. For genome-scale runs, split
+\code{intervals} by chromosome and run the pieces in parallel.
 
 Run genome-wide, every bin returns about three rows per base in reach. To
 find the bins one substitution can move across a threshold, screen first with
