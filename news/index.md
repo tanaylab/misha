@@ -26,6 +26,43 @@
   means the names listed there, as `db = NULL` does, not the top of its
   `tracks/`.
 
+- **Behavior fix:** per-chromosome files of tracks and big intervals
+  sets named by a chromosome alias (`1` for `chr1`, `1-chr2` for a pair,
+  as earlier pymisha wrote them) are read, converted, copied and lifted
+  over as canonically named ones. 2D tracks read as empty, big sets
+  failed to load and lifted tracks came out empty. Delete the `.meta` of
+  such a 2D track if an earlier version saved one.
+
+- **Breaking:** where a chromosome has no file named by its name, nor by
+  that name with “chr” added or removed, and two different files named
+  by other aliases, reading or converting them is an error; converting
+  to the indexed format stops at a file not named by a chromosome or
+  that cannot be read (an unreadable file was packed as empty). A
+  canonically named file wins over an alias-named one, and the
+  conversion’s `remove.old` removes both.
+
+- **Bug fix:** `gtrack.copy(overwrite = TRUE)` removed the existing
+  destination before copying, so a copy that then failed (an entry it
+  could not copy, a check that stopped late) lost it; the destination is
+  now kept until the copy succeeds.
+
+- **Bug fix:**
+  [`gintervals.load()`](https://tanaylab.github.io/misha/reference/gintervals.load.md)
+  of an indexed big set returned the chromosomes deleted from it with
+  `gintervals.update(NULL)`.
+
+- **Bug fix:** a forced
+  [`gtrack.2d.convert_to_indexed()`](https://tanaylab.github.io/misha/reference/gtrack.2d.convert_to_indexed.md)
+  that failed (a pair file it could not read, a full disk) could remove
+  the track’s index and data; it now leaves the track as it was.
+
+- **Breaking:**
+  [`gdataset.load()`](https://tanaylab.github.io/misha/reference/gdataset.load.md)
+  refuses a dataset with indexed tracks or interval sets whose own
+  `seq/genome.idx` cannot be read when its `chrom_sizes.txt` order
+  differs from the working database’s chromosome order. It loaded, and
+  those files could read other chromosomes.
+
 ## misha 5.13.1
 
 - **Behavior fix:**
