@@ -172,6 +172,33 @@
     res
 }
 
+# The files of the given chromosomes (pairs) of a big intervals set, as the readers find them
+# (.gchrom_files), NA where there is none (e.g. in an indexed set). NA for a track used as a set.
+.gintervals.big.chrom_files <- function(intervals.set, chrom = NULL, chrom1 = NULL, chrom2 = NULL) {
+    if (intervals.set %in% get("GTRACKS", envir = .misha)) {
+        return(rep(NA_character_, length(c(chrom, chrom1))))
+    }
+    dir <- .intervals_dir(intervals.set)
+    # The canonically named files win: a load of chromosomes (pairs) that all have one does not list the
+    # directory, which loops over the chromosomes of a set would otherwise list once per chromosome
+    canonical <- if (!is.null(chrom)) as.character(chrom) else paste(chrom1, chrom2, sep = "-")
+    if (length(canonical) && all(file_test("-f", file.path(dir, canonical)))) {
+        return(canonical)
+    }
+    # without it, next to the set's index only the canonical file would count (GenomeTrack::ChromFiles)
+    if (length(canonical) == 1 && !file.exists(file.path(dir, canonical)) &&
+        file.exists(file.path(dir, if (is.null(chrom)) "intervals2d.idx" else "intervals.idx"))) {
+        return(NA_character_)
+    }
+    files <- .gchrom_files(dir, is.null(chrom))
+    files <- files[files$used, ]
+    if (!is.null(chrom)) {
+        files$file[match(as.character(chrom), files$chrom)]
+    } else {
+        files$file[match(paste(chrom1, chrom2), paste(files$chrom1, files$chrom2))]
+    }
+}
+
 .gintervals.big.save_meta <- function(path, stats, zeroline) {
     .gwith_umask({
         f <- file(sprintf("%s/.meta", path), "wb")

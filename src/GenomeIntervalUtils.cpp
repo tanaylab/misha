@@ -788,8 +788,34 @@ SEXP gtrack_intervals_load(SEXP _track, SEXP _chrom, SEXP _chrom1, SEXP _chrom2,
 
 		const char *track_str = CHAR(STRING_ELT(_track, 0));
 		IntervUtils iu(_envir);
-		string trackpath(track2path(_envir, track_str));
-		GenomeTrack::Type track_type = GenomeTrack::get_type(trackpath.c_str(), iu.get_chromkey(), true);
+		const string trackpath = track2path(_envir, track_str);
+		auto chrom_arg = [](SEXP _chrom) -> const char * {
+			return Rf_isString(_chrom) ? CHAR(STRING_ELT(_chrom, 0)) : CHAR(STRING_ELT(Rf_getAttrib(_chrom, R_LevelsSymbol), INTEGER(_chrom)[0] - 1));
+		};
+		auto one_chrom = [](SEXP _chrom) { return (Rf_isString(_chrom) || Rf_isFactor(_chrom)) && Rf_length(_chrom) == 1; };
+
+		// A per-chromosome track's chromosome (pair) whose canonically named file is there is read from it,
+		// which wins over the others, with no listing (a loop over the track's chromosomes would list its
+		// directory each time); a file of the other dimension's type goes to the listing.
+		string canonical;
+		GenomeTrack::Type track_type = GenomeTrack::FIXED_BIN;
+		struct stat st;
+		if ((one_chrom(_chrom) || (one_chrom(_chrom1) && one_chrom(_chrom2))) && stat((trackpath + "/track.idx").c_str(), &st)) {
+			bool is_1d = one_chrom(_chrom);
+			canonical = trackpath + "/" + (is_1d ? GenomeTrack::get_1d_filename(iu.get_chromkey(), iu.chrom2id(chrom_arg(_chrom))) :
+										   GenomeTrack::get_2d_filename(iu.get_chromkey(), iu.chrom2id(chrom_arg(_chrom1)), iu.chrom2id(chrom_arg(_chrom2))));
+			if (!stat(canonical.c_str(), &st) && S_ISREG(st.st_mode)) {
+				// a current type of the requested dimension; anything else (an obsolete format) the listing reports
+				track_type = GenomeTrack::s_read_type(canonical.c_str());
+				if (is_1d ? track_type != GenomeTrack::FIXED_BIN && track_type != GenomeTrack::SPARSE && track_type != GenomeTrack::ARRAYS :
+							track_type != GenomeTrack::RECTS && track_type != GenomeTrack::POINTS && track_type != GenomeTrack::COMPUTED)
+					canonical.clear();
+			} else
+				canonical.clear();
+		}
+		const GenomeTrack::ChromFiles *files = canonical.empty() ? &iu.get_chrom_files(trackpath) : NULL;
+		if (files)
+			track_type = GenomeTrack::get_type(*files, true);
 
 		if (track_type == GenomeTrack::FIXED_BIN)
 			verror("Track of type %s cannot be used in place of an intervals set", GenomeTrack::TYPE_NAMES[track_type]);
@@ -805,8 +831,7 @@ SEXP gtrack_intervals_load(SEXP _track, SEXP _chrom, SEXP _chrom1, SEXP _chrom2,
 			const char *chrom = Rf_isString(_chrom) ? CHAR(STRING_ELT(_chrom, 0)) : CHAR(STRING_ELT(chrom_levels, INTEGER(_chrom)[0] - 1));
 			int chromid = iu.chrom2id(chrom);
 
-			string resolved = GenomeTrack::find_existing_1d_filename(iu.get_chromkey(), trackpath, chromid);
-			string filename(trackpath + "/" + resolved);
+			string filename(files ? files->path(chromid) : canonical);
 
 			if (track_type == GenomeTrack::SPARSE) {
 				track = unique_ptr<GenomeTrack1D>(new GenomeTrackSparse());
@@ -834,7 +859,7 @@ SEXP gtrack_intervals_load(SEXP _track, SEXP _chrom, SEXP _chrom1, SEXP _chrom2,
 			int chromid1 = iu.chrom2id(chrom1);
 			int chromid2 = iu.chrom2id(chrom2);
 
-			string filename(trackpath + "/" + GenomeTrack::get_2d_filename(iu.get_chromkey(), chromid1, chromid2));
+			string filename(files ? files->path(chromid1, chromid2) : canonical);
 
 			if (track_type == GenomeTrack::RECTS) {
 				track = unique_ptr<GenomeTrack2D>(new GenomeTrackRectsRects(iu.get_track_chunk_size(), iu.get_track_num_chunks()));
@@ -865,6 +890,80 @@ SEXP gtrack_intervals_load(SEXP _track, SEXP _chrom, SEXP _chrom1, SEXP _chrom2,
 	return R_NilValue;
 }
 
+// The per-chromosome files of a track or intervals set directory (GenomeTrack::ChromFiles), for R: one
+// element per file named by a chromosome (by a pair if is_2d): chrom (chrom1, chrom2), its canonical
+// name(s); file; used, whether it is the file that the readers open.
+SEXP gchrom_files(SEXP _dir, SEXP _is_2d, SEXP _envir)
+{
+	try {
+		RdbInitializer rdb_init;
+
+		if (!Rf_isString(_dir) || Rf_length(_dir) != 1)
+			verror("Directory argument is not a string");
+
+		if (!Rf_isLogical(_is_2d) || Rf_length(_is_2d) != 1 || LOGICAL(_is_2d)[0] == NA_LOGICAL)
+			verror("is_2d argument is not a logical value");
+
+		IntervUtils iu(_envir);
+		const GenomeChromKey &chromkey = iu.get_chromkey();
+		const GenomeTrack::ChromFiles &files = iu.get_chrom_files(CHAR(STRING_ELT(_dir, 0)));
+		bool is_2d = LOGICAL(_is_2d)[0];
+		vector<const GenomeTrack::ChromFiles::File *> rows;
+
+		for (const GenomeTrack::ChromFiles::File &file : files.files()) {
+			if (is_2d ? file.chromid1 >= 0 : file.chromid >= 0)
+				rows.push_back(&file);
+		}
+
+		int ncols = is_2d ? 4 : 3;
+		SEXP answer = rprotect_ptr(RSaneAllocVector(VECSXP, ncols));
+		SEXP names = rprotect_ptr(RSaneAllocVector(STRSXP, ncols));
+		SEXP rchroms1 = rprotect_ptr(RSaneAllocVector(STRSXP, rows.size()));
+		SEXP rchroms2 = is_2d ? rprotect_ptr(RSaneAllocVector(STRSXP, rows.size())) : R_NilValue;
+		SEXP rfiles = rprotect_ptr(RSaneAllocVector(STRSXP, rows.size()));
+		SEXP rused = rprotect_ptr(RSaneAllocVector(LGLSXP, rows.size()));
+
+		for (size_t i = 0; i < rows.size(); ++i) {
+			const GenomeTrack::ChromFiles::File &file = *rows[i];
+			// used: the file read for its chromosome (pair); none in a dimension whose files the readers stop
+			// at (a conflict, a file that cannot be reached), so the listing serves gintervals.update, which
+			// removes a chromosome's alias-named files whatever another chromosome's are
+			bool used = false;
+			try {
+				used = is_2d ? files.filename(file.chromid1, file.chromid2) == file.name : files.filename(file.chromid) == file.name;
+			} catch (TGLException &) {
+			}
+			if (is_2d) {
+				SET_STRING_ELT(rchroms1, i, RSaneMkChar(chromkey.id2chrom(file.chromid1).c_str()));
+				SET_STRING_ELT(rchroms2, i, RSaneMkChar(chromkey.id2chrom(file.chromid2).c_str()));
+			} else
+				SET_STRING_ELT(rchroms1, i, RSaneMkChar(chromkey.id2chrom(file.chromid).c_str()));
+			LOGICAL(rused)[i] = used;
+			SET_STRING_ELT(rfiles, i, RSaneMkChar(file.name.c_str()));
+		}
+
+		int icol = 0;
+		SET_VECTOR_ELT(answer, icol, rchroms1);
+		SET_STRING_ELT(names, icol++, RSaneMkChar(is_2d ? "chrom1" : "chrom"));
+		if (is_2d) {
+			SET_VECTOR_ELT(answer, icol, rchroms2);
+			SET_STRING_ELT(names, icol++, RSaneMkChar("chrom2"));
+		}
+		SET_VECTOR_ELT(answer, icol, rfiles);
+		SET_STRING_ELT(names, icol++, RSaneMkChar("file"));
+		SET_VECTOR_ELT(answer, icol, rused);
+		SET_STRING_ELT(names, icol++, RSaneMkChar("used"));
+		Rf_setAttrib(answer, R_NamesSymbol, names);
+
+		return answer;
+	} catch (TGLException &e) {
+		rerror("%s", e.msg());
+	} catch (const bad_alloc &e) {
+		rerror("Out of memory");
+	}
+	return R_NilValue;
+}
+
 SEXP gbigintervs_load_chrom(SEXP _intervset, SEXP _chrom, SEXP _envir)
 {
 	try {
@@ -884,13 +983,18 @@ SEXP gbigintervs_load_chrom(SEXP _intervset, SEXP _chrom, SEXP _envir)
 		const char *chrom = Rf_isString(_chrom) ? CHAR(STRING_ELT(_chrom, 0)) : CHAR(STRING_ELT(chrom_levels, INTEGER(_chrom)[0] - 1));
 		int chromid = iu.chrom2id(chrom);
 
-		// Try per-chromosome file first
-		string chrom_filename = intervset_path + "/" + chrom;
+		// Try per-chromosome file first. Next to the set's index only the canonically named file counts
+		// (GenomeTrack::ChromFiles), so without one the index is read with no listing (a loop over the
+		// set's chromosomes would list its directory once per chromosome).
 		struct stat st;
+		string canonical_path = intervset_path + "/" + GenomeTrack::get_1d_filename(iu.get_chromkey(), chromid);
+		bool index_only = lstat(canonical_path.c_str(), &st) && errno == ENOENT && !stat((intervset_path + "/intervals.idx").c_str(), &st);
+		const GenomeTrack::ChromFiles *files = index_only ? NULL : &iu.get_chrom_files(intervset_path);
+		string chrom_filename = files ? files->path(chromid) : canonical_path;
 
 		SEXP rintervals = R_NilValue;
 
-		if (stat(chrom_filename.c_str(), &st) == 0) {
+		if (files && files->exists(chromid)) {
 			// PER-CHROMOSOME PATH: Per-chromosome file exists
 			rintervals = rprotect_ptr(RSaneUnserialize(chrom_filename.c_str()));
 			runprotect(1);
@@ -988,13 +1092,17 @@ SEXP gbigintervs_load_chrom2d(SEXP _intervset, SEXP _chrom1, SEXP _chrom2, SEXP 
 		int chromid1 = iu.chrom2id(chrom1);
 		int chromid2 = iu.chrom2id(chrom2);
 
-		// Try per-pair file first
-		string pair_filename = intervset_path + "/" + chrom1 + "-" + chrom2;
+		// Try per-pair file first; without a canonically named one next to the set's index, the index with
+		// no listing (as for 1D above)
 		struct stat st;
+		string canonical_path = intervset_path + "/" + GenomeTrack::get_2d_filename(iu.get_chromkey(), chromid1, chromid2);
+		bool index_only = lstat(canonical_path.c_str(), &st) && errno == ENOENT && !stat((intervset_path + "/intervals2d.idx").c_str(), &st);
+		const GenomeTrack::ChromFiles *files = index_only ? NULL : &iu.get_chrom_files(intervset_path);
+		string pair_filename = files ? files->path(chromid1, chromid2) : canonical_path;
 
 		SEXP rintervals = R_NilValue;
 
-		if (stat(pair_filename.c_str(), &st) == 0) {
+		if (files && files->exists(chromid1, chromid2)) {
 			// PER-PAIR PATH: Per-pair file exists
 			rintervals = rprotect_ptr(RSaneUnserialize(pair_filename.c_str()));
 			runprotect(1);

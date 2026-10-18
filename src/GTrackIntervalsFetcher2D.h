@@ -253,7 +253,7 @@ void GTrackIntervalsFetcher2D<Track>::load_chrom_by_pair_idx(int pair_idx)
 		int chromid1 = key_chrom1(k);
 		int chromid2 = key_chrom2(k);
 
-		string filename(track2path(m_iu->get_env(), m_track_name) + "/" + GenomeTrack::get_2d_filename(*m_chromkey, chromid1, chromid2));
+		string filename(m_iu->get_chrom_files(track2path(m_iu->get_env(), m_track_name)).path(chromid1, chromid2));
 		m_track->init_read(filename.c_str(), chromid1, chromid2);
 		m_cur_pair_idx = pair_idx;
 	}

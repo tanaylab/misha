@@ -399,6 +399,11 @@ public:
 
 	const GenomeChromKey &get_chromkey() const { return m_chrom_key; }
 
+	// The per-chromosome files of a track or intervals set directory, listed at the first request and
+	// kept for the rest of the call, so that every reader in the call opens the same files. Code that
+	// changes the files of a directory lists it itself (GenomeTrack::ChromFiles).
+	const GenomeTrack::ChromFiles &get_chrom_files(const string &dir) const;
+
 	bool track_exists(const char *track_name);
 
 	// Returns the number of parallel processes that would be opened by distribute_task, or 0 if
@@ -459,6 +464,7 @@ private:
 	IntervalValidator             m_validator;
 	ChainIntervalConverter         m_chain_converter;
 	IntervalConverter              m_interval_converter;
+	mutable map<string, GenomeTrack::ChromFiles> m_chrom_files;
 
 	SEXP get_rallgenome1d() const { return VECTOR_ELT(m_allgenome, 0); }
 	SEXP get_rallgenome2d() const { return VECTOR_ELT(m_allgenome, 1); }

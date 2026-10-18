@@ -21,9 +21,9 @@ public:
 		m_array_idxs.resize(get_colnames().size());
 	}
 
-	Source(const GenomeChromKey &chromkey, const char *src, const char *dir, SEXP colnames) : m_chromkey(chromkey) {
+	Source(const GenomeChromKey &chromkey, const char *src, const GenomeTrack::ChromFiles &chrom_files, SEXP colnames) : m_chromkey(chromkey) {
 		m_src = src;
-		m_dir = dir;
+		m_chrom_files = &chrom_files;
 		m_colnames.reserve(Rf_length(colnames));
 		for (int i = 0; i < Rf_length(colnames); ++i) 
 			m_colnames.push_back(CHAR(STRING_ELT(colnames, i)));
@@ -48,11 +48,7 @@ public:
 		if (is_csv())
 			m_intervals = (GIntervals *)&m_csv.get_intervals(chromid);
 		else {
-			char filename[FILENAME_MAX];
-
-			string resolved = GenomeTrack::find_existing_1d_filename(m_chromkey, m_dir, chromid);
-			snprintf(filename, sizeof(filename), "%s/%s", m_dir.c_str(), resolved.c_str());
-			m_track.init_read(filename, chromid);
+			m_track.init_read(m_chrom_files->path(chromid).c_str(), chromid);
 			m_intervals = (GIntervals *)&m_track.get_intervals();
 		}
 
@@ -118,7 +114,7 @@ private:
 	GenomeTrackArrays    m_track;
 	GenomeArraysCsv      m_csv;
 	string               m_src;
-	string               m_dir;
+	const GenomeTrack::ChromFiles *m_chrom_files{NULL};
 	vector<string>       m_colnames;
 	vector<unsigned>     m_array_idxs;
 	GIntervals          *m_intervals;
@@ -170,7 +166,7 @@ SEXP garrays_import(SEXP _track, SEXP _src, SEXP _colnames, SEXP _envir)
 				verror("Invalid column names argument");
 
 			if (Rf_length(rcolnames))
-				sources.push_back(new Source(iu.get_chromkey(), src, track2path(_envir, src).c_str(), rcolnames));
+				sources.push_back(new Source(iu.get_chromkey(), src, iu.get_chrom_files(track2path(_envir, src)), rcolnames));
 			else
 				sources.push_back(new Source(iu.get_chromkey(), src));
 
@@ -211,8 +207,7 @@ SEXP garrays_import(SEXP _track, SEXP _src, SEXP _colnames, SEXP _envir)
 		progress.init(max_chromid, 1);
 
 		for (int chromid = 0; chromid < max_chromid; ++chromid) {
-			string resolved = GenomeTrack::find_existing_1d_filename(iu.get_chromkey(), dirname, chromid);
-			snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), resolved.c_str());
+			snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), chromid).c_str());
 			track.init_write(filename, chromid);
 
 			for (Sources::iterator isrc = sources.begin(); isrc != sources.end(); ++isrc) {

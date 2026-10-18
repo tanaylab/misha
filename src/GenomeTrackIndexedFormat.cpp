@@ -5,7 +5,6 @@
  */
 
 #include <cstdint>
-#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -14,7 +13,6 @@
 #include <vector>
 #include <string>
 #include <algorithm>
-#include <unordered_set>
 
 #include "GenomeTrack.h"
 #include "TrackIndex.h"
@@ -32,7 +30,7 @@ using namespace rdb;
 static bool copy_file_contents(const string &src, FILE *dest, uint64_t &bytes_written) {
     FILE *src_fp = fopen(src.c_str(), "rb");
     if (!src_fp) {
-        return false; // File doesn't exist or can't be opened
+        TGLError<GenomeTrack>("Failed to open %s: %s", src.c_str(), strerror(errno));
     }
 
     // Get file size
@@ -106,8 +104,15 @@ SEXP gtrack_convert_to_indexed_format(SEXP _track, SEXP _remove_old, SEXP _envir
         IntervUtils iu(_envir);
         const GenomeChromKey &chromkey = iu.get_chromkey();
 
+        // The chromosome files, listed once. Not the call's listing: the conversion writes into the directory.
+        const GenomeTrack::ChromFiles files(chromkey, track_dir);
+        for (const GenomeTrack::ChromFiles::File &file : files.files()) {
+            if (!file.link && file.chromid < 0)
+                verror("Track %s: file %s is not named by a chromosome", track.c_str(), file.name.c_str());
+        }
+
         // Determine track type from first chromosome file
-        GenomeTrack::Type track_type_enum = GenomeTrack::get_type(track_dir.c_str(), chromkey);
+        GenomeTrack::Type track_type_enum = GenomeTrack::get_type(files);
         MishaTrackType track_type = MishaTrackType::DENSE;
 
         switch (track_type_enum) {
@@ -149,46 +154,14 @@ SEXP gtrack_convert_to_indexed_format(SEXP _track, SEXP _remove_old, SEXP _envir
 
         // Collect entries and concatenate files
         vector<TrackContigEntry> entries;
-        vector<string> chr_files_to_remove;
         uint64_t current_offset = 0;
-
-        // Instead of doing 3 stat() calls per chromosome (which can be 50K+ system calls
-        // for large genomes), read the directory once to get all existing chromosome files.
-        // This reduces O(N*3) stat calls to O(1) readdir + O(N) map lookups.
-        unordered_set<string> existing_files;
-        DIR *dir = opendir(track_dir.c_str());
-        if (dir) {
-            struct dirent *entry;
-            while ((entry = readdir(dir)) != NULL) {
-                if (entry->d_name[0] != '.') {  // Skip . and ..
-                    existing_files.insert(entry->d_name);
-                }
-            }
-            closedir(dir);
-        }
 
         for (int chromid = 0; chromid < (int)chromkey.get_num_chroms(); chromid++) {
             check_interrupt();
 
             string chrom_name = chromkey.id2chrom(chromid);
-
-            // Try to find the chromosome file, handling chr prefix mismatch
-            string chr_file;
-            bool found = false;
-
-            // Try 1: chromosome name as-is
-            if (existing_files.count(chrom_name)) {
-                chr_file = track_dir + "/" + chrom_name;
-                found = true;
-            } else if (chrom_name.substr(0, 3) != "chr" && existing_files.count("chr" + chrom_name)) {
-                // Try 2: with "chr" prefix if not already present
-                chr_file = track_dir + "/chr" + chrom_name;
-                found = true;
-            } else if (chrom_name.substr(0, 3) == "chr" && existing_files.count(chrom_name.substr(3))) {
-                // Try 3: without "chr" prefix if present
-                chr_file = track_dir + "/" + chrom_name.substr(3);
-                found = true;
-            }
+            bool found = files.exists(chromid);
+            string chr_file = files.path(chromid);
 
             TrackContigEntry entry;
             entry.chrom_id = chromid;
@@ -200,7 +173,6 @@ SEXP gtrack_convert_to_indexed_format(SEXP _track, SEXP _remove_old, SEXP _envir
             if (found && copy_file_contents(chr_file, dat_fp, bytes_written)) {
                 entry.length = bytes_written;
                 current_offset += bytes_written;
-                chr_files_to_remove.push_back(chr_file);
             }
 
             // Write entry to index via shared writer.
@@ -256,10 +228,11 @@ SEXP gtrack_convert_to_indexed_format(SEXP _track, SEXP _remove_old, SEXP _envir
                 (unsigned long long)current_offset, (unsigned long long)dat_stat.st_size);
         }
 
-        // Remove old per-chromosome files if requested
+        // Remove old per-chromosome files if requested, also those that the packed ones hid
         if (remove_old) {
-            for (const string &chr_file : chr_files_to_remove) {
-                unlink(chr_file.c_str());
+            for (const GenomeTrack::ChromFiles::File &file : files.files()) {
+                if (!file.link || file.chromid >= 0)  // not a symlink the conversion ignored
+                    unlink((track_dir + "/" + file.name).c_str());
             }
         }
 

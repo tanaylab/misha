@@ -38,7 +38,8 @@ SEXP gtrackinfo(SEXP _track, SEXP _validate, SEXP _envir)
 		SEXP answer, names, rtype, rdim, rsize, rformat;
 
 		string trackpath(track2path(_envir, full_track_str));
-		GenomeTrack::Type type = GenomeTrack::get_type(trackpath.c_str(), iu.get_chromkey());
+		const GenomeTrack::ChromFiles &files = iu.get_chrom_files(trackpath);
+		GenomeTrack::Type type = GenomeTrack::get_type(files);
 
 		// Check if track uses indexed format
 		string idx_path = trackpath + "/track.idx";
@@ -76,19 +77,15 @@ SEXP gtrackinfo(SEXP _track, SEXP _validate, SEXP _envir)
 			// leading chroms inside init_read (see GenomeTrackFixedBin.cpp), so
 			// keep their original behavior of probing the first chrom.
 			int probe_chromid = all_genome_intervs.front().chromid;
-			string resolved = GenomeTrack::find_existing_1d_filename(iu.get_chromkey(), trackpath, probe_chromid);
 			if (!is_indexed) {
 				for (GIntervals::const_iterator iinterv = all_genome_intervs.begin(); iinterv != all_genome_intervs.end(); ++iinterv) {
-					string candidate = GenomeTrack::find_existing_1d_filename(iu.get_chromkey(), trackpath, iinterv->chromid);
-					string full = trackpath + "/" + candidate;
-					if (access(full.c_str(), F_OK) == 0) {
+					if (files.exists(iinterv->chromid)) {
 						probe_chromid = iinterv->chromid;
-						resolved = candidate;
 						break;
 					}
 				}
 			}
-			snprintf(filename, sizeof(filename), "%s/%s", trackpath.c_str(), resolved.c_str());
+			snprintf(filename, sizeof(filename), "%s", files.path(probe_chromid).c_str());
 
 			gtrack.init_read(filename, probe_chromid);
             rbinsize = rprotect_ptr(Rf_ScalarInteger(gtrack.get_bin_size()));
@@ -118,14 +115,24 @@ SEXP gtrackinfo(SEXP _track, SEXP _validate, SEXP _envir)
 			}
 			totsize += idx_stat.st_size;
 		} else {
-			// For per-chromosome tracks, sum all per-chromosome files
-			vector<string> filenames;
-			get_chrom_files(trackpath.c_str(), filenames);
-			for (vector<string>::const_iterator ifilename = filenames.begin(); ifilename != filenames.end(); ++ifilename) {
-				string fullpath(trackpath + "/" + *ifilename);
-				if (stat(fullpath.c_str(), &buf))
+			// For per-chromosome tracks, sum the per-chromosome files that are not symlinks, as master listed
+			// no symlinks. The files read are checked as the readers check them (a conflict, a symlink to a
+			// file that cannot be reached); a symlink that cannot be reached and is not read is passed over,
+			// and any other file that cannot be stat'ed stops (gtrack.copy relies on that before it removes
+			// an existing destination).
+			if (GenomeTrack::is_1d(type))
+				files.chromids();
+			else
+				files.chrom_pairs();
+			for (const GenomeTrack::ChromFiles::File &file : files.files()) {
+				string fullpath(trackpath + "/" + file.name);
+				if (stat(fullpath.c_str(), &buf)) {
+					if (file.link)
+						continue;
 					verror("Cannot stat %s: %s", fullpath.c_str(), strerror(errno));
-				totsize += buf.st_size;
+				}
+				if (!file.link)
+					totsize += buf.st_size;
 			}
 		}
 

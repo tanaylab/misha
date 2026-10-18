@@ -517,6 +517,48 @@ gintervals.update <- function(intervals.set = NULL, intervals = "", chrom = NULL
 
     # big: update stats (including delete), save chrom (or delete), convert to small if needed
     if (.gintervals.is_bigset(intervals.set)) {
+        # The names GenomeTrack::ChromFiles maps to a chromosome: its own, its aliases (CHROM_ALIAS), and
+        # these with "chr" added or removed. Its files under them other than the canonical one are removed
+        # with the update: they would be read in place of a deleted one, and earlier pymisha reads them
+        # before the canonical one. Checked by name, not by listing the directory, which a loop of updates
+        # would do once per chromosome.
+        alias <- get0("CHROM_ALIAS", envir = .misha, inherits = FALSE, ifnotfound = character(0))
+        chroms <- as.character(get("ALLGENOME", envir = .misha)[[1]]$chrom)
+        toggled <- function(names) ifelse(startsWith(names, "chr"), substring(names, 4), paste0("chr", names))
+        names_of <- function(chrom) {
+            chrom <- as.character(chrom)
+            names <- unique(c(chrom, names(alias)[alias == chrom]))
+            names <- unique(c(names, toggled(names)))
+            names[nzchar(names)]
+        }
+        # the chromosome ChromFiles maps a name to (GenomeChromKey::find_chromid, then the toggle), NA if none:
+        # a toggled name may be another chromosome's ("1" and "chr1")
+        chrom_of <- function(names) {
+            by_name <- function(names) {
+                id <- ifelse(names %in% chroms, names, unname(alias[names]))
+                ifelse(id %in% chroms, id, NA)
+            }
+            id <- by_name(names)
+            ifelse(is.na(id), by_name(toggled(names)), id)
+        }
+        # of the names, those with a file (not a directory: the listing skips those) or a symlink that cannot be
+        # followed, other than the file the canonical name was written through (a symlink to an alias-named
+        # file, as made for earlier pymisha); removed by file.remove(), which takes no wildcards
+        remove_aliases <- function(names, canonical) {
+            paths <- file.path(fullpath, names)
+            canonical <- file.path(fullpath, canonical)
+            if (file.exists(canonical)) {
+                paths <- paths[normalizePath(paths, mustWork = FALSE) != normalizePath(canonical)]
+            }
+            if (length(paths)) {
+                file.remove(paths)
+            }
+        }
+        exists_or_link <- function(names) {
+            paths <- file.path(fullpath, names)
+            links <- Sys.readlink(paths)
+            names[file_test("-f", paths) | (!is.na(links) & nzchar(links) & !file.exists(paths))]
+        }
         is1d <- .gintervals.big.is1d(intervals.set)
         meta <- .gintervals.big.meta(intervals.set)
         stats <- meta$stats
@@ -539,7 +581,11 @@ gintervals.update <- function(intervals.set = NULL, intervals = "", chrom = NULL
                 stats <- rbind(stats, data.frame(chrom = chrom, stat))
                 stats <- stats[order(stats$chrom), ]
             }
+            aliases <- setdiff(names_of(chrom), chrom)
+            aliases <- exists_or_link(aliases[chrom_of(aliases) %in% chrom])
+            # removed once the write succeeded: they may hold the chromosome's only data
             .gintervals.big.save(fullpath, intervals, chrom = chrom)
+            remove_aliases(aliases, chrom)
         } else {
             if (is.null(chrom1) || is.null(chrom2)) {
                 stop("chrom1 and chrom2 parameters must be specified", call. = FALSE)
@@ -553,7 +599,19 @@ gintervals.update <- function(intervals.set = NULL, intervals = "", chrom = NULL
                 stats <- rbind(stats, data.frame(chrom1 = chrom1, chrom2 = chrom2, stat))
                 stats <- stats[order(stats$chrom1, stats$chrom2), ]
             }
+            aliases <- setdiff(as.vector(outer(names_of(chrom1), names_of(chrom2), paste, sep = "-")), paste(chrom1, chrom2, sep = "-"))
+            # the pair ChromFiles maps a name to: split at the first dash where both parts map
+            dash <- gregexpr("-", aliases, fixed = TRUE)
+            k <- rep(seq_along(aliases), lengths(dash))
+            pos <- unlist(dash)
+            id1 <- chrom_of(substr(aliases[k], 1, pos - 1))
+            id2 <- chrom_of(substring(aliases[k], pos + 1))
+            both <- which(!is.na(id1) & !is.na(id2))
+            both <- both[!duplicated(k[both])]
+            aliases <- exists_or_link(aliases[k[both][id1[both] == chrom1 & id2[both] == chrom2]])
+            # removed once the write succeeded: they may hold the pair's only data
             .gintervals.big.save(fullpath, intervals, chrom1 = chrom1, chrom2 = chrom2)
+            remove_aliases(aliases, paste(chrom1, chrom2, sep = "-"))
         }
 
         if (nrow(stats) > 1) {

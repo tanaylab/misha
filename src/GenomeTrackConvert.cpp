@@ -28,7 +28,8 @@ SEXP gtrackconvert(SEXP _src_track, SEXP _tgt_track, SEXP _envir)
 		IntervUtils iu(_envir);
 		string src_trackpath(track2path(_envir, src_track_str));
 		string tgt_trackpath = create_track_dir(_envir, tgt_track_str);
-		GenomeTrack::Type track_type = GenomeTrack::get_type(src_trackpath.c_str(), iu.get_chromkey(), true);
+		const GenomeTrack::ChromFiles &src_files = iu.get_chrom_files(src_trackpath);
+		GenomeTrack::Type track_type = GenomeTrack::get_type(src_files, true);
 
 		if (track_type == GenomeTrack::FIXED_BIN || track_type == GenomeTrack::SPARSE  || track_type == GenomeTrack::ARRAYS ||
 			track_type == GenomeTrack::RECTS || track_type == GenomeTrack::POINTS || track_type == GenomeTrack::COMPUTED)
@@ -40,7 +41,7 @@ SEXP gtrackconvert(SEXP _src_track, SEXP _tgt_track, SEXP _envir)
 
 		for (uint64_t chromid1 = 0; chromid1 < iu.get_chromkey().get_num_chroms(); chromid1++) {
 			for (uint64_t chromid2 = 0; chromid2 < iu.get_chromkey().get_num_chroms(); chromid2++) {
-				if (!bfile.open((src_trackpath + "/" + GenomeTrack::get_2d_filename(iu.get_chromkey(), chromid1, chromid2)).c_str(), "rb")) {
+				if (!bfile.open(src_files.path(chromid1, chromid2).c_str(), "rb")) {
 					int format_signature;
 
 					if (bfile.read(&format_signature, sizeof(format_signature)) != sizeof(format_signature)) {

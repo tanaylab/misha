@@ -182,6 +182,14 @@ IntervUtils::~IntervUtils()
 		delete *iinterv;
 }
 
+const GenomeTrack::ChromFiles &IntervUtils::get_chrom_files(const string &dir) const
+{
+	auto ifiles = m_chrom_files.find(dir);
+	if (ifiles == m_chrom_files.end())
+		ifiles = m_chrom_files.emplace(dir, GenomeTrack::ChromFiles(m_chrom_key, dir)).first;
+	return ifiles->second;
+}
+
 bool IntervUtils::track_exists(const char *track_name)
 {
 	SEXP all_track_names = R_NilValue;
