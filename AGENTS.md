@@ -29,8 +29,9 @@ R -e “devtools::load_all(export_all = FALSE)”
 `PKG_BUILD_EXTRA_FLAGS=false` is set (e.g. in `~/.Renviron`). Without
 it, build first with `pkgbuild::compile_dll(debug = FALSE)`, then
 `load_all(compile = FALSE)`. To check a build:
-`readelf --debug-dump=info src/misha.so | grep -m1 DW_AT_producer` must
-show `-O2`.
+`readelf --debug-dump=info src/misha.so | grep DW_AT_producer | grep -c -- -O0`
+must print `0` (a debug build still shows `-O2`, followed by the `-O0`
+that overrides it).
 
 Do **not** use
 [`library(name_of_package)`](https://rdrr.io/r/base/library.html) to

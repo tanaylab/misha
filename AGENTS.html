@@ -53,7 +53,7 @@
 <h2 id="running-current-r-code">Running current R code<a class="anchor" aria-label="anchor" href="#running-current-r-code"></a></h2>
 <p>To run the current R code, use the following command:</p>
 <p>R -e “devtools::load_all(export_all = FALSE)”</p>
-<p><code>load_all()</code> compiles changed C++ with pkgbuild’s debug flags (<code>-g -O0</code>), which makes misha about 10x slower, unless <code>PKG_BUILD_EXTRA_FLAGS=false</code> is set (e.g. in <code>~/.Renviron</code>). Without it, build first with <code>pkgbuild::compile_dll(debug = FALSE)</code>, then <code>load_all(compile = FALSE)</code>. To check a build: <code>readelf --debug-dump=info src/misha.so | grep -m1 DW_AT_producer</code> must show <code>-O2</code>.</p>
+<p><code>load_all()</code> compiles changed C++ with pkgbuild’s debug flags (<code>-g -O0</code>), which makes misha about 10x slower, unless <code>PKG_BUILD_EXTRA_FLAGS=false</code> is set (e.g. in <code>~/.Renviron</code>). Without it, build first with <code>pkgbuild::compile_dll(debug = FALSE)</code>, then <code>load_all(compile = FALSE)</code>. To check a build: <code>readelf --debug-dump=info src/misha.so | grep DW_AT_producer | grep -c -- -O0</code> must print <code>0</code> (a debug build still shows <code>-O2</code>, followed by the <code>-O0</code> that overrides it).</p>
 <p>Do <strong>not</strong> use <code><a href="https://rdrr.io/r/base/library.html" class="external-link">library(name_of_package)</a></code> to load the package, this will load the package from the installed version, not the development version.</p>
 </div>
 <div class="section level2">
