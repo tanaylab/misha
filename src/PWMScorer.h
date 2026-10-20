@@ -53,6 +53,9 @@ public:
     // directly.
     double get_last_max_score() const { return m_last_max_score; }
 
+protected:
+    int64_t pattern_length() const override { return (int64_t)m_pssm.size(); }
+
 private:
     // Sliding window cache for contiguous intervals
     struct SlideCache {

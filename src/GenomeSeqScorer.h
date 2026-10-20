@@ -22,7 +22,15 @@ public:
     // Pure virtual function to be implemented by derived classes
     virtual double score_interval(const GInterval& interval, const GenomeChromKey& chromkey) = 0;
 
+    // Bases read past the END of the shifted interval: pattern_length() - 1 when
+    // the scorer extends, else 0. The same expansion calculate_expanded_interval()
+    // applies, so gextract.variants can tell which bins a substituted base reaches.
+    int64_t read_extension() const;
+
 protected:
+    // The pattern length this scorer passes to calculate_expanded_interval().
+    virtual int64_t pattern_length() const = 0;
+
     // Helper method to calculate appropriate interval based on extension setting
     GInterval calculate_expanded_interval(const GInterval& interval, const GenomeChromKey& chromkey, int64_t pattern_length);
 

@@ -1,3 +1,9 @@
+# misha 5.14.0
+
+* New `gextract.variants()`: the value of a track expression with one base substituted, for every substitution in reach of each bin (all three alternative bases by default, or a table of variants such as `gintervals.import_vcf()` output). `score.thresh` keeps only the substitutions that move the value across a threshold.
+
+* `potts.max` virtual tracks take `max_edits = 1`: the best score reachable with at most one substitution, for screening the genome before `gextract.variants()`.
+
 # misha 5.13.2
 
 * **Behavior fix:** after `gdir.cd()` into a subdirectory, tracks and interval sets there could be looked up at the top of the database instead (by `gtrack.copy()` and the indexed-format conversion always, by other functions with a dataset loaded or once a track was created or copied). Reads failed or returned the top-level track of that name, `gtrack.rm()`, `gtrack.copy(overwrite = TRUE)` and `gtrack.convert_to_indexed()` could delete, replace or empty it, and tracks could not be created there in an indexed database.

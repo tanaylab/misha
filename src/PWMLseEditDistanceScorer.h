@@ -68,6 +68,9 @@ public:
 
     float get_last_min_edits() const { return m_last_min_edits; }
 
+protected:
+    int64_t pattern_length() const override { return (int64_t)m_pssm.length(); }
+
 private:
     DnaPSSM m_pssm;
     float m_threshold;

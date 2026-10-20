@@ -136,6 +136,7 @@ reference:
       - gcompute_strands_autocorr
       - gdist
       - gextract
+      - gextract.variants
       - glookup
       - gpartition
       - gquantiles

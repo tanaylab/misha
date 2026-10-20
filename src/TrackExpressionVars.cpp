@@ -165,6 +165,21 @@ TrackExpressionVars::TrackExpressionVars(rdb::IntervUtils &iu) :
 	m_sequence_processor = std::make_unique<SequenceVarProcessor>(iu, m_shared_seqfetch);
 }
 
+void TrackExpressionVars::set_substitution(const SeqSubstitution &sub)
+{
+	if (sub == m_substitution)
+		return;
+	m_substitution = sub;
+	m_shared_seqfetch.set_substitution(sub);
+	// The pwm and potts scorers keep scores of earlier reads between calls.
+	for (Track_var &var : m_track_vars) {
+		if (var.pwm_scorer)
+			var.pwm_scorer->invalidate_cache();
+		if (var.potts_scorer)
+			var.potts_scorer->invalidate_cache();
+	}
+}
+
 TrackExpressionVars::~TrackExpressionVars()
 {
 	for (Track_vars::iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ivar++)
@@ -922,7 +937,8 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
                 PottsScorer::MOTIF_COUNT,
                 potts_params.bidirect,
                 potts_params.strand_mode,
-                potts_params.score_thresh
+                potts_params.score_thresh,
+                potts_params.max_edits
             );
 
             // Parse optional iterator modifier (sshift/eshift) for sequence-based vtracks
@@ -2218,4 +2234,30 @@ void TrackExpressionVars::set_vars(unsigned idx)
 
 	// Process value variables
 	m_value_processor->process_value_vars(m_value_vars, m_interval1d, idx);
+}
+
+
+std::vector<std::pair<int64_t, int64_t>> TrackExpressionVars::seq_read_offsets() const
+{
+	std::vector<std::pair<int64_t, int64_t>> offs;
+	for (const Track_var &var : m_track_vars) {
+		const GenomeSeqScorer *scorer =
+			var.pwm_scorer ? (const GenomeSeqScorer *)var.pwm_scorer.get() :
+			var.potts_scorer ? (const GenomeSeqScorer *)var.potts_scorer.get() :
+			var.pwm_edit_distance_scorer ? (const GenomeSeqScorer *)var.pwm_edit_distance_scorer.get() :
+			var.pwm_lse_edit_distance_scorer ? (const GenomeSeqScorer *)var.pwm_lse_edit_distance_scorer.get() :
+			var.kmer_counter ? (const GenomeSeqScorer *)var.kmer_counter.get() :
+			var.masked_counter ? (const GenomeSeqScorer *)var.masked_counter.get() : nullptr;
+		if (!scorer)
+			continue;
+		const int64_t sshift = var.seq_imdf1d ? var.seq_imdf1d->sshift : 0;
+		const int64_t eshift = var.seq_imdf1d ? var.seq_imdf1d->eshift : 0;
+		int64_t lo = sshift;
+		// The batched sequence path counts reverse-strand k-mers anchored up to
+		// k - 1 bases left of the interval, so those bases can change the value.
+		if (var.kmer_counter && var.kmer_counter->get_strand() != 1)
+			lo -= scorer->read_extension();
+		offs.emplace_back(lo, eshift + scorer->read_extension());
+	}
+	return offs;
 }

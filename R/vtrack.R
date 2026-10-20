@@ -319,7 +319,7 @@
     if (!from_params) {
         .vtrack_check_unknown_params(func, dots, c(
             "e", "J", "pairs", "intercept", "bidirect", "extend", "strand",
-            "score.thresh", "width", "pair_strength", "attr", "link"
+            "score.thresh", "width", "pair_strength", "attr", "link", "max_edits"
         ))
     }
 
@@ -340,13 +340,30 @@
 
     # .potts_params() is the same builder gseq.potts() uses, so the two entry
     # points cannot drift on validation or on the list's shape.
-    .potts_params(dots,
+    p <- .potts_params(dots,
         bidirect = if (!is.null(dots[["bidirect"]])) dots[["bidirect"]] else TRUE,
         extend = if (!is.null(dots[["extend"]])) dots[["extend"]] else TRUE,
         strand = if (!is.null(dots[["strand"]])) dots[["strand"]] else 1,
         score.thresh = score.thresh,
         what = sprintf("virtual track function '%s'", func)
     )
+    # Only potts.max: for a log-sum-exp, a count or a position the best single
+    # substitution does not decompose by anchor. Left out of the list at 0, so
+    # existing potts vtracks keep their params unchanged.
+    max_edits <- dots[["max_edits"]]
+    if (!is.null(max_edits)) {
+        if (!identical(func, "potts.max")) {
+            stop(sprintf("max_edits is supported by potts.max only, not by '%s'", func), call. = FALSE)
+        }
+        if (!is.numeric(max_edits) || length(max_edits) != 1L ||
+            is.na(max_edits) || !(max_edits %in% c(0, 1))) {
+            stop(sprintf("virtual track function '%s': max_edits must be 0 or 1", func), call. = FALSE)
+        }
+        if (max_edits == 1) {
+            p$max_edits <- 1L
+        }
+    }
+    p
 }
 
 #' Validate and process kmer function parameters
@@ -845,7 +862,7 @@
 #' \tabular{llll}{
 #'   Source \tab func \tab Key params \tab Description \cr
 #'   NULL (sequence) \tab potts \tab e, J, pairs, intercept, bidirect, extend, strand \tab Log-sum-exp of the pairwise-energy score over all anchors inside the iterator interval. \cr
-#'   NULL (sequence) \tab potts.max \tab e, J, pairs, intercept, bidirect, extend, strand \tab Highest-scoring anchor. \cr
+#'   NULL (sequence) \tab potts.max \tab e, J, pairs, intercept, bidirect, extend, strand, max_edits \tab Highest-scoring anchor; with \code{max_edits = 1}, the highest score reachable with at most one substitution. \cr
 #'   NULL (sequence) \tab potts.max.pos \tab e, J, pairs, intercept, bidirect, extend, strand \tab 1-based position of the best anchor, signed by strand when \code{bidirect = TRUE}. \cr
 #'   NULL (sequence) \tab potts.count \tab e, J, pairs, intercept, score.thresh (required), bidirect, extend, strand \tab Number of anchors scoring at least \code{score.thresh}. \cr
 #' }
@@ -914,6 +931,7 @@
 #'   \item \strong{Reproducing a model fitted elsewhere.} Because the union is log-sum-exp, \code{bidirect = TRUE} does not reproduce a model whose own definition takes the \strong{maximum} over the two strands: the two differ by up to \code{log 2}, and by exactly \code{log 2} wherever the strands tie. For those, declare two virtual tracks over the same model with \code{bidirect = FALSE} and \code{strand = 1} / \code{strand = -1}, and combine them yourself with \code{pmax}. The same applies when several models have to share ONE strand decision - a core plus flanking windows, say. Give each window a strand-locked pair, place it with \code{\link{gvtrack.iterator}}, and settle the strand once with an \code{ifelse} on the pair that decides it; letting each window take its own maximum computes a different and strictly larger quantity.
 #'   \item \code{e}/\code{J}/\code{pairs}/\code{intercept} can be supplied as a whole fitted model: a fitted Potts model has exactly the fields this family needs plus \code{width}, \code{pair_strength}, \code{attr} and \code{link}; those four are accepted and ignored, so the model can be passed verbatim as \code{params}, and \code{width} is cross-checked against \code{nrow(e)} when present.
 #'   \item \code{score.thresh}: Mandatory for \code{potts.count} - there is no default, since a Potts score is an energy whose usable range depends on the model - and ignored by the rest of the family.
+#'   \item \code{max_edits} (\code{potts.max} only): 0 (default) or 1. With 1, each anchor scores the best of its own window and every window one substitution away, and the vtrack returns the best anchor. It is exact, costs about 4 to 30 times a plain \code{potts.max} (more for wide models and with \code{bidirect = TRUE}), and is meant as a genome-wide bound before \code{\link{gextract.variants}}. A window with a non-ACGT base is still not scored.
 #' }
 #'
 #' \strong{Edit distance notes}

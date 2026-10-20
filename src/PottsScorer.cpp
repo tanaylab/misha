@@ -8,17 +8,17 @@
 
 PottsScorer::PottsScorer(const PottsModel &model, const std::string &genome_root,
                          bool extend, ScoringMode mode, bool bidirect, char strand,
-                         double score_thresh)
+                         double score_thresh, int max_edits)
     : GenomeSeqScorer(genome_root, extend, strand), m_model(model), m_rc(model.rc()),
-      m_mode(mode), m_bidirect(bidirect), m_score_thresh(score_thresh)
+      m_mode(mode), m_bidirect(bidirect), m_score_thresh(score_thresh), m_max_edits(max_edits)
 {
 }
 
 PottsScorer::PottsScorer(const PottsModel &model, GenomeSeqFetch *shared_seqfetch,
                          bool extend, ScoringMode mode, bool bidirect, char strand,
-                         double score_thresh)
+                         double score_thresh, int max_edits)
     : GenomeSeqScorer(shared_seqfetch, extend, strand), m_model(model), m_rc(model.rc()),
-      m_mode(mode), m_bidirect(bidirect), m_score_thresh(score_thresh)
+      m_mode(mode), m_bidirect(bidirect), m_score_thresh(score_thresh), m_max_edits(max_edits)
 {
 }
 
@@ -236,6 +236,55 @@ double PottsScorer::score_direct(size_t i_min, size_t i_max, size_t motif_len, s
                    : std::numeric_limits<float>::quiet_NaN();
     }
     return std::numeric_limits<float>::quiet_NaN();
+}
+
+double PottsScorer::score_one_edit(size_t i_min, size_t i_max, size_t motif_len)
+{
+    // Same strand handling as anchor_value(): with strand -1 the target is
+    // already reverse-complemented, so the twin reads the original forward
+    // strand. Under bidirect one base changes both strands, so both are
+    // recomputed for the same substitution before they are combined.
+    const bool check_fwd = m_bidirect || m_strand != -1;
+    const bool check_rev = m_bidirect || m_strand == -1;
+    const PottsModel &mf = (m_strand == -1) ? m_rc : m_model;
+    const PottsModel &mr = (m_strand == -1) ? m_model : m_rc;
+    auto combine = [&](double f, double r) {
+        if (check_fwd && check_rev) {
+            double u = f;
+            log_sum_log(u, r);
+            return u;
+        }
+        return check_fwd ? f : r;
+    };
+
+    potts_block_codes(m_codes, m_block_codes, i_min, i_max + motif_len);
+    const int W = (int)motif_len;
+    double best = -std::numeric_limits<double>::infinity();
+    bool any = false;
+    for (size_t i = i_min; i <= i_max; ++i) {
+        if (m_nbad[i + motif_len] - m_nbad[i] != 0)
+            continue;
+        const int8_t *c = &m_codes[i];
+        const int8_t *bc = &m_block_codes[i];
+        const double f = check_fwd ? mf.score_codes(c, bc) : 0.0;
+        const double r = check_rev ? mr.score_codes(c, bc) : 0.0;
+        double a = combine(f, r);
+        for (int j = 0; j < W; ++j)
+            for (int b = 0; b < 4; ++b) {
+                if (b == c[j])
+                    continue;
+                const double u = combine(check_fwd ? f + mf.delta_codes(c, j, b) : 0.0,
+                                         check_rev ? r + mr.delta_codes(c, j, b) : 0.0);
+                if (u > a)
+                    a = u;
+            }
+        if (a > best)
+            best = a;
+        any = true;
+    }
+    if (any)
+        m_last_max_score = best;
+    return any ? (float)best : std::numeric_limits<float>::quiet_NaN();
 }
 
 double PottsScorer::slid_answer(const GInterval &expanded_interval, size_t motif_len,
@@ -632,6 +681,13 @@ double PottsScorer::score_interval(const GInterval &interval, const GenomeChromK
             i_min = 0;
 
         potts_encode(target, m_codes, m_nbad);
+
+        if (m_max_edits == 1) {
+            // Not slid: an anchor's best edit depends on its whole window, and
+            // with 1 bp bins the cache never populates anyway.
+            invalidate_cache();
+            return score_one_edit(i_min, i_max, motif_len);
+        }
 
         return score_with_sliding_window(interval, expanded, i_min, i_max, motif_len, tlen);
     } catch (TGLException &e) {

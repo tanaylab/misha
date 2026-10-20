@@ -34,6 +34,7 @@
 #include "TrackExpressionFixedRectIterator.h"
 #include "TrackExpressionIntervals1DIterator.h"
 #include "TrackExpressionIntervals2DIterator.h"
+#include "TrackExpressionRows1DIterator.h"
 #include "TrackExpressionIterator.h"
 #include "TrackExpressionSparseIterator.h"
 #include "TrackExpressionScanner.h"
@@ -357,6 +358,8 @@ bool TrackExprScanner::eval_next()
                 m_expr_itr_scope_idx[m_eval_buf_size] = ((TrackExpression1DIterator *)m_expr_itr)->get_cur_scope_idx();
                 m_expr_itr_scope_chrom_idx[m_eval_buf_size] = ((TrackExpression1DIterator *)m_expr_itr)->get_cur_scope_chrom_idx();
 				// Publish iterator-derived variables for this slot so expressions can use them
+				if (m_row_subs)
+					m_expr_vars.set_substitution((*m_row_subs)[((TrackExpression1DIterator *)m_expr_itr)->get_cur_scope_idx()]);
 				m_expr_vars.set_vars(interval, m_eval_buf_size);
                 m_expr_itr->next();
 			}
@@ -892,6 +895,13 @@ TrackExpressionIteratorBase *TrackExprScanner::create_expr_iterator(SEXP giterat
 		GIntervalsFetcher1D *scope1d, GIntervalsFetcher2D *scope2d, GIntervals &intervals1d, GIntervals2D &intervals2d, const DiagonalBand &band, bool call_begin)
 {
 	monitor_memusage();
+
+	if (m_rows) {
+		TrackExpressionRows1DIterator *itr = new TrackExpressionRows1DIterator;
+		if (call_begin)
+			itr->begin(*m_rows, *scope1d);
+		return itr;
+	}
 
 	TrackExpressionIteratorBase *expr_itr = NULL;
 	SEXP class_name = Rf_getAttrib(giterator, R_ClassSymbol);

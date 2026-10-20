@@ -38,6 +38,7 @@ struct PottsParams {
     bool extend_flag = true;
     char strand_mode = 1;
     double score_thresh = 0.0;
+    int max_edits = 0;
 
     static int find_elt(SEXP list, const char *name) {
         SEXP names = Rf_getAttrib(list, R_NamesSymbol);
@@ -178,6 +179,17 @@ struct PottsParams {
             if ((!Rf_isInteger(rt) && !Rf_isReal(rt)) || Rf_length(rt) != 1)
                 rdb::verror("%s: 'score.thresh' must be a single number", who.c_str());
             params.score_thresh = Rf_asReal(rt);
+        }
+
+        const int im = find_elt(rparams, "max_edits");
+        if (im >= 0 && VECTOR_ELT(rparams, im) != R_NilValue) {
+            SEXP rme = VECTOR_ELT(rparams, im);
+            if ((!Rf_isInteger(rme) && !Rf_isReal(rme)) || Rf_length(rme) != 1)
+                rdb::verror("%s: 'max_edits' must be 0 or 1", who.c_str());
+            const int mv = Rf_asInteger(rme);
+            if (mv != 0 && mv != 1)
+                rdb::verror("%s: 'max_edits' must be 0 or 1", who.c_str());
+            params.max_edits = mv;
         }
 
         return params;

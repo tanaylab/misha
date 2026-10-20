@@ -37,6 +37,9 @@ public:
                                const GInterval &original_interval,
                                const GInterval &fetch_interval) const;
 
+protected:
+    int64_t pattern_length() const override { return (int64_t)m_kmer.length(); }
+
 private:
     std::string m_kmer;
     CountMode m_mode;

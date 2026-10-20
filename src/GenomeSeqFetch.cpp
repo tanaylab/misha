@@ -1,3 +1,4 @@
+#include <cctype>
 #include <errno.h>
 #include <sys/stat.h>
 
@@ -48,6 +49,14 @@ void GenomeSeqFetch::set_seqdir(const std::string &dir) {
         m_indexed_mode = false;
         m_index = nullptr;
     }
+}
+
+void GenomeSeqFetch::set_substitution(const SeqSubstitution &sub)
+{
+	if (sub == m_sub)
+		return;
+	m_sub = sub;
+	m_cache_valid = false;  // the cached read may carry the previous substitution
 }
 
 void GenomeSeqFetch::read_interval(const GInterval &interval, const GenomeChromKey &chromkey, vector<char> &result)
@@ -151,6 +160,15 @@ void GenomeSeqFetch::read_interval(const GInterval &interval, const GenomeChromK
 
 			TGLError<GenomeSeqFetch>(FILE_READ_FAILED, "Reading sequence file %s failed", m_bfile.file_name().c_str());
 		}
+	}
+
+	// The substituted base takes the case of the base it replaces, so masked.*
+	// sees the same mask. Applied before the reverse complement, in genome
+	// coordinates; the read starts at interval.start in both modes.
+	if (m_sub.chromid == interval.chromid && m_sub.pos >= interval.start &&
+	    m_sub.pos < interval.start + (int64_t)result.size()) {
+		char &c = result[m_sub.pos - interval.start];
+		c = islower((unsigned char)c) ? (char)tolower(m_sub.base) : m_sub.base;
 	}
 
 	// Apply reverse-complement if needed (same for both modes)
