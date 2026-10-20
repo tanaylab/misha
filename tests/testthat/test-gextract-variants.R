@@ -195,9 +195,9 @@ test_that("score.thresh keeps exactly the rows that cross it", {
     all_rows <- gextract.variants("v_pwm", iv, iterator = 1, colnames = "s")
     # halfway across the largest change, so at least one row crosses
     i <- which.max(abs(all_rows$s.alt - all_rows$s.ref))
-    t <- (all_rows$s.ref[i] + all_rows$s.alt[i]) / 2
-    crossed <- all_rows[(all_rows$s.ref >= t) != (all_rows$s.alt >= t), ]
-    got <- gextract.variants("v_pwm", iv, iterator = 1, colnames = "s", score.thresh = t)
+    threshold <- (all_rows$s.ref[i] + all_rows$s.alt[i]) / 2
+    crossed <- all_rows[(all_rows$s.ref >= threshold) != (all_rows$s.alt >= threshold), ]
+    got <- gextract.variants("v_pwm", iv, iterator = 1, colnames = "s", score.thresh = threshold)
     rownames(crossed) <- NULL
     rownames(got) <- NULL
     expect_equal(got, crossed)
