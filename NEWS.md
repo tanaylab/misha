@@ -1,16 +1,18 @@
 # misha 5.13.3
 
-* **Behavior fix:** per-chromosome files of tracks and big intervals sets named by a chromosome alias (`1` for `chr1`, `1-chr2` for a pair, as earlier pymisha wrote them) are read, converted, copied and lifted over as canonically named ones. 2D tracks read as empty, big sets failed to load and lifted tracks came out empty. Delete the `.meta` of such a 2D track if an earlier version saved one.
+* **Behavior fix:** track and big-set files named by a chromosome alias (`1`, `1-chr2`, as earlier pymisha wrote them) are used like canonically named ones; 2D tracks read as empty and big sets failed to load. Delete a stale `.meta` of such a 2D track.
 
-* **Breaking:** where a chromosome has no file named by its name, nor by that name with "chr" added or removed, and two different files named by other aliases, reading or converting them is an error; converting to the indexed format stops at a file not named by a chromosome or that cannot be read (an unreadable file was packed as empty). A canonically named file wins over an alias-named one, and the conversion's `remove.old` removes both.
+* **Breaking:** two different alias-named files for one chromosome are an error; the indexed conversion stops at a file it cannot read or match to a chromosome.
 
-* **Bug fix:** `gtrack.copy(overwrite = TRUE)` removed the existing destination before copying, so a copy that then failed (an entry it could not copy, a check that stopped late) lost it; the destination is now kept until the copy succeeds.
+* **Bug fix:** a failed `gtrack.copy(overwrite = TRUE)` no longer loses the existing destination.
 
-* **Bug fix:** `gintervals.load()` of an indexed big set returned the chromosomes deleted from it with `gintervals.update(NULL)`.
+* **Bug fix:** `gintervals.load()` of an indexed big set returned chromosomes deleted with `gintervals.update(NULL)`.
 
-* **Bug fix:** a forced `gtrack.2d.convert_to_indexed()` that failed (a pair file it could not read, a full disk) could remove the track's index and data; it now leaves the track as it was.
+* **Bug fix:** a failed forced `gtrack.2d.convert_to_indexed()` could delete the track's data; the track is now left as it was.
 
-* **Breaking:** `gdataset.load()` refuses a dataset with indexed tracks or interval sets whose own `seq/genome.idx` cannot be read when its `chrom_sizes.txt` order differs from the working database's chromosome order. It loaded, and those files could read other chromosomes.
+* **Breaking:** `gdataset.load()` refuses an indexed dataset with an unreadable `seq/genome.idx` and a chromosome order different from the working database's.
+
+* Documentation: `gintervals.neighbors()`'s `dist` is unsigned when `intervals2` has no strand; with `use_intervals1_strand`, negative is upstream on both strands.
 
 # misha 5.13.2
 

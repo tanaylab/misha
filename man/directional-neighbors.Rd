@@ -62,8 +62,8 @@ TSS analysis where you want distances relative to gene direction.
 \details{
 **Distance interpretation:**
 \itemize{
-  \item **Positive strand queries:** upstream distances < 0, downstream distances > 0
-  \item **Negative strand queries:** upstream distances > 0, downstream distances < 0
+  \item **Either strand:** upstream distances < 0, downstream distances > 0, upstream
+  and downstream in the direction of the query's strand
 }
 If no strand column is present, all intervals are treated as positive strand.
 }
