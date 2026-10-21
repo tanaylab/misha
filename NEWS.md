@@ -12,6 +12,8 @@
 
 * **Breaking:** `gdataset.load()` refuses a dataset with indexed tracks or interval sets whose own `seq/genome.idx` cannot be read when its `chrom_sizes.txt` order differs from the working database's chromosome order. It loaded, and those files could read other chromosomes.
 
+* Documentation: `gintervals.neighbors()`'s `dist` is unsigned when `intervals2` has no strand column (the help said such intervals count as + strand), and with `use_intervals1_strand` (and in `gintervals.neighbors.upstream()`) a negative `dist` is upstream of the query on either strand (the help had it reversed for - strand queries).
+
 # misha 5.13.2
 
 * **Behavior fix:** after `gdir.cd()` into a subdirectory, tracks and interval sets there could be looked up at the top of the database instead (by `gtrack.copy()` and the indexed-format conversion always, by other functions with a dataset loaded or once a track was created or copied). Reads failed or returned the top-level track of that name, `gtrack.rm()`, `gtrack.copy(overwrite = TRUE)` and `gtrack.convert_to_indexed()` could delete, replace or empty it, and tracks could not be created there in an indexed database.
