@@ -1,8 +1,4 @@
-# misha 5.13.2
-
-* **Behavior fix:** after `gdir.cd()` into a subdirectory, tracks and interval sets there could be looked up at the top of the database instead (by `gtrack.copy()` and the indexed-format conversion always, by other functions with a dataset loaded or once a track was created or copied). Reads failed or returned the top-level track of that name, `gtrack.rm()`, `gtrack.copy(overwrite = TRUE)` and `gtrack.convert_to_indexed()` could delete, replace or empty it, and tracks could not be created there in an indexed database.
-
-* **Breaking:** after `gdir.cd()` into a subdirectory, `db = <working database>` in `gtrack.rm()`, `gintervals.rm()` and `gtrack.copy()` means the names listed there, as `db = NULL` does, not the top of its `tracks/`.
+# misha 5.13.3
 
 * **Behavior fix:** per-chromosome files of tracks and big intervals sets named by a chromosome alias (`1` for `chr1`, `1-chr2` for a pair, as earlier pymisha wrote them) are read, converted, copied and lifted over as canonically named ones. 2D tracks read as empty, big sets failed to load and lifted tracks came out empty. Delete the `.meta` of such a 2D track if an earlier version saved one.
 
@@ -15,6 +11,12 @@
 * **Bug fix:** a forced `gtrack.2d.convert_to_indexed()` that failed (a pair file it could not read, a full disk) could remove the track's index and data; it now leaves the track as it was.
 
 * **Breaking:** `gdataset.load()` refuses a dataset with indexed tracks or interval sets whose own `seq/genome.idx` cannot be read when its `chrom_sizes.txt` order differs from the working database's chromosome order. It loaded, and those files could read other chromosomes.
+
+# misha 5.13.2
+
+* **Behavior fix:** after `gdir.cd()` into a subdirectory, tracks and interval sets there could be looked up at the top of the database instead (by `gtrack.copy()` and the indexed-format conversion always, by other functions with a dataset loaded or once a track was created or copied). Reads failed or returned the top-level track of that name, `gtrack.rm()`, `gtrack.copy(overwrite = TRUE)` and `gtrack.convert_to_indexed()` could delete, replace or empty it, and tracks could not be created there in an indexed database.
+
+* **Breaking:** after `gdir.cd()` into a subdirectory, `db = <working database>` in `gtrack.rm()`, `gintervals.rm()` and `gtrack.copy()` means the names listed there, as `db = NULL` does, not the top of its `tracks/`.
 
 # misha 5.13.1
 
