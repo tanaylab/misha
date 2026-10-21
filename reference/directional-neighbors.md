@@ -83,11 +83,8 @@ gintervals.neighbors.directional(
 
 \*\*Distance interpretation:\*\*
 
-- \*\*Positive strand queries:\*\* upstream distances \< 0, downstream
-  distances \> 0
-
-- \*\*Negative strand queries:\*\* upstream distances \> 0, downstream
-  distances \< 0
+- \*\*Either strand:\*\* upstream distances \< 0, downstream distances
+  \> 0, upstream and downstream in the direction of the query's strand
 
 If no strand column is present, all intervals are treated as positive
 strand.

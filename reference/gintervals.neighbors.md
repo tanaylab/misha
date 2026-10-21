@@ -1,10 +1,12 @@
 # Finds neighbors between two sets of intervals
 
 For each interval in 'intervals1', finds the closest intervals from
-'intervals2'. Distance directionality can be determined by either the
-strand of the target intervals (intervals2, default) or the query
-intervals (intervals1). When no strand column is present, all intervals
-are treated as positive strand (strand = 1).
+'intervals2'. The sign of the distance follows a strand: by default the
+strand of the target intervals (intervals2), with
+'use_intervals1_strand' the strand of the query intervals (intervals1).
+By default, when intervals2 has no strand column, the distance is
+unsigned (never negative); with 'use_intervals1_strand', when intervals1
+has no strand column, all of them count as positive strand (strand = 1).
 
 ## Usage
 
@@ -101,20 +103,15 @@ relative to gene direction.
 
 \*\*Distance calculation modes:\*\*
 
-- \*\*use_intervals1_strand = FALSE (default):\*\* Uses intervals2
-  strand for directionality
+- \*\*use_intervals1_strand = FALSE (default):\*\* the distance is
+  positive when the intervals1 interval is downstream of the intervals2
+  interval in the direction of its strand, negative when upstream;
+  unsigned when intervals2 has no strand column
 
-- \*\*use_intervals1_strand = TRUE:\*\* Uses intervals1 strand for
-  directionality
-
-\*\*Important:\*\* When 'use_intervals1_strand = TRUE', distance signs
-are interpreted as:
-
-- \*\*+ strand queries:\*\* Negative distances = upstream, Positive
-  distances = downstream
-
-- \*\*- strand queries:\*\* Negative distances = downstream, Positive
-  distances = upstream
+- \*\*use_intervals1_strand = TRUE:\*\* the distance is positive when
+  the intervals2 interval is downstream of the query in the direction of
+  the query's strand, negative when upstream, on either strand (without
+  a strand column: to the right of the query)
 
 For 2D intervals two distances are calculated and returned for each
 axis. The distances must fall in the range of \['mindist1', 'maxdist1'\]
