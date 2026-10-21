@@ -573,7 +573,7 @@ void SequenceVarProcessor::batch_process_sequence_vtracks(
 			          [](unsigned char c) { return toupper(c); });
 
 			// Build HashMap: scan once, record all kmer positions
-			for (size_t pos = 0; pos + max_kmer_len <= sequence.length(); pos++) {
+			for (size_t pos = 0; pos < sequence.length(); pos++) {
 				for (size_t k = 1; k <= max_kmer_len && pos + k <= sequence.length(); k++) {
 					string kmer = sequence.substr(pos, k);
 					fwd_positions[kmer].push_back(pos);
@@ -592,7 +592,7 @@ void SequenceVarProcessor::batch_process_sequence_vtracks(
 			          [](unsigned char c) { return toupper(c); });
 
 			// Build HashMap for reverse strand
-			for (size_t pos = 0; pos + max_kmer_len <= sequence.length(); pos++) {
+			for (size_t pos = 0; pos < sequence.length(); pos++) {
 				for (size_t k = 1; k <= max_kmer_len && pos + k <= sequence.length(); k++) {
 					string kmer = sequence.substr(pos, k);
 					rev_positions[kmer].push_back(pos);

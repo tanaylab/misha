@@ -1495,3 +1495,86 @@ test_that("kmer honors iterator shifts for both strands (extend=TRUE)", {
         expect_equal(scores[[frac_names[i]]], expected_frac, tolerance = 1e-5)
     }
 })
+
+# With 4 or more sequence vtracks (and none filtered) kmer vtracks are scored
+# in batches. A batched kmer vtrack must count exactly the k-mers it counts when
+# scored on its own: those whose 0-based genomic start lies in its (shifted)
+# iterator interval, on either strand.
+local_kmer_seq_db <- function(seqs, env = parent.frame()) {
+    local_db_state(env)
+    td <- tempfile("kmer_batch_")
+    dir.create(td)
+    withr::defer(unlink(td, recursive = TRUE), envir = env)
+    fasta <- file.path(td, "genome.fa")
+    writeLines(rbind(paste0(">", names(seqs)), seqs), fasta)
+    suppressMessages(gdb.create(file.path(td, "db"), fasta))
+    gsetroot(file.path(td, "db"))
+    remove_all_vtracks()
+}
+
+kmer_alone_and_batched <- function(vt, others, intervals, iterator) {
+    expr <- paste(c(vt, paste0("0 * ", others)), collapse = " + ")
+    list(
+        alone = gextract(vt, intervals, iterator = iterator, colnames = "v")$v,
+        batched = gextract(expr, intervals, iterator = iterator, colnames = "v")$v
+    )
+}
+
+test_that("batched kmer vtracks count the same k-mers as a kmer vtrack scored alone", {
+    set.seed(60417)
+    rand_seq <- function(n) sample(c("A", "C", "G", "T"), n, replace = TRUE)
+    soft <- rand_seq(613)
+    soft <- ifelse(((seq_along(soft) - 1) %/% 25) %% 2 == 1, tolower(soft), soft)
+    local_kmer_seq_db(c(chr1 = paste(rand_seq(601), collapse = ""), chr2 = paste(soft, collapse = "")))
+
+    # Whole chromosomes in 1 bp and 7 bp bins: every bin touching a chromosome
+    # end is scored, including a short last bin.
+    intervals <- gintervals.all()
+    others <- c("o1", "o2", "o3")
+    for (func in c("kmer.count", "kmer.frac")) {
+        for (strand in c(1, 0, -1)) {
+            for (extend in c(TRUE, FALSE)) {
+                # The other k-mers are longer than most tested ones, so under
+                # extend = FALSE a short k-mer shares its batch with a longer one.
+                for (i in 1:3) {
+                    gvtrack.create(others[i], NULL, "kmer.count",
+                        kmer = c("C", "GG", "GATTACA")[i], extend = extend, strand = strand
+                    )
+                }
+                for (kmer in c("A", "CA", "ACG", "TTAC")) {
+                    for (shift in list(NULL, c(-3, 2), c(4, 4))) {
+                        gvtrack.create("k1", NULL, func, kmer = kmer, extend = extend, strand = strand)
+                        if (!is.null(shift)) {
+                            gvtrack.iterator("k1", sshift = shift[1], eshift = shift[2])
+                        }
+                        for (iterator in c(1, 7)) {
+                            res <- kmer_alone_and_batched("k1", others, intervals, iterator)
+                            expect_equal(res$batched, res$alone,
+                                info = sprintf(
+                                    "%s kmer=%s strand=%d extend=%s shift=%s iterator=%d",
+                                    func, kmer, strand, extend, toString(shift), iterator
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+})
+
+test_that("batched kmer.count does not count a reverse-strand k-mer anchored left of the bin", {
+    # chr2 differs from chr1 only at base 99, which completes CGT at [98, 101):
+    # ACG on the reverse strand anchored at 98, outside the bin [100, 110).
+    chr1 <- strsplit(strrep("A", 300), "")[[1]]
+    chr1[99:101] <- c("C", "A", "T")
+    chr2 <- chr1
+    chr2[100] <- "G"
+    local_kmer_seq_db(c(chr1 = paste(chr1, collapse = ""), chr2 = paste(chr2, collapse = "")))
+    for (v in c("k1", "k2", "k3", "k4")) {
+        gvtrack.create(v, NULL, "kmer.count", kmer = "ACG", extend = TRUE, strand = 0)
+    }
+    bins <- gintervals(c("chr1", "chr2"), 100, 110)
+    expect_equal(gextract("k1", bins, iterator = 10, colnames = "v")$v, c(0, 0))
+    expect_equal(gextract("k1 + 0 * k2 + 0 * k3 + 0 * k4", bins, iterator = 10, colnames = "v")$v, c(0, 0))
+})
