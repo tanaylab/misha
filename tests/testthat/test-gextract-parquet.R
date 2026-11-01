@@ -51,6 +51,9 @@ for i in range(md.num_row_groups):
             col["null_count"] = s.null_count
         cols.append(col)
     meta["row_groups"].append({"num_rows": rg.num_rows, "columns": cols})
+# also iter_batches() and read_table(): a file with no row groups reads with read_table but not iter_batches
+meta["iter_batches_rows"] = sum(b.num_rows for b in f.iter_batches())
+meta["read_table_rows"] = pq.read_table(path).num_rows
 with open(out_json, "w") as fh:
     json.dump(meta, fh)
     fh.write("\\n")
@@ -86,7 +89,9 @@ read_pq <- function(path) {
         table = tab,
         names = vapply(meta$schema, function(x) x$name, ""),
         types = vapply(meta$schema, function(x) x$type, ""),
-        row_groups = meta$row_groups
+        row_groups = meta$row_groups,
+        iter_batches_rows = meta$iter_batches_rows,
+        read_table_rows = meta$read_table_rows
     )
 }
 
@@ -178,6 +183,26 @@ test_that("many columns (Thrift lists of 15 elements or more), values rounded to
     expect_identical(pq$names, c("chrom", "start", "end", exprs))
     expect_false(identical(float32(inmem[["pq / 3"]]), inmem[["pq / 3"]]))
     expect_same_rows(pq$table, inmem, exprs)
+})
+
+test_that("an empty result is one empty row group, as pyarrow writes an empty table", {
+    skip_without_pyarrow()
+    local_pq_track_db()
+    f <- file.path(withr::local_tempdir(), "x.parquet")
+    # an iterator that does not meet the scope yields no rows
+    scope <- gintervals("chr1", 0, 100)
+    iter <- gintervals("chr2", 0, 100)
+
+    expect_null(gextract("pq", "pq * 2", intervals = scope, iterator = iter))
+    gextract("pq", "pq * 2", intervals = scope, iterator = iter, file = f)
+    pq <- read_pq(f)
+
+    expect_identical(pq$names, c("chrom", "start", "end", "pq", "pq * 2"))
+    expect_identical(pq$types, c("string", "int32", "int32", "float", "float"))
+    expect_equal(nrow(pq$table), 0)
+    expect_equal(pq$iter_batches_rows, 0)
+    expect_equal(pq$read_table_rows, 0)
+    expect_equal(vapply(pq$row_groups, function(rg) rg$num_rows, 0), 0)
 })
 
 test_that("row groups split at the cap and at chromosome changes", {

@@ -337,7 +337,8 @@ void ParquetWriter::add_row(const string &chrom, int64_t start, int64_t end, con
 		TGLError<ParquetWriter>(FORMAT_ERROR, "Interval (%s, %lld, %lld) does not fit 32-bit Parquet coordinates", chrom.c_str(), (long long)start, (long long)end);
 
 	if (chrom != m_chrom || m_starts.size() >= MAX_ROW_GROUP_ROWS) {
-		flush_row_group();
+		if (!m_starts.empty())
+			flush_row_group();
 		m_chrom = chrom;
 	}
 
@@ -353,7 +354,10 @@ void ParquetWriter::add_row(const string &chrom, int64_t start, int64_t end, con
 
 void ParquetWriter::close()
 {
-	flush_row_group();
+	// A file without rows still gets one, empty, row group, as pyarrow writes an empty table:
+	// pyarrow's ParquetFile.read() and iter_batches() fail on a file with no row groups.
+	if (!m_starts.empty() || m_meta.row_groups.empty())
+		flush_row_group();
 
 	string footer;
 	m_meta.encode(footer);
@@ -370,9 +374,6 @@ void ParquetWriter::close()
 
 void ParquetWriter::flush_row_group()
 {
-	if (m_starts.empty())
-		return;
-
 	RowGroup rg;
 	rg.num_rows = m_starts.size();
 	rg.file_offset = m_offset;
@@ -385,7 +386,7 @@ void ParquetWriter::flush_row_group()
 	chrom.meta_data.path_in_schema = { "chrom" };
 	chrom.meta_data.num_values = rg.num_rows;
 	write_dictionary_chunk(chrom.meta_data, plain((uint32_t)m_chrom.size()) + m_chrom, 1, vector<uint32_t>(m_starts.size(), 0));
-	chrom.meta_data.has_statistics = true;
+	chrom.meta_data.has_statistics = rg.num_rows > 0;
 	chrom.meta_data.statistics.min_value = chrom.meta_data.statistics.max_value = m_chrom;
 
 	write_coord_column(rg.columns[1], "start", m_starts);
@@ -408,18 +409,18 @@ void ParquetWriter::flush_row_group()
 
 void ParquetWriter::write_coord_column(ColumnChunk &cc, const string &name, const vector<int64_t> &coords)
 {
+	if (m_int64_coords)
+		write_fixed_column(cc, Type::INT64, name, coords);
+	else
+		write_fixed_column(cc, Type::INT32, name, vector<int32_t>(coords.begin(), coords.end()));
+
+	if (coords.empty())  // no min and max to write
+		return;
+
 	auto minmax = minmax_element(coords.begin(), coords.end());
 	Statistics &stats = cc.meta_data.statistics;
-
-	if (m_int64_coords) {
-		write_fixed_column(cc, Type::INT64, name, coords);
-		stats.min_value = plain(*minmax.first);
-		stats.max_value = plain(*minmax.second);
-	} else {
-		write_fixed_column(cc, Type::INT32, name, vector<int32_t>(coords.begin(), coords.end()));
-		stats.min_value = plain((int32_t)*minmax.first);
-		stats.max_value = plain((int32_t)*minmax.second);
-	}
+	stats.min_value = m_int64_coords ? plain(*minmax.first) : plain((int32_t)*minmax.first);
+	stats.max_value = m_int64_coords ? plain(*minmax.second) : plain((int32_t)*minmax.second);
 	cc.meta_data.has_statistics = true;
 }
 
