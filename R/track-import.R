@@ -1,32 +1,5 @@
 # Track import functions and helpers
 
-get_bigWigToWig_bin <- function(sysname = Sys.info()[["sysname"]]) {
-    bin <- getOption("misha.bigWigToWig", "")
-    if (nzchar(bin)) {
-        return(bin)
-    }
-
-    # ponytail: only a Linux x86-64 binary is bundled; elsewhere fall back to PATH
-    if (sysname == "Linux") {
-        dir <- tempdir()
-        utils::untar(system.file("bigWigToWig.tar.gz", package = "misha"), exdir = dir)
-        return(file.path(dir, "bigWigToWig"))
-    }
-
-    bin <- Sys.which("bigWigToWig")
-    if (!nzchar(bin)) {
-        stop(sprintf(paste0(
-            "The bigWigToWig executable bundled with misha is a Linux x86-64 binary and cannot run on %s.\n",
-            "Install UCSC's bigWigToWig for your platform, e.g.:\n",
-            "  conda install -c bioconda ucsc-bigwigtowig\n",
-            "  or download it from http://hgdownload.soe.ucsc.edu/admin/exe/\n",
-            "Then put it on PATH, or set options(misha.bigWigToWig = \"/path/to/bigWigToWig\")."
-        ), sysname), call. = FALSE)
-    }
-    bin
-}
-
-
 # Internal helpers for gtrack.import
 .gtrack_is_bed_path <- function(path) {
     grepl("\\.bed(\\.(gz|zip))?$", path, ignore.case = TRUE, perl = TRUE)
@@ -84,6 +57,9 @@ get_bigWigToWig_bin <- function(sysname = Sys.info()[["sysname"]]) {
 #'
 #' This function creates a track from WIG / BigWig / BedGraph / tab-delimited
 #' file. Zipped files are supported (file name must have '.gz' or '.zip' suffix).
+#'
+#' BigWig files are read directly at full resolution (zoom levels are not
+#' used). A truncated bigWig is an error.
 #'
 #' Tab-delimited files must start with a header line with the following column
 #' names (tab-separated): 'chrom', 'start', 'end', and exactly one value column
@@ -200,7 +176,7 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
     bed_parsed <- NULL
     used_bed <- FALSE
 
-    # File-preparation phase: unzip / BigWig conversion. tmp.dirname must
+    # File-preparation phase: unzip. tmp.dirname must
     # be cleaned regardless of whether track create succeeds.
     tryCatch(
         {
@@ -241,25 +217,6 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
                 report.progress <- TRUE
                 bed_parsed <- .gtrack_read_bed(file)
                 used_bed <- TRUE
-            } else if (length(grep("^.+\\.bw$", file, perl = TRUE)) || length(grep("^.+\\.bigWig$", file, perl = TRUE)) ||
-                # looks like all bigWig files start with "fc26" in their first two bytes
-                system(sprintf("od -x -N 2 %s", shQuote(file)), intern = TRUE)[1] == "0000000 fc26") {
-                message("Converting from BigWig to WIG...\n")
-                report.progress <- TRUE
-                if (tmp.dirname == "") {
-                    tmp.dirname <- tempfile()
-                    if (!.gwith_umask(dir.create(tmp.dirname, recursive = TRUE, mode = "0777"))) {
-                        stop(sprintf("Failed to create a directory %s", tmp.dirname), call. = FALSE)
-                    }
-                }
-
-                file.noext <- basename(gsub("^(.+)\\.(.+)$", "\\1", file, perl = TRUE))
-                file.converted <- paste(tmp.dirname, "/", file.noext, ".wig", sep = "")
-                retv <- system(paste(shQuote(get_bigWigToWig_bin()), shQuote(file), shQuote(file.converted)), intern = FALSE)
-                if (retv != 0) {
-                    stop("BigWigToWig conversion failed", call. = FALSE)
-                }
-                file <- file.converted
             }
 
             if (!used_bed && report.progress) {
@@ -287,7 +244,7 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
                         .gcall("gtrack_create_sparse", trackstr, bed_parsed$intervals, bed_parsed$values, .misha_env())
                     }
                 } else {
-                    # file may be a temporary unzipped / bigWig-converted copy that is
+                    # file may be a temporary unzipped copy that is
                     # deleted before this call returns; file.original is what the user
                     # asked for, and is what C++ names in its diagnostics.
                     .gcall("gtrackimportwig", trackstr, file, file.original, binsize, defval, .misha_env())

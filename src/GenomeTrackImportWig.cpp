@@ -6,6 +6,7 @@
 #include "rdbprogress.h"
 #include "rdbutils.h"
 
+#include "BigWig.h"
 #include "GenomeArraysCsv.h"
 #include "GenomeTrackFixedBin.h"
 #include "GenomeTrackSparse.h"
@@ -143,7 +144,7 @@ SEXP gtrackimportwig(SEXP _track, SEXP _wig, SEXP _srcname, SEXP _binsize, SEXP 
 
 		const char *track = CHAR(STRING_ELT(_track, 0));
 		const char *fname = CHAR(STRING_ELT(_wig, 0));
-		// What the user asked to import. gtrack.import unzips and converts bigWig into a
+		// What the user asked to import. gtrack.import unzips a .gz / .zip into a
 		// temporary file that is deleted before the call returns, so messages that name
 		// fname would point at a path that no longer exists (and, in gtrack.import_set,
 		// disagree with the file name reported as failed).
@@ -158,22 +159,28 @@ SEXP gtrackimportwig(SEXP _track, SEXP _wig, SEXP _srcname, SEXP _binsize, SEXP 
 		string dirname = create_track_dir(_envir, track);
 		IntervUtils iu(_envir);
 		Wig wig;
+		BigWig bigwig;
 		GenomeArraysCsv csv;
 		GIntervals data;
 		GIntervals::const_iterator iinterv_begin;
 		GIntervals::const_iterator iinterv_end;
 		vector<float> vals;
 		char filename[FILENAME_MAX];
+		bool is_bigwig = BigWig::is_bigwig(fname);
 		bool is_csv = false;
 		string wig_err_msg;
 
-		try {
-			wig.init(iu.get_chromkey(), fname, true);
-		} catch (TGLException &e) {
-			if (e.type() != typeid(Wig) || e.code() == Wig::FILE_ERROR)
-				throw e;
-			wig_err_msg = e.msg();
-			is_csv = true;
+		if (is_bigwig)
+			bigwig.init(iu.get_chromkey(), fname);
+		else {
+			try {
+				wig.init(iu.get_chromkey(), fname, true);
+			} catch (TGLException &e) {
+				if (e.type() != typeid(Wig) || e.code() == Wig::FILE_ERROR)
+					throw e;
+				wig_err_msg = e.msg();
+				is_csv = true;
+			}
 		}
 
 		if (is_csv) {
@@ -190,8 +197,10 @@ SEXP gtrackimportwig(SEXP _track, SEXP _wig, SEXP _srcname, SEXP _binsize, SEXP 
 
 		}
 
-		const UnknownChroms &unknown_chroms = is_csv ? csv.get_unknown_chroms() : wig.get_unknown_chroms();
-		uint64_t num_matched_chroms = is_csv ? csv.get_num_matched_chroms() : wig.get_num_matched_chroms();
+		const UnknownChroms &unknown_chroms = is_bigwig ? bigwig.get_unknown_chroms() :
+			is_csv ? csv.get_unknown_chroms() : wig.get_unknown_chroms();
+		uint64_t num_matched_chroms = is_bigwig ? bigwig.get_num_matched_chroms() :
+			is_csv ? csv.get_num_matched_chroms() : wig.get_num_matched_chroms();
 
 		verify_chroms_matched(iu.get_chromkey(), srcname, unknown_chroms, num_matched_chroms, _envir);
 
@@ -211,7 +220,10 @@ SEXP gtrackimportwig(SEXP _track, SEXP _wig, SEXP _srcname, SEXP _binsize, SEXP 
 				iinterv_begin = intervals.begin();
 				iinterv_end = intervals.end();
 			} else {
-				wig.get_data(chromid, data);
+				if (is_bigwig)
+					bigwig.get_data(chromid, data);
+				else
+					wig.get_data(chromid, data);
 				iinterv_begin = data.begin();
 				iinterv_end = data.end();
 			}
@@ -333,6 +345,8 @@ SEXP gtrackimportwig(SEXP _track, SEXP _wig, SEXP _srcname, SEXP _binsize, SEXP 
 		rerror("%s", e.msg());
     } catch (const bad_alloc &e) {
         rerror("Out of memory");
+    } catch (const std::exception &e) {
+        rerror("%s", e.what());
     }
 
 	return R_NilValue;
