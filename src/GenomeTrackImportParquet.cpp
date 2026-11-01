@@ -2,7 +2,8 @@
  * GenomeTrackImportParquet.cpp
  *
  * gtrack.import_parquet: the value columns of Parquet files as dense tracks, one track per
- * column, binned exactly as gtrackimportwig bins a tab-delimited file.
+ * column, binned exactly as gtrackimportwig bins a tab-delimited file. With multitasking on,
+ * the chromosomes and columns are split between forked kids.
  */
 
 #include <algorithm>
@@ -15,6 +16,7 @@
 #include "DataFrameUtils.h"
 #include "GenomeTrack.h"
 #include "GenomeTrackFixedBin.h"
+#include "GTrack2DImport.h"
 #include "Parquet.h"
 #include "UnknownChroms.h"
 #include "rdbinterval.h"
@@ -29,6 +31,9 @@ void verify_chroms_matched(const GenomeChromKey &chromkey, const char *fname, co
 void report_skipped_chroms(const char *fname, const UnknownChroms &unknown, uint64_t num_matched, SEXP envir);
 
 namespace {
+
+// A unit of work is a chromosome and a batch of at most this many columns
+const int MAX_UNIT_COLS = 16;
 
 // The value of one bin, as gtrackimportwig computes it: sum and covered_bases from the
 // non-NaN values that overlap the bin, the rest of the bin filled with defval unless it is NaN
@@ -403,17 +408,42 @@ SEXP gtrackimportparquet(SEXP _dirs, SEXP _files, SEXP _columns, SEXP _binsize, 
 		uint64_t num_matched = import.num_matched_chroms();
 		verify_chroms_matched(chromkey, srcname.c_str(), import.unknown(), num_matched, _envir);
 
-		vector<int> cols(columns.size());
-		iota(cols.begin(), cols.end(), 0);
+		// Units: each chromosome, largest first, times batches of columns of nearly equal size.
+		// Kid i takes units i, i + num_kids, ... A batch decodes the chromosome's coordinates
+		// again, so in one process all the columns are one batch.
+		int num_cols = columns.size();
+		int num_batches = (num_cols + MAX_UNIT_COLS - 1) / MAX_UNIT_COLS;
+		int num_kids = import_num_kids(iu, chromkey.get_num_chroms() * num_batches);
+		if (num_kids == 1)
+			num_batches = 1;
+		vector<int> chromids(chromkey.get_num_chroms());
+		vector<pair<int, vector<int>>> units;
 
-		Progress_reporter progress;
-		progress.init(chromkey.get_num_chroms(), 1);
-		for (int chromid = 0; chromid < (int)chromkey.get_num_chroms(); ++chromid) {
-			check_interrupt();
-			import.import_chrom(chromid, cols);
-			progress.report(1);
+		iota(chromids.begin(), chromids.end(), 0);
+		stable_sort(chromids.begin(), chromids.end(), [&](int a, int b) { return chromkey.get_chrom_size(a) > chromkey.get_chrom_size(b); });
+		for (int chromid : chromids) {
+			for (int batch = 0; batch < num_batches; ++batch) {
+				vector<int> cols(num_cols * (batch + 1) / num_batches - num_cols * batch / num_batches);
+				iota(cols.begin(), cols.end(), num_cols * batch / num_batches);
+				units.emplace_back(chromid, cols);
+			}
 		}
-		progress.report_last();
+
+		run_kids(iu, num_kids, [&](int kid) {
+			// a kid reads through file descriptors of its own
+			if (num_kids > 1)
+				import.open();
+
+			Progress_reporter progress;
+			progress.init((units.size() - kid + num_kids - 1) / num_kids, 1);
+			for (size_t u = kid; u < units.size(); u += num_kids) {
+				check_interrupt();
+				import.import_chrom(units[u].first, units[u].second);
+				progress.report(1);
+			}
+			progress.report_last();
+			return (char)0;
+		});
 
 		// Only now, when nothing can fail, is it safe to leave a pending message for .gcall()
 		report_skipped_chroms(srcname.c_str(), import.unknown(), num_matched, _envir);

@@ -354,3 +354,65 @@ test_that("attributes and indexed database", {
     expect_identical(track_values("ix_a"), expected_values("a"))
     expect_identical(track_values("ix_b"), expected_values("b"))
 })
+
+# Six chromosomes of 5000 bp, a dense track "src" binned at 50 bp, and 20 expressions of it
+# with their column names: with gmax.processes = 4 the import runs in kids, 6 x 2 units of work
+local_pq6_db <- function(env = parent.frame()) {
+    local_db_state(env)
+    tmp <- withr::local_tempdir(.local_envir = env)
+    db <- file.path(tmp, "pq6db")
+    create_test_db(db, data.frame(chrom = paste0("chr", 1:6), size = 5000))
+    gdb.init(db)
+    bins <- gintervals.all()
+    bins <- data.frame(chrom = rep(bins$chrom, each = 100), start = rep(seq(0, 4950, by = 50), 6))
+    bins$end <- bins$start + 50
+    gtrack.create_dense("src", "src", bins, sin(seq_len(nrow(bins))) * 100, 50)
+    db
+}
+
+pq6_exprs <- paste0("src * ", 1:20, " + ", 1:20)
+pq6_cols <- paste0("c", 1:20)
+
+test_that("parallel import equals serial import", {
+    db <- local_pq6_db()
+    pq_file <- file.path(withr::local_tempdir(), "x.parquet")
+    gextract(pq6_exprs, intervals = gintervals.all(), iterator = 50, colnames = pq6_cols, file = pq_file)
+
+    withr::with_options(list(gmultitasking = FALSE), gtrack.import_parquet("test", pq_file, 50, track.prefix = "ser_"))
+    t0 <- proc.time()
+    withr::with_options(list(gmultitasking = TRUE, gmax.processes = 4), gtrack.import_parquet("test", pq_file, 50, track.prefix = "par_"))
+    dt <- proc.time() - t0
+    expect_identical(.glifetime_counters(), c(ref_count = 0L, protect_count = 0L))
+
+    # kids were forked: their CPU time shows up once they are reaped
+    expect_gt(dt[["user.child"]] + dt[["sys.child"]], 0)
+    for (col in pq6_cols) {
+        ser <- gextract(paste0("ser_", col), gintervals.all(), iterator = 50, colnames = "v")
+        expect_identical(gextract(paste0("par_", col), gintervals.all(), iterator = 50, colnames = "v"), ser, info = col)
+    }
+    # and the values are those of the expressions, not NaN in both
+    expect_equal(
+        gextract("par_c3", gintervals.all(), iterator = 50)$par_c3,
+        gextract("src * 3 + 3", gintervals.all(), iterator = 50)[["src * 3 + 3"]],
+        tolerance = 1e-6
+    )
+})
+
+test_that("a kid error removes everything", {
+    db <- local_pq6_db()
+    src <- withr::local_tempdir()
+    gextract(pq6_exprs, intervals = gintervals.all(), iterator = 50, colnames = pq6_cols, file = file.path(src, "shard_1.parquet"))
+    # one row on chr5 again: the rows of chr5 overlap, the other chromosomes import fine
+    gextract(pq6_exprs, intervals = gintervals("chr5", 1000, 1050), iterator = 50, colnames = pq6_cols, file = file.path(src, "shard_2.parquet"))
+
+    withr::with_options(list(gmultitasking = TRUE, gmax.processes = 4), {
+        expect_error(
+            gtrack.import_parquet("test", file.path(src, "shard_*.parquet"), 50, track.prefix = "k_"),
+            "shard_1.parquet, row group 4 and file .*shard_2.parquet, row group 0: rows overlap"
+        )
+    })
+    expect_identical(.glifetime_counters(), c(ref_count = 0L, protect_count = 0L))
+    expect_identical(gtrack.ls(), "src")
+    expect_false(any(dir.exists(file.path(db, "tracks", paste0("k_", pq6_cols, ".track")))))
+    expect_length(staging_leftovers(db), 0)
+})
