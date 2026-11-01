@@ -1,7 +1,8 @@
 /*
  * Parquet.h
  *
- * Parquet files without a Parquet library: the file metadata structs and ParquetWriter.
+ * Parquet files without a Parquet library: the file metadata structs, ParquetWriter and
+ * ParquetReader.
  */
 
 #ifndef PARQUET_H_
@@ -15,8 +16,13 @@ using namespace std;
 
 // The file metadata of parquet.thrift (apache/parquet-format, src/main/thrift/parquet.thrift).
 // Enum values and the field ids in Parquet.cpp are copied from that file. Each struct carries
-// the fields misha writes; encode() appends the struct in the Thrift compact protocol.
+// the fields misha writes and the ones a reader needs; encode() appends the struct in the Thrift
+// compact protocol, decode() reads it back (resetting absent fields to their defaults and
+// skipping fields it does not know). decode() followed by encode() reproduces what encode()
+// wrote.
 namespace parquet {
+
+struct ThriftIn;  // a Thrift compact protocol reader, in Parquet.cpp
 
 struct Type { enum type { BOOLEAN = 0, INT32 = 1, INT64 = 2, INT96 = 3, FLOAT = 4, DOUBLE = 5, BYTE_ARRAY = 6, FIXED_LEN_BYTE_ARRAY = 7 }; };
 struct ConvertedType { enum type { UTF8 = 0 }; };
@@ -32,6 +38,7 @@ struct Statistics {
 	string  min_value;
 
 	void encode(string &out) const;
+	void decode(ThriftIn &in);
 };
 
 struct SchemaElement {
@@ -43,6 +50,7 @@ struct SchemaElement {
 	bool    logical_type_string = false; // LogicalType STRING
 
 	void encode(string &out) const;
+	void decode(ThriftIn &in);
 };
 
 struct DataPageHeader {
@@ -52,6 +60,7 @@ struct DataPageHeader {
 	int     repetition_level_encoding = Encoding::RLE;
 
 	void encode(string &out) const;
+	void decode(ThriftIn &in);
 };
 
 struct DictionaryPageHeader {
@@ -59,6 +68,20 @@ struct DictionaryPageHeader {
 	int     encoding = Encoding::PLAIN;
 
 	void encode(string &out) const;
+	void decode(ThriftIn &in);
+};
+
+// Only read: misha writes data page v1
+struct DataPageHeaderV2 {
+	int32_t num_values = 0;
+	int32_t num_nulls = 0;
+	int32_t num_rows = 0;
+	int     encoding = Encoding::PLAIN;
+	int32_t definition_levels_byte_length = 0;
+	int32_t repetition_levels_byte_length = 0;
+	bool    is_compressed = true;
+
+	void decode(ThriftIn &in);
 };
 
 struct PageHeader {
@@ -67,8 +90,10 @@ struct PageHeader {
 	int32_t              compressed_page_size = 0;
 	DataPageHeader       data_page_header;        // written for a DATA_PAGE
 	DictionaryPageHeader dictionary_page_header;  // written for a DICTIONARY_PAGE
+	DataPageHeaderV2     data_page_header_v2;     // read only
 
 	void encode(string &out) const;
+	void decode(ThriftIn &in);
 };
 
 struct ColumnMetaData {
@@ -85,13 +110,16 @@ struct ColumnMetaData {
 	Statistics     statistics;
 
 	void encode(string &out) const;
+	void decode(ThriftIn &in);
 };
 
 struct ColumnChunk {
+	string         file_path;  // read only: the chunk is in another file
 	int64_t        file_offset = 0;
 	ColumnMetaData meta_data;
 
 	void encode(string &out) const;
+	void decode(ThriftIn &in);
 };
 
 struct RowGroup {
@@ -102,6 +130,7 @@ struct RowGroup {
 	int64_t             total_compressed_size = 0;
 
 	void encode(string &out) const;
+	void decode(ThriftIn &in);
 };
 
 // encode() also writes column_orders: TYPE_ORDER for every leaf column, which is what tells
@@ -114,6 +143,7 @@ struct FileMetaData {
 	string                created_by;
 
 	void encode(string &out) const;
+	void decode(ThriftIn &in);
 };
 
 }
@@ -156,6 +186,53 @@ private:
 	void write_dictionary_chunk(parquet::ColumnMetaData &md, const string &dict, uint32_t dict_size, const vector<uint32_t> &indices);
 	void write_page(parquet::PageHeader &header, const string &payload);
 	void write(const string &bytes);
+};
+
+struct ParquetColumn {
+	string name;
+	int    physical_type;  // parquet::Type; -1 if the schema has none
+	bool   optional;
+};
+
+// Reads the columns of a Parquet file with a flat schema (a root group of leaf columns) with
+// pread() only, so that forked processes can share nothing but the file name. Columns are
+// decoded one column chunk (row group x column) at a time, and only when asked for: an
+// unsupported type, encoding or codec is reported when that column is read, in an error that
+// names the file, the row group and the column.
+// Supported: INT32, INT64, FLOAT, DOUBLE, BYTE_ARRAY; PLAIN, PLAIN_DICTIONARY, RLE_DICTIONARY,
+// BYTE_STREAM_SPLIT (values), RLE (levels); data pages v1 and v2; UNCOMPRESSED, SNAPPY, GZIP.
+class ParquetReader {
+public:
+	enum Errors { FILE_ERROR, FORMAT_ERROR, UNSUPPORTED };
+
+	ParquetReader() = default;
+	ParquetReader(const ParquetReader &) = delete;  // owns the file descriptor
+	ParquetReader &operator=(const ParquetReader &) = delete;
+	~ParquetReader();
+
+	void open(const string &filename);
+
+	const vector<ParquetColumn> &columns() const { return m_columns; }
+	int column_index(const string &name) const;  // -1 if absent
+	int num_row_groups() const { return (int)m_meta.row_groups.size(); }
+	int64_t num_rows(int row_group) const { return m_meta.row_groups[row_group].num_rows; }
+	const parquet::FileMetaData &metadata() const { return m_meta; }
+
+	// One value per row of the row group
+	void read_doubles(int row_group, int col, vector<double> &out);   // INT32/INT64/FLOAT/DOUBLE, null -> NaN
+	void read_int64s(int row_group, int col, vector<int64_t> &out);   // INT32/INT64, null is an error
+	void read_strings(int row_group, int col, vector<string> &out);   // BYTE_ARRAY, null is an error
+
+private:
+	int                   m_fd = -1;
+	string                m_filename;
+	uint64_t              m_size = 0;
+	parquet::FileMetaData m_meta;
+	vector<ParquetColumn> m_columns;
+
+	template <typename T, typename O> void read_as(int row_group, int col, vector<O> &out, const O *null_value);
+	template <typename T> void read_chunk(int row_group, int col, vector<T> &vals, vector<uint8_t> &defs);
+	void pread_exact(void *buf, uint64_t size, uint64_t offset);
 };
 
 #endif /* PARQUET_H_ */

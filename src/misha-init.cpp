@@ -88,6 +88,8 @@ extern "C" {
     extern SEXP gtrack_import_contacts(SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gtrackimport_mappedseq(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gtrackimportwig(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP gtrackimportparquet(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP parquet_columns(SEXP, SEXP);
     extern SEXP gtrackinfo(SEXP, SEXP, SEXP);
     extern SEXP gtrack_intervals_load(SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gchrom_files(SEXP, SEXP, SEXP);
@@ -210,6 +212,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"gtrack_import_contacts", (DL_FUNC)&gtrack_import_contacts, 5},
     {"gtrackimport_mappedseq", (DL_FUNC)&gtrackimport_mappedseq, 11},
     {"gtrackimportwig", (DL_FUNC)&gtrackimportwig, 6},
+    {"gtrackimportparquet", (DL_FUNC)&gtrackimportparquet, 6},
+    {"parquet_columns", (DL_FUNC)&parquet_columns, 2},
     {"gtrackinfo", (DL_FUNC)&gtrackinfo, 3},
     {"gtrack_intervals_load", (DL_FUNC)&gtrack_intervals_load, 5},
     {"gchrom_files", (DL_FUNC)&gchrom_files, 3},
