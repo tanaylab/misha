@@ -13,6 +13,7 @@
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <strings.h>
 #include <thread>
 #include <vector>
 
@@ -21,6 +22,7 @@
 #include "GenomeTrack.h"
 #include "GIntervalsBigSet1D.h"
 #include "GIntervalsBigSet2D.h"
+#include "Parquet.h"
 #include "TrackExpressionScanner.h"
 #include "TrackExpressionFixedBinIterator.h"
 #include "TrackExpressionFixedRectIterator.h"
@@ -517,6 +519,63 @@ static SEXP transform_intervals_join(SEXP answer, SEXP _intervals,
 	return out;
 }
 
+static bool is_parquet_file(const char *filename)
+{
+	size_t len = strlen(filename);
+	return len >= 8 && !strcasecmp(filename + len - 8, ".parquet");
+}
+
+// Writes the scan to a Parquet file. The rows go to a temporary file in the target's directory,
+// renamed onto the target once complete, so an error or an interrupt leaves the target as it was.
+static void write_parquet(TrackExprScanner &scanner, IntervUtils &iu, const char *filename, SEXP _exprs, SEXP _colnames,
+						  GIntervalsFetcher1D *intervals1d, GIntervalsFetcher2D *intervals2d, SEXP _iterator_policy, SEXP _band)
+{
+	scanner.begin(_exprs, intervals1d, intervals2d, _iterator_policy, _band);
+	if (!scanner.get_iterator()->is_1d())
+		verror("Parquet output does not support 2D iterators");
+
+	unsigned num_exprs = (unsigned)Rf_length(_exprs);
+	vector<string> names;
+	for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr)
+		names.push_back(CHAR(STRING_ELT(Rf_isNull(_colnames) ? _exprs : _colnames, iexpr)));
+
+	// start and end are INT64 only if a chromosome of the scope does not fit in INT32
+	const GenomeChromKey &chromkey = iu.get_chromkey();
+	bool int64_coords = false;
+	for (int chromid = 0; chromid < (int)chromkey.get_num_chroms(); ++chromid) {
+		if (intervals1d->size(chromid) && chromkey.get_chrom_size(chromid) > (uint64_t)numeric_limits<int32_t>::max())
+			int64_coords = true;
+	}
+
+	string target(filename);
+	size_t slash = target.rfind('/');
+	string dir = slash == string::npos ? "" : target.substr(0, slash + 1);
+	string base = slash == string::npos ? target : target.substr(slash + 1);
+
+	// declared before the writer, so the writer closes the file before it is removed
+	struct TmpFile {
+		string path;
+		~TmpFile() { if (!path.empty()) unlink(path.c_str()); }
+	} tmp { dir + "." + base + ".tmp." + to_string(getpid()) };
+
+	ParquetWriter writer;
+	vector<double> values(num_exprs);
+
+	writer.open(tmp.path, names, int64_coords);
+	for (; !scanner.isend(); scanner.next()) {
+		const GInterval &interval = scanner.last_interval1d();
+		for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr)
+			values[iexpr] = scanner.last_real(iexpr);
+		writer.add_row(iu.id2chrom(interval.chromid), interval.start, interval.end, values.data());
+		check_interrupt();
+	}
+	writer.close();
+
+	if (rename(tmp.path.c_str(), filename))
+		verror("Failed to rename %s to %s: %s", tmp.path.c_str(), filename, strerror(errno));
+	tmp.path.clear();
+}
+
 
 extern "C" {
 
@@ -567,6 +626,11 @@ SEXP C_gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_pol
 		intervals2d->verify_no_overlaps(iu.get_chromkey());
 
 		TrackExprScanner scanner(iu);
+
+		if (filename && is_parquet_file(filename)) {
+			write_parquet(scanner, iu, filename, _exprs, _colnames, intervals1d, intervals2d, _iterator_policy, _band);
+			return R_NilValue;
+		}
 
 		if (filename) {
 			ofstream outfile;
@@ -1168,6 +1232,11 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 		}
 
 		const char *filename = Rf_isNull(_file) ? NULL : CHAR(STRING_ELT(_file, 0));
+
+		// Parquet output is written serially, by C_gextract
+		if (filename && is_parquet_file(filename))
+			throw rdb::SingleShard();
+
 		unsigned num_exprs = (unsigned)Rf_length(_exprs);
 		uint64_t num_intervals;
 		GIntervals out_intervals1d;

@@ -28,8 +28,9 @@ implicitly based on track expressions.}
 
 \item{band}{track expression band. If 'NULL' no band is used.}
 
-\item{file}{file name where the function result is optionally outputted in
-tab-delimited format}
+\item{file}{file name where the function result is optionally outputted:
+Parquet if the name ends in '.parquet' (chrom, start, end and one float32
+column per expression), tab-delimited otherwise}
 
 \item{intervals.set.out}{intervals set name where the function result is
 optionally outputted}
@@ -72,6 +73,17 @@ text file (without 'intervalID' column) rather than returned to the user.
 This can be especially useful when the result is too big to fit into the
 physical memory.  The resulted file can be used as an input for
 'gtrack.import' or 'gtrack.array.import' functions.
+
+A 'file' name ending in '.parquet' (in any case) writes a Parquet file
+instead: columns 'chrom', 'start' and 'end', then one float32 column per
+track expression, named as in the text file. 'start' and 'end' are 32-bit
+integers unless a chromosome of the scope is 2^31 bp or longer. NaN values
+are written as NaN, not as missing values. Only 1D iterators are supported,
+and the column names must be unique and other than 'chrom', 'start' and
+'end'. The file is written under a temporary name in the same directory and
+renamed when complete, so an error or an interrupt leaves an existing file
+as it was. With a numeric 'iterator' the file is a table of dense bins
+that pyarrow reads directly.
 
 If 'intervals.set.out' is not 'NULL' the result is saved as an intervals
 set. Similarly to 'file' parameter 'intervals.set.out' can be useful to
