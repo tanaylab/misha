@@ -708,7 +708,9 @@ gtrack.import_set <- function(description = NULL, path = NULL, binsize = NULL, t
 #' error.
 #'
 #' The track of column 'col' is named '[track.prefix]col'. All the track
-#' names are checked before anything is written; existing tracks are not
+#' names are checked before anything is written: a name must start with a
+#' letter and hold only letters, digits, '_' and '.' (columns are never
+#' renamed; leave such a column out with 'columns'). Existing tracks are not
 #' overwritten and no directories are created.
 #'
 #' Values are binned as \code{\link{gtrack.import}} bins the same rows read
@@ -808,6 +810,14 @@ gtrack.import_parquet <- function(description, path, binsize, track.prefix = NUL
     }
 
     tracks <- paste0(track.prefix, columns)
+    # the rule gintervals.save applies to interval set names; dots are directories
+    bad <- !grepl("^[A-Za-z][\\w.]*$", tracks, perl = TRUE)
+    if (any(bad)) {
+        stop(sprintf(
+            "Column(s) %s do not make valid track names with track.prefix \"%s\" (a letter, then letters, digits, _ or .). Leave them out with 'columns =' or rename them in the file.",
+            paste0("\"", columns[bad], "\"", collapse = ", "), track.prefix
+        ), call. = FALSE)
+    }
     for (track in tracks) {
         .gconfirmtrackcreate(track)
     }

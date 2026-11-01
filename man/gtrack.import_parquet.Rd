@@ -47,7 +47,9 @@ created tracks. With 'columns = NULL' every column other than 'chrom',
 error.
 
 The track of column 'col' is named '[track.prefix]col'. All the track
-names are checked before anything is written; existing tracks are not
+names are checked before anything is written: a name must start with a
+letter and hold only letters, digits, '_' and '.' (columns are never
+renamed; leave such a column out with 'columns'). Existing tracks are not
 overwritten and no directories are created.
 
 Values are binned as \code{\link{gtrack.import}} bins the same rows read

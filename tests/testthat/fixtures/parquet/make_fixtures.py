@@ -95,6 +95,11 @@ write("with_name.parquet", with_name)
 
 write("single.parquet", frame(rows, ("chrom", "start", "end", "a")))
 
+# a column whose name is not a valid track name
+bad_name = df.copy()
+bad_name["x * 2"] = df["b"] * 2
+write("bad_name.parquet", bad_name)
+
 
 # plain_uncompressed.parquet with fields of every Thrift compact type that parquet.thrift does
 # not have (ids 100 and up, as a newer writer might add) at the start of FileMetaData, before the

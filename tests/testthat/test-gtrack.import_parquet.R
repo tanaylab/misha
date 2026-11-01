@@ -171,6 +171,24 @@ test_that("existing or invalid track names error before anything is written", {
     expect_length(staging_leftovers(db), 0)
 })
 
+test_that("a column that is not a valid track name is an error, never renamed", {
+    db <- local_pq_db()
+    # refused before anything is written: track2path() would also refuse the name, but only
+    # once the tracks have been imported, with no word about 'columns'
+    msg <- tryCatch(
+        gtrack.import_parquet("test", pq_fixture("bad_name.parquet"), 32, track.prefix = "bn_"),
+        error = function(e) conditionMessage(e)
+    )
+    expect_match(msg, "\"x * 2\"", fixed = TRUE)
+    expect_match(msg, "columns =", fixed = TRUE)
+    expect_length(gtrack.ls(), 0)
+    expect_length(staging_leftovers(db), 0)
+
+    created <- gtrack.import_parquet("test", pq_fixture("bad_name.parquet"), 32, track.prefix = "bn_", columns = c("a", "b"))
+    expect_identical(created, c("bn_a", "bn_b"))
+    expect_identical(track_values("bn_b"), expected_values("b"))
+})
+
 test_that("all or nothing when the second file fails", {
     db <- local_pq_db()
     src <- withr::local_tempdir()
