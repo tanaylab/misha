@@ -208,6 +208,8 @@ test_that("an empty result is one empty row group, as pyarrow writes an empty ta
 test_that("row groups split at the cap and at chromosome changes", {
     skip_without_pyarrow()
     local_pq_db(c(chr1 = 1100000, chr2 = 1000))
+    # one writer: kids would cut chr1 into shards of their own
+    withr::local_options(gmultitasking = FALSE)
     intervs <- rbind(bins_of("chr1", 1100000, 1), bins_of("chr2", 1000, 1))
     gtrack.create_dense("pos", "pos", intervs, intervs$start, 1)
     f <- file.path(withr::local_tempdir(), "x.parquet")
@@ -271,9 +273,9 @@ test_that("errors leave no file behind", {
     f <- file.path(dir, "x.parquet")
 
     # (a) duplicate column names, (b) a value column named like a coordinate column
-    expect_error(gextract("pq", "pq * 2", intervals = gintervals.all(), iterator = 32, colnames = c("v", "v"), file = f), "v")
+    expect_error(gextract("pq", "pq * 2", intervals = gintervals.all(), iterator = 32, colnames = c("v", "v"), file = f), "two columns named \"v\"")
     expect_false(file.exists(f))
-    expect_error(gextract("pq", intervals = gintervals.all(), iterator = 32, colnames = "start", file = f), "start")
+    expect_error(gextract("pq", intervals = gintervals.all(), iterator = 32, colnames = "start", file = f), "value column named \"start\"")
     expect_false(file.exists(f))
 
     # (c) an error in the middle of the scan: chr2's pq values are 1000.25, 1001.25, ..., so

@@ -401,9 +401,12 @@ test_that("parallel import equals serial import", {
 test_that("a kid error removes everything", {
     db <- local_pq6_db()
     src <- withr::local_tempdir()
-    gextract(pq6_exprs, intervals = gintervals.all(), iterator = 50, colnames = pq6_cols, file = file.path(src, "shard_1.parquet"))
-    # one row on chr5 again: the rows of chr5 overlap, the other chromosomes import fine
-    gextract(pq6_exprs, intervals = gintervals("chr5", 1000, 1050), iterator = 50, colnames = pq6_cols, file = file.path(src, "shard_2.parquet"))
+    # written by one process, so that shard_1.parquet has one row group per chromosome
+    withr::with_options(list(gmultitasking = FALSE), {
+        gextract(pq6_exprs, intervals = gintervals.all(), iterator = 50, colnames = pq6_cols, file = file.path(src, "shard_1.parquet"))
+        # one row on chr5 again: the rows of chr5 overlap, the other chromosomes import fine
+        gextract(pq6_exprs, intervals = gintervals("chr5", 1000, 1050), iterator = 50, colnames = pq6_cols, file = file.path(src, "shard_2.parquet"))
+    })
 
     withr::with_options(list(gmultitasking = TRUE, gmax.processes = 4), {
         expect_error(
