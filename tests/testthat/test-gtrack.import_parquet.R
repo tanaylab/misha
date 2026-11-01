@@ -22,8 +22,8 @@ bin_k <- c(0:31, 0:18)
 bin_chrom_index <- rep(0:1, c(32, 19))
 
 # The fixtures' closed form: a = k + 0.25, b = chrom_index * 1000 + k (k = start / 32)
-expected_values <- function(col) {
-    if (col == "a") bin_k + 0.25 else as.numeric(as.single(bin_chrom_index * 1000 + bin_k))
+expected_values <- function(value_col) {
+    if (value_col == "a") bin_k + 0.25 else as.numeric(as.single(bin_chrom_index * 1000 + bin_k))
 }
 
 track_values <- function(track) {
@@ -32,8 +32,25 @@ track_values <- function(track) {
 
 # Hidden staging dirs left in the tracks dir (.trash.* entries are being removed already)
 staging_leftovers <- function(db) {
-    files <- list.files(file.path(db, "tracks"), all.files = TRUE, no.. = TRUE)
-    files[grepl("\\.tmp\\.", files) & !grepl("^\\.trash\\.", files)]
+    entries <- list.files(file.path(db, "tracks"), all.files = TRUE, no.. = TRUE)
+    entries[grepl("\\.tmp\\.", entries) & !grepl("^\\.trash\\.", entries)]
+}
+
+# Nothing of tracks is left: not listed, not in GTRACKS, no track dir, no staging dir
+expect_no_tracks_left <- function(db, tracks) {
+    expect_length(gtrack.ls(), 0)
+    expect_false(any(tracks %in% get("GTRACKS", envir = .misha)))
+    expect_false(any(dir.exists(file.path(db, "tracks", paste0(tracks, ".track")))))
+    expect_length(staging_leftovers(db), 0)
+}
+
+# Copies fixtures (a list of new name = fixture) into a fresh directory; returns the directory
+local_fixture_dir <- function(fixtures, env = parent.frame()) {
+    src <- withr::local_tempdir(.local_envir = env)
+    for (i in seq_along(fixtures)) {
+        file.copy(pq_fixture(fixtures[[i]]), file.path(src, names(fixtures)[i]))
+    }
+    src
 }
 
 test_that("imports every fixture with exact values", {
@@ -46,8 +63,8 @@ test_that("imports every fixture with exact values", {
         prefix <- paste0("t_", gsub("*", "", fx, fixed = TRUE), "_")
         created <- gtrack.import_parquet("test", pq_fixture(paste0(fx, ".parquet")), 32, track.prefix = prefix)
         expect_identical(created, paste0(prefix, c("a", "b")), info = fx)
-        for (col in c("a", "b")) {
-            expect_identical(track_values(paste0(prefix, col)), expected_values(col), info = paste(fx, col))
+        for (value_col in c("a", "b")) {
+            expect_identical(track_values(paste0(prefix, value_col)), expected_values(value_col), info = paste(fx, value_col))
         }
     }
 })
@@ -142,6 +159,65 @@ test_that("unsupported files error and create nothing", {
     expect_error(gtrack.import_parquet("test", pq_fixture("no_such_*.parquet"), 32), "No files")
 })
 
+test_that("arguments are checked before anything is read", {
+    db <- local_pq_db()
+    pq_path <- pq_fixture("pandas_default.parquet")
+    expect_error(gtrack.import_parquet("test", c(pq_path, pq_path), 32), "path must be a single string")
+    for (binsize in list(Inf, NaN, NA, -32, 1.5, 2^32, "32", c(32, 64))) {
+        expect_error(gtrack.import_parquet("test", pq_path, binsize), "binsize must be a positive integer", info = format(binsize))
+    }
+    expect_error(gtrack.import_parquet("test", pq_path, 32, defval = "x"), "defval must be a number")
+    expect_no_tracks_left(db, c("a", "b"))
+})
+
+test_that("integer annotations are honoured; decimals, dates and timestamps are refused", {
+    db <- local_pq_db()
+    pq_path <- pq_fixture("annotated.parquet")
+    info <- .gcall("parquet_columns", pq_path, .misha_env())
+    expect_identical(
+        setNames(info$type, info$name),
+        c(
+            chrom = "string", start = "int64", end = "int64", u32 = "int32", u64 = "int64", i8 = "int32",
+            dec = "other", ts = "other", d = "other"
+        )
+    )
+
+    # columns = NULL: the decimal, timestamp and date columns are not numbers
+    expect_error(gtrack.import_parquet("test", pq_path, 32, track.prefix = "an_"), "dec, ts, d .*columns")
+    expect_no_tracks_left(db, paste0("an_", c("u32", "u64", "i8")))
+
+    # unsigned values past the signed range; k = start / 32
+    created <- gtrack.import_parquet("test", pq_path, 32, track.prefix = "an_", columns = c("u32", "u64", "i8"))
+    expect_identical(created, c("an_u32", "an_u64", "an_i8"))
+    expect_identical(track_values("an_u32"), 3e9 + bin_k * 256)
+    expect_identical(track_values("an_u64"), 2^63 + bin_k * 2^40)
+    expect_identical(track_values("an_i8"), -as.numeric(bin_k))
+
+    for (value_col in c("dec", "ts", "d")) {
+        expect_error(
+            gtrack.import_parquet("test", pq_path, 32, track.prefix = "bad_", columns = value_col),
+            c(dec = "DECIMAL", ts = "TIMESTAMP", d = "DATE")[[value_col]],
+            info = value_col
+        )
+        expect_false(gtrack.exists(paste0("bad_", value_col)))
+    }
+    expect_length(staging_leftovers(db), 0)
+})
+
+test_that("all files must have the same value columns", {
+    db <- local_pq_db()
+    src <- local_fixture_dir(list(shard_1.parquet = "shard_chr1.parquet", shard_2.parquet = "extra_column.parquet"))
+    expect_error(
+        gtrack.import_parquet("test", file.path(src, "shard_*.parquet"), 32, track.prefix = "x_"),
+        "shard_2.parquet has value columns a, b, c"
+    )
+    expect_error(
+        gtrack.import_parquet("test", file.path(src, "shard_*.parquet"), 32, track.prefix = "x_", columns = c("a", "b")),
+        "shard_2.parquet has value columns a, b, c"
+    )
+    expect_no_tracks_left(db, c("x_a", "x_b", "x_c"))
+})
+
 test_that("error messages name the file and the row group", {
     db <- local_pq_db()
     expect_error(
@@ -191,20 +267,48 @@ test_that("a column that is not a valid track name is an error, never renamed", 
 
 test_that("all or nothing when the second file fails", {
     db <- local_pq_db()
-    src <- withr::local_tempdir()
-    file.copy(pq_fixture("shard_chr1.parquet"), src)
-    bytes <- readBin(pq_fixture("shard_chr2.parquet"), "raw", 1e6)
-    writeBin(bytes[seq_len(length(bytes) %/% 2)], file.path(src, "shard_chr2.parquet"))
 
-    expect_error(gtrack.import_parquet("test", file.path(src, "shard_chr*.parquet"), 32))
-    expect_length(gtrack.ls(), 0)
-    expect_length(staging_leftovers(db), 0)
+    # a truncated file: refused before anything is staged
+    src <- local_fixture_dir(list(shard_1.parquet = "shard_chr1.parquet"))
+    pq_bytes <- readBin(pq_fixture("shard_chr2.parquet"), "raw", 1e6)
+    writeBin(pq_bytes[seq_len(length(pq_bytes) %/% 2)], file.path(src, "shard_2.parquet"))
+    expect_error(gtrack.import_parquet("test", file.path(src, "shard_*.parquet"), 32, track.prefix = "x_"), "is not a Parquet file, or is truncated")
+    expect_no_tracks_left(db, c("x_a", "x_b"))
+
+    # a corrupt page in the second file: fails inside the import, after chr1 was written
+    src <- local_fixture_dir(list(shard_1.parquet = "shard_chr1.parquet", shard_2.parquet = "corrupt_page.parquet"))
+    expect_error(gtrack.import_parquet("test", file.path(src, "shard_*.parquet"), 32, track.prefix = "x_"), "shard_2.parquet, row group 0, column a: corrupt")
+    expect_no_tracks_left(db, c("x_a", "x_b"))
+})
+
+test_that("all or nothing when a track fails after it was renamed into place", {
+    db <- local_pq_db()
+    set_attrs <- .gtrack_set_created_attrs
+    local_mocked_bindings(.gtrack_set_created_attrs = function(trackstr, ...) {
+        if (trackstr == "x_b") stop("mocked attribute failure")
+        set_attrs(trackstr, ...)
+    })
+    expect_error(gtrack.import_parquet("test", pq_fixture("pandas_default.parquet"), 32, track.prefix = "x_"), "mocked attribute failure")
+    expect_no_tracks_left(db, c("x_a", "x_b"))
+})
+
+test_that("a track the cleanup cannot remove is reported", {
+    db <- local_pq_db()
+    local_mocked_bindings(
+        .gtrack_set_created_attrs = function(...) stop("mocked attribute failure"),
+        .gdb.trash = function(...) FALSE
+    )
+    expect_warning(
+        expect_error(gtrack.import_parquet("test", pq_fixture("pandas_default.parquet"), 32, track.prefix = "x_", columns = "a"), "mocked attribute failure"),
+        "post-create cleanup left residue"
+    )
 })
 
 test_that("binning equals gtrack.import of the same rows", {
     db <- local_pq_db()
 
-    # rows that are not bins (the general path)
+    # rows that are not bins (the general path), with a gap, a NaN value and short rows, so
+    # that some bins are only partly covered
     for (defval in c(NaN, 0.1)) {
         prefix <- if (is.nan(defval)) "un_" else "und_"
         gtrack.import_parquet("test", pq_fixture("unaligned.parquet"), 32, track.prefix = prefix, defval = defval)

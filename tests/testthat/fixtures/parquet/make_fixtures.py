@@ -4,6 +4,8 @@
 # Common data: chr1 (1000 bp) and chr2 (600 bp) in 32 bp bins, the last bin of each short.
 # a (float32) = k + 0.25 and b (float64) = chrom_index * 1000 + k, where k = start / 32.
 
+import datetime
+import decimal
 import os
 
 import pandas as pd
@@ -67,6 +69,19 @@ write("byte_stream_split.parquet", df, use_dictionary=False, use_byte_stream_spl
 # per-chromosome shards, the value columns in a different order
 write("shard_chr1.parquet", frame([r for r in rows if r[0] == "chr1"]))
 write("shard_chr2.parquet", frame([r for r in rows if r[0] == "chr2"], ("chrom", "start", "end", "b", "a")))
+# chr2 rows with a value column the chr1 shard does not have
+extra = frame([r for r in rows if r[0] == "chr2"])
+extra["c"] = extra["b"]
+write("extra_column.parquet", extra)
+
+# shard_chr2 with the first page of column a overwritten: the footer and the chrom column are
+# intact, so the file opens and the error comes from inside the import
+data = bytearray(open(path("shard_chr2.parquet"), "rb").read())
+col_a = pq.ParquetFile(path("shard_chr2.parquet")).metadata.row_group(0).column(4)
+assert col_a.path_in_schema == "a"
+first_page = col_a.dictionary_page_offset or col_a.data_page_offset
+data[first_page:first_page + 8] = b"\xff" * 8
+open(path("corrupt_page.parquet"), "wb").write(bytes(data))
 
 write("alias.parquet", frame([(r[0][3:],) + r[1:] for r in rows]))
 write("unknown_chrom.parquet", frame([r for r in rows if r[0] == "chr1"] + [("scaffold_9", s, s + 10, 1.0, 2.0) for s in (0, 10, 20)]))
@@ -79,21 +94,44 @@ write("overlap.parquet", frame(rows[:4] + rows[3:]))
 # the last chr2 row ends at 640, past the end of chr2
 write("beyond_end.parquet", frame(rows[:-1] + [rows[-1][:2] + (640,) + rows[-1][3:]]))
 
-# chr1 in 50 bp intervals, value k + 0.5: not aligned to 32 bp bins
-unaligned = pd.DataFrame({
-    "chrom": "chr1",
-    "start": pd.Series(range(0, 1000, 50), dtype="int64"),
-    "end": pd.Series(range(50, 1050, 50), dtype="int64"),
-    "value": [k + 0.5 for k in range(20)],
+# Rows not aligned to 32 bp bins: chr1 in 50 bp intervals with value k + 0.5, except that
+# [250, 300) is missing (a gap) and [500, 550) holds NaN (a value, not a null); chr2 has two
+# short rows. So some bins are only partly covered.
+unaligned_rows = [("chr1", s, s + 50, s / 50 + 0.5) for s in range(0, 1000, 50) if s != 250]
+unaligned_rows = [r if r[1] != 500 else r[:3] + (float("nan"),) for r in unaligned_rows]
+unaligned_rows += [("chr2", 10, 20, 7.5), ("chr2", 100, 130, -2.25)]
+unaligned = pa.table({
+    "chrom": pa.array([r[0] for r in unaligned_rows]),
+    "start": pa.array([r[1] for r in unaligned_rows], pa.int64()),
+    "end": pa.array([r[2] for r in unaligned_rows], pa.int64()),
+    "value": pa.array([r[3] for r in unaligned_rows], pa.float64()),
 })
-pq.write_table(table(unaligned), path("unaligned.parquet"))
-unaligned.to_csv(path("unaligned.tsv"), sep="\t", index=False)
+assert unaligned.column("value").null_count == 0
+pq.write_table(unaligned, path("unaligned.parquet"))
+unaligned.to_pandas().to_csv(path("unaligned.tsv"), sep="\t", index=False, na_rep="NaN")
 
 with_name = df.copy()
 with_name["name"] = ["r%d" % i for i in range(len(df))]
 write("with_name.parquet", with_name)
 
 write("single.parquet", frame(rows, ("chrom", "start", "end", "a")))
+
+# Physical number types whose converted / logical type changes their meaning. u32 (INT32,
+# UINT_32) and u64 (INT64, UINT_64) hold values past the signed range; i8 is INT32 with INT_8;
+# dec is DECIMAL(5, 2) stored as INT32 (k + 0.25 is stored as 100 * k + 25); ts (INT64,
+# TIMESTAMP with no converted type) and d (INT32, DATE) are not numbers to misha.
+annotated = pa.table({
+    "chrom": pa.array([r[0] for r in rows]),
+    "start": pa.array([r[1] for r in rows], pa.int64()),
+    "end": pa.array([r[2] for r in rows], pa.int64()),
+    "u32": pa.array([3_000_000_000 + r[1] // BIN * 256 for r in rows], pa.uint32()),
+    "u64": pa.array([2**63 + r[1] // BIN * 2**40 for r in rows], pa.uint64()),
+    "i8": pa.array([-(r[1] // BIN) for r in rows], pa.int8()),
+    "dec": pa.array([decimal.Decimal(r[1] // BIN) + decimal.Decimal("0.25") for r in rows], pa.decimal128(5, 2)),
+    "ts": pa.array([datetime.datetime(2020, 1, 1)] * len(rows), pa.timestamp("ns")),
+    "d": pa.array([datetime.date(2020, 1, 1)] * len(rows), pa.date32()),
+})
+pq.write_table(annotated, path("annotated.parquet"), store_decimal_as_integer=True)
 
 # a column whose name is not a valid track name
 bad_name = df.copy()

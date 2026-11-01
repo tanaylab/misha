@@ -38,8 +38,8 @@ The files must have the interval columns 'chrom' (string), 'start' and
 (integer or floating point), such as the files \code{\link{gextract}}
 writes with \code{file = "x.parquet"} or pandas' \code{to_parquet}.
 'path' may contain wildcards, so that per-chromosome files import in one
-call; every file must have every imported column. Columns are matched by
-name, not by position.
+call; all the files must have the same value columns. Columns are matched
+by name, not by position.
 
 'columns' selects the value columns to import, in the order of the
 created tracks. With 'columns = NULL' every column other than 'chrom',
@@ -67,7 +67,9 @@ tracks is created.
 Supported: flat schemas; PLAIN, dictionary and BYTE_STREAM_SPLIT
 encodings; data pages v1 and v2; UNCOMPRESSED, SNAPPY and GZIP compression.
 Other compression codecs (e.g. ZSTD) and encodings (e.g.
-DELTA_BINARY_PACKED) are an error that names them.
+DELTA_BINARY_PACKED) are an error that names them. Unsigned integer columns
+are read as unsigned; decimal, date, time and timestamp columns are not
+numbers and are refused.
 
 'description' is added to the created tracks as an attribute.
 }

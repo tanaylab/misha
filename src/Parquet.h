@@ -25,7 +25,9 @@ namespace parquet {
 struct ThriftIn;  // a Thrift compact protocol reader, in Parquet.cpp
 
 struct Type { enum type { BOOLEAN = 0, INT32 = 1, INT64 = 2, INT96 = 3, FLOAT = 4, DOUBLE = 5, BYTE_ARRAY = 6, FIXED_LEN_BYTE_ARRAY = 7 }; };
-struct ConvertedType { enum type { UTF8 = 0 }; };
+struct ConvertedType { enum type { UTF8 = 0, ENUM = 4, UINT_8 = 11, UINT_64 = 14, INT_64 = 18, JSON = 19 }; };
+// The members of the LogicalType union, by field id
+struct LogicalType { enum type { STRING = 1, ENUM = 4, INTEGER = 10, JSON = 12 }; };
 struct FieldRepetitionType { enum type { REQUIRED = 0, OPTIONAL = 1, REPEATED = 2 }; };
 struct Encoding { enum type { PLAIN = 0, PLAIN_DICTIONARY = 2, RLE = 3, BIT_PACKED = 4, DELTA_BINARY_PACKED = 5, DELTA_LENGTH_BYTE_ARRAY = 6, DELTA_BYTE_ARRAY = 7, RLE_DICTIONARY = 8, BYTE_STREAM_SPLIT = 9 }; };
 struct CompressionCodec { enum type { UNCOMPRESSED = 0, SNAPPY = 1, GZIP = 2, LZO = 3, BROTLI = 4, LZ4 = 5, ZSTD = 6, LZ4_RAW = 7 }; };
@@ -47,7 +49,8 @@ struct SchemaElement {
 	string  name;
 	int     num_children = -1;          // -1: absent (a leaf)
 	int     converted_type = -1;        // ConvertedType; -1: absent
-	bool    logical_type_string = false; // LogicalType STRING
+	int     logical_type = -1;          // LogicalType (the union member's field id); -1: absent. encode() writes only STRING
+	bool    integer_signed = true;      // LogicalType INTEGER: isSigned
 
 	void encode(string &out) const;
 	void decode(ThriftIn &in);
@@ -192,13 +195,16 @@ struct ParquetColumn {
 	string name;
 	int    physical_type;  // parquet::Type; -1 if the schema has none
 	bool   optional;
+	bool   unsigned_int;   // UINT_* or INTEGER(isSigned = false): INT32 and INT64 values are unsigned
+	string other_type;     // a converted or logical type that makes the values neither numbers nor
+	                       // strings to misha (DECIMAL, DATE, TIMESTAMP, ...); "" if none
 };
 
 // Reads the columns of a Parquet file with a flat schema (a root group of leaf columns) with
 // pread() only, so that forked processes can share nothing but the file name. Columns are
 // decoded one column chunk (row group x column) at a time, and only when asked for: an
-// unsupported type, encoding or codec is reported when that column is read, in an error that
-// names the file, the row group and the column.
+// unsupported type, annotation (ParquetColumn::other_type), encoding or codec is reported when
+// that column is read, in an error that names the file, the row group and the column.
 // Supported: INT32, INT64, FLOAT, DOUBLE, BYTE_ARRAY; PLAIN, PLAIN_DICTIONARY, RLE_DICTIONARY,
 // BYTE_STREAM_SPLIT (values), RLE (levels); data pages v1 and v2; UNCOMPRESSED, SNAPPY, GZIP.
 class ParquetReader {

@@ -125,7 +125,7 @@ void SchemaElement::encode(string &out) const
 		put_i32(out, last, 5, num_children);
 	if (converted_type >= 0)
 		put_i32(out, last, 6, converted_type);
-	if (logical_type_string) {
+	if (logical_type == LogicalType::STRING) {
 		// LogicalType is a union: field 1 (STRING) holding an empty StringType struct
 		put_field(out, last, 10, CT_STRUCT);
 		int16_t union_last = 0;
@@ -385,12 +385,21 @@ void SchemaElement::decode(ThriftIn &in)
 		case 4: name = in.binary(ct); return true;
 		case 5: num_children = in.i32(ct); return true;
 		case 6: converted_type = in.i32(ct); return true;
-		case 10:  // LogicalType, a union: only STRING (field 1) is kept
+		case 10:  // LogicalType, a union: which member, and INTEGER's isSigned
 			in.expect(ct, CT_STRUCT);
 			in.read_struct([&](int16_t lid, int lct) {
-				if (lid == 1 && lct == CT_STRUCT)
-					logical_type_string = true;
-				return false;
+				if (lct != CT_STRUCT)
+					return false;
+				logical_type = lid;
+				if (lid != LogicalType::INTEGER)
+					return false;
+				in.read_struct([&](int16_t iid, int ict) {
+					if (iid != 2)
+						return false;
+					integer_signed = in.boolean(ict);
+					return true;
+				});
+				return true;
 			});
 			return true;
 		}
@@ -617,7 +626,7 @@ void ParquetWriter::open(const string &filename, const vector<string> &value_nam
 		col.name = i <= 3 ? coords[i - 1] : value_names[i - 4];
 	}
 	m_meta.schema[1].converted_type = ConvertedType::UTF8;
-	m_meta.schema[1].logical_type_string = true;
+	m_meta.schema[1].logical_type = LogicalType::STRING;
 
 	m_int64_coords = int64_coords;
 	m_chrom.clear();
@@ -840,6 +849,30 @@ static const char *codec_name(int codec)
 {
 	static const char *names[] = { "UNCOMPRESSED", "SNAPPY", "GZIP", "LZO", "BROTLI", "LZ4", "ZSTD", "LZ4_RAW" };
 	return codec >= 0 && codec < (int)(sizeof(names) / sizeof(names[0])) ? names[codec] : "unknown";
+}
+
+// Sets col.unsigned_int and col.other_type from the converted and logical types of se. Kept as
+// numbers or strings: no annotation, INT_* / UINT_* / INTEGER, UTF8 / STRING, ENUM, JSON;
+// anything else (DECIMAL, DATE, TIME, TIMESTAMP, ...) is other_type, refused rather than misread.
+static void read_annotations(const SchemaElement &se, ParquetColumn &col)
+{
+	static const char *converted[] = { "UTF8", "MAP", "MAP_KEY_VALUE", "LIST", "ENUM", "DECIMAL", "DATE", "TIME_MILLIS", "TIME_MICROS",
+	                                   "TIMESTAMP_MILLIS", "TIMESTAMP_MICROS", "UINT_8", "UINT_16", "UINT_32", "UINT_64", "INT_8", "INT_16",
+	                                   "INT_32", "INT_64", "JSON", "BSON", "INTERVAL" };
+	static const char *logical[] = { "", "STRING", "MAP", "LIST", "ENUM", "DECIMAL", "DATE", "TIME", "TIMESTAMP", "", "INTEGER", "UNKNOWN",
+	                                 "JSON", "BSON", "UUID", "FLOAT16", "VARIANT", "GEOMETRY", "GEOGRAPHY", "FILE" };
+	int ct = se.converted_type;
+	int lt = se.logical_type;
+	bool ct_int = ct >= ConvertedType::UINT_8 && ct <= ConvertedType::INT_64;
+	bool ct_kept = ct < 0 || ct_int || ct == ConvertedType::UTF8 || ct == ConvertedType::ENUM || ct == ConvertedType::JSON;
+	bool lt_kept = lt < 0 || lt == LogicalType::INTEGER || lt == LogicalType::STRING || lt == LogicalType::ENUM || lt == LogicalType::JSON;
+
+	col.unsigned_int = (ct_int && ct <= ConvertedType::UINT_64) || (lt == LogicalType::INTEGER && !se.integer_signed);
+	col.other_type.clear();
+	if (!ct_kept)
+		col.other_type = ct < (int)(sizeof(converted) / sizeof(converted[0])) ? converted[ct] : "an unknown converted type";
+	else if (!lt_kept)
+		col.other_type = lt < (int)(sizeof(logical) / sizeof(logical[0])) && *logical[lt] ? logical[lt] : "an unknown logical type";
 }
 
 [[noreturn]] static void unsupported_encoding(int encoding)
@@ -1154,7 +1187,8 @@ void ParquetReader::open(const string &filename)
 		if (schema[i].num_children > 0)
 			TGLError<ParquetReader>(UNSUPPORTED, "File %s: column %s is nested; only flat schemas (a root group of plain columns) are supported",
 			                        filename.c_str(), schema[i].name.c_str());
-		m_columns.push_back(ParquetColumn{ schema[i].name, schema[i].type, schema[i].repetition_type == FieldRepetitionType::OPTIONAL });
+		m_columns.push_back(ParquetColumn{ schema[i].name, schema[i].type, schema[i].repetition_type == FieldRepetitionType::OPTIONAL, false, "" });
+		read_annotations(schema[i], m_columns.back());
 	}
 
 	for (size_t i = 0; i < m_meta.row_groups.size(); ++i) {
@@ -1325,35 +1359,62 @@ void ParquetReader::read_as(int row_group, int col, vector<O> &out, const O *nul
 
 [[noreturn]] static void wrong_type(const string &filename, int row_group, const ParquetColumn &col, const char *expected)
 {
-	TGLError<ParquetReader>(ParquetReader::UNSUPPORTED, "File %s, row group %d, column %s: type %s is not supported here; expected %s",
-	                        filename.c_str(), row_group, col.name.c_str(), type_name(col.physical_type), expected);
+	TGLError<ParquetReader>(ParquetReader::UNSUPPORTED, "File %s, row group %d, column %s: type %s%s%s is not supported here; expected %s",
+	                        filename.c_str(), row_group, col.name.c_str(), type_name(col.physical_type),
+	                        col.other_type.empty() ? "" : " annotated ", col.other_type.c_str(), expected);
 }
 
 void ParquetReader::read_doubles(int row_group, int col, vector<double> &out)
 {
 	const double nan = numeric_limits<double>::quiet_NaN();
+	const ParquetColumn &c = m_columns.at(col);
 
-	switch (m_columns.at(col).physical_type) {
-	case Type::INT32: read_as<int32_t>(row_group, col, out, &nan); break;
-	case Type::INT64: read_as<int64_t>(row_group, col, out, &nan); break;
-	case Type::FLOAT: read_as<float>(row_group, col, out, &nan); break;
-	case Type::DOUBLE: read_as<double>(row_group, col, out, &nan); break;
-	default: wrong_type(m_filename, row_group, m_columns[col], "a number (INT32, INT64, FLOAT or DOUBLE)");
+	if (c.other_type.empty()) {
+		switch (c.physical_type) {
+		case Type::INT32:
+			c.unsigned_int ? read_as<uint32_t>(row_group, col, out, &nan) : read_as<int32_t>(row_group, col, out, &nan);
+			return;
+		case Type::INT64:
+			c.unsigned_int ? read_as<uint64_t>(row_group, col, out, &nan) : read_as<int64_t>(row_group, col, out, &nan);
+			return;
+		case Type::FLOAT: read_as<float>(row_group, col, out, &nan); return;
+		case Type::DOUBLE: read_as<double>(row_group, col, out, &nan); return;
+		}
 	}
+	wrong_type(m_filename, row_group, c, "a number (INT32, INT64, FLOAT or DOUBLE)");
 }
 
 void ParquetReader::read_int64s(int row_group, int col, vector<int64_t> &out)
 {
-	switch (m_columns.at(col).physical_type) {
-	case Type::INT32: read_as<int32_t>(row_group, col, out, (const int64_t *)NULL); break;
-	case Type::INT64: read_as<int64_t>(row_group, col, out, (const int64_t *)NULL); break;
-	default: wrong_type(m_filename, row_group, m_columns[col], "an integer (INT32 or INT64)");
+	const ParquetColumn &c = m_columns.at(col);
+
+	if (c.other_type.empty()) {
+		switch (c.physical_type) {
+		case Type::INT32:
+			c.unsigned_int ? read_as<uint32_t>(row_group, col, out, (const int64_t *)NULL) : read_as<int32_t>(row_group, col, out, (const int64_t *)NULL);
+			return;
+		case Type::INT64:
+			if (!c.unsigned_int) {
+				read_as<int64_t>(row_group, col, out, (const int64_t *)NULL);
+				return;
+			}
+			read_as<uint64_t>(row_group, col, out, (const int64_t *)NULL);
+			for (int64_t v : out) {
+				if (v < 0)  // an unsigned value past INT64_MAX
+					TGLError<ParquetReader>(FORMAT_ERROR, "File %s, row group %d, column %s: value %llu is too large",
+					                        m_filename.c_str(), row_group, c.name.c_str(), (unsigned long long)v);
+			}
+			return;
+		}
 	}
+	wrong_type(m_filename, row_group, c, "an integer (INT32 or INT64)");
 }
 
 void ParquetReader::read_strings(int row_group, int col, vector<string> &out)
 {
-	if (m_columns.at(col).physical_type != Type::BYTE_ARRAY)
-		wrong_type(m_filename, row_group, m_columns[col], "a string (BYTE_ARRAY)");
+	const ParquetColumn &c = m_columns.at(col);
+
+	if (c.physical_type != Type::BYTE_ARRAY || !c.other_type.empty())
+		wrong_type(m_filename, row_group, c, "a string (BYTE_ARRAY)");
 	read_as<string>(row_group, col, out, (const string *)NULL);
 }

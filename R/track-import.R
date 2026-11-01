@@ -699,8 +699,8 @@ gtrack.import_set <- function(description = NULL, path = NULL, binsize = NULL, t
 #' (integer or floating point), such as the files \code{\link{gextract}}
 #' writes with \code{file = "x.parquet"} or pandas' \code{to_parquet}.
 #' 'path' may contain wildcards, so that per-chromosome files import in one
-#' call; every file must have every imported column. Columns are matched by
-#' name, not by position.
+#' call; all the files must have the same value columns. Columns are matched
+#' by name, not by position.
 #'
 #' 'columns' selects the value columns to import, in the order of the
 #' created tracks. With 'columns = NULL' every column other than 'chrom',
@@ -728,7 +728,9 @@ gtrack.import_set <- function(description = NULL, path = NULL, binsize = NULL, t
 #' Supported: flat schemas; PLAIN, dictionary and BYTE_STREAM_SPLIT
 #' encodings; data pages v1 and v2; UNCOMPRESSED, SNAPPY and GZIP compression.
 #' Other compression codecs (e.g. ZSTD) and encodings (e.g.
-#' DELTA_BINARY_PACKED) are an error that names them.
+#' DELTA_BINARY_PACKED) are an error that names them. Unsigned integer columns
+#' are read as unsigned; decimal, date, time and timestamp columns are not
+#' numbers and are refused.
 #'
 #' 'description' is added to the created tracks as an attribute.
 #'
@@ -764,11 +766,17 @@ gtrack.import_parquet <- function(description, path, binsize, track.prefix = NUL
     }
     .gcheckroot()
 
-    if (!is.numeric(binsize) || length(binsize) != 1 || is.na(binsize) || binsize < 0 || binsize != round(binsize)) {
-        stop("binsize must be a positive integer", call. = FALSE)
+    if (!is.character(path) || length(path) != 1 || is.na(path)) {
+        stop("path must be a single string (it may contain wildcards)", call. = FALSE)
+    }
+    if (!is.numeric(binsize) || length(binsize) != 1 || !is.finite(binsize) || binsize < 0 || binsize != round(binsize) || binsize >= 2^32) {
+        stop("binsize must be a positive integer below 2^32", call. = FALSE)
     }
     if (binsize == 0) {
         stop("Parquet import creates dense tracks; binsize must be > 0", call. = FALSE)
+    }
+    if (!is.numeric(defval) || length(defval) != 1) {
+        stop("defval must be a number", call. = FALSE)
     }
     if (is.null(track.prefix)) {
         track.prefix <- ""
@@ -802,10 +810,22 @@ gtrack.import_parquet <- function(description, path, binsize, track.prefix = NUL
     if (any(columns %in% coords) || anyDuplicated(columns)) {
         stop("columns must be distinct and cannot include chrom, start or end", call. = FALSE)
     }
-    for (file in files) {
-        absent <- setdiff(c(coords, columns), .gcall("parquet_columns", file, .misha_env())$name)
+    # every file has the imported columns, and all have the same value columns (in any order)
+    first_values <- NULL
+    for (pq_file in files) {
+        file_cols <- .gcall("parquet_columns", pq_file, .misha_env())$name
+        absent <- setdiff(c(coords, columns), file_cols)
         if (length(absent)) {
-            stop(sprintf("File %s has no column(s) %s", file, paste(absent, collapse = ", ")), call. = FALSE)
+            stop(sprintf("File %s has no column(s) %s", pq_file, paste(absent, collapse = ", ")), call. = FALSE)
+        }
+        file_values <- sort(setdiff(file_cols, coords))
+        if (is.null(first_values)) {
+            first_values <- file_values
+        } else if (!identical(file_values, first_values)) {
+            stop(sprintf(
+                "File %s has value columns %s, but %s has %s: all files must have the same value columns",
+                pq_file, paste(file_values, collapse = ", "), files[1], paste(first_values, collapse = ", ")
+            ), call. = FALSE)
         }
     }
 
@@ -833,9 +853,9 @@ gtrack.import_parquet <- function(description, path, binsize, track.prefix = NUL
             for (parent in unique(dirname(finals))) {
                 try(.gdb.trash_sweep_old(parent), silent = TRUE)
             }
-            for (dir in staging) {
-                if (!.gwith_umask(dir.create(dir, mode = "0777"))) {
-                    stop(sprintf("Failed to create a directory %s", dir), call. = FALSE)
+            for (stage_dir in staging) {
+                if (!.gwith_umask(dir.create(stage_dir, mode = "0777"))) {
+                    stop(sprintf("Failed to create a directory %s", stage_dir), call. = FALSE)
                 }
             }
 
@@ -856,7 +876,7 @@ gtrack.import_parquet <- function(description, path, binsize, track.prefix = NUL
                 .gtrack_set_created_attrs(
                     tracks[i], description,
                     sprintf(
-                        "gtrack.import_parquet(description, \"%s\", %d, \"%s\", \"%s\", %g)",
+                        "gtrack.import_parquet(description, \"%s\", %.0f, \"%s\", \"%s\", %g)",
                         path, binsize, track.prefix, columns[i], defval
                     ),
                     NULL
@@ -869,11 +889,16 @@ gtrack.import_parquet <- function(description, path, binsize, track.prefix = NUL
         },
         finally = {
             if (!success) {
-                for (dir in staging[dir.exists(staging)]) {
-                    .gdb.trash(dir)
+                for (stage_dir in staging[dir.exists(staging)]) {
+                    .gdb.trash(stage_dir)
                 }
                 for (i in which(created)) {
-                    .gdb.trash(finals[i])
+                    if (!.gdb.trash(finals[i]) && dir.exists(finals[i])) {
+                        warning(sprintf(
+                            "Track %s post-create cleanup left residue at %s; manual cleanup required",
+                            tracks[i], finals[i]
+                        ), call. = FALSE)
+                    }
                     try(.gdb.rm_track(tracks[i]), silent = TRUE)
                 }
             }

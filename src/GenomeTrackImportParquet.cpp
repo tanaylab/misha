@@ -303,9 +303,10 @@ void ParquetImport::import_chrom(int chromid, const vector<int> &cols)
 	}
 }
 
+// Unsigned integers are reported by their physical type: they are numbers too
 const char *parquet_type_name(const ParquetColumn &col, const parquet::FileMetaData &meta, size_t idx)
 {
-	if (meta.schema[idx + 1].repetition_type == parquet::FieldRepetitionType::REPEATED)
+	if (meta.schema[idx + 1].repetition_type == parquet::FieldRepetitionType::REPEATED || !col.other_type.empty())
 		return "other";
 	switch (col.physical_type) {
 	case parquet::Type::INT32: return "int32";
@@ -376,11 +377,12 @@ SEXP gtrackimportparquet(SEXP _dirs, SEXP _files, SEXP _columns, SEXP _binsize, 
 			verror("Defval argument is not a number");
 
 		double dbinsize = Rf_isReal(_binsize) ? REAL(_binsize)[0] : INTEGER(_binsize)[0];
-		unsigned binsize = (unsigned)dbinsize;
 		double defval = Rf_isReal(_defval) ? REAL(_defval)[0] : INTEGER(_defval)[0];
 
-		if (!(dbinsize > 0) || binsize != dbinsize)
+		// before the cast: converting NaN, Inf or anything >= 2^32 to unsigned is undefined
+		if (!(dbinsize > 0) || dbinsize >= 4294967296.0 || dbinsize != floor(dbinsize))
 			verror("Invalid value of binsize argument: %g", dbinsize);
+		unsigned binsize = (unsigned)dbinsize;
 
 		vector<string> dirs, files, columns;
 		for (int i = 0; i < Rf_length(_dirs); ++i) {
