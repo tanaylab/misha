@@ -313,3 +313,126 @@ test_that("tsv output unchanged", {
     expect_identical(lines[1:2], c("chrom\tstart\tend\ta\tb", "chr1\t0\t32\t0.25\t0.5"))
     expect_length(lines, 1 + 32 + 19)
 })
+
+# Multitasking: kids write parts that the parent merges. With gmax.processes = 4 and
+# gmin.scope4process = 1000, prepare4multitasking() plans these shards:
+# - an implicit iterator or a sparse one: whole chromosomes, chr1 | chr2 | chr3 chr4 | chr5 chr6
+#   for six chromosomes of equal size, chr1 | chr2 | chr3 | chr4 chr5 chr6 when chr3 is twice
+#   as long as the others
+# - iterator = 50 over 6 x 1,300,000 bp: four ranges that cut chromosomes
+
+# chr1..chr6 of the given sizes; dense track six (binsize 50) = start / 50 + chrom index / 8,
+# so the fraction tells the chromosome. The values are small enough for gtrack.import_parquet
+# to read them back exactly: it averages with float products, as gtrackimportwig does.
+local_six_chrom_db <- function(sizes = rep(200000, 6), env = parent.frame()) {
+    chroms <- paste0("chr", 1:6)
+    local_pq_db(stats::setNames(sizes, chroms), env)
+    intervs <- do.call(rbind, Map(bins_of, chroms, sizes, 50))
+    gtrack.create_dense("six", "six", intervs, intervs$start / 50 + match(intervs$chrom, chroms) / 8, 50)
+}
+
+dir_entries <- function(dir) list.files(dir, all.files = TRUE, no.. = TRUE)
+
+test_that("multitask output equals serial output", {
+    skip_without_pyarrow()
+    local_six_chrom_db(rep(1300000, 6))
+    withr::local_options(gmax.processes = 4, gmin.scope4process = 1000)
+    dir <- withr::local_tempdir()
+    f <- file.path(dir, "x.parquet")
+    exprs <- c("six", "six * 2", "six + 0.5")
+    cols <- c("a", "b", "c")
+
+    # NULL: shards of whole chromosomes; 50: ranges that cut chromosomes, so a chromosome's
+    # rows come from two kids
+    for (iter in list(NULL, 50)) {
+        label <- if (is.null(iter)) "implicit iterator" else "iterator = 50"
+        inmem <- gextract(exprs, intervals = gintervals.all(), iterator = iter, colnames = cols)
+        gextract(exprs, intervals = gintervals.all(), iterator = iter, colnames = cols, file = f)
+        pq <- read_pq(f)
+
+        expect_equal(nrow(pq$table), 6 * 26000, label = label)
+        expect_same_rows(pq$table, inmem, cols)
+        # one chromosome per row group; the rows' order is checked above
+        rg_chroms <- vapply(pq$row_groups, function(rg) rg_column(rg, "chrom")$min, "")
+        expect_identical(rg_chroms, vapply(pq$row_groups, function(rg) rg_column(rg, "chrom")$max, ""), label = label)
+        expect_identical(unique(rg_chroms), paste0("chr", 1:6), label = label)
+        if (is.null(iter)) {
+            expect_length(rg_chroms, 6)
+        } else {
+            expect_gt(length(rg_chroms), 6)
+        }
+        expect_identical(dir_entries(dir), "x.parquet", label = label)
+    }
+
+    # misha reads it back
+    gtrack.import_parquet("back", f, 50, track.prefix = "back_")
+    for (k in cols) {
+        expect_identical(gextract(paste0("back_", k), gintervals.all(), iterator = 50)[[paste0("back_", k)]], float32(inmem[[k]]), label = k)
+    }
+})
+
+test_that("a kid with no rows still merges", {
+    skip_without_pyarrow()
+    local_six_chrom_db(c(2, 2, 4, 2, 2, 2) * 100000)
+    withr::local_options(gmax.processes = 4, gmin.scope4process = 1000)
+    # no intervals on chr3, which is a shard of its own
+    iter <- gintervals(paste0("chr", c(1, 2, 4, 5, 6)), 1000, 1100)
+    gtrack.create_sparse("sp", "sp", iter, seq_len(nrow(iter)))
+    f <- file.path(withr::local_tempdir(), "x.parquet")
+
+    inmem <- gextract("six", "sp", intervals = gintervals.all(), iterator = "sp")
+    gextract("six", "sp", intervals = gintervals.all(), iterator = "sp", file = f)
+    pq <- read_pq(f)
+
+    expect_same_rows(pq$table, inmem, c("six", "sp"))
+    expect_identical(vapply(pq$row_groups, function(rg) rg$num_rows, 0), rep(1, 5))
+})
+
+test_that("a failing kid leaves nothing behind", {
+    local_six_chrom_db()
+    withr::local_options(gmax.processes = 4, gmin.scope4process = 1000)
+    dir <- withr::local_tempdir()
+    f <- file.path(dir, "x.parquet")
+    # fails on chr5 (fraction 5 / 8), in the last of the four kids
+    assign("parquet_test_fail", function(x) {
+        if (any(x %% 1 == 0.625, na.rm = TRUE)) stop("parquet_test_fail saw chr5")
+        x
+    }, envir = globalenv())
+    withr::defer(rm("parquet_test_fail", envir = globalenv()))
+    fail_scan <- function() {
+        utils::capture.output(
+            gextract("parquet_test_fail(six)", intervals = gintervals.all(), file = f),
+            type = "message"
+        )
+    }
+
+    expect_error(fail_scan(), "saw chr5")
+    expect_identical(.glifetime_counters(), c(ref_count = 0L, protect_count = 0L))
+    expect_identical(dir_entries(dir), character())
+
+    # an existing target is left as it was
+    writeLines("existing content", f)
+    expect_error(fail_scan(), "saw chr5")
+    expect_identical(readLines(f), "existing content")
+    expect_identical(dir_entries(dir), "x.parquet")
+})
+
+test_that("every part takes INT64 coordinates when one chromosome of the scope needs them", {
+    skip_without_pyarrow()
+    local_pq_db(c(chr1 = 10, chr2 = 10000))
+    # the sizes misha reads; no sequence of that length is needed for this
+    writeLines(c("chr1\t2147483648", "chr2\t10000"), file.path(.misha$GROOT, "chrom_sizes.txt"))
+    suppressMessages(gdb.init(.misha$GROOT))
+    gtrack.create_dense("big", "big", gintervals(c("chr1", "chr2"), c(2147480000, 0), c(2147483648, 10000)), c(5, 7), 1e6)
+    withr::local_options(gmax.processes = 4, gmin.scope4process = 1000)
+    f <- file.path(withr::local_tempdir(), "x.parquet")
+    # one shard per chromosome: the chr2 kid alone would pick INT32
+    scope <- gintervals(c("chr1", "chr2"), c(2147000000, 0), c(2147483648, 10000))
+
+    inmem <- gextract("big", intervals = scope)
+    gextract("big", intervals = scope, file = f)
+    pq <- read_pq(f)
+
+    expect_identical(pq$types, c("string", "int64", "int64", "float"))
+    expect_same_rows(pq$table, inmem, "big")
+})

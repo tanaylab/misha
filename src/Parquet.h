@@ -155,20 +155,27 @@ struct FileMetaData {
 // with int64_coords) and one FLOAT column per value name, all REQUIRED. Rows must arrive
 // grouped by chromosome; a row group holds one chromosome and at most MAX_ROW_GROUP_ROWS rows.
 // The file is complete only after close(); the destructor closes the file without finishing it.
+//
+// merge() concatenates files written by ParquetWriter with the same schema into one: their row
+// groups in the order of parts, under one footer. A part without rows is left out unless no
+// part has rows.
 class ParquetWriter {
 public:
 	enum Errors { FILE_ERROR, FORMAT_ERROR };
 
-	static const uint64_t MAX_ROW_GROUP_ROWS = 1048576;
+	static const uint64_t MAX_ROW_GROUP_ROWS = 1048576;  // defined in Parquet.cpp too, for ODR uses
 
 	ParquetWriter() = default;
 	ParquetWriter(const ParquetWriter &) = delete;  // owns the file descriptor
 	ParquetWriter &operator=(const ParquetWriter &) = delete;
 	~ParquetWriter();
 
-	void open(const string &filename, const vector<string> &value_names, bool int64_coords);
+	// created_by: the file's created_by, "misha <version>"
+	void open(const string &filename, const vector<string> &value_names, bool int64_coords, const string &created_by);
 	void add_row(const string &chrom, int64_t start, int64_t end, const double *values);
 	void close();
+
+	static void merge(const string &target, const vector<string> &parts);
 
 private:
 	int                      m_fd = -1;
@@ -183,12 +190,14 @@ private:
 	vector<int64_t>          m_ends;
 	vector<vector<uint32_t>> m_values;  // float bit patterns, one vector per value column
 
+	void create(const string &filename);
 	void flush_row_group();
 	void write_coord_column(parquet::ColumnChunk &cc, const string &name, const vector<int64_t> &coords);
 	template <typename T> void write_fixed_column(parquet::ColumnChunk &cc, int type, const string &name, const vector<T> &vals);
 	void write_dictionary_chunk(parquet::ColumnMetaData &md, const string &dict, uint32_t dict_size, const vector<uint32_t> &indices);
 	void write_page(parquet::PageHeader &header, const string &payload);
 	void write(const string &bytes);
+	void append(int fd, const string &filename, uint64_t offset, uint64_t size);
 };
 
 struct ParquetColumn {
@@ -230,9 +239,12 @@ public:
 	void read_strings(int row_group, int col, vector<string> &out);   // BYTE_ARRAY, null is an error
 
 private:
+	friend class ParquetWriter;  // merge() copies the row groups through m_fd
+
 	int                   m_fd = -1;
 	string                m_filename;
 	uint64_t              m_size = 0;
+	uint64_t              m_footer_offset = 0;  // where the footer starts: the row groups end there
 	parquet::FileMetaData m_meta;
 	vector<ParquetColumn> m_columns;
 

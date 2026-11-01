@@ -12,6 +12,7 @@
 #include <fcntl.h>
 #include <limits>
 #include <sys/stat.h>
+#include <sys/syscall.h>
 #include <unistd.h>
 #include <unordered_map>
 #include <zlib.h>
@@ -589,13 +590,15 @@ template <typename T> static string plain(T v) { return string((const char *)&v,
 // dictionary page limit, in floats
 static const uint32_t MAX_DICTIONARY_SIZE = 262144;
 
+const uint64_t ParquetWriter::MAX_ROW_GROUP_ROWS;
+
 ParquetWriter::~ParquetWriter()
 {
 	if (m_fd >= 0)
 		::close(m_fd);
 }
 
-void ParquetWriter::open(const string &filename, const vector<string> &value_names, bool int64_coords)
+void ParquetWriter::open(const string &filename, const vector<string> &value_names, bool int64_coords, const string &created_by)
 {
 	const char *coords[] = { "chrom", "start", "end" };
 
@@ -610,12 +613,8 @@ void ParquetWriter::open(const string &filename, const vector<string> &value_nam
 		}
 	}
 
-	SEXP version = rdb::run_in_R("as.character(utils::packageVersion(\"misha\"))", R_BaseEnv);
-	if (!Rf_isString(version) || Rf_length(version) != 1)
-		TGLError<ParquetWriter>(FORMAT_ERROR, "Failed to read the version of misha");
-
 	m_meta = FileMetaData();
-	m_meta.created_by = string("misha ") + CHAR(STRING_ELT(version, 0));
+	m_meta.created_by = created_by;
 	m_meta.schema.resize(4 + value_names.size());
 	m_meta.schema[0].name = "schema";
 	m_meta.schema[0].num_children = 3 + value_names.size();
@@ -633,13 +632,61 @@ void ParquetWriter::open(const string &filename, const vector<string> &value_nam
 	m_starts.clear();
 	m_ends.clear();
 	m_values.assign(value_names.size(), vector<uint32_t>());
+	create(filename);
+}
 
+// Creates the file and writes the header
+void ParquetWriter::create(const string &filename)
+{
 	m_filename = filename;
 	m_fd = ::open(filename.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0666);
 	if (m_fd < 0)
 		TGLError<ParquetWriter>(FILE_ERROR, "Failed to open file %s for writing: %s", filename.c_str(), strerror(errno));
 	m_offset = 0;
 	write("PAR1");
+}
+
+void ParquetWriter::merge(const string &target, const vector<string> &parts)
+{
+	ParquetWriter out;  // the row groups are copied as they are; out adds the header and the footer
+	string schema;
+
+	out.create(target);
+	for (size_t i = 0; i < parts.size(); ++i) {
+		ParquetReader part;
+		part.open(parts[i]);
+		const FileMetaData &meta = part.metadata();
+
+		string part_schema;
+		for (const SchemaElement &se : meta.schema)
+			se.encode(part_schema);
+		if (!i) {
+			schema = part_schema;
+			out.m_meta = meta;
+			out.m_meta.num_rows = 0;
+			out.m_meta.row_groups.clear();
+		} else if (part_schema != schema)
+			TGLError<ParquetWriter>(FORMAT_ERROR, "Cannot merge %s into %s: its schema differs from that of %s", parts[i].c_str(), target.c_str(), parts[0].c_str());
+
+		// A part without rows holds one empty row group (see close())
+		if (!meta.num_rows && (i + 1 < parts.size() || !out.m_meta.row_groups.empty()))
+			continue;
+
+		int64_t shift = (int64_t)out.m_offset - 4;
+		out.append(part.m_fd, parts[i], 4, part.m_footer_offset - 4);
+		for (RowGroup rg : meta.row_groups) {
+			rg.file_offset += shift;
+			for (ColumnChunk &cc : rg.columns) {
+				cc.file_offset += shift;
+				cc.meta_data.data_page_offset += shift;
+				if (cc.meta_data.dictionary_page_offset >= 0)
+					cc.meta_data.dictionary_page_offset += shift;
+			}
+			out.m_meta.row_groups.push_back(rg);
+		}
+		out.m_meta.num_rows += meta.num_rows;
+	}
+	out.close();
 }
 
 void ParquetWriter::add_row(const string &chrom, int64_t start, int64_t end, const double *values)
@@ -828,6 +875,53 @@ void ParquetWriter::write(const string &bytes)
 		left -= n;
 	}
 	m_offset += bytes.size();
+}
+
+// Appends size bytes of fd (the file filename) from offset: with copy_file_range() where the
+// kernel can copy between the two files, through a buffer where it cannot
+void ParquetWriter::append(int fd, const string &filename, uint64_t offset, uint64_t size)
+{
+	uint64_t end = offset + size;
+	bool kernel_copy = true;  // until copy_file_range() turns out not to work here
+	string buf;
+
+	while (offset < end) {
+		rdb::check_interrupt();
+
+		size_t chunk = min<uint64_t>(end - offset, 1 << 26);
+		ssize_t n;
+
+		if (kernel_copy) {
+#if defined(__linux__) && defined(SYS_copy_file_range)
+			// the system call: glibc < 2.27 has no copy_file_range()
+			loff_t off = offset;
+			n = syscall(SYS_copy_file_range, fd, &off, m_fd, NULL, chunk, 0);
+#else
+			n = -1;
+			errno = ENOSYS;
+#endif
+			// not supported for these files (EINVAL is how some filesystems say so)
+			if (n < 0 && (errno == ENOSYS || errno == EXDEV || errno == EOPNOTSUPP || errno == EINVAL)) {
+				kernel_copy = false;
+				continue;
+			}
+			if (n > 0)
+				m_offset += n;
+		} else {
+			buf.resize(chunk);
+			n = pread(fd, &buf[0], chunk, offset);
+			if (n > 0) {
+				buf.resize(n);
+				write(buf);
+			}
+		}
+
+		if (n < 0 && errno == EINTR)
+			continue;
+		if (n <= 0)
+			TGLError<ParquetWriter>(FILE_ERROR, "Failed to copy %s to %s: %s", filename.c_str(), m_filename.c_str(), n ? strerror(errno) : "unexpected end of file");
+		offset += n;
+	}
 }
 
 //------------------------------ ParquetReader ------------------------------
@@ -1167,8 +1261,9 @@ void ParquetReader::open(const string &filename)
 	if (footer_len > m_size - 12)
 		TGLError<ParquetReader>(FORMAT_ERROR, "File %s: invalid footer length %u", filename.c_str(), footer_len);
 
+	m_footer_offset = m_size - 8 - footer_len;
 	string footer(footer_len, '\0');
-	pread_exact(&footer[0], footer_len, m_size - 8 - footer_len);
+	pread_exact(&footer[0], footer_len, m_footer_offset);
 
 	try {
 		ThriftIn in(footer.data(), footer.size());

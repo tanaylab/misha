@@ -525,57 +525,89 @@ static bool is_parquet_file(const char *filename)
 	return len >= 8 && !strcasecmp(filename + len - 8, ".parquet");
 }
 
-// Writes the scan to a Parquet file. The rows go to a temporary file in the target's directory,
-// renamed onto the target once complete, so an error or an interrupt leaves the target as it was.
-static void write_parquet(TrackExprScanner &scanner, IntervUtils &iu, const char *filename, SEXP _exprs, SEXP _colnames,
-						  GIntervalsFetcher1D *intervals1d, GIntervalsFetcher2D *intervals2d, SEXP _iterator_policy, SEXP _band)
+// Files removed when this goes out of scope. In a multitasking child it removes nothing: the
+// parent owns every temporary file of the call.
+struct TmpFiles {
+	vector<string> paths;
+	~TmpFiles() {
+		if (!RdbInitializer::is_kid()) {
+			for (const string &path : paths)
+				unlink(path.c_str());
+		}
+	}
+};
+
+// Where a Parquet output is written before it is renamed onto the target: a hidden file next to
+// the target (the same filesystem, so rename() works), unique to this process
+static string parquet_tmp_path(const char *filename)
 {
-	scanner.begin(_exprs, intervals1d, intervals2d, _iterator_policy, _band);
+	string target(filename);
+	size_t slash = target.rfind('/');  // npos + 1 == 0: no directory
+	return target.substr(0, slash + 1) + "." + target.substr(slash + 1) + ".tmp." + to_string(getpid());
+}
+
+// The value columns: colnames, or else the expressions
+static vector<string> parquet_value_names(SEXP _exprs, SEXP _colnames)
+{
+	vector<string> names;
+	for (int iexpr = 0; iexpr < Rf_length(_exprs); ++iexpr)
+		names.push_back(CHAR(STRING_ELT(Rf_isNull(_colnames) ? _exprs : _colnames, iexpr)));
+	return names;
+}
+
+// start and end are INT64 only if a chromosome of the scope does not fit in INT32
+static bool parquet_int64_coords(IntervUtils &iu, GIntervalsFetcher1D *scope)
+{
+	const GenomeChromKey &chromkey = iu.get_chromkey();
+	for (int chromid = 0; chromid < (int)chromkey.get_num_chroms(); ++chromid) {
+		if (scope->size(chromid) && chromkey.get_chrom_size(chromid) > (uint64_t)numeric_limits<int32_t>::max())
+			return true;
+	}
+	return false;
+}
+
+static string parquet_created_by()
+{
+	SEXP version = run_in_R("as.character(utils::packageVersion(\"misha\"))", R_BaseEnv);
+	if (!Rf_isString(version) || Rf_length(version) != 1)
+		verror("Failed to read the version of misha");
+	return string("misha ") + CHAR(STRING_ELT(version, 0));
+}
+
+// Writes the rows of a begun scan to a new Parquet file
+static void write_parquet_rows(TrackExprScanner &scanner, IntervUtils &iu, const string &path, const vector<string> &names,
+							   bool int64_coords, const string &created_by)
+{
 	if (!scanner.get_iterator()->is_1d())
 		verror("Parquet output does not support 2D iterators");
 
-	unsigned num_exprs = (unsigned)Rf_length(_exprs);
-	vector<string> names;
-	for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr)
-		names.push_back(CHAR(STRING_ELT(Rf_isNull(_colnames) ? _exprs : _colnames, iexpr)));
-
-	// start and end are INT64 only if a chromosome of the scope does not fit in INT32
-	const GenomeChromKey &chromkey = iu.get_chromkey();
-	bool int64_coords = false;
-	for (int chromid = 0; chromid < (int)chromkey.get_num_chroms(); ++chromid) {
-		if (intervals1d->size(chromid) && chromkey.get_chrom_size(chromid) > (uint64_t)numeric_limits<int32_t>::max())
-			int64_coords = true;
-	}
-
-	string target(filename);
-	size_t slash = target.rfind('/');
-	string dir = slash == string::npos ? "" : target.substr(0, slash + 1);
-	string base = slash == string::npos ? target : target.substr(slash + 1);
-
-	// declared before the writer, so the writer closes the file before it is removed
-	struct TmpFile {
-		string path;
-		~TmpFile() { if (!path.empty()) unlink(path.c_str()); }
-	} tmp { dir + "." + base + ".tmp." + to_string(getpid()) };
-
 	ParquetWriter writer;
-	vector<double> values(num_exprs);
+	vector<double> values(names.size());
 
-	writer.open(tmp.path, names, int64_coords);
+	writer.open(path, names, int64_coords, created_by);
 	for (; !scanner.isend(); scanner.next()) {
 		const GInterval &interval = scanner.last_interval1d();
-		for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr)
+		for (unsigned iexpr = 0; iexpr < values.size(); ++iexpr)
 			values[iexpr] = scanner.last_real(iexpr);
 		writer.add_row(iu.id2chrom(interval.chromid), interval.start, interval.end, values.data());
 		check_interrupt();
 	}
 	writer.close();
-
-	if (rename(tmp.path.c_str(), filename))
-		verror("Failed to rename %s to %s: %s", tmp.path.c_str(), filename, strerror(errno));
-	tmp.path.clear();
 }
 
+// Writes the scan to a Parquet file. The rows go to a temporary file renamed onto the target once
+// complete, so an error or an interrupt leaves the target as it was.
+static void write_parquet(TrackExprScanner &scanner, IntervUtils &iu, const char *filename, SEXP _exprs, SEXP _colnames,
+						  GIntervalsFetcher1D *intervals1d, GIntervalsFetcher2D *intervals2d, SEXP _iterator_policy, SEXP _band)
+{
+	scanner.begin(_exprs, intervals1d, intervals2d, _iterator_policy, _band);
+
+	TmpFiles tmp { { parquet_tmp_path(filename) } };
+	write_parquet_rows(scanner, iu, tmp.paths[0], parquet_value_names(_exprs, _colnames), parquet_int64_coords(iu, intervals1d), parquet_created_by());
+	if (rename(tmp.paths[0].c_str(), filename))
+		verror("Failed to rename %s to %s: %s", tmp.paths[0].c_str(), filename, strerror(errno));
+	tmp.paths.clear();
+}
 
 extern "C" {
 
@@ -1201,6 +1233,10 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 	bool single_shard = false;
 
 	try {
+		// The parts and the temporary target of a Parquet output. Declared before the
+		// RdbInitializer, whose destructor kills and reaps the kids, so that they are removed
+		// only once no kid can still be writing one.
+		TmpFiles parquet_tmp;
 		RdbInitializer rdb_init;
 		const bool profile = is_gextract_profile_enabled();
 
@@ -1233,10 +1269,6 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 
 		const char *filename = Rf_isNull(_file) ? NULL : CHAR(STRING_ELT(_file, 0));
 
-		// Parquet output is written serially, by C_gextract
-		if (filename && is_parquet_file(filename))
-			throw rdb::SingleShard();
-
 		unsigned num_exprs = (unsigned)Rf_length(_exprs);
 		uint64_t num_intervals;
 		GIntervals out_intervals1d;
@@ -1255,6 +1287,44 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 		intervals2d->verify_no_overlaps(iu.get_chromkey());
 
 		string intervset_out = Rf_isNull(_intervals_set_out) ? "" : CHAR(STRING_ELT(_intervals_set_out, 0));
+
+		// Parquet: each kid writes its shard to a part file of its own, and the parent merges the
+		// parts in kid order, which is genome order (prepare4multitasking() plans the shards
+		// along the sorted scope)
+		if (filename && is_parquet_file(filename)) {
+			int num_kids = iu.prepare4multitasking(_exprs, intervals1d, intervals2d, _iterator_policy, _band,
+												   allow_multichrom_range_split_for_gextract(_iterator_policy, intervset_out));
+
+			// one shard, or an empty scope (whose file C_gextract writes too)
+			if (num_kids <= 1)
+				throw rdb::SingleShard();
+
+			// decided once, on the whole scope, so that every part has the same schema
+			vector<string> names = parquet_value_names(_exprs, _colnames);
+			bool int64_coords = parquet_int64_coords(iu, intervals1d);
+			string created_by = parquet_created_by();
+			string tmp_target = parquet_tmp_path(filename);
+			vector<string> parts;
+
+			for (int i = 0; i < num_kids; ++i)
+				parts.push_back(tmp_target + "." + to_string(i));
+			parquet_tmp.paths = parts;
+			parquet_tmp.paths.push_back(tmp_target);
+
+			if (iu.distribute_task(0, 0)) {  // child process
+				TrackExprScanner scanner(iu);
+
+				scanner.begin(_exprs, iu.get_kid_intervals1d(), iu.get_kid_intervals2d(), _iterator_policy, _band);
+				write_parquet_rows(scanner, iu, parts[RdbInitializer::get_kid_idx()], names, int64_coords, created_by);
+				rreturn(R_NilValue);
+			}
+
+			ParquetWriter::merge(tmp_target, parts);
+			if (rename(tmp_target.c_str(), filename))
+				verror("Failed to rename %s to %s: %s", tmp_target.c_str(), filename, strerror(errno));
+			parquet_tmp.paths.pop_back();  // tmp_target is now the target
+			rreturn(R_NilValue);
+		}
 
 		if (filename) {
 			TrackExprScanner scanner(iu);
