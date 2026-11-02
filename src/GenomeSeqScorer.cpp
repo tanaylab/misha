@@ -34,3 +34,9 @@ GInterval GenomeSeqScorer::calculate_expanded_interval(const GInterval &interval
 
     return expanded_interval;
 }
+
+int64_t GenomeSeqScorer::read_extension() const
+{
+    const int64_t w = pattern_length();
+    return (m_extend && w > 1) ? w - 1 : 0;
+}

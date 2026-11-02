@@ -18,7 +18,10 @@ gtrack.import(
 
 \item{description}{a character string description}
 
-\item{file}{file path}
+\item{file}{file path. A Parquet file (recognized by its first bytes, whatever its name)
+is imported when it has exactly one value column besides 'chrom', 'start' and 'end';
+it always makes a dense track, so 'binsize' must be > 0. Use
+\code{\link{gtrack.import_parquet}} for several columns.}
 
 \item{binsize}{bin size of the newly created 'Dense' track or '0' for a
 'Sparse' track}
@@ -36,6 +39,9 @@ Creates a track from WIG / BigWig / BedGraph / BED / tab-delimited file
 \details{
 This function creates a track from WIG / BigWig / BedGraph / tab-delimited
 file. Zipped files are supported (file name must have '.gz' or '.zip' suffix).
+
+BigWig files are read directly at full resolution (zoom levels are not
+used). A truncated bigWig is an error.
 
 Tab-delimited files must start with a header line with the following column
 names (tab-separated): 'chrom', 'start', 'end', and exactly one value column

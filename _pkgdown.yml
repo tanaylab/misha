@@ -39,6 +39,7 @@ reference:
       - gtrack.import
       - gtrack.import_mappedseq
       - gtrack.import_set
+      - gtrack.import_parquet
       - gtrack.info
       - gtrack.path
       - gtrack.liftover
@@ -136,6 +137,7 @@ reference:
       - gcompute_strands_autocorr
       - gdist
       - gextract
+      - gextract.variants
       - glookup
       - gpartition
       - gquantiles

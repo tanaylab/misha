@@ -88,6 +88,8 @@ extern "C" {
     extern SEXP gtrack_import_contacts(SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gtrackimport_mappedseq(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gtrackimportwig(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP gtrackimportparquet(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP parquet_columns(SEXP, SEXP, SEXP);
     extern SEXP gtrackinfo(SEXP, SEXP, SEXP);
     extern SEXP gtrack_intervals_load(SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gchrom_files(SEXP, SEXP, SEXP);
@@ -114,6 +116,8 @@ extern "C" {
     extern SEXP C_gseq_pwm_multitask(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gseq_pwm_edits(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gseq_potts(SEXP, SEXP, SEXP, SEXP);
+    extern SEXP C_gvariants_reach(SEXP, SEXP);
+    extern SEXP C_gextract_variants(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_potts_score_codes_cmp(SEXP, SEXP);
     extern SEXP C_gseq_kmer(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gsynth_train(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
@@ -127,6 +131,8 @@ extern "C" {
     extern SEXP C_register_filter(SEXP, SEXP, SEXP);
     extern SEXP C_get_filter_info(SEXP);
     extern SEXP C_lifetime_counters(void);
+    extern SEXP C_test_file_size_limit(SEXP);
+    extern SEXP C_take_write_error(SEXP);
 }
 
 static const R_CallMethodDef CallEntries[] = {
@@ -210,6 +216,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"gtrack_import_contacts", (DL_FUNC)&gtrack_import_contacts, 5},
     {"gtrackimport_mappedseq", (DL_FUNC)&gtrackimport_mappedseq, 11},
     {"gtrackimportwig", (DL_FUNC)&gtrackimportwig, 6},
+    {"gtrackimportparquet", (DL_FUNC)&gtrackimportparquet, 7},
+    {"parquet_columns", (DL_FUNC)&parquet_columns, 3},
     {"gtrackinfo", (DL_FUNC)&gtrackinfo, 3},
     {"gtrack_intervals_load", (DL_FUNC)&gtrack_intervals_load, 5},
     {"gchrom_files", (DL_FUNC)&gchrom_files, 3},
@@ -236,6 +244,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"C_gseq_pwm_multitask", (DL_FUNC)&C_gseq_pwm_multitask, 17},
     {"C_gseq_pwm_edits", (DL_FUNC)&C_gseq_pwm_edits, 14},
     {"C_gseq_potts", (DL_FUNC)&C_gseq_potts, 4},
+    {"C_gvariants_reach", (DL_FUNC)&C_gvariants_reach, 2},
+    {"C_gextract_variants", (DL_FUNC)&C_gextract_variants, 7},
     {"C_potts_score_codes_cmp", (DL_FUNC)&C_potts_score_codes_cmp, 2},
     {"C_gseq_kmer", (DL_FUNC)&C_gseq_kmer, 9},
     {"C_gsynth_train", (DL_FUNC)&C_gsynth_train, 14},
@@ -248,6 +258,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"C_register_filter", (DL_FUNC)&C_register_filter, 3},
     {"C_get_filter_info", (DL_FUNC)&C_get_filter_info, 1},
     {"C_lifetime_counters", (DL_FUNC)&C_lifetime_counters, 0},
+    {"C_test_file_size_limit", (DL_FUNC)&C_test_file_size_limit, 1},
+    {"C_take_write_error", (DL_FUNC)&C_take_write_error, 1},
     {NULL, NULL, 0}
 };
 

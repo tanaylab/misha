@@ -33,11 +33,7 @@ gdb.set_readonly_attrs <- function(attrs) {
             stop("Attribute name cannot be an empty string", call. = FALSE)
         }
 
-        .gwith_umask({
-            f <- file(filename, "wb")
-            serialize(attrs, f)
-            close(f)
-        })
+        .gwith_umask(.gserialize_file(attrs, filename))
     }
     retv <- 0 # suppress return value
 }

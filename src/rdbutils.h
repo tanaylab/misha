@@ -582,6 +582,10 @@ public:
 
 	static bool   is_kid() { return s_is_kid; }
 	static int    get_kid_idx() { return s_kid_index; }
+
+	// Called by rexit(): a child's destructors have closed its files by then, and the parent
+	// learns of an error only through the shared error message.
+	static void   report_kid_write_error();
     static void   get_open_fds(set<int> &fds);
 
 	// The two counters that carry misha's lifetime invariant: both must be back at their
@@ -774,6 +778,8 @@ private:
 
 [[noreturn]] inline void rexit() {
 	if (RdbInitializer::is_kid()){
+		RdbInitializer::report_kid_write_error();
+
 		// Normally we should have called exit() here. However "R CMD check"
 		// doesn't like calls to exit/abort/etc because they end R session
 		// itself. It prints a Rf_warning message and packages with Rf_warning

@@ -72,6 +72,14 @@ public:
 	// in case of error throws an exception
 	static int64_t file_size(const char *path);
 
+	// The first file this process failed to finish writing (a write that failed earlier, or the
+	// flush in fclose()), as recorded by close() whoever called it - the destructor included,
+	// which cannot report anything. Empty if there was none. A parent raises it once the .Call
+	// returns (.gcall() in R/utils.R), a multitasking child as its own error (rexit()).
+	// set_write_error("") clears it.
+	static const char *write_error() { return s_write_error; }
+	static void set_write_error(const char *msg) { snprintf(s_write_error, sizeof(s_write_error), "%s", msg); }
+
 protected:
 	FILE       *m_fp{NULL};
 	int         m_eof;
@@ -83,10 +91,13 @@ protected:
 	int64_t     m_phys_pos;
 	int64_t     m_sbuf_pos;
 	int64_t     m_ebuf_pos;
+	bool        m_writable{false};
 
 	void init(unsigned bufsize);
 
 private:
+	static char s_write_error[1000];
+
 	// restrict copying of class (otherwise need reference counters for m_buf and m_fp)
 	BufferedFile(const BufferedFile &) = delete;
 	BufferedFile &operator=(const BufferedFile &obj) = delete;

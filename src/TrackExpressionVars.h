@@ -62,6 +62,8 @@ using namespace std;
 
 class TrackExpressionVars {
 public:
+	void set_substitution(const SeqSubstitution &sub);
+
     struct Binned_pv {
    		vector<double> bins;
         BinFinder  binfinder;
@@ -274,6 +276,10 @@ public:
 
     bool is_seq_variable(unsigned ivar) const;
 
+    // Per sequence vtrack, (lo, hi) such that a bin [s, e) reads [s + lo, e + hi):
+    // its iterator shifts plus the scorer's read_extension(). Used by gextract.variants.
+    std::vector<std::pair<int64_t, int64_t>> seq_read_offsets() const;
+
     // Helper methods to check variable function types
     static bool is_sequence_based_function(Track_var::Val_func func);
     static bool is_pwm_function(Track_var::Val_func func);
@@ -347,6 +353,7 @@ private:
 
 	// Shared sequence fetcher for all sequence-based vtracks to enable caching
 	GenomeSeqFetch          m_shared_seqfetch;
+	SeqSubstitution         m_substitution;
 
 	// Processors for different variable types (using pointers to avoid circular dependency)
 	std::unique_ptr<TrackVarProcessor>       m_track_processor;

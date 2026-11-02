@@ -78,13 +78,13 @@
 
     .gwith_umask({
         con <- file(path, "wb")
-        on.exit(close(con), add = TRUE)
         for (nm in names(attrs)) {
             writeBin(charToRaw(nm), con)
             writeBin(as.raw(0L), con)
             writeBin(charToRaw(as.character(attrs[nm])), con)
             writeBin(as.raw(0L), con)
         }
+        .gclose_written(con, path)
     })
     invisible()
 }

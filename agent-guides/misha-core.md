@@ -130,8 +130,8 @@ Pick the verb by *what's returned*, not by alphabetical proximity.
 
 | Use | Returns | When |
 |---|---|---|
-| `gvtrack.create(_, src, "distance")` / `"distance.center"` / `"distance.edge"` | per-bin signed numeric column | You're sweeping the genome at fixed resolution and want distance as a feature alongside other tracks. |
-| `gintervals.neighbors(a, b)` | paired-row frame (a + b + signed `dist`) | k-NN, distance bands via `mindist`/`maxdist`, asymmetric upstream/downstream. |
+| `gvtrack.create(_, src, "distance")` / `"distance.center"` / `"distance.edge"` | per-bin numeric column, signed only when the source has a strand | You're sweeping the genome at fixed resolution and want distance as a feature alongside other tracks. |
+| `gintervals.neighbors(a, b)` | paired-row frame (a + b + `dist`, signed only by a strand) | k-NN, distance bands via `mindist`/`maxdist`, asymmetric upstream/downstream. |
 | `gintervals.annotate(intervs, annot, annotation_columns)` | input rows + selected annot cols + `dist` | Attach gene symbol + distance to a fixed query frame without changing row count. |
 
 ### Aggregators (`func =` on `gvtrack.create`)
@@ -243,13 +243,13 @@ my_peaks <- gintervals.load("intervs.my.peaks")
 
 Two primitives, different return shapes:
 
-- **`gintervals.neighbors(query, target, ...)`** - paired-row output, one input row × matched neighbor; signed `dist` column. Good for k-NN, distance-banded matching, asymmetric upstream/downstream.
-- **`gintervals.annotate(intervals, annotation_intervals, annotation_columns=, ...)`** - column-attach output, preserves row count and order. Good for "add gene symbol + signed distance".
+- **`gintervals.neighbors(query, target, ...)`** - paired-row output, one input row × matched neighbor; `dist` column (sign rule below). Good for k-NN, distance-banded matching, asymmetric upstream/downstream.
+- **`gintervals.annotate(intervals, annotation_intervals, annotation_columns=, ...)`** - column-attach output, preserves row count and order. Good for "add gene symbol + distance".
 
 ```r
 tss <- gintervals.load("intervs.global.tss")
 
-# Nearest neighbor with signed distance, dropping unmatched rows:
+# Nearest neighbor, dropping unmatched rows:
 near <- gintervals.neighbors(peaks, tss)
 
 # Distance-banded - keep all peaks (na.if.notfound is the key flag):
@@ -272,7 +272,11 @@ peaks <- gintervals.annotate(peaks, tss,
                              na_value    = NA)
 ```
 
-Signed-distance convention: positive `dist` means the target is downstream of the query (in genome coordinates if query has no strand; in transcription direction if `use_intervals1_strand = TRUE`).
+Sign of `dist` (the same for `gintervals.annotate`'s distance column). It is never signed by genome coordinates alone:
+
+- **Default:** it follows the target's (`intervals2`) strand: positive when the query lies downstream of the target in the target's direction, negative upstream. A peak 1 kb downstream of a + strand TSS has `dist = 1000`.
+- **Target without a `strand` column:** `dist` is unsigned (never negative), so a negative `mindist` or `dist < 0` matches nothing.
+- **`use_intervals1_strand = TRUE`** (and `gintervals.neighbors.upstream/downstream/directional`): it follows the query's strand: positive when the target lies downstream of the query, negative upstream, on either strand. A query without a `strand` column counts as +, which gives the sign in genome coordinates (positive = target to the right).
 
 **Promoters from TSS in one call.** Strand-aware promoter windows around `intervs.global.tss` come up constantly. If `misha.ext` is installed:
 
@@ -294,7 +298,7 @@ Same row count and order as the input; coordinates are rewritten only for rows t
 **Avoid:**
 - `gintervals.neighbors` without `na.if.notfound = TRUE` when annotating a fixed set - rows with no neighbor in range are dropped silently.
 - `gintervals.neighbors` when you only want to *attach* columns to an existing frame - `gintervals.annotate` is the right tool.
-- Forgetting that `dist` is *signed*. Filter with `abs(dist) < W`; bare `dist < W` accepts arbitrary upstream distances.
+- Assuming `dist` is signed by genome position. It is signed only by a strand (the target's, by default), so check which one before filtering on its sign. Filter on size with `abs(dist) < W`; with a strand, bare `dist < W` accepts arbitrary upstream distances.
 
 ### 4.3 Distance flavors
 
@@ -303,10 +307,10 @@ Same row count and order as the input; coordinates are rewritten only for rows t
 | `func` | Measures | Returns 0 when | Notes |
 |---|---|---|---|
 | `distance` | Iterator-bin *center* → nearest source *edge* (outside); *normalized* fractional position when inside. | Bin center exactly on a source edge | Mixed semantics - fine for genome-wide profiles, surprising if you assumed pure edge-to-edge. |
-| `distance.center` | Iterator-bin *center* → nearest source *center*. | Bin center coincides with a source center | Use for anchor-to-anchor offsets in meta-profiles. |
+| `distance.center` | Iterator-bin *center* → *center* of the source interval containing it; NaN when the bin center is outside every source interval. | Bin center coincides with a source center | Use for offsets inside source intervals (e.g. position within a peak); for distance to anchors outside them use `distance` or `distance.edge`. |
 | `distance.edge` | *Edge-to-edge*, same as `gintervals.neighbors`. | Iterator interval overlaps the source | Use when you specifically want `gintervals.neighbors` semantics inside a vtrack. |
 
-All three return *signed* distance when the source has a `strand` column (sign = direction relative to strand); unsigned otherwise. All three return NA when the chromosome has no source intervals.
+All three return *signed* distance when the source has a `strand` column (sign = direction relative to strand); unsigned otherwise. All three return NA when the chromosome has no source intervals, and `distance.center` also when the bin center is outside every source interval.
 
 ```r
 gvtrack.create("d_tss", src = "intervs.global.tss", func = "distance")

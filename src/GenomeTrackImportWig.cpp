@@ -6,6 +6,7 @@
 #include "rdbprogress.h"
 #include "rdbutils.h"
 
+#include "BigWig.h"
 #include "GenomeArraysCsv.h"
 #include "GenomeTrackFixedBin.h"
 #include "GenomeTrackSparse.h"
@@ -64,7 +65,7 @@ static string format_alias_hint(SEXP envir)
 // between names in the file that resolved and names that did not - not between database
 // chromosomes the file covered and ones it did not. A chr1-only bedGraph dropped nothing,
 // so it is silent; it is unmatched names that prove data in the file never reached the track.
-static void verify_chroms_matched(const GenomeChromKey &chromkey, const char *fname,
+void verify_chroms_matched(const GenomeChromKey &chromkey, const char *fname,
                                   const UnknownChroms &unknown, uint64_t num_matched, SEXP envir)
 {
 	if (unknown.empty() || num_matched)
@@ -88,7 +89,7 @@ static void verify_chroms_matched(const GenomeChromKey &chromkey, const char *fn
 //   - a primary chromosome (chr7, X): the database was supposed to have that one, so the
 //     naming is probably wrong. A warning, with the alias hint. Mitochondria are the first
 //     kind, not this one - see UnknownChroms.
-static void report_skipped_chroms(const char *fname, const UnknownChroms &unknown, uint64_t num_matched, SEXP envir)
+void report_skipped_chroms(const char *fname, const UnknownChroms &unknown, uint64_t num_matched, SEXP envir)
 {
 	if (unknown.empty())
 		return;
@@ -119,6 +120,85 @@ static void report_skipped_chroms(const char *fname, const UnknownChroms &unknow
 	add_pending_diagnostic(envir, severity, msg);
 }
 
+// Turns records into the bins of a dense track as they arrive. Records must be sorted and must
+// not overlap. A bin is the mean over its bases: a base under a record takes the record's value,
+// any other base (or one under a NaN record) takes defval, and a bin left with no value is NaN.
+class DenseBinner {
+public:
+	DenseBinner(GenomeTrackFixedBin &track, uint64_t binsize, uint64_t chromsize, double defval, Progress_reporter &progress) :
+		m_track(track), m_binsize(binsize), m_chromsize(chromsize), m_defval(defval), m_progress(progress) { m_bins.reserve(10000); }
+
+	void add(uint64_t start, uint64_t end, float v)
+	{
+		// The parsers guarantee this; a record that broke it would loop past the chromosome end.
+		if (start < m_bin_start || start > end || end > m_chromsize)
+			verror("Internal error: import record %llu-%llu is out of order or outside the chromosome",
+			       (unsigned long long)start, (unsigned long long)end);
+
+		while (m_bin_start + m_binsize <= start)
+			next_bin();
+
+		while (1) {
+			uint64_t bin_end = min(m_bin_start + m_binsize, m_chromsize);
+			uint64_t overlap_len = min(end, bin_end) - max(start, m_bin_start);
+
+			if (!std::isnan(v)) {
+				m_sum += v * overlap_len;
+				m_covered += overlap_len;
+			}
+			if (end <= bin_end)
+				break;
+			next_bin();
+		}
+	}
+
+	void finish()
+	{
+		while (m_bin_start < m_chromsize)
+			next_bin();
+		write();
+	}
+
+private:
+	GenomeTrackFixedBin &m_track;
+	uint64_t             m_binsize;
+	uint64_t             m_chromsize;
+	double               m_defval;
+	Progress_reporter   &m_progress;
+	uint64_t             m_bin_start{0};
+	double               m_sum{0};
+	uint64_t             m_covered{0};
+	vector<float>        m_bins;
+
+	void next_bin()
+	{
+		uint64_t bin_len = min(m_bin_start + m_binsize, m_chromsize) - m_bin_start;
+
+		if (m_covered < bin_len && !std::isnan(m_defval)) {
+			m_sum += m_defval * (bin_len - m_covered);
+			m_covered = bin_len;
+		}
+
+		m_bins.push_back(m_covered ? (float)(m_sum / m_covered) : numeric_limits<float>::quiet_NaN());
+		m_sum = 0;
+		m_covered = 0;
+		m_bin_start += m_binsize;
+
+		if (m_bins.size() >= 10000) {
+			write();
+			m_progress.report(0);
+			check_interrupt();
+		}
+	}
+
+	void write()
+	{
+		if (!m_bins.empty())
+			m_track.write_next_bins(m_bins.data(), m_bins.size());
+		m_bins.clear();
+	}
+};
+
 extern "C" {
 
 SEXP gtrackimportwig(SEXP _track, SEXP _wig, SEXP _srcname, SEXP _binsize, SEXP _defvalue, SEXP _envir)
@@ -143,7 +223,7 @@ SEXP gtrackimportwig(SEXP _track, SEXP _wig, SEXP _srcname, SEXP _binsize, SEXP 
 
 		const char *track = CHAR(STRING_ELT(_track, 0));
 		const char *fname = CHAR(STRING_ELT(_wig, 0));
-		// What the user asked to import. gtrack.import unzips and converts bigWig into a
+		// What the user asked to import. gtrack.import unzips a .gz / .zip into a
 		// temporary file that is deleted before the call returns, so messages that name
 		// fname would point at a path that no longer exists (and, in gtrack.import_set,
 		// disagree with the file name reported as failed).
@@ -158,22 +238,26 @@ SEXP gtrackimportwig(SEXP _track, SEXP _wig, SEXP _srcname, SEXP _binsize, SEXP 
 		string dirname = create_track_dir(_envir, track);
 		IntervUtils iu(_envir);
 		Wig wig;
+		BigWig bigwig;
 		GenomeArraysCsv csv;
 		GIntervals data;
-		GIntervals::const_iterator iinterv_begin;
-		GIntervals::const_iterator iinterv_end;
 		vector<float> vals;
 		char filename[FILENAME_MAX];
+		bool is_bigwig = BigWig::is_bigwig(fname);
 		bool is_csv = false;
 		string wig_err_msg;
 
-		try {
-			wig.init(iu.get_chromkey(), fname, true);
-		} catch (TGLException &e) {
-			if (e.type() != typeid(Wig) || e.code() == Wig::FILE_ERROR)
-				throw e;
-			wig_err_msg = e.msg();
-			is_csv = true;
+		if (is_bigwig)
+			bigwig.init(iu.get_chromkey(), fname);
+		else {
+			try {
+				wig.init(iu.get_chromkey(), fname, true);
+			} catch (TGLException &e) {
+				if (e.type() != typeid(Wig) || e.code() == Wig::FILE_ERROR)
+					throw e;
+				wig_err_msg = e.msg();
+				is_csv = true;
+			}
 		}
 
 		if (is_csv) {
@@ -190,8 +274,10 @@ SEXP gtrackimportwig(SEXP _track, SEXP _wig, SEXP _srcname, SEXP _binsize, SEXP 
 
 		}
 
-		const UnknownChroms &unknown_chroms = is_csv ? csv.get_unknown_chroms() : wig.get_unknown_chroms();
-		uint64_t num_matched_chroms = is_csv ? csv.get_num_matched_chroms() : wig.get_num_matched_chroms();
+		const UnknownChroms &unknown_chroms = is_bigwig ? bigwig.get_unknown_chroms() :
+			is_csv ? csv.get_unknown_chroms() : wig.get_unknown_chroms();
+		uint64_t num_matched_chroms = is_bigwig ? bigwig.get_num_matched_chroms() :
+			is_csv ? csv.get_num_matched_chroms() : wig.get_num_matched_chroms();
 
 		verify_chroms_matched(iu.get_chromkey(), srcname, unknown_chroms, num_matched_chroms, _envir);
 
@@ -203,125 +289,54 @@ SEXP gtrackimportwig(SEXP _track, SEXP _wig, SEXP _srcname, SEXP _binsize, SEXP 
 
 		for (int chromid = 0; chromid < (int)iu.get_chromkey().get_num_chroms(); ++chromid) {
 			uint64_t chromsize = iu.get_chromkey().get_chrom_size(chromid);
+			GenomeTrackFixedBin dense;
+			GenomeTrackSparse sparse;
+			DenseBinner binner(dense, binsize, chromsize, defvalue, progress);
+			uint64_t num_recs = 0;
 
 			check_interrupt();
 
-			if (is_csv) {
-				const GIntervals &intervals = csv.get_intervals(chromid);
-				iinterv_begin = intervals.begin();
-				iinterv_end = intervals.end();
-			} else {
-				wig.get_data(chromid, data);
-				iinterv_begin = data.begin();
-				iinterv_end = data.end();
-			}
-
 			snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), chromid).c_str());
+			if (binsize)
+				dense.init_write(filename, binsize, chromid);
+			else
+				sparse.init_write(filename, chromid);
 
-			if (binsize) {  // Fixed-bin track
-				GenomeTrackFixedBin gtrack;
-				gtrack.init_write(filename, binsize, chromid);
-				GIntervals::const_iterator iinterval = iinterv_begin;
-
-				// Batch writing: accumulate bins and write in batches
-				vector<float> bin_batch;
-				bin_batch.reserve(10000);
-				uint64_t bins_since_progress = 0;
-
-				for (uint64_t start_coord = 0; start_coord < chromsize; start_coord += binsize) {
-					double sum = 0;
-					uint64_t covered_bases = 0;
-					uint64_t end_coord = min(start_coord + binsize, chromsize);
-
-					// Skip intervals that end before current bin
-					while (iinterval != iinterv_end && (uint64_t)iinterval->end <= start_coord) {
-						++iinterval;
-					}
-
-					// Process all intervals that overlap with current bin
-					GIntervals::const_iterator cur_interval = iinterval;
-					while (cur_interval != iinterv_end && (uint64_t)cur_interval->start < end_coord) {
-						// Calculate overlap between interval and bin
-						uint64_t overlap_start = max(start_coord, (uint64_t)cur_interval->start);
-						uint64_t overlap_end = min(end_coord, (uint64_t)cur_interval->end);
-
-						if (overlap_end > overlap_start) {
-							float v;
-							if (is_csv) {
-								csv.get_sliced_vals(cur_interval, vals);
-								v = vals.front();
-							} else {
-								memcpy(&v, &cur_interval->udata, sizeof(float));
-							}
-
-							if (!std::isnan(v)) {
-								uint64_t overlap_len = overlap_end - overlap_start;
-								sum += v * overlap_len;
-								covered_bases += overlap_len;
-							}
-						}
-						++cur_interval;
-					}
-
-					// Fill uncovered bases with default value
-					uint64_t bin_size_actual = end_coord - start_coord;
-					if (covered_bases < bin_size_actual && !std::isnan(defvalue)) {
-						uint64_t uncovered = bin_size_actual - covered_bases;
-						sum += defvalue * uncovered;
-						covered_bases += uncovered;
-					}
-
-					// Calculate bin value
-					float bin_value = covered_bases ? (sum / covered_bases) : numeric_limits<float>::quiet_NaN();
-					bin_batch.push_back(bin_value);
-
-					// Write in batches of 10000 bins
-					if (bin_batch.size() >= 10000) {
-						gtrack.write_next_bins(bin_batch.data(), bin_batch.size());
-						bin_batch.clear();
-						progress.report(0);
-						check_interrupt();
-						bins_since_progress = 0;
-					} else {
-						++bins_since_progress;
-						// Report progress every 10000 bins even if batch not full
-						if (bins_since_progress >= 10000) {
-							progress.report(0);
-							check_interrupt();
-							bins_since_progress = 0;
-						}
-					}
-				}
-
-				// Write remaining bins
-				if (!bin_batch.empty()) {
-					gtrack.write_next_bins(bin_batch.data(), bin_batch.size());
-				}
-			} else { // Sparse track
-				GenomeTrackSparse gtrack;
-				gtrack.init_write(filename, chromid);
-
-				uint64_t intervals_processed = 0;
-				for (GIntervals::const_iterator iinterval = iinterv_begin; iinterval != iinterv_end; ++iinterval) {
+			auto add = [&](const GIntervals &intervals) {
+				for (GIntervals::const_iterator iinterval = intervals.begin(); iinterval != intervals.end(); ++iinterval) {
 					float v;
 
 					if (is_csv) {
 						csv.get_sliced_vals(iinterval, vals);
 						v = vals.front();
-					} else {
+					} else
 						memcpy(&v, &iinterval->udata, sizeof(float));
-					}
 
-					gtrack.write_next_interval(*iinterval, v);
-
-					// Report progress every 10000 intervals
-					++intervals_processed;
-					if (intervals_processed % 10000 == 0) {
-						progress.report(0);
-						check_interrupt();
+					if (binsize)
+						binner.add(iinterval->start, iinterval->end, v);
+					else {
+						sparse.write_next_interval(*iinterval, v);
+						if (++num_recs % 10000 == 0) {
+							progress.report(0);
+							check_interrupt();
+						}
 					}
 				}
+			};
+
+			if (is_csv)
+				add(csv.get_intervals(chromid));
+			else if (is_bigwig) {
+				// one data block at a time: a whole chromosome of records can take gigabytes
+				for (uint64_t iblock = 0; bigwig.get_data(chromid, iblock, data); ++iblock)
+					add(data);
+			} else {
+				wig.get_data(chromid, data);
+				add(data);
 			}
+
+			if (binsize)
+				binner.finish();
 			progress.report(1);
 		}
 		progress.report_last();
@@ -333,6 +348,8 @@ SEXP gtrackimportwig(SEXP _track, SEXP _wig, SEXP _srcname, SEXP _binsize, SEXP 
 		rerror("%s", e.msg());
     } catch (const bad_alloc &e) {
         rerror("Out of memory");
+    } catch (const std::exception &e) {
+        rerror("%s", e.what());
     }
 
 	return R_NilValue;

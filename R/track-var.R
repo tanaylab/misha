@@ -35,9 +35,7 @@
 
         # save the variable
         filename <- paste(dirname, varname, sep = "/")
-        f <- file(filename, "wb")
-        serialize(value, f)
-        close(f)
+        .gserialize_file(value, filename)
     })
 }
 

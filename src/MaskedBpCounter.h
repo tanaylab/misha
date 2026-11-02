@@ -23,6 +23,9 @@ public:
 
     CountMode get_mode() const { return m_mode; }
 
+protected:
+    int64_t pattern_length() const override { return 1; }
+
 private:
     CountMode m_mode;
 };

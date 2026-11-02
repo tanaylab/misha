@@ -613,7 +613,9 @@ SEXP gbigintervs_indexed_write_chrom(SEXP _dat_path, SEXP _intervals, SEXP _envi
             verror("Failed to get file position after write: %s", strerror(errno));
         }
 
-        fclose(dat_fp);
+        bool write_failed = ferror(dat_fp);
+        if (fclose(dat_fp) || write_failed)
+            verror("Failed to write %s: %s", dat_path.c_str(), write_failed ? "write error" : strerror(errno));
 
         uint64_t length = new_pos - offset;
 

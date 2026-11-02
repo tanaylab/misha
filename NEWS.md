@@ -1,24 +1,50 @@
+# misha 5.14.0
+
+### New features
+
+* New `gextract.variants()`: the value of a track expression under each single-base substitution that can change it, or under the variants of a table such as `gintervals.import_vcf()` output.
+
+* `potts.max` virtual tracks accept `max_edits = 1`: the best score within one substitution.
+
+* `gextract(file = "x.parquet")` writes a GZIP-compressed Parquet file (chrom, start, end and one float32 column per expression, all nullable as in arrow-written files), in parallel when `gmultitasking` is on.
+
+* New `gtrack.import_parquet()` imports the value columns of Parquet files as dense tracks, one track per column. `gtrack.import()` also reads a Parquet file with one value column.
+
+### Bug fixes
+
+* `gextract(file = ...)` and `intervals.set.out` were ignored under `options(gmultitasking.strategy = "tracks")`: nothing was written and a data.frame was returned.
+
+* **Behavior fix:** `gtrack.import()` keeps bigWig values at full precision (they were rounded to 6 digits). `options(misha.bigWigToWig)` is removed.
+
+* Concurrent bigWig imports could fail or silently import only part of the file.
+
+* A call that could not fully write a track or intervals set (full disk, quota, NFS error) reported success and left it truncated; it now fails.
+
+### Performance
+
+* Importing a bigWig uses less memory.
+
 # misha 5.13.3
 
-* **Behavior fix:** `kmer.count` and `kmer.frac` virtual tracks were wrong in calls whose expressions use 4 or more sequence virtual tracks (k-mer, PWM, Potts, masked): with `strand = 0` or `-1` and `extend = TRUE` they counted reverse-strand k-mers anchored up to k-1 bases left of the interval instead of those in its last k-1 bases, and with `extend = FALSE` a k-mer missed matches near the interval edges when a longer k-mer on the same strand was in the call. They now equal the same virtual track used alone.
+* **Behavior fix:** track and big-set files named by a chromosome alias (`1`, `1-chr2`, as earlier pymisha wrote them) are used like canonically named ones; 2D tracks read as empty and big sets failed to load. Delete a stale `.meta` of such a 2D track.
+
+* **Breaking:** two different alias-named files for one chromosome are an error; the indexed conversion stops at a file it cannot read or match to a chromosome.
+
+* **Bug fix:** a failed `gtrack.copy(overwrite = TRUE)` no longer loses the existing destination.
+
+* **Bug fix:** `gintervals.load()` of an indexed big set returned chromosomes deleted with `gintervals.update(NULL)`.
+
+* **Bug fix:** a failed forced `gtrack.2d.convert_to_indexed()` could delete the track's data; the track is now left as it was.
+
+* **Breaking:** `gdataset.load()` refuses an indexed dataset with an unreadable `seq/genome.idx` and a chromosome order different from the working database's.
+
+* Documentation: `gintervals.neighbors()`'s `dist` is unsigned when `intervals2` has no strand; with `use_intervals1_strand`, negative is upstream on both strands.
 
 # misha 5.13.2
 
 * **Behavior fix:** after `gdir.cd()` into a subdirectory, tracks and interval sets there could be looked up at the top of the database instead (by `gtrack.copy()` and the indexed-format conversion always, by other functions with a dataset loaded or once a track was created or copied). Reads failed or returned the top-level track of that name, `gtrack.rm()`, `gtrack.copy(overwrite = TRUE)` and `gtrack.convert_to_indexed()` could delete, replace or empty it, and tracks could not be created there in an indexed database.
 
 * **Breaking:** after `gdir.cd()` into a subdirectory, `db = <working database>` in `gtrack.rm()`, `gintervals.rm()` and `gtrack.copy()` means the names listed there, as `db = NULL` does, not the top of its `tracks/`.
-
-* **Behavior fix:** per-chromosome files of tracks and big intervals sets named by a chromosome alias (`1` for `chr1`, `1-chr2` for a pair, as earlier pymisha wrote them) are read, converted, copied and lifted over as canonically named ones. 2D tracks read as empty, big sets failed to load and lifted tracks came out empty. Delete the `.meta` of such a 2D track if an earlier version saved one.
-
-* **Breaking:** where a chromosome has no file named by its name, nor by that name with "chr" added or removed, and two different files named by other aliases, reading or converting them is an error; converting to the indexed format stops at a file not named by a chromosome or that cannot be read (an unreadable file was packed as empty). A canonically named file wins over an alias-named one, and the conversion's `remove.old` removes both.
-
-* **Bug fix:** `gtrack.copy(overwrite = TRUE)` removed the existing destination before copying, so a copy that then failed (an entry it could not copy, a check that stopped late) lost it; the destination is now kept until the copy succeeds.
-
-* **Bug fix:** `gintervals.load()` of an indexed big set returned the chromosomes deleted from it with `gintervals.update(NULL)`.
-
-* **Bug fix:** a forced `gtrack.2d.convert_to_indexed()` that failed (a pair file it could not read, a full disk) could remove the track's index and data; it now leaves the track as it was.
-
-* **Breaking:** `gdataset.load()` refuses a dataset with indexed tracks or interval sets whose own `seq/genome.idx` cannot be read when its `chrom_sizes.txt` order differs from the working database's chromosome order. It loaded, and those files could read other chromosomes.
 
 # misha 5.13.1
 

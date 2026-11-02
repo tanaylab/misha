@@ -214,11 +214,7 @@ gdb.create <- function(groot = NULL, fasta = NULL, genes.file = NULL, annots.fil
             }
 
             # write read-only attributes
-            .gwith_umask({
-                f <- file(paste(groot, ".ro_attributes", sep = "/"), "wb")
-                serialize(c("created.by", "created.date", "created.user"), f)
-                close(f)
-            })
+            .gwith_umask(.gserialize_file(c("created.by", "created.date", "created.user"), paste(groot, ".ro_attributes", sep = "/")))
 
             if (verbose) message("Database was successfully created")
             success <- TRUE

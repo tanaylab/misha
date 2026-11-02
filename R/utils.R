@@ -12,10 +12,16 @@
     # happen on the way out of an error or an interrupt too, or the outer call loses
     # its own diagnostics and inherits whatever the failed inner call had queued.
     outer <- .gtake_pending_diagnostics()
+    outer_write_error <- .Call("C_take_write_error", NULL)
     completed <- FALSE
     on.exit(
         {
             mine <- .gtake_pending_diagnostics()
+            # A file the call failed to finish writing (see BufferedFile::write_error): the
+            # final flush happens when C++ closes the file, often in a destructor that cannot
+            # raise anything. Taken on every exit, so a failed call does not leave it behind
+            # for the next one; an outer call's (this one is nested in it) is put back.
+            write_error <- .Call("C_take_write_error", outer_write_error)
             if (length(outer)) {
                 assign(".GPENDING.DIAGNOSTICS", outer, envir = .misha)
             }
@@ -24,6 +30,9 @@
             # error is the thing worth reporting and because a warning raised while an
             # error unwinds would replace it under options(warn = 2).
             if (completed) {
+                if (!is.null(write_error)) {
+                    stop(write_error, call. = FALSE)
+                }
                 .graise_diagnostics(mine)
             }
         },
@@ -58,6 +67,44 @@
     )
     completed <- TRUE
     res
+}
+
+# Closes a connection that wrote `path`. close() writes the last buffer, and if that fails R
+# only warns and returns a non-zero status - a truncated file behind a call that seems to have
+# succeeded. Removes the file and raises an error naming it instead.
+.gclose_written <- function(con, path) {
+    why <- ""
+    status <- withCallingHandlers(close(con), warning = function(w) {
+        if (startsWith(conditionMessage(w), "Problem closing connection")) {
+            why <<- trimws(sub("^Problem closing connection:", "", conditionMessage(w)))
+            invokeRestart("muffleWarning")
+        }
+    })
+    if (!is.null(status) && status != 0) {
+        unlink(path)
+        stop(sprintf("Failed to write %s: %s", path, why), call. = FALSE)
+    }
+    invisible()
+}
+
+# Serializes x into a new file at `path`. A write that fails midway, fails when close() writes
+# the last buffer, or is interrupted removes the file and raises an error naming it, instead of
+# leaving a truncated file (and an open connection) behind.
+.gserialize_file <- function(x, path) {
+    f <- file(path, "wb")
+    tryCatch(serialize(x, f),
+        error = function(e) {
+            suppressWarnings(close(f))
+            unlink(path)
+            stop(sprintf("Failed to write %s: %s", path, conditionMessage(e)), call. = FALSE)
+        },
+        interrupt = function(i) {
+            suppressWarnings(close(f))
+            unlink(path)
+            stop("Command interrupted!", call. = FALSE)
+        }
+    )
+    .gclose_written(f, path)
 }
 
 # Removes the diagnostics queued by the C++ layer, if any, and returns them: a list of
