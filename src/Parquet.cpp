@@ -641,8 +641,11 @@ void ParquetWriter::create(const string &filename, const string &name)
 {
 	m_filename = name;
 	m_fd = ::open(filename.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0666);
-	if (m_fd < 0)
-		TGLError<ParquetWriter>(FILE_ERROR, "Failed to open file %s for writing: %s", name.c_str(), strerror(errno));
+	if (m_fd < 0) {
+		size_t slash = filename.rfind('/');
+		string dir = slash == string::npos ? "." : slash ? filename.substr(0, slash) : "/";
+		TGLError<ParquetWriter>(FILE_ERROR, "Failed to write %s: cannot create a temporary file in %s: %s", name.c_str(), dir.c_str(), strerror(errno));
+	}
 	m_offset = 0;
 	write("PAR1");
 }

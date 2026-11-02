@@ -620,6 +620,19 @@ static ParquetOutput parquet_output(const char *filename)
 	return out;
 }
 
+// Renames the finished temporary file onto the target. A target it replaces passes on its
+// permission bits, as a write in place would keep them (best effort: if chmod fails, the file
+// has the permissions it was created with).
+static void commit_parquet(const ParquetOutput &out)
+{
+	struct stat st;
+
+	if (!stat(out.target.c_str(), &st))
+		chmod(out.tmp.c_str(), st.st_mode & 0777);
+	if (rename(out.tmp.c_str(), out.target.c_str()))
+		verror("Failed to rename %s to %s: %s", out.tmp.c_str(), out.target.c_str(), strerror(errno));
+}
+
 // The value columns: colnames, or else the expressions
 static vector<string> parquet_value_names(SEXP _exprs, SEXP _colnames)
 {
@@ -679,8 +692,7 @@ static void write_parquet(TrackExprScanner &scanner, IntervUtils &iu, const char
 	ParquetOutput out = parquet_output(filename);
 	TmpFiles tmp { { out.tmp } };
 	write_parquet_rows(scanner, iu, out.tmp, filename, parquet_value_names(_exprs, _colnames), parquet_int64_coords(iu, intervals1d), parquet_created_by());
-	if (rename(out.tmp.c_str(), out.target.c_str()))
-		verror("Failed to rename %s to %s: %s", out.tmp.c_str(), out.target.c_str(), strerror(errno));
+	commit_parquet(out);
 	tmp.paths.clear();
 }
 
@@ -1395,8 +1407,7 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 			}
 
 			ParquetWriter::merge(out.tmp, parts, filename);
-			if (rename(out.tmp.c_str(), out.target.c_str()))
-				verror("Failed to rename %s to %s: %s", out.tmp.c_str(), out.target.c_str(), strerror(errno));
+			commit_parquet(out);
 			parquet_tmp.paths.pop_back();  // out.tmp is now the target
 			rreturn(R_NilValue);
 		}

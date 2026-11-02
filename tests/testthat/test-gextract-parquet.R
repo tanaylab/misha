@@ -461,17 +461,55 @@ test_that("a failing kid leaves nothing behind", {
     expect_identical(dir_entries(dir), "x.parquet")
 })
 
-test_that("a target in a missing directory is an error naming it, not its temporary file", {
+test_that("a target in a missing directory is an error naming it and the temporary file's directory", {
     local_six_chrom_db()
     withr::local_options(gmax.processes = 4, gmin.scope4process = 1000)
     f <- file.path(withr::local_tempdir(), "nodir", "x.parquet")
-    msg <- paste0("Failed to open file ", f, " for writing: No such file or directory")
+    msg <- paste0("Failed to write ", f, ": cannot create a temporary file in ", dirname(f), ": No such file or directory")
     # one process, then kids (each fails to create its part)
     for (multitask in c(FALSE, TRUE)) {
         withr::with_options(list(gmultitasking = multitask), {
             expect_error(gextract("six", intervals = gintervals.all(), file = f), msg, fixed = TRUE)
         })
     }
+})
+
+test_that("a writable target in a directory that is not writable: the error names the temporary file", {
+    skip_if(identical(Sys.info()[["effective_user"]], "root"), "root writes into any directory")
+    local_six_chrom_db()
+    withr::local_options(gmax.processes = 4, gmin.scope4process = 1000)
+    ro_dir <- file.path(withr::local_tempdir(), "ro")
+    dir.create(ro_dir)
+    f <- file.path(ro_dir, "x.parquet")
+    file.create(f)
+    Sys.chmod(ro_dir, "0555")
+    withr::defer(Sys.chmod(ro_dir, "0755"))
+    msg <- paste0("Failed to write ", f, ": cannot create a temporary file in ", ro_dir, ": Permission denied")
+    for (multitask in c(FALSE, TRUE)) {
+        withr::with_options(list(gmultitasking = multitask), {
+            expect_error(gextract("six", intervals = gintervals.all(), file = f), msg, fixed = TRUE)
+        })
+    }
+    expect_identical(file.size(f), 0)
+})
+
+test_that("a replaced target keeps its permission bits", {
+    local_six_chrom_db()
+    withr::local_options(gmax.processes = 4, gmin.scope4process = 1000)
+    out_dir <- withr::local_tempdir()
+    for (multitask in c(FALSE, TRUE)) {
+        f <- file.path(out_dir, paste0("x", multitask, ".parquet"))
+        file.create(f)
+        # no umask turns 0666 into this
+        Sys.chmod(f, "0604", use_umask = FALSE)
+        withr::with_options(list(gmultitasking = multitask), gextract("six", intervals = gintervals.all(), file = f))
+        expect_identical(format(file.mode(f)), "604", info = paste("multitask", multitask))
+        expect_gt(file.size(f), 0)
+    }
+    # a new target gets the default permissions, as before
+    f <- file.path(out_dir, "new.parquet")
+    gextract("six", intervals = gintervals.all(), file = f)
+    expect_identical(file.mode(f), as.octmode(bitwAnd(0x1b6, bitwNot(strtoi(Sys.umask(), 8L)))))
 })
 
 test_that("every part takes INT64 coordinates when one chromosome of the scope needs them", {
