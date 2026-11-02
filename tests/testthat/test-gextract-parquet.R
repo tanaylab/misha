@@ -461,6 +461,19 @@ test_that("a failing kid leaves nothing behind", {
     expect_identical(dir_entries(dir), "x.parquet")
 })
 
+test_that("a target in a missing directory is an error naming it, not its temporary file", {
+    local_six_chrom_db()
+    withr::local_options(gmax.processes = 4, gmin.scope4process = 1000)
+    f <- file.path(withr::local_tempdir(), "nodir", "x.parquet")
+    msg <- paste0("Failed to open file ", f, " for writing: No such file or directory")
+    # one process, then kids (each fails to create its part)
+    for (multitask in c(FALSE, TRUE)) {
+        withr::with_options(list(gmultitasking = multitask), {
+            expect_error(gextract("six", intervals = gintervals.all(), file = f), msg, fixed = TRUE)
+        })
+    }
+})
+
 test_that("every part takes INT64 coordinates when one chromosome of the scope needs them", {
     skip_without_pyarrow()
     local_pq_db(c(chr1 = 10, chr2 = 10000))

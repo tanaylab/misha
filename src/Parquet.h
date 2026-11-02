@@ -171,16 +171,18 @@ public:
 	ParquetWriter &operator=(const ParquetWriter &) = delete;
 	~ParquetWriter();
 
-	// created_by: the file's created_by, "misha <version>"
-	void open(const string &filename, const vector<string> &value_names, bool int64_coords, const string &created_by);
+	// created_by: the file's created_by, "misha <version>"; name: what messages call the file
+	// (the target that filename, a temporary file, stands for)
+	void open(const string &filename, const vector<string> &value_names, bool int64_coords, const string &created_by, const string &name);
 	void add_row(const string &chrom, int64_t start, int64_t end, const double *values);
 	void close();
 
-	static void merge(const string &target, const vector<string> &parts);
+	// name: what messages call target
+	static void merge(const string &target, const vector<string> &parts, const string &name);
 
 private:
 	int                      m_fd = -1;
-	string                   m_filename;
+	string                   m_filename;  // what messages call the file
 	bool                     m_int64_coords = false;
 	uint64_t                 m_offset = 0;
 	parquet::FileMetaData    m_meta;
@@ -191,7 +193,7 @@ private:
 	vector<int64_t>          m_ends;
 	vector<vector<uint32_t>> m_values;  // float bit patterns, one vector per value column
 
-	void create(const string &filename);
+	void create(const string &filename, const string &name);
 	void flush_row_group();
 	void write_coord_column(parquet::ColumnChunk &cc, const string &name, const vector<int64_t> &coords);
 	template <typename T> void write_fixed_column(parquet::ColumnChunk &cc, int type, const string &name, const vector<T> &vals);

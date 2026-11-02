@@ -648,8 +648,8 @@ static string parquet_created_by()
 	return string("misha version ") + CHAR(STRING_ELT(version, 0));
 }
 
-// Writes the rows of a begun scan to a new Parquet file
-static void write_parquet_rows(TrackExprScanner &scanner, IntervUtils &iu, const string &path, const vector<string> &names,
+// Writes the rows of a begun scan to a new Parquet file, path; messages call it target
+static void write_parquet_rows(TrackExprScanner &scanner, IntervUtils &iu, const string &path, const char *target, const vector<string> &names,
 							   bool int64_coords, const string &created_by)
 {
 	if (!scanner.get_iterator()->is_1d())
@@ -658,7 +658,7 @@ static void write_parquet_rows(TrackExprScanner &scanner, IntervUtils &iu, const
 	ParquetWriter writer;
 	vector<double> values(names.size());
 
-	writer.open(path, names, int64_coords, created_by);
+	writer.open(path, names, int64_coords, created_by, target);
 	for (; !scanner.isend(); scanner.next()) {
 		const GInterval &interval = scanner.last_interval1d();
 		for (unsigned iexpr = 0; iexpr < values.size(); ++iexpr)
@@ -678,7 +678,7 @@ static void write_parquet(TrackExprScanner &scanner, IntervUtils &iu, const char
 
 	ParquetOutput out = parquet_output(filename);
 	TmpFiles tmp { { out.tmp } };
-	write_parquet_rows(scanner, iu, out.tmp, parquet_value_names(_exprs, _colnames), parquet_int64_coords(iu, intervals1d), parquet_created_by());
+	write_parquet_rows(scanner, iu, out.tmp, filename, parquet_value_names(_exprs, _colnames), parquet_int64_coords(iu, intervals1d), parquet_created_by());
 	if (rename(out.tmp.c_str(), out.target.c_str()))
 		verror("Failed to rename %s to %s: %s", out.tmp.c_str(), out.target.c_str(), strerror(errno));
 	tmp.paths.clear();
@@ -1390,11 +1390,11 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 				TrackExprScanner scanner(iu);
 
 				scanner.begin(_exprs, iu.get_kid_intervals1d(), iu.get_kid_intervals2d(), _iterator_policy, _band);
-				write_parquet_rows(scanner, iu, parts[RdbInitializer::get_kid_idx()], names, int64_coords, created_by);
+				write_parquet_rows(scanner, iu, parts[RdbInitializer::get_kid_idx()], filename, names, int64_coords, created_by);
 				rreturn(R_NilValue);
 			}
 
-			ParquetWriter::merge(out.tmp, parts);
+			ParquetWriter::merge(out.tmp, parts, filename);
 			if (rename(out.tmp.c_str(), out.target.c_str()))
 				verror("Failed to rename %s to %s: %s", out.tmp.c_str(), out.target.c_str(), strerror(errno));
 			parquet_tmp.paths.pop_back();  // out.tmp is now the target

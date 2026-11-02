@@ -598,7 +598,7 @@ ParquetWriter::~ParquetWriter()
 		::close(m_fd);
 }
 
-void ParquetWriter::open(const string &filename, const vector<string> &value_names, bool int64_coords, const string &created_by)
+void ParquetWriter::open(const string &filename, const vector<string> &value_names, bool int64_coords, const string &created_by, const string &name)
 {
 	const char *coords[] = { "chrom", "start", "end" };
 
@@ -632,26 +632,26 @@ void ParquetWriter::open(const string &filename, const vector<string> &value_nam
 	m_starts.clear();
 	m_ends.clear();
 	m_values.assign(value_names.size(), vector<uint32_t>());
-	create(filename);
+	create(filename, name);
 }
 
 // Creates the file and writes the header
-void ParquetWriter::create(const string &filename)
+void ParquetWriter::create(const string &filename, const string &name)
 {
-	m_filename = filename;
+	m_filename = name;
 	m_fd = ::open(filename.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0666);
 	if (m_fd < 0)
-		TGLError<ParquetWriter>(FILE_ERROR, "Failed to open file %s for writing: %s", filename.c_str(), strerror(errno));
+		TGLError<ParquetWriter>(FILE_ERROR, "Failed to open file %s for writing: %s", name.c_str(), strerror(errno));
 	m_offset = 0;
 	write("PAR1");
 }
 
-void ParquetWriter::merge(const string &target, const vector<string> &parts)
+void ParquetWriter::merge(const string &target, const vector<string> &parts, const string &name)
 {
 	ParquetWriter out;  // the row groups are copied as they are; out adds the header and the footer
 	string schema;
 
-	out.create(target);
+	out.create(target, name);
 	for (size_t i = 0; i < parts.size(); ++i) {
 		{  // the reader is closed before the part is unlinked (NFS silly-renames open files)
 			ParquetReader part;
@@ -667,7 +667,7 @@ void ParquetWriter::merge(const string &target, const vector<string> &parts)
 				out.m_meta.num_rows = 0;
 				out.m_meta.row_groups.clear();
 			} else if (part_schema != schema)
-				TGLError<ParquetWriter>(FORMAT_ERROR, "Cannot merge %s into %s: its schema differs from that of %s", parts[i].c_str(), target.c_str(), parts[0].c_str());
+				TGLError<ParquetWriter>(FORMAT_ERROR, "Cannot merge %s into %s: its schema differs from that of %s", parts[i].c_str(), name.c_str(), parts[0].c_str());
 
 			// A part without rows holds one empty row group (see close())
 			bool skip = !meta.num_rows && (i + 1 < parts.size() || !out.m_meta.row_groups.empty());
