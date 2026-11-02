@@ -400,7 +400,7 @@ gtrack.create_dense("atac.es",
 
 Preferred path for any read-intervals-in-R source.
 
-**Paired-end BAM → fragment coverage (misha ≥ 5.13.0).** Each proper pair covers its own fragment; there is no `pileup`. The same call with a fragment file (chrom/start/end, e.g. 10x `fragments.tsv.gz`) streams it without loading it into R.
+**Paired-end BAM → fragment coverage (misha ≥ 5.13.0).** Each proper pair covers its own fragment; there is no `pileup`. Only pairs the aligner flagged proper are read, so its insert-size limit (bowtie2 default `-X 500`) caps fragment length before `max.fraglen` does. The same call with a fragment file (chrom/start/end, e.g. 10x `fragments.tsv.gz`) streams it without loading it into R.
 
 ```r
 gtrack.import_mappedseq("chip.oct4",
