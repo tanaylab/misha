@@ -27,7 +27,12 @@ gtrack.import(
 
 - file:
 
-  file path
+  file path. A Parquet file (recognized by its first bytes, whatever its
+  name) is imported when it has exactly one value column besides
+  'chrom', 'start' and 'end'; it always makes a dense track, so
+  'binsize' must be \> 0. Use
+  [`gtrack.import_parquet`](https://tanaylab.github.io/misha/reference/gtrack.import_parquet.md)
+  for several columns.
 
 - binsize:
 

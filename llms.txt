@@ -192,6 +192,8 @@ Functions to manipulate and create tracks
 - [`gtrack.import_set()`](https://tanaylab.github.io/misha/reference/gtrack.import_set.md)
   : Creates one or more tracks from multiple WIG / BigWig / BedGraph /
   tab-delimited files on disk or FTP
+- [`gtrack.import_parquet()`](https://tanaylab.github.io/misha/reference/gtrack.import_parquet.md)
+  : Creates dense tracks from the columns of Parquet files
 - [`gtrack.info()`](https://tanaylab.github.io/misha/reference/gtrack.info.md)
   : Returns information about a track
 - [`gtrack.path()`](https://tanaylab.github.io/misha/reference/gtrack.path.md)
