@@ -5,7 +5,10 @@
  *      Author: hoichman
  */
 
+#include <cctype>
+#include <climits>
 #include <cstdint>
+#include <dirent.h>
 #include <inttypes.h>
 #include <atomic>
 #include <chrono>
@@ -14,6 +17,7 @@
 #include <iostream>
 #include <limits>
 #include <strings.h>
+#include <sys/stat.h>
 #include <thread>
 #include <vector>
 
@@ -537,13 +541,83 @@ struct TmpFiles {
 	}
 };
 
-// Where a Parquet output is written before it is renamed onto the target: a hidden file next to
-// the target (the same filesystem, so rename() works), unique to this process
-static string parquet_tmp_path(const char *filename)
+// The file a write to filename replaces: filename, or where its chain of symlinks leads, whether
+// that file exists or not. An ofstream writes through a link, and so does a Parquet output.
+static string resolve_symlinks(const char *filename)
 {
-	string target(filename);
-	size_t slash = target.rfind('/');  // npos + 1 == 0: no directory
-	return target.substr(0, slash + 1) + "." + target.substr(slash + 1) + ".tmp." + to_string(getpid());
+	string path(filename);
+	struct stat st;
+
+	for (int hops = 0; !lstat(path.c_str(), &st) && S_ISLNK(st.st_mode); ++hops) {
+		if (hops == 40)
+			verror("Failed to write %s: too many levels of symbolic links", filename);
+
+		char text[PATH_MAX];
+		ssize_t len = readlink(path.c_str(), text, sizeof(text));
+		if (len <= 0 || len == (ssize_t)sizeof(text))
+			verror("Failed to read symbolic link %s: %s", path.c_str(), len < 0 ? strerror(errno) : "invalid length");
+		// a relative link is relative to the directory of the link (npos + 1 == 0: no directory)
+		size_t slash = path.rfind('/');
+		path = (text[0] == '/' ? "" : path.substr(0, slash + 1)) + string(text, len);
+	}
+	return path;
+}
+
+// This host as temporary names carry it, as .gdb.host_tag() writes it: the name up to the first
+// dot, anything but [A-Za-z0-9_] replaced by '_'
+static string host_tag()
+{
+	char buf[256] = "";
+	gethostname(buf, sizeof(buf) - 1);
+	string host(buf, strcspn(buf, "."));
+	for (char &ch : host) {
+		if (!isalnum((unsigned char)ch) && ch != '_')
+			ch = '_';
+	}
+	return host.empty() ? "unknown" : host;
+}
+
+// A number as to_string() writes it, small enough for a pid
+static bool is_decimal(const string &s)
+{
+	return !s.empty() && s.size() <= 9 && s.find_first_not_of("0123456789") == string::npos && (s[0] != '0' || s.size() == 1);
+}
+
+// Where a Parquet output goes, and the hidden file it is written to first: tmp, next to target
+// (the same filesystem, so rename() works), named for this host and process, as two hosts on
+// shared storage may run writers of the same pid. The parts of a multitasking write add .<kid>.
+struct ParquetOutput {
+	string target;  // the target, or where its symlinks lead
+	string tmp;     // .<target name>.tmp.<host>.<pid>
+};
+
+// Also removes the leftovers of writers of the same target on this host that were killed
+// (a SIGKILL leaves them no chance to clean up): temporary files and parts of pids that no longer
+// exist. Files of another host, of a live pid, or with a name of another form are left alone.
+static ParquetOutput parquet_output(const char *filename)
+{
+	ParquetOutput out;
+	out.target = resolve_symlinks(filename);
+	size_t slash = out.target.rfind('/');  // npos + 1 == 0: no directory
+	string dir = out.target.substr(0, slash + 1);
+	string prefix = "." + out.target.substr(slash + 1) + ".tmp." + host_tag() + ".";
+	out.tmp = dir + prefix + to_string(getpid());
+
+	DIR *dp = opendir(dir.empty() ? "." : dir.c_str());
+	if (!dp)
+		return out;  // writing tmp fails with the reason
+	for (struct dirent *ent; (ent = readdir(dp)); ) {
+		string name(ent->d_name);
+		if (name.compare(0, prefix.size(), prefix))
+			continue;
+		string rest = name.substr(prefix.size());  // <pid> or <pid>.<kid>
+		size_t dot = rest.find('.');
+		string pid = rest.substr(0, dot);
+		if (is_decimal(pid) && (dot == string::npos || is_decimal(rest.substr(dot + 1))) && kill((pid_t)stol(pid), 0) && errno == ESRCH)
+			unlink((dir + name).c_str());
+	}
+	closedir(dp);
+	return out;
 }
 
 // The value columns: colnames, or else the expressions
@@ -602,10 +676,11 @@ static void write_parquet(TrackExprScanner &scanner, IntervUtils &iu, const char
 {
 	scanner.begin(_exprs, intervals1d, intervals2d, _iterator_policy, _band);
 
-	TmpFiles tmp { { parquet_tmp_path(filename) } };
-	write_parquet_rows(scanner, iu, tmp.paths[0], parquet_value_names(_exprs, _colnames), parquet_int64_coords(iu, intervals1d), parquet_created_by());
-	if (rename(tmp.paths[0].c_str(), filename))
-		verror("Failed to rename %s to %s: %s", tmp.paths[0].c_str(), filename, strerror(errno));
+	ParquetOutput out = parquet_output(filename);
+	TmpFiles tmp { { out.tmp } };
+	write_parquet_rows(scanner, iu, out.tmp, parquet_value_names(_exprs, _colnames), parquet_int64_coords(iu, intervals1d), parquet_created_by());
+	if (rename(out.tmp.c_str(), out.target.c_str()))
+		verror("Failed to rename %s to %s: %s", out.tmp.c_str(), out.target.c_str(), strerror(errno));
 	tmp.paths.clear();
 }
 
@@ -1303,13 +1378,13 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 			vector<string> names = parquet_value_names(_exprs, _colnames);
 			bool int64_coords = parquet_int64_coords(iu, intervals1d);
 			string created_by = parquet_created_by();
-			string tmp_target = parquet_tmp_path(filename);
+			ParquetOutput out = parquet_output(filename);
 			vector<string> parts;
 
 			for (int i = 0; i < num_kids; ++i)
-				parts.push_back(tmp_target + "." + to_string(i));
+				parts.push_back(out.tmp + "." + to_string(i));
 			parquet_tmp.paths = parts;
-			parquet_tmp.paths.push_back(tmp_target);
+			parquet_tmp.paths.push_back(out.tmp);
 
 			if (iu.distribute_task(0, 0)) {  // child process
 				TrackExprScanner scanner(iu);
@@ -1319,10 +1394,10 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 				rreturn(R_NilValue);
 			}
 
-			ParquetWriter::merge(tmp_target, parts);
-			if (rename(tmp_target.c_str(), filename))
-				verror("Failed to rename %s to %s: %s", tmp_target.c_str(), filename, strerror(errno));
-			parquet_tmp.paths.pop_back();  // tmp_target is now the target
+			ParquetWriter::merge(out.tmp, parts);
+			if (rename(out.tmp.c_str(), out.target.c_str()))
+				verror("Failed to rename %s to %s: %s", out.tmp.c_str(), out.target.c_str(), strerror(errno));
+			parquet_tmp.paths.pop_back();  // out.tmp is now the target
 			rreturn(R_NilValue);
 		}
 

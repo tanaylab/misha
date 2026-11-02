@@ -481,3 +481,100 @@ test_that("every part takes INT64 coordinates when one chromosome of the scope n
     expect_arrow_like(pq)
     expect_same_rows(pq$table, inmem, "big")
 })
+
+test_that("a symlinked target is written through and the link kept", {
+    skip_without_pyarrow()
+    local_six_chrom_db()
+    withr::local_options(gmax.processes = 4, gmin.scope4process = 1000)
+    inmem <- gextract("six", intervals = gintervals.all())
+
+    for (multitask in c(FALSE, TRUE)) {
+        label <- if (multitask) "multitask" else "serial"
+        parent <- withr::local_tempdir()
+        link_dir <- file.path(parent, "links")
+        real_dir <- file.path(parent, "real")
+        dir.create(link_dir)
+        dir.create(real_dir)
+        for (f in file.path(real_dir, c("abs.parquet", "rel.parquet"))) {
+            writeLines("old content", f)
+        }
+        # links/<name>.parquet -> the text of each
+        links <- c(
+            abs = file.path(real_dir, "abs.parquet"), # to an existing file
+            rel = file.path("..", "real", "rel.parquet"), # relative, to an existing file
+            dangling = "chain.parquet", # relative, to a link to a file that does not exist yet
+            chain = file.path(real_dir, "new.parquet")
+        )
+        link_paths <- file.path(link_dir, paste0(names(links), ".parquet"))
+        file.symlink(unname(links), link_paths)
+
+        withr::with_options(list(gmultitasking = multitask), {
+            for (k in c("abs", "rel", "dangling")) {
+                gextract("six", intervals = gintervals.all(), file = file.path(link_dir, paste0(k, ".parquet")))
+            }
+        })
+
+        expect_identical(Sys.readlink(link_paths), unname(links), label = label)
+        expect_setequal(dir_entries(link_dir), basename(link_paths))
+        expect_setequal(dir_entries(real_dir), c("abs.parquet", "rel.parquet", "new.parquet"))
+        for (f in dir_entries(real_dir)) {
+            expect_same_rows(read_pq(file.path(real_dir, f))$table, inmem, "six")
+        }
+    }
+})
+
+test_that("temporary files are named for this host and process", {
+    local_six_chrom_db()
+    withr::local_options(gmax.processes = 4, gmin.scope4process = 1000)
+    out_dir <- withr::local_tempdir()
+    f <- file.path(out_dir, "x.parquet")
+    # what the directory holds at each evaluation of the expression, in kids too
+    seen_file <- withr::local_tempfile()
+    assign("parquet_test_peek", function(x) {
+        cat(sprintf("%s\n", dir_entries(out_dir)), file = seen_file, sep = "", append = TRUE)
+        x
+    }, envir = globalenv())
+    withr::defer(rm("parquet_test_peek", envir = globalenv()))
+    tmp <- sprintf(".x.parquet.tmp.%s.%d", .gdb.host_tag(), Sys.getpid())
+    parts <- paste0(tmp, ".", 0:3)
+
+    withr::with_options(list(gmultitasking = FALSE), gextract("parquet_test_peek(six)", intervals = gintervals.all(), file = f))
+    seen <- unique(readLines(seen_file))
+    expect_identical(seen, tmp)
+
+    unlink(c(f, seen_file))
+    gextract("parquet_test_peek(six)", intervals = gintervals.all(), file = f)
+    seen <- unique(readLines(seen_file))
+    expect_true(all(seen %in% c(tmp, parts)), label = paste(seen, collapse = ", "))
+    expect_true(any(seen %in% parts), label = paste(seen, collapse = ", "))
+    expect_identical(dir_entries(out_dir), "x.parquet")
+})
+
+test_that("leftovers of killed writers on this host are removed, and nothing else", {
+    local_six_chrom_db()
+    withr::local_options(gmax.processes = 4, gmin.scope4process = 1000)
+    host <- .gdb.host_tag()
+    dead <- 4194303L # the largest pid Linux allows; running only if the pids wrapped around to it
+    skip_if(dir.exists(file.path("/proc", dead)))
+    # a live process of this user
+    sleeper <- as.integer(system("sleep 600 >/dev/null 2>&1 & echo $!", intern = TRUE))
+    withr::defer(tools::pskill(sleeper))
+
+    for (multitask in c(FALSE, TRUE)) {
+        out_dir <- withr::local_tempdir()
+        stale <- sprintf(".x.parquet.tmp.%s.%d%s", host, dead, c("", ".0", ".11"))
+        kept <- c(
+            sprintf(".x.parquet.tmp.someotherhost.%d", dead),
+            sprintf(".x.parquet.tmp.%s.%d%s", host, sleeper, c("", ".2")),
+            # not exactly .<target>.tmp.<host>.<pid>[.<kid>]
+            sprintf(".x.parquet.tmp.%s.0%d", host, dead),
+            sprintf(".x.parquet.tmp.%s.%d%s", host, dead, c(".x", ".1.2", ".")),
+            sprintf(".x.parquet.tmp.%d", dead),
+            sprintf(".y.parquet.tmp.%s.%d", host, dead)
+        )
+        file.create(file.path(out_dir, c(stale, kept)))
+
+        withr::with_options(list(gmultitasking = multitask), gextract("six", intervals = gintervals.all(), file = file.path(out_dir, "x.parquet")))
+        expect_setequal(dir_entries(out_dir), c("x.parquet", kept))
+    }
+})
