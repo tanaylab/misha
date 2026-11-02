@@ -270,6 +270,15 @@ test_that("floating point start and end import when they hold whole numbers", {
     expect_length(staging_leftovers(db), 0)
 })
 
+test_that("a chromosome name longer than 1024 bytes is an error", {
+    db <- local_pq_db()
+    expect_error(
+        gtrack.import_parquet("test", pq_fixture("long_chrom.parquet"), 32, track.prefix = "lc_"),
+        "long_chrom.parquet, row group 0, column chrom: a string of 1025 bytes; strings longer than 1024 bytes are not supported"
+    )
+    expect_no_tracks_left(db, "lc_a")
+})
+
 test_that("all files must have the same value columns", {
     db <- local_pq_db()
     src <- local_fixture_dir(list(shard_1.parquet = "shard_chr1.parquet", shard_2.parquet = "extra_column.parquet"))

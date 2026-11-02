@@ -241,7 +241,7 @@ public:
 	// One value per row of the row group
 	void read_doubles(int row_group, int col, vector<double> &out);   // INT32/INT64/FLOAT/DOUBLE, null -> NaN
 	void read_int64s(int row_group, int col, vector<int64_t> &out);   // INT32/INT64, or FLOAT/DOUBLE of whole numbers; null is an error
-	void read_strings(int row_group, int col, vector<string> &out);   // BYTE_ARRAY, null is an error
+	void read_strings(int row_group, int col, vector<string> &out);   // BYTE_ARRAY of at most 1024 bytes, null is an error
 
 private:
 	friend class ParquetWriter;  // merge() copies the row groups through m_fd

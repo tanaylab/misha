@@ -277,3 +277,10 @@ for name, bad in (("float_coords_fraction.parquet", 160.5), ("float_coords_nan.p
     starts[5] = bad
     pq.write_table(float_coords.set_column(1, "start", pa.array(starts, pa.float64())), path(name))
 assert pq.read_table(path("float_coords_nan.parquet")).column("start").null_count == 0
+
+# single.parquet with a chromosome name of 1025 bytes in every row: one dictionary entry, which
+# the reader would otherwise copy into every row
+long_chrom = frame(rows, ("chrom", "start", "end", "a"))
+long_chrom["chrom"] = "c" * 1025
+write("long_chrom.parquet", long_chrom)
+assert pq.ParquetFile(path("long_chrom.parquet")).metadata.row_group(0).column(0).dictionary_page_offset is not None

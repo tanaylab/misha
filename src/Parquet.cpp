@@ -1190,6 +1190,10 @@ template <typename T> static void get_plain(const uint8_t *p, const uint8_t *end
 	memcpy(&out[old], p, n * sizeof(T));
 }
 
+// Longer strings are refused: a dictionary entry is copied into every row that refers to it, so a
+// small file of one long entry could otherwise ask for terabytes. Chromosome names are far shorter.
+static const uint32_t MAX_STRING_BYTES = 1024;
+
 template <> void get_plain<string>(const uint8_t *p, const uint8_t *end, uint64_t n, vector<string> &out)
 {
 	for (uint64_t i = 0; i < n; ++i) {
@@ -1199,6 +1203,8 @@ template <> void get_plain<string>(const uint8_t *p, const uint8_t *end, uint64_
 		p += 4;
 		if ((uint64_t)(end - p) < len)
 			corrupt("PLAIN values");
+		if (len > MAX_STRING_BYTES)
+			TGLError<ParquetReader>(ParquetReader::UNSUPPORTED, "a string of %u bytes; strings longer than %u bytes are not supported", len, MAX_STRING_BYTES);
 		out.emplace_back((const char *)p, len);
 		p += len;
 	}
