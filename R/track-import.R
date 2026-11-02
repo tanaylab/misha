@@ -228,7 +228,7 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
                 if (is.null(binsize) || is.na(binsize) || binsize == 0) {
                     stop("Parquet import creates dense tracks; binsize must be > 0", call. = FALSE)
                 }
-                pq_columns <- .gcall("parquet_columns", file, .misha_env())$name
+                pq_columns <- .gcall("parquet_columns", file, file.original, .misha_env())$name
                 pq_columns <- setdiff(pq_columns, c("chrom", "start", "end"))
                 if (length(pq_columns) != 1) {
                     stop(sprintf(
@@ -273,7 +273,7 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
                     if (!.gwith_umask(dir.create(pq_stage, mode = "0777"))) {
                         stop(sprintf("Failed to create a directory %s", pq_stage), call. = FALSE)
                     }
-                    .gcall("gtrackimportparquet", pq_stage, file, pq_columns, binsize, defval, .misha_env())
+                    .gcall("gtrackimportparquet", pq_stage, file, file.original, pq_columns, binsize, defval, .misha_env())
                 } else if (used_bed) {
                     if (!is.null(binsize) && !is.na(binsize) && binsize > 0) {
                         intervalData <- data.frame(
@@ -819,7 +819,7 @@ gtrack.import_parquet <- function(description, path, binsize, track.prefix = NUL
 
     coords <- c("chrom", "start", "end")
     if (is.null(columns)) {
-        info <- .gcall("parquet_columns", files[1], .misha_env())
+        info <- .gcall("parquet_columns", files[1], files[1], .misha_env())
         info <- info[!info$name %in% coords, ]
         bad <- info$name[!info$type %in% c("int32", "int64", "float", "double")]
         if (length(bad)) {
@@ -839,7 +839,7 @@ gtrack.import_parquet <- function(description, path, binsize, track.prefix = NUL
     # every file has the imported columns, and all have the same value columns (in any order)
     first_values <- NULL
     for (pq_file in files) {
-        file_cols <- .gcall("parquet_columns", pq_file, .misha_env())$name
+        file_cols <- .gcall("parquet_columns", pq_file, pq_file, .misha_env())$name
         absent <- setdiff(c(coords, columns), file_cols)
         if (length(absent)) {
             stop(sprintf("File %s has no column(s) %s", pq_file, paste(absent, collapse = ", ")), call. = FALSE)
@@ -885,7 +885,7 @@ gtrack.import_parquet <- function(description, path, binsize, track.prefix = NUL
                 }
             }
 
-            .gcall("gtrackimportparquet", staging, files, columns, binsize, defval, .misha_env())
+            .gcall("gtrackimportparquet", staging, files, files, columns, binsize, defval, .misha_env())
 
             for (i in seq_along(tracks)) {
                 .gdb.fsync(staging[i], recursive = TRUE)

@@ -220,7 +220,7 @@ test_that("arguments are checked before anything is read", {
 test_that("integer annotations are honoured; decimals, dates and timestamps are refused", {
     db <- local_pq_db()
     pq_path <- pq_fixture("annotated.parquet")
-    info <- .gcall("parquet_columns", pq_path, .misha_env())
+    info <- .gcall("parquet_columns", pq_path, pq_path, .misha_env())
     expect_identical(
         setNames(info$type, info$name),
         c(
@@ -494,6 +494,43 @@ test_that("a .parquet name is not needed", {
     src <- local_fixture_dir(list(x.dat = "single.parquet"))
     gtrack.import("pq_dat", "test", file.path(src, "x.dat"), binsize = 32)
     expect_equal(track_values("pq_dat"), expected_values("a"))
+})
+
+test_that("messages about a gzipped Parquet file name it, not its unzipped copy", {
+    db <- local_pq_db()
+    src <- withr::local_tempdir()
+    gzip_copy <- function(from, to) {
+        con <- gzfile(to, "wb")
+        writeBin(readBin(from, "raw", file.size(from)), con)
+        close(con)
+        to
+    }
+
+    # an error of the reader (decoding a column) and one of the import (before decoding)
+    gz <- gzip_copy(pq_fixture("bad_def_level.parquet"), file.path(src, "bad_def_level.parquet.gz"))
+    expect_error(suppressMessages(gtrack.import("g1", "test", gz, binsize = 32)), paste0("File ", gz, ", row group 0, column a: corrupt data"), fixed = TRUE)
+    gz <- gzip_copy(pq_fixture("more_rows_than_bases.parquet"), file.path(src, "more_rows_than_bases.parquet.gz"))
+    expect_error(suppressMessages(gtrack.import("g2", "test", gz, binsize = 32)), paste0("File ", gz, ", row group 0: 1601 rows"), fixed = TRUE)
+    expect_no_tracks_left(db, c("g1", "g2"))
+
+    # the unknown chromosome report: a file of another database, with a chromosome this one lacks
+    other <- file.path(src, "otherdb")
+    create_test_db(other, data.frame(chrom = c("chr1", "scaffold_9"), size = c(1000, 100)))
+    gdb.init(other)
+    pq_file <- file.path(src, "x.parquet")
+    gextract("1", gintervals.all(), iterator = 32, colnames = "a", file = pq_file)
+    gdb.init(db)
+    gz <- gzip_copy(pq_file, file.path(src, "x.parquet.gz"))
+    msgs <- character(0)
+    withCallingHandlers(
+        gtrack.import("g3", "test", gz, binsize = 32),
+        message = function(m) {
+            msgs <<- c(msgs, conditionMessage(m))
+            invokeRestart("muffleMessage")
+        }
+    )
+    expect_match(msgs, paste("chromosome name(s) in", gz, "do not exist"), fixed = TRUE, all = FALSE)
+    expect_equal(track_values("g3")[1:32], rep(1, 32))
 })
 
 test_that("a Parquet input with no rows is an error naming the file", {

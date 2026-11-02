@@ -1280,21 +1280,21 @@ void ParquetReader::pread_exact(void *buf, uint64_t size, uint64_t offset)
 	}
 }
 
-void ParquetReader::open(const string &filename)
+void ParquetReader::open(const string &filename, const string &name)
 {
 	if (m_fd >= 0)
 		::close(m_fd);
 	m_fd = -1;
-	m_filename = filename;
+	m_filename = name.empty() ? filename : name;
 	m_columns.clear();
 
 	m_fd = ::open(filename.c_str(), O_RDONLY | O_CLOEXEC);
 	if (m_fd < 0)
-		TGLError<ParquetReader>(FILE_ERROR, "Failed to open file %s: %s", filename.c_str(), strerror(errno));
+		TGLError<ParquetReader>(FILE_ERROR, "Failed to open file %s: %s", m_filename.c_str(), strerror(errno));
 
 	struct stat st;
 	if (fstat(m_fd, &st))
-		TGLError<ParquetReader>(FILE_ERROR, "Failed to stat file %s: %s", filename.c_str(), strerror(errno));
+		TGLError<ParquetReader>(FILE_ERROR, "Failed to stat file %s: %s", m_filename.c_str(), strerror(errno));
 	m_size = st.st_size;
 
 	char head[4], tail[8];
@@ -1303,13 +1303,13 @@ void ParquetReader::open(const string &filename)
 		pread_exact(tail, 8, m_size - 8);
 	}
 	if (m_size >= 12 && !memcmp(tail + 4, "PARE", 4))
-		TGLError<ParquetReader>(UNSUPPORTED, "File %s: encrypted Parquet files are not supported", filename.c_str());
+		TGLError<ParquetReader>(UNSUPPORTED, "File %s: encrypted Parquet files are not supported", m_filename.c_str());
 	if (m_size < 12 || memcmp(head, "PAR1", 4) || memcmp(tail + 4, "PAR1", 4))
-		TGLError<ParquetReader>(FORMAT_ERROR, "File %s is not a Parquet file, or is truncated", filename.c_str());
+		TGLError<ParquetReader>(FORMAT_ERROR, "File %s is not a Parquet file, or is truncated", m_filename.c_str());
 
 	uint32_t footer_len = get_le32((const uint8_t *)tail);
 	if (footer_len > m_size - 12)
-		TGLError<ParquetReader>(FORMAT_ERROR, "File %s: invalid footer length %u", filename.c_str(), footer_len);
+		TGLError<ParquetReader>(FORMAT_ERROR, "File %s: invalid footer length %u", m_filename.c_str(), footer_len);
 
 	m_footer_offset = m_size - 8 - footer_len;
 	string footer(footer_len, '\0');
@@ -1319,19 +1319,19 @@ void ParquetReader::open(const string &filename)
 		ThriftIn in(footer.data(), footer.size());
 		m_meta.decode(in);
 	} catch (TGLException &e) {
-		TGLError<ParquetReader>(FORMAT_ERROR, "File %s: %s", filename.c_str(), e.msg());
+		TGLError<ParquetReader>(FORMAT_ERROR, "File %s: %s", m_filename.c_str(), e.msg());
 	}
 
 	const vector<SchemaElement> &schema = m_meta.schema;
 	if (schema.empty() || schema[0].num_children < 0)
-		TGLError<ParquetReader>(FORMAT_ERROR, "File %s: invalid schema", filename.c_str());
+		TGLError<ParquetReader>(FORMAT_ERROR, "File %s: invalid schema", m_filename.c_str());
 	if ((size_t)schema[0].num_children != schema.size() - 1)
-		TGLError<ParquetReader>(UNSUPPORTED, "File %s: only flat schemas (a root group of plain columns) are supported", filename.c_str());
+		TGLError<ParquetReader>(UNSUPPORTED, "File %s: only flat schemas (a root group of plain columns) are supported", m_filename.c_str());
 
 	for (size_t i = 1; i < schema.size(); ++i) {
 		if (schema[i].num_children > 0)
 			TGLError<ParquetReader>(UNSUPPORTED, "File %s: column %s is nested; only flat schemas (a root group of plain columns) are supported",
-			                        filename.c_str(), schema[i].name.c_str());
+			                        m_filename.c_str(), schema[i].name.c_str());
 		m_columns.push_back(ParquetColumn{ schema[i].name, schema[i].type, schema[i].repetition_type == FieldRepetitionType::OPTIONAL, false, "" });
 		read_annotations(schema[i], m_columns.back());
 	}
@@ -1339,7 +1339,7 @@ void ParquetReader::open(const string &filename)
 	for (size_t i = 0; i < m_meta.row_groups.size(); ++i) {
 		const RowGroup &rg = m_meta.row_groups[i];
 		if (rg.columns.size() != m_columns.size() || rg.num_rows < 0)
-			TGLError<ParquetReader>(FORMAT_ERROR, "File %s, row group %llu: invalid metadata", filename.c_str(), (unsigned long long)i);
+			TGLError<ParquetReader>(FORMAT_ERROR, "File %s, row group %llu: invalid metadata", m_filename.c_str(), (unsigned long long)i);
 	}
 }
 

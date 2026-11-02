@@ -227,7 +227,8 @@ public:
 	ParquetReader &operator=(const ParquetReader &) = delete;
 	~ParquetReader();
 
-	void open(const string &filename);
+	// name: what messages call the file, if not filename
+	void open(const string &filename, const string &name = string());
 
 	const vector<ParquetColumn> &columns() const { return m_columns; }
 	int column_index(const string &name) const;  // -1 if absent
@@ -244,7 +245,7 @@ private:
 	friend class ParquetWriter;  // merge() copies the row groups through m_fd
 
 	int                   m_fd = -1;
-	string                m_filename;
+	string                m_filename;  // what messages call the file
 	uint64_t              m_size = 0;
 	uint64_t              m_footer_offset = 0;  // where the footer starts: the row groups end there
 	parquet::FileMetaData m_meta;

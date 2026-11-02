@@ -62,9 +62,10 @@ class ParquetImport {
 public:
 	enum { CHROM, START, END, NUM_COORDS };
 
-	ParquetImport(const GenomeChromKey &chromkey, const vector<string> &files, const vector<string> &columns,
+	// names: what messages call the files
+	ParquetImport(const GenomeChromKey &chromkey, const vector<string> &files, const vector<string> &names, const vector<string> &columns,
 	              const vector<string> &dirs, unsigned binsize, double defval) :
-		m_chromkey(chromkey), m_files(files), m_columns(columns), m_dirs(dirs), m_binsize(binsize), m_defval(defval) {}
+		m_chromkey(chromkey), m_files(files), m_names(names), m_columns(columns), m_dirs(dirs), m_binsize(binsize), m_defval(defval) {}
 
 	// Opens the files and finds the columns in each
 	void open();
@@ -83,6 +84,7 @@ public:
 private:
 	const GenomeChromKey             &m_chromkey;
 	vector<string>                    m_files;
+	vector<string>                    m_names;
 	vector<string>                    m_columns;
 	vector<string>                    m_dirs;
 	unsigned                          m_binsize;
@@ -105,10 +107,11 @@ void ParquetImport::open()
 	m_readers.clear();
 	m_col_idx.clear();
 	int64_t total_rows = 0;
-	for (const string &file : m_files) {
+	for (size_t f = 0; f < m_files.size(); ++f) {
+		const string &file = m_names[f];
 		m_readers.emplace_back(new ParquetReader());
 		ParquetReader &reader = *m_readers.back();
-		reader.open(file);
+		reader.open(m_files[f], file);
 		total_rows += reader.metadata().num_rows;
 
 		// Rows that do not overlap cannot outnumber the bases (and overlaps are an error). Checked
@@ -134,9 +137,9 @@ void ParquetImport::open()
 	// Only the total counts: an empty shard among non-empty ones is fine
 	if (!total_rows) {
 		string names;
-		for (const string &file : m_files)
+		for (const string &file : m_names)
 			names += (names.empty() ? "" : ", ") + file;
-		verror("%s %s no rows", names.c_str(), m_files.size() == 1 ? "has" : "have");
+		verror("%s %s no rows", names.c_str(), m_names.size() == 1 ? "has" : "have");
 	}
 }
 
@@ -183,7 +186,7 @@ string ParquetImport::unknown_chroms_files() const
 		if (!m_file_has_unknown[f])
 			continue;
 		if (num < (size_t)UnknownChroms::MAX_REPORTED)
-			res += (num ? ", " : "") + m_files[f];
+			res += (num ? ", " : "") + m_names[f];
 		++num;
 	}
 	if (num > (size_t)UnknownChroms::MAX_REPORTED)
@@ -194,9 +197,9 @@ string ParquetImport::unknown_chroms_files() const
 void ParquetImport::rows_error(const char *what, const Run &run1, const Run &run2) const
 {
 	if (run1.file == run2.file && run1.row_group == run2.row_group)
-		verror("File %s, row group %d: %s", m_files[run1.file].c_str(), run1.row_group, what);
-	verror("File %s, row group %d and file %s, row group %d: %s", m_files[run1.file].c_str(), run1.row_group,
-	       m_files[run2.file].c_str(), run2.row_group, what);
+		verror("File %s, row group %d: %s", m_names[run1.file].c_str(), run1.row_group, what);
+	verror("File %s, row group %d and file %s, row group %d: %s", m_names[run1.file].c_str(), run1.row_group,
+	       m_names[run2.file].c_str(), run2.row_group, what);
 }
 
 void ParquetImport::import_chrom(int chromid, const vector<int> &cols)
@@ -356,17 +359,17 @@ const char *parquet_type_name(const ParquetColumn &col, const parquet::FileMetaD
 extern "C" {
 
 // The columns of a Parquet file: data.frame(name, type), type one of int32, int64, float,
-// double, string, other
-SEXP parquet_columns(SEXP _file, SEXP _envir)
+// double, string, other. name is what messages call the file.
+SEXP parquet_columns(SEXP _file, SEXP _name, SEXP _envir)
 {
 	try {
 		RdbInitializer rdb_init;
 
-		if (!Rf_isString(_file) || Rf_length(_file) != 1)
+		if (!Rf_isString(_file) || Rf_length(_file) != 1 || !Rf_isString(_name) || Rf_length(_name) != 1)
 			verror("File argument is not a string");
 
 		ParquetReader reader;
-		reader.open(CHAR(STRING_ELT(_file, 0)));
+		reader.open(CHAR(STRING_ELT(_file, 0)), CHAR(STRING_ELT(_name, 0)));
 
 		const vector<ParquetColumn> &cols = reader.columns();
 		SEXP answer = DataFrameUtils::create_data_frame(cols.size(), 2);
@@ -394,8 +397,9 @@ SEXP parquet_columns(SEXP _file, SEXP _envir)
 }
 
 // dirs[i] is an existing empty directory that receives the per-chromosome files of columns[i],
-// for every chromosome of the database
-SEXP gtrackimportparquet(SEXP _dirs, SEXP _files, SEXP _columns, SEXP _binsize, SEXP _defval, SEXP _envir)
+// for every chromosome of the database. names[i] is what messages call files[i]: gtrack.import
+// reads a gzipped file from a temporary copy.
+SEXP gtrackimportparquet(SEXP _dirs, SEXP _files, SEXP _names, SEXP _columns, SEXP _binsize, SEXP _defval, SEXP _envir)
 {
 	try {
 		RdbInitializer rdb_init;
@@ -404,6 +408,8 @@ SEXP gtrackimportparquet(SEXP _dirs, SEXP _files, SEXP _columns, SEXP _binsize, 
 			verror("dirs and columns must be character vectors of the same, positive, length");
 		if (!Rf_isString(_files) || !Rf_length(_files))
 			verror("files must be a non-empty character vector");
+		if (!Rf_isString(_names) || Rf_length(_names) != Rf_length(_files))
+			verror("names must be a character vector of the length of files");
 		if ((!Rf_isReal(_binsize) && !Rf_isInteger(_binsize)) || Rf_length(_binsize) != 1)
 			verror("Binsize argument is not a number");
 		if ((!Rf_isReal(_defval) && !Rf_isInteger(_defval)) || Rf_length(_defval) != 1)
@@ -417,17 +423,19 @@ SEXP gtrackimportparquet(SEXP _dirs, SEXP _files, SEXP _columns, SEXP _binsize, 
 			verror("Invalid value of binsize argument: %g", dbinsize);
 		unsigned binsize = (unsigned)dbinsize;
 
-		vector<string> dirs, files, columns;
+		vector<string> dirs, files, names, columns;
 		for (int i = 0; i < Rf_length(_dirs); ++i) {
 			dirs.push_back(CHAR(STRING_ELT(_dirs, i)));
 			columns.push_back(CHAR(STRING_ELT(_columns, i)));
 		}
-		for (int i = 0; i < Rf_length(_files); ++i)
+		for (int i = 0; i < Rf_length(_files); ++i) {
 			files.push_back(CHAR(STRING_ELT(_files, i)));
+			names.push_back(CHAR(STRING_ELT(_names, i)));
+		}
 
 		IntervUtils iu(_envir);
 		const GenomeChromKey &chromkey = iu.get_chromkey();
-		ParquetImport import(chromkey, files, columns, dirs, binsize, defval);
+		ParquetImport import(chromkey, files, names, columns, dirs, binsize, defval);
 
 		import.open();
 		import.index();
