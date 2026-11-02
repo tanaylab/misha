@@ -32,8 +32,9 @@ public:
 
 	void init(const GenomeChromKey &chromkey, const string &filename);
 
-	// returns true if data for chromosome exists; (float)udata of each interval contains the value
-	bool get_data(int chromid, GIntervals &intervals);
+	// Fills intervals with the records of data block iblock of the chromosome, (float)udata holding
+	// the value. Blocks must be read in order from 0. Returns false past the chromosome's last block.
+	bool get_data(int chromid, uint64_t iblock, GIntervals &intervals);
 
 	// Chromosome names that carry data in the file but do not exist in the genome database.
 	const UnknownChroms &get_unknown_chroms() const { return m_unknown_chroms; }
@@ -57,6 +58,7 @@ private:
 	uint64_t               m_tree_budget;     // see init()
 	vector<char>           m_cbuf;
 	vector<char>           m_ubuf;
+	int64_t                m_last_end{0};     // end of the previous record of the chromosome
 
 	void read_at(uint64_t offset, void *buf, uint64_t size);
 	void read_chrom_tree(uint64_t offset, uint32_t keysize, int depth, vector<pair<uint32_t, string> > &chroms);

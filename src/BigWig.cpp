@@ -219,89 +219,90 @@ void BigWig::read_rtree(uint64_t offset, int depth)
 		read_rtree(*ichild, depth + 1);
 }
 
-bool BigWig::get_data(int chromid, GIntervals &intervals)
+bool BigWig::get_data(int chromid, uint64_t iblock, GIntervals &intervals)
 {
 	intervals.clear();
-	if (m_db2bw[chromid] < 0)
+	if (m_db2bw[chromid] < 0 || iblock >= m_blocks[m_db2bw[chromid]].size())
 		return false;
 
 	const char *fname = m_bfile.file_name().c_str();
 	uint32_t bwid = m_db2bw[chromid];
 	int64_t chromsize = m_chromkey->get_chrom_size(chromid);
-	int64_t last_end = 0;
+	const Block &block = m_blocks[bwid][iblock];
 
-	for (vector<Block>::const_iterator iblock = m_blocks[bwid].begin(); iblock != m_blocks[bwid].end(); ++iblock) {
-		const char *data;
-		uint64_t size;
+	if (!iblock)
+		m_last_end = 0;
 
-		m_cbuf.resize(iblock->size);
-		read_at(iblock->offset, m_cbuf.data(), iblock->size);
+	const char *data;
+	uint64_t size;
 
-		if (m_uncompress_bufsize) {
-			uLongf usize = min((uint64_t)m_uncompress_bufsize, MAX_BLOCK_SIZE);
-			int rc;
+	m_cbuf.resize(block.size);
+	read_at(block.offset, m_cbuf.data(), block.size);
 
-			m_ubuf.resize(usize);
-			rc = uncompress((Bytef *)m_ubuf.data(), &usize, (const Bytef *)m_cbuf.data(), iblock->size);
-			if (rc != Z_OK)
-				TGLError<BigWig>(INVALID_FORMAT, "bigWig file %s: data block at offset %llu failed to decompress (zlib error %d)",
-				                 fname, (unsigned long long)iblock->offset, rc);
-			data = m_ubuf.data();
-			size = usize;
+	if (m_uncompress_bufsize) {
+		uLongf usize = min((uint64_t)m_uncompress_bufsize, MAX_BLOCK_SIZE);
+		int rc;
+
+		m_ubuf.resize(usize);
+		rc = uncompress((Bytef *)m_ubuf.data(), &usize, (const Bytef *)m_cbuf.data(), block.size);
+		if (rc != Z_OK)
+			TGLError<BigWig>(INVALID_FORMAT, "bigWig file %s: data block at offset %llu failed to decompress (zlib error %d)",
+			                 fname, (unsigned long long)block.offset, rc);
+		data = m_ubuf.data();
+		size = usize;
+	} else {
+		data = m_cbuf.data();
+		size = block.size;
+	}
+
+	// section header: chromId, start, end, itemStep, itemSpan, type, reserved, itemCount
+	if (size < 24)
+		TGLError<BigWig>(INVALID_FORMAT, "bigWig file %s: malformed data block at offset %llu", fname, (unsigned long long)block.offset);
+
+	int64_t start = get<uint32_t>(data + 4);
+	int64_t step = get<uint32_t>(data + 12);
+	int64_t span = get<uint32_t>(data + 16);
+	uint8_t type = data[20];
+	uint16_t num_items = get<uint16_t>(data + 22);
+	uint64_t item_size = type == 1 ? 12 : type == 2 ? 8 : type == 3 ? 4 : 0;   // bedGraph, variableStep, fixedStep
+
+	if (get<uint32_t>(data) != bwid || !item_size || size != 24 + num_items * item_size)
+		TGLError<BigWig>(INVALID_FORMAT, "bigWig file %s: malformed data block at offset %llu", fname, (unsigned long long)block.offset);
+
+	const char *item = data + 24;
+
+	for (uint16_t i = 0; i < num_items; ++i, item += item_size) {
+		int64_t s, e;
+		float v;
+
+		if (type == 1) {
+			s = get<uint32_t>(item);
+			e = get<uint32_t>(item + 4);
+			v = get<float>(item + 8);
+		} else if (type == 2) {
+			s = get<uint32_t>(item);
+			e = s + span;
+			v = get<float>(item + 4);
 		} else {
-			data = m_cbuf.data();
-			size = iblock->size;
+			s = start + i * step;
+			e = s + span;
+			v = get<float>(item);
 		}
 
-		// section header: chromId, start, end, itemStep, itemSpan, type, reserved, itemCount
-		if (size < 24)
-			TGLError<BigWig>(INVALID_FORMAT, "bigWig file %s: malformed data block at offset %llu", fname, (unsigned long long)iblock->offset);
+		if (s >= e)   // bedGraphToBigWig stores zero-length records; bigWigToWig skipped them
+			continue;
 
-		int64_t start = get<uint32_t>(data + 4);
-		int64_t step = get<uint32_t>(data + 12);
-		int64_t span = get<uint32_t>(data + 16);
-		uint8_t type = data[20];
-		uint16_t num_items = get<uint16_t>(data + 22);
-		uint64_t item_size = type == 1 ? 12 : type == 2 ? 8 : type == 3 ? 4 : 0;   // bedGraph, variableStep, fixedStep
+		// As in the WIG parser: a bedGraph record must fit the chromosome, a step record is clipped to it.
+		if (s >= chromsize || (type == 1 && e > chromsize))
+			TGLError<BigWig>(BAD_COORD, "bigWig file %s: record %s:%lld-%lld exceeds chromosome %s boundaries",
+			                 fname, m_bw_names[bwid].c_str(), (long long)s, (long long)e, m_chromkey->id2chrom(chromid).c_str());
 
-		if (get<uint32_t>(data) != bwid || !item_size || size != 24 + num_items * item_size)
-			TGLError<BigWig>(INVALID_FORMAT, "bigWig file %s: malformed data block at offset %llu", fname, (unsigned long long)iblock->offset);
+		if (s < m_last_end)
+			TGLError<BigWig>(INVALID_FORMAT, "bigWig file %s: records of %s are overlapping or unsorted at %lld",
+			                 fname, m_bw_names[bwid].c_str(), (long long)s);
 
-		const char *item = data + 24;
-
-		for (uint16_t i = 0; i < num_items; ++i, item += item_size) {
-			int64_t s, e;
-			float v;
-
-			if (type == 1) {
-				s = get<uint32_t>(item);
-				e = get<uint32_t>(item + 4);
-				v = get<float>(item + 8);
-			} else if (type == 2) {
-				s = get<uint32_t>(item);
-				e = s + span;
-				v = get<float>(item + 4);
-			} else {
-				s = start + i * step;
-				e = s + span;
-				v = get<float>(item);
-			}
-
-			if (s >= e)   // bedGraphToBigWig stores zero-length records; bigWigToWig skipped them
-				continue;
-
-			// As in the WIG parser: a bedGraph record must fit the chromosome, a step record is clipped to it.
-			if (s >= chromsize || (type == 1 && e > chromsize))
-				TGLError<BigWig>(BAD_COORD, "bigWig file %s: record %s:%lld-%lld exceeds chromosome %s boundaries",
-				                 fname, m_bw_names[bwid].c_str(), (long long)s, (long long)e, m_chromkey->id2chrom(chromid).c_str());
-
-			if (s < last_end)
-				TGLError<BigWig>(INVALID_FORMAT, "bigWig file %s: records of %s are overlapping or unsorted at %lld",
-				                 fname, m_bw_names[bwid].c_str(), (long long)s);
-
-			last_end = min(e, chromsize);
-			intervals.push_back(GInterval(chromid, s, last_end, 0, GInterval::cast2udata(v)));
-		}
+		m_last_end = min(e, chromsize);
+		intervals.push_back(GInterval(chromid, s, m_last_end, 0, GInterval::cast2udata(v)));
 	}
 	return true;
 }
