@@ -66,16 +66,14 @@ A bin `[s, e)` of a sequence virtual track reads
 `[s + sshift, e + eshift + W - 1)`, where the shifts come from
 [`gvtrack.iterator`](https://tanaylab.github.io/misha/reference/gvtrack.iterator.md)
 and `W - 1` is added when the track extends (`extend = TRUE`, motif or
-model width `W`). Two families read further: `kmer.count` and
-`kmer.frac` with `strand` 0 or -1 start at `s + sshift - (k - 1)` for a
-k-mer of length `k` (when `extend = TRUE`), and `pwm.edit_distance` with
-`max_indels` ends `max_indels` bases later, at
-`e + eshift + W - 1 + max_indels`. A substitution is paired with every
-bin whose reach, the union over the expression's sequence virtual
-tracks, contains it. Tracks and non-sequence virtual tracks in `expr`
-are read as usual, so they contribute the same value to both columns.
-The substituted base takes the case of the reference base, so `masked.*`
-tracks see the same mask. Only single-base substitutions are supported.
+model width `W`). `pwm.edit_distance` with `max_indels` reads further:
+it ends `max_indels` bases later, at `e + eshift + W - 1 + max_indels`.
+A substitution is paired with every bin whose reach, the union over the
+expression's sequence virtual tracks, contains it. Tracks and
+non-sequence virtual tracks in `expr` are read as usual, so they
+contribute the same value to both columns. The substituted base takes
+the case of the reference base, so `masked.*` tracks see the same mask.
+Only single-base substitutions are supported.
 
 The exact pass runs in one process. For genome-scale runs, split
 `intervals` by chromosome and run the pieces in parallel.

@@ -13,7 +13,7 @@ variants listed in variants."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">misha</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.14.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.14.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -42,7 +42,7 @@ variants listed in variants."></head><body>
   <main id="main" class="col-md-9"><div class="page-header">
 
       <h1>Evaluate a track expression under single-base substitutions</h1>
-      <small class="dont-index">Source: <a href="https://github.com/tanaylab/misha/blob/v5.14.0/R/compute-variants.R" class="external-link"><code>R/compute-variants.R</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/tanaylab/misha/blob/master/R/compute-variants.R" class="external-link"><code>R/compute-variants.R</code></a></small>
       <div class="d-none name"><code>gextract.variants.Rd</code></div>
     </div>
 
@@ -112,10 +112,8 @@ value and the substituted value fall on different sides of it.</p></dd>
     <p>A bin <code>[s, e)</code> of a sequence virtual track reads <code>[s + sshift, e +
 eshift + W - 1)</code>, where the shifts come from <code><a href="gvtrack.iterator.html">gvtrack.iterator</a></code>
 and <code>W - 1</code> is added when the track extends (<code>extend = TRUE</code>, motif
-or model width <code>W</code>). Two families read further: <code>kmer.count</code> and
-<code>kmer.frac</code> with <code>strand</code> 0 or -1 start at <code>s + sshift - (k -
-1)</code> for a k-mer of length <code>k</code> (when <code>extend = TRUE</code>), and
-<code>pwm.edit_distance</code> with <code>max_indels</code> ends <code>max_indels</code> bases
+or model width <code>W</code>). <code>pwm.edit_distance</code> with <code>max_indels</code>
+reads further: it ends <code>max_indels</code> bases
 later, at <code>e + eshift + W - 1 + max_indels</code>. A substitution is paired with every bin whose reach,
 the union over the expression's sequence virtual tracks, contains it. Tracks
 and non-sequence virtual tracks in <code>expr</code> are read as usual, so they

@@ -1,5 +1,11 @@
 # Changelog
 
+## misha 5.14.1
+
+- **Behavior fix:** `kmer.count` and `kmer.frac` could be wrong near bin
+  edges when an expression used 4 or more sequence virtual tracks; they
+  now match the same virtual track used alone.
+
 ## misha 5.14.0
 
 #### New features
