@@ -49,10 +49,8 @@ variants listed in \code{variants}.
 A bin \code{[s, e)} of a sequence virtual track reads \code{[s + sshift, e +
 eshift + W - 1)}, where the shifts come from \code{\link{gvtrack.iterator}}
 and \code{W - 1} is added when the track extends (\code{extend = TRUE}, motif
-or model width \code{W}). Two families read further: \code{kmer.count} and
-\code{kmer.frac} with \code{strand} 0 or -1 start at \code{s + sshift - (k -
-1)} for a k-mer of length \code{k} (when \code{extend = TRUE}), and
-\code{pwm.edit_distance} with \code{max_indels} ends \code{max_indels} bases
+or model width \code{W}). \code{pwm.edit_distance} with \code{max_indels}
+reads further: it ends \code{max_indels} bases
 later, at \code{e + eshift + W - 1 + max_indels}. A substitution is paired with every bin whose reach,
 the union over the expression's sequence virtual tracks, contains it. Tracks
 and non-sequence virtual tracks in \code{expr} are read as usual, so they

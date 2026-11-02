@@ -1436,12 +1436,13 @@ test_that("kmer honors iterator shifts for reverse strand (extend=TRUE)", {
         orig <- test_intervals
         orig$start <- pmax(0, orig$start - s)
         orig$end <- orig$end + s
-        # For reverse strand with extend=TRUE, fetch extends at the start by k-1
+        # extend=TRUE pads the end by k-1, on either strand
         fetch <- orig
-        fetch$start <- pmax(0, fetch$start - (nchar(k) - 1))
+        fetch$end <- fetch$end + (nchar(k) - 1)
         seq_ext <- toupper(gseq.extract(fetch))
 
-        # Count occurrences of reverse complement in forward sequence window
+        # Reverse-strand k-mers starting in the window = its reverse complement
+        # on the forward strand
         res <- count_kmers_manually(seq_ext, rc_k, orig, fetch)
 
         expect_equal(scores[[count_names[i]]], res$count)
@@ -1475,16 +1476,12 @@ test_that("kmer honors iterator shifts for both strands (extend=TRUE)", {
         orig <- test_intervals
         orig$start <- pmax(0, orig$start - s)
         orig$end <- orig$end + s
-        # Forward fetch extends at end; reverse fetch extends at start
-        fetch_fwd <- orig
-        fetch_fwd$end <- fetch_fwd$end + (nchar(k) - 1)
-        seq_fwd <- toupper(gseq.extract(fetch_fwd))
-        res_fwd <- count_kmers_manually(seq_fwd, k, orig, fetch_fwd)
-
-        fetch_rev <- orig
-        fetch_rev$start <- pmax(0, fetch_rev$start - (nchar(k) - 1))
-        seq_rev <- toupper(gseq.extract(fetch_rev))
-        res_rev <- count_kmers_manually(seq_rev, rc_k, orig, fetch_rev)
+        # extend=TRUE pads the end by k-1, on either strand
+        fetch <- orig
+        fetch$end <- fetch$end + (nchar(k) - 1)
+        seq_ext <- toupper(gseq.extract(fetch))
+        res_fwd <- count_kmers_manually(seq_ext, k, orig, fetch)
+        res_rev <- count_kmers_manually(seq_ext, rc_k, orig, fetch)
 
         expected_count <- res_fwd$count + res_rev$count
         possible_positions <- (orig$end - orig$start) - nchar(k) + 1

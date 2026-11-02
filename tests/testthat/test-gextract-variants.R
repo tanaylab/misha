@@ -10,7 +10,7 @@ test_that("reach: a bin [s, e) of each sequence vtrack reads [s + lo, e + hi)", 
     expect_equal(reach("v_pwm"), cbind(lo = -5, hi = 3 + 3))
     expect_equal(reach("r_noext"), cbind(lo = 0, hi = 0))
     expect_equal(reach("v_potts"), cbind(lo = 4, hi = 4 + 5))
-    expect_equal(reach("v_kmer"), cbind(lo = -2 - 2, hi = 2 + 2))
+    expect_equal(reach("v_kmer"), cbind(lo = -2, hi = 2 + 2))
     expect_equal(reach("r_kmer_fwd"), cbind(lo = 0, hi = 2))
     expect_equal(reach("r_kmer_noext"), cbind(lo = 0, hi = 0))
     expect_equal(reach("v_masked"), cbind(lo = -3, hi = 3))

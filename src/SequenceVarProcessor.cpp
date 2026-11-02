@@ -3,6 +3,7 @@
 #include <limits>
 #include <vector>
 #include <unordered_map>
+#include <set>
 #include <unordered_set>
 #include <algorithm>
 #include <cctype>
@@ -557,9 +558,9 @@ void SequenceVarProcessor::batch_process_sequence_vtracks(
 		unordered_map<string, vector<size_t>> rev_positions;
 
 		// Get max kmer length for this group
-		size_t max_kmer_len = 0;
+		std::set<size_t> kmer_lens;
 		for (TrackExpressionVars::Track_var* var : group) {
-			max_kmer_len = max(max_kmer_len, var->kmer_counter->get_kmer().length());
+			kmer_lens.insert(var->kmer_counter->get_kmer().length());
 		}
 
 		// Fetch and process forward strand if needed
@@ -574,7 +575,8 @@ void SequenceVarProcessor::batch_process_sequence_vtracks(
 
 			// Build HashMap: scan once, record all kmer positions
 			for (size_t pos = 0; pos < sequence.length(); pos++) {
-				for (size_t k = 1; k <= max_kmer_len && pos + k <= sequence.length(); k++) {
+				for (size_t k : kmer_lens) {
+					if (pos + k > sequence.length()) break;
 					string kmer = sequence.substr(pos, k);
 					fwd_positions[kmer].push_back(pos);
 				}
@@ -593,7 +595,8 @@ void SequenceVarProcessor::batch_process_sequence_vtracks(
 
 			// Build HashMap for reverse strand
 			for (size_t pos = 0; pos < sequence.length(); pos++) {
-				for (size_t k = 1; k <= max_kmer_len && pos + k <= sequence.length(); k++) {
+				for (size_t k : kmer_lens) {
+					if (pos + k > sequence.length()) break;
 					string kmer = sequence.substr(pos, k);
 					rev_positions[kmer].push_back(pos);
 				}
