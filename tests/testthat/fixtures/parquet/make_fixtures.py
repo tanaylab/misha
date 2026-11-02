@@ -215,3 +215,30 @@ with open(path("huge_num_values.parquet"), "wb") as fh:
 md = pq.ParquetFile(path("huge_num_values.parquet")).metadata
 assert md.row_group(0).num_rows == 51 and md.row_group(0).column(0).num_values == 2**40
 assert md.row_group(0).column(1).num_values == 51
+
+# single.parquet with a null in rows 16 to 31 of a, written uncompressed and PLAIN, so that the
+# definition levels of a are the RLE runs (16 x 1, 16 x 0, 19 x 1). Their values are then set to
+# 2 and 0: the runs still count 32 values, which the page holds, but a level of 2 does not exist
+# (pyarrow refuses the file: "Malformed levels")
+single = pq.read_table(path("single.parquet"))
+a = pa.array([None if 16 <= i < 32 else v for i, v in enumerate(single.column("a").to_pylist())], type=pa.float32())
+pq.write_table(single.set_column(3, "a", a), path("bad_def_level.parquet"), use_dictionary=False, compression="none")
+data = open(path("bad_def_level.parquet"), "rb").read()
+levels = bytes.fromhex("06 00 00 00 20 01 20 00 26 01")  # their 4-byte length, then the runs
+assert data.count(levels) == 1
+with open(path("bad_def_level.parquet"), "wb") as fh:
+    fh.write(data.replace(levels, bytes.fromhex("06 00 00 00 20 02 20 00 26 00")))
+
+# single.parquet with 1601 rows in its footer, one more than the bases of the test genome
+# (chr1 1000 + chr2 600 bp): num_rows of the file and of the row group, and num_values of every
+# column chunk, all the field header 0x16 then the zigzag varint 102 (51)
+data = open(path("single.parquet"), "rb").read()
+n = int.from_bytes(data[-8:-4], "little")
+footer = data[-8 - n:-8]
+assert footer.count(b"\x16\x66") == 6
+footer = footer.replace(b"\x16\x66", b"\x16" + varint(2 * 1601))
+with open(path("more_rows_than_bases.parquet"), "wb") as fh:
+    fh.write(data[:-8 - n] + footer + len(footer).to_bytes(4, "little") + b"PAR1")
+md = pq.ParquetFile(path("more_rows_than_bases.parquet")).metadata
+assert md.num_rows == 1601 and md.row_group(0).num_rows == 1601
+assert all(md.row_group(0).column(k).num_values == 1601 for k in range(4))

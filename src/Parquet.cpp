@@ -1170,6 +1170,8 @@ static void get_rle_hybrid(const uint8_t *p, const uint8_t *end, int bit_width, 
 			uint32_t v = 0;
 			for (int i = 0; i < value_bytes; ++i)
 				v |= (uint32_t)p[i] << (8 * i);
+			if (v > mask)  // a definition level of 2 would count as two values
+				corrupt("RLE run value exceeds the bit width");
 			p += value_bytes;
 			out.insert(out.end(), min(count, target - out.size()), v);
 		}

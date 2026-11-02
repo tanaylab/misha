@@ -101,6 +101,24 @@ test_that("a column chunk that claims more values than its row group has is refu
     expect_no_tracks_left(db, c("h_a"))
 })
 
+test_that("a definition level the bit width cannot hold is corrupt data", {
+    db <- local_pq_db()
+    expect_error(
+        gtrack.import_parquet("test", pq_fixture("bad_def_level.parquet"), 32, track.prefix = "d_"),
+        "bad_def_level.parquet, row group 0, column a: corrupt data \\(RLE run value exceeds the bit width\\)"
+    )
+    expect_no_tracks_left(db, "d_a")
+})
+
+test_that("a row group of more rows than the genome has bases is refused before it is read", {
+    db <- local_pq_db()
+    expect_error(
+        gtrack.import_parquet("test", pq_fixture("more_rows_than_bases.parquet"), 32, track.prefix = "m_"),
+        "more_rows_than_bases.parquet, row group 0: 1601 rows, more than the 1600 bases of the genome"
+    )
+    expect_no_tracks_left(db, "m_a")
+})
+
 test_that("description is validated up front", {
     db <- local_pq_db()
     expect_error(gtrack.import_parquet(NULL, pq_fixture("single.parquet"), 32), "Usage: gtrack.import_parquet")

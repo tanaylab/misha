@@ -98,6 +98,10 @@ private:
 
 void ParquetImport::open()
 {
+	uint64_t genome_size = 0;
+	for (int chromid = 0; chromid < (int)m_chromkey.get_num_chroms(); ++chromid)
+		genome_size += m_chromkey.get_chrom_size(chromid);
+
 	m_readers.clear();
 	m_col_idx.clear();
 	int64_t total_rows = 0;
@@ -106,6 +110,15 @@ void ParquetImport::open()
 		ParquetReader &reader = *m_readers.back();
 		reader.open(file);
 		total_rows += reader.metadata().num_rows;
+
+		// Rows that do not overlap cannot outnumber the bases (and overlaps are an error). Checked
+		// before decoding, which allocates by the row count: a small corrupt file could ask for
+		// tens of GB.
+		for (int rg = 0; rg < reader.num_row_groups(); ++rg) {
+			if ((uint64_t)reader.num_rows(rg) > genome_size)
+				verror("File %s, row group %d: %lld rows, more than the %llu bases of the genome", file.c_str(), rg,
+				       (long long)reader.num_rows(rg), (unsigned long long)genome_size);
+		}
 
 		vector<string> names = { "chrom", "start", "end" };
 		names.insert(names.end(), m_columns.begin(), m_columns.end());
