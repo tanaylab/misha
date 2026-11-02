@@ -448,3 +448,43 @@ test_that("a .parquet name is not needed", {
     gtrack.import("pq_dat", "test", file.path(src, "x.dat"), binsize = 32)
     expect_equal(track_values("pq_dat"), expected_values("a"))
 })
+
+test_that("a Parquet input with no rows is an error naming the file", {
+    db <- local_pq_db()
+    empty <- pq_fixture("no_rowgroups.parquet")
+    expect_error(gtrack.import_parquet("test", empty, 32, track.prefix = "e_"), paste(empty, "has no rows"), fixed = TRUE)
+    expect_no_tracks_left(db, "e_a")
+    expect_error(gtrack.import("e_one", "test", empty, binsize = 32), paste(empty, "has no rows"), fixed = TRUE)
+    expect_no_tracks_left(db, "e_one")
+
+    # misha's own output for an empty scope: one row group of zero rows
+    own <- file.path(withr::local_tempdir(), "own.parquet")
+    gtrack.create_sparse("dense_src", "src", gintervals("chr1", 0, 10), 1)
+    gextract("dense_src", intervals = gintervals("chr1", 0, 100), iterator = gintervals("chr2", 0, 100), file = own)
+    expect_error(gtrack.import_parquet("test", own, 32, track.prefix = "o_"), paste(own, "has no rows"), fixed = TRUE)
+    expect_length(staging_leftovers(db), 0)
+    expect_identical(gtrack.ls(), "dense_src")
+})
+
+test_that("an empty shard among non-empty shards imports", {
+    db <- local_pq_db()
+    src <- local_fixture_dir(list(shard_1.parquet = "no_rowgroups.parquet", shard_2.parquet = "single.parquet"))
+    gtrack.import_parquet("test", file.path(src, "shard_*.parquet"), 32, track.prefix = "x_")
+    expect_identical(track_values("x_a"), expected_values("a"))
+    # all shards empty: an error naming all of them
+    src <- local_fixture_dir(list(s1.parquet = "no_rowgroups.parquet", s2.parquet = "no_rowgroups.parquet"))
+    expect_error(gtrack.import_parquet("test", file.path(src, "s*.parquet"), 32, track.prefix = "y_"), "s1.parquet, .*s2.parquet have no rows")
+    expect_length(staging_leftovers(db), 0)
+})
+
+test_that("a directory as path suggests the glob", {
+    db <- local_pq_db()
+    src <- local_fixture_dir(list(a.parquet = "single.parquet"))
+    expect_error(
+        gtrack.import_parquet("test", src, 32, track.prefix = "d_"),
+        paste0("is a directory; to import the Parquet files in it use path = \"", file.path(src, "*.parquet"), "\""),
+        fixed = TRUE
+    )
+    expect_no_tracks_left(db, "d_a")
+    expect_error(gtrack.import_parquet("test", file.path(src, "nothing"), 32), "No files match")
+})

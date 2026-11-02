@@ -384,7 +384,7 @@ gtrack.import("epi.k27me3.es",
               defval      = NaN)
 ```
 
-`gtrack.import` auto-dispatches on extension (`.bw`, `.wig`, `.bed`, `.txt`/`.tsv`).
+`gtrack.import` auto-dispatches on extension (`.bw`, `.wig`, `.bed`, `.txt`/`.tsv`) and on the PAR1 magic of a Parquet file (one value column; use `gtrack.import_parquet()` for several).
 
 **BED-style read intervals (R data.frame) → pileup track in one call.** `gtrack.create_dense(..., func = "coverage")`: bin value = `sum(value_i * overlap_i / binsize)` = average per-base signal in the bin. With `values = rep(1, n)`, this is a ChIP-seq-style pileup in a single call:
 

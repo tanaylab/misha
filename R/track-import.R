@@ -811,6 +811,9 @@ gtrack.import_parquet <- function(description, path, binsize, track.prefix = NUL
     files <- sort(Sys.glob(path))
     files <- files[!dir.exists(files)]
     if (!length(files)) {
+        if (dir.exists(path)) {
+            stop(sprintf("%s is a directory; to import the Parquet files in it use path = \"%s\"", path, file.path(path, "*.parquet")), call. = FALSE)
+        }
         stop(sprintf("No files match %s", path), call. = FALSE)
     }
 

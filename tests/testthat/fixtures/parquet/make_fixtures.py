@@ -185,3 +185,9 @@ footer = unknown + field(1, 5) + footer[1:]
 with open(path("unknown_fields.parquet"), "wb") as fh:
     fh.write(data[:-8 - n] + footer + len(footer).to_bytes(4, "little") + b"PAR1")
 assert pq.read_table(path("unknown_fields.parquet")).equals(pq.read_table(path("plain_uncompressed.parquet")))
+
+# a file with the columns of single.parquet and no row groups at all (pyarrow's ParquetFile.read()
+# gives an empty table)
+with pq.ParquetWriter(path("no_rowgroups.parquet"), table(frame(rows, ("chrom", "start", "end", "a"))).schema):
+    pass
+assert pq.ParquetFile(path("no_rowgroups.parquet")).metadata.num_row_groups == 0

@@ -100,10 +100,12 @@ void ParquetImport::open()
 {
 	m_readers.clear();
 	m_col_idx.clear();
+	int64_t total_rows = 0;
 	for (const string &file : m_files) {
 		m_readers.emplace_back(new ParquetReader());
 		ParquetReader &reader = *m_readers.back();
 		reader.open(file);
+		total_rows += reader.metadata().num_rows;
 
 		vector<string> names = { "chrom", "start", "end" };
 		names.insert(names.end(), m_columns.begin(), m_columns.end());
@@ -114,6 +116,14 @@ void ParquetImport::open()
 				verror("File %s has no column \"%s\"", file.c_str(), name.c_str());
 			m_col_idx.back().push_back(idx);
 		}
+	}
+
+	// Only the total counts: an empty shard among non-empty ones is fine
+	if (!total_rows) {
+		string names;
+		for (const string &file : m_files)
+			names += (names.empty() ? "" : ", ") + file;
+		verror("%s %s no rows", names.c_str(), m_files.size() == 1 ? "has" : "have");
 	}
 }
 

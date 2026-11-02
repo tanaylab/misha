@@ -653,38 +653,44 @@ void ParquetWriter::merge(const string &target, const vector<string> &parts)
 
 	out.create(target);
 	for (size_t i = 0; i < parts.size(); ++i) {
-		ParquetReader part;
-		part.open(parts[i]);
-		const FileMetaData &meta = part.metadata();
+		{  // the reader is closed before the part is unlinked (NFS silly-renames open files)
+			ParquetReader part;
+			part.open(parts[i]);
+			const FileMetaData &meta = part.metadata();
 
-		string part_schema;
-		for (const SchemaElement &se : meta.schema)
-			se.encode(part_schema);
-		if (!i) {
-			schema = part_schema;
-			out.m_meta = meta;
-			out.m_meta.num_rows = 0;
-			out.m_meta.row_groups.clear();
-		} else if (part_schema != schema)
-			TGLError<ParquetWriter>(FORMAT_ERROR, "Cannot merge %s into %s: its schema differs from that of %s", parts[i].c_str(), target.c_str(), parts[0].c_str());
+			string part_schema;
+			for (const SchemaElement &se : meta.schema)
+				se.encode(part_schema);
+			if (!i) {
+				schema = part_schema;
+				out.m_meta = meta;
+				out.m_meta.num_rows = 0;
+				out.m_meta.row_groups.clear();
+			} else if (part_schema != schema)
+				TGLError<ParquetWriter>(FORMAT_ERROR, "Cannot merge %s into %s: its schema differs from that of %s", parts[i].c_str(), target.c_str(), parts[0].c_str());
 
-		// A part without rows holds one empty row group (see close())
-		if (!meta.num_rows && (i + 1 < parts.size() || !out.m_meta.row_groups.empty()))
-			continue;
+			// A part without rows holds one empty row group (see close())
+			bool skip = !meta.num_rows && (i + 1 < parts.size() || !out.m_meta.row_groups.empty());
 
-		int64_t shift = (int64_t)out.m_offset - 4;
-		out.append(part.m_fd, parts[i], 4, part.m_footer_offset - 4);
-		for (RowGroup rg : meta.row_groups) {
-			rg.file_offset += shift;
-			for (ColumnChunk &cc : rg.columns) {
-				cc.file_offset += shift;
-				cc.meta_data.data_page_offset += shift;
-				if (cc.meta_data.dictionary_page_offset >= 0)
-					cc.meta_data.dictionary_page_offset += shift;
+			if (!skip) {
+				int64_t shift = (int64_t)out.m_offset - 4;
+				out.append(part.m_fd, parts[i], 4, part.m_footer_offset - 4);
+				for (RowGroup rg : meta.row_groups) {
+					rg.file_offset += shift;
+					for (ColumnChunk &cc : rg.columns) {
+						cc.file_offset += shift;
+						cc.meta_data.data_page_offset += shift;
+						if (cc.meta_data.dictionary_page_offset >= 0)
+							cc.meta_data.dictionary_page_offset += shift;
+					}
+					out.m_meta.row_groups.push_back(rg);
+				}
+				out.m_meta.num_rows += meta.num_rows;
 			}
-			out.m_meta.row_groups.push_back(rg);
 		}
-		out.m_meta.num_rows += meta.num_rows;
+		// Frees the part's disk now, so that the peak is not every part plus the merged file;
+		// the caller's guard unlinks the rest on failure and ignores the ENOENT of this one
+		unlink(parts[i].c_str());
 	}
 	out.close();
 }
