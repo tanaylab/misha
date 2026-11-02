@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cerrno>
+#include <cmath>
 #include <cstring>
 #include <fcntl.h>
 #include <limits>
@@ -1550,9 +1551,24 @@ void ParquetReader::read_int64s(int row_group, int col, vector<int64_t> &out)
 					                        m_filename.c_str(), row_group, c.name.c_str(), (unsigned long long)v);
 			}
 			return;
+		case Type::FLOAT:
+		case Type::DOUBLE: {
+			vector<double> vals;
+
+			c.physical_type == Type::FLOAT ? read_as<float>(row_group, col, vals, (const double *)NULL) : read_as<double>(row_group, col, vals, (const double *)NULL);
+			out.resize(vals.size());
+			for (size_t i = 0; i < vals.size(); ++i) {
+				// [-2^63, 2^63) is where the cast is defined; NaN fails the comparisons
+				if (!(vals[i] >= -9223372036854775808.0 && vals[i] < 9223372036854775808.0) || vals[i] != floor(vals[i]))
+					TGLError<ParquetReader>(FORMAT_ERROR, "File %s, row group %d, column %s: value %.17g is not an integer",
+					                        m_filename.c_str(), row_group, c.name.c_str(), vals[i]);
+				out[i] = (int64_t)vals[i];
+			}
+			return;
+		}
 		}
 	}
-	wrong_type(m_filename, row_group, c, "an integer (INT32 or INT64)");
+	wrong_type(m_filename, row_group, c, "an integer (INT32 or INT64), or FLOAT or DOUBLE holding whole numbers");
 }
 
 void ParquetReader::read_strings(int row_group, int col, vector<string> &out)

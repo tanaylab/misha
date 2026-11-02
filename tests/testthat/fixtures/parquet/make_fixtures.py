@@ -265,3 +265,15 @@ for name, min_chroms in (("many_chroms.parquet", 3), ("many_chroms_shuffled.parq
     pf = pq.ParquetFile(path(name))
     assert pf.metadata.num_row_groups > 5
     assert all(len(set(pf.read_row_group(i).column("chrom").to_pylist())) >= min_chroms for i in range(pf.metadata.num_row_groups - 1))
+
+# single.parquet with start DOUBLE and end FLOAT (arrow::write_parquet writes misha's data frames
+# with double start and end); then with a start of 160.5, and with a NaN start (a value, not a null)
+float_coords = table(frame(rows, ("chrom", "start", "end", "a")))
+float_coords = float_coords.set_column(1, "start", float_coords.column("start").cast(pa.float64()))
+float_coords = float_coords.set_column(2, "end", float_coords.column("end").cast(pa.float32()))
+pq.write_table(float_coords, path("float_coords.parquet"))
+for name, bad in (("float_coords_fraction.parquet", 160.5), ("float_coords_nan.parquet", float("nan"))):
+    starts = float_coords.column("start").to_pylist()
+    starts[5] = bad
+    pq.write_table(float_coords.set_column(1, "start", pa.array(starts, pa.float64())), path(name))
+assert pq.read_table(path("float_coords_nan.parquet")).column("start").null_count == 0

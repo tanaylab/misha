@@ -718,9 +718,10 @@ gtrack.import_set <- function(description = NULL, path = NULL, binsize = NULL, t
 #' Creates one 'Dense' track per value column of one or more Parquet files.
 #'
 #' The files must have the interval columns 'chrom' (string), 'start' and
-#' 'end' (integers, 0-based, end exclusive) and one or more value columns
-#' (integer or floating point), such as the files \code{\link{gextract}}
-#' writes with \code{file = "x.parquet"} or pandas' \code{to_parquet}.
+#' 'end' (0-based, end exclusive; integers, or floating point numbers that
+#' are whole) and one or more value columns (integer or floating point),
+#' such as the files \code{\link{gextract}} writes with
+#' \code{file = "x.parquet"} or pandas' \code{to_parquet}.
 #' 'path' may contain wildcards, so that per-chromosome files import in one
 #' call; all the files must have the same value columns. Columns are matched
 #' by name, not by position.

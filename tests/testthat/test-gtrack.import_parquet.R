@@ -251,6 +251,25 @@ test_that("integer annotations are honoured; decimals, dates and timestamps are 
     expect_length(staging_leftovers(db), 0)
 })
 
+test_that("floating point start and end import when they hold whole numbers", {
+    db <- local_pq_db()
+    gtrack.import_parquet("test", pq_fixture("float_coords.parquet"), 32, track.prefix = "fc_")
+    gtrack.import_parquet("test", pq_fixture("single.parquet"), 32, track.prefix = "ic_")
+    expect_identical(track_values("fc_a"), track_values("ic_a"))
+    expect_identical(track_values("fc_a"), expected_values("a"))
+
+    expect_error(
+        gtrack.import_parquet("test", pq_fixture("float_coords_fraction.parquet"), 32, track.prefix = "ff_"),
+        "float_coords_fraction.parquet, row group 0, column start: value 160.5 is not an integer"
+    )
+    expect_error(
+        gtrack.import_parquet("test", pq_fixture("float_coords_nan.parquet"), 32, track.prefix = "fn_"),
+        "float_coords_nan.parquet, row group 0, column start: value -?nan is not an integer"
+    )
+    expect_false(any(gtrack.exists(c("ff_a", "fn_a"))))
+    expect_length(staging_leftovers(db), 0)
+})
+
 test_that("all files must have the same value columns", {
     db <- local_pq_db()
     src <- local_fixture_dir(list(shard_1.parquet = "shard_chr1.parquet", shard_2.parquet = "extra_column.parquet"))
