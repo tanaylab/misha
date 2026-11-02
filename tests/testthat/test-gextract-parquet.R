@@ -506,10 +506,12 @@ test_that("a replaced target keeps its permission bits", {
         expect_identical(format(file.mode(f)), "604", info = paste("multitask", multitask))
         expect_gt(file.size(f), 0)
     }
-    # a new target gets the default permissions, as before
+    # a new target gets the permissions a new text file gets (misha's own umask, not the caller's)
     f <- file.path(out_dir, "new.parquet")
     gextract("six", intervals = gintervals.all(), file = f)
-    expect_identical(file.mode(f), as.octmode(bitwAnd(0x1b6, bitwNot(strtoi(Sys.umask(), 8L)))))
+    tsv <- file.path(out_dir, "new.tsv")
+    gextract("six", intervals = gintervals.all(), file = tsv)
+    expect_identical(file.mode(f), file.mode(tsv))
 })
 
 test_that("every part takes INT64 coordinates when one chromosome of the scope needs them", {
