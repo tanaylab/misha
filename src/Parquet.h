@@ -211,10 +211,11 @@ struct ParquetColumn {
 };
 
 // Reads the columns of a Parquet file with a flat schema (a root group of leaf columns) with
-// pread() only, so that forked processes can share nothing but the file name. Columns are
-// decoded one column chunk (row group x column) at a time, and only when asked for: an
-// unsupported type, annotation (ParquetColumn::other_type), encoding or codec is reported when
-// that column is read, in an error that names the file, the row group and the column.
+// pread() only, so that forked processes can read through the file descriptor they inherit
+// (there is no file offset to share). Columns are decoded one column chunk (row group x column)
+// at a time, and only when asked for: an unsupported type, annotation (ParquetColumn::other_type),
+// encoding or codec is reported when that column is read, in an error that names the file, the
+// row group and the column.
 // Supported: INT32, INT64, FLOAT, DOUBLE, BYTE_ARRAY; PLAIN, PLAIN_DICTIONARY, RLE_DICTIONARY,
 // BYTE_STREAM_SPLIT (values), RLE (levels); data pages v1 and v2; UNCOMPRESSED, SNAPPY, GZIP.
 class ParquetReader {

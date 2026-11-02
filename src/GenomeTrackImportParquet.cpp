@@ -220,6 +220,9 @@ void ParquetImport::import_chrom(int chromid, const vector<int> &cols)
 			reader.read_int64s(run.row_group, m_col_idx[run.file][END], buf_ends);
 		}
 
+		if ((uint64_t)run.end > min(buf_starts.size(), buf_ends.size()))
+			rows_error("fewer rows than when it was indexed", run, run);
+
 		run_of_row.push_back(starts.size());
 		for (int64_t i = run.begin; i < run.end; ++i) {
 			int64_t start = buf_starts[i];
@@ -275,6 +278,8 @@ void ParquetImport::import_chrom(int chromid, const vector<int> &cols)
 			const Run &run = runs[r];
 			if (!r || run.file != runs[r - 1].file || run.row_group != runs[r - 1].row_group)
 				m_readers[run.file]->read_doubles(run.row_group, m_col_idx[run.file][NUM_COORDS + col], buf_vals);
+			if ((uint64_t)run.end > buf_vals.size())
+				rows_error("fewer rows than when it was indexed", run, run);
 			for (int64_t i = run.begin; i < run.end; ++i)
 				vals[row++] = buf_vals[i];
 		}
@@ -452,11 +457,9 @@ SEXP gtrackimportparquet(SEXP _dirs, SEXP _files, SEXP _columns, SEXP _binsize, 
 			}
 		}
 
+		// Kids read through the file descriptors they inherit, not by opening the files again: a file
+		// replaced since index() would no longer match it
 		run_kids(iu, num_kids, [&](int kid) {
-			// a kid reads through file descriptors of its own
-			if (num_kids > 1)
-				import.open();
-
 			Progress_reporter progress;
 			progress.init((units.size() - kid + num_kids - 1) / num_kids, 1);
 			for (size_t u = kid; u < units.size(); u += num_kids) {
