@@ -4,6 +4,16 @@
 
 #### New features
 
+- New
+  [`gextract.variants()`](https://tanaylab.github.io/misha/reference/gextract.variants.md):
+  the value of a track expression under each single-base substitution
+  that can change it, or under the variants of a table such as
+  [`gintervals.import_vcf()`](https://tanaylab.github.io/misha/reference/gintervals.import_vcf.md)
+  output.
+
+- `potts.max` virtual tracks accept `max_edits = 1`: the best score
+  within one substitution.
+
 - `gextract(file = "x.parquet")` writes a GZIP-compressed Parquet file
   (chrom, start, end and one float32 column per expression, all nullable
   as in arrow-written files), in parallel when `gmultitasking` is on.
@@ -28,6 +38,14 @@
 
 - Concurrent bigWig imports could fail or silently import only part of
   the file.
+
+- A call that could not fully write a track or intervals set (full disk,
+  quota, NFS error) reported success and left it truncated; it now
+  fails.
+
+#### Performance
+
+- Importing a bigWig uses less memory.
 
 ## misha 5.13.3
 

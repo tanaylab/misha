@@ -188,7 +188,7 @@ the start of the iterator interval after all modifier adjustments.
 |----|----|----|----|
 | Source | func | Key params | Description |
 | NULL (sequence) | potts | e, J, pairs, intercept, bidirect, extend, strand | Log-sum-exp of the pairwise-energy score over all anchors inside the iterator interval. |
-| NULL (sequence) | potts.max | e, J, pairs, intercept, bidirect, extend, strand | Highest-scoring anchor. |
+| NULL (sequence) | potts.max | e, J, pairs, intercept, bidirect, extend, strand, max_edits | Highest-scoring anchor; with `max_edits = 1`, the highest score reachable with at most one substitution. |
 | NULL (sequence) | potts.max.pos | e, J, pairs, intercept, bidirect, extend, strand | 1-based position of the best anchor, signed by strand when `bidirect = TRUE`. |
 | NULL (sequence) | potts.count | e, J, pairs, intercept, score.thresh (required), bidirect, extend, strand | Number of anchors scoring at least `score.thresh`. |
 
@@ -352,6 +352,14 @@ k-mer, and masked sequence functions.
 - `score.thresh`: Mandatory for `potts.count` - there is no default,
   since a Potts score is an energy whose usable range depends on the
   model - and ignored by the rest of the family.
+
+- `max_edits` (`potts.max` only): 0 (default) or 1. With 1, each anchor
+  scores the best of its own window and every window one substitution
+  away, and the vtrack returns the best anchor. It is exact, costs about
+  4 to 30 times a plain `potts.max` (more for wide models and with
+  `bidirect = TRUE`), and is meant as a genome-wide bound before
+  [`gextract.variants`](https://tanaylab.github.io/misha/reference/gextract.variants.md).
+  A window with a non-ACGT base is still not scored.
 
 **Edit distance notes**
 

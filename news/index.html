@@ -43,7 +43,9 @@
 <h2 class="pkg-version" data-toc-text="5.14.0" id="misha-5140">misha 5.14.0<a class="anchor" aria-label="anchor" href="#misha-5140"></a></h2>
 <div class="section level4">
 <h4 id="new-features-5-14-0">New features<a class="anchor" aria-label="anchor" href="#new-features-5-14-0"></a></h4>
-<ul><li><p><code>gextract(file = "x.parquet")</code> writes a GZIP-compressed Parquet file (chrom, start, end and one float32 column per expression, all nullable as in arrow-written files), in parallel when <code>gmultitasking</code> is on.</p></li>
+<ul><li><p>New <code><a href="../reference/gextract.variants.html">gextract.variants()</a></code>: the value of a track expression under each single-base substitution that can change it, or under the variants of a table such as <code><a href="../reference/gintervals.import_vcf.html">gintervals.import_vcf()</a></code> output.</p></li>
+<li><p><code>potts.max</code> virtual tracks accept <code>max_edits = 1</code>: the best score within one substitution.</p></li>
+<li><p><code>gextract(file = "x.parquet")</code> writes a GZIP-compressed Parquet file (chrom, start, end and one float32 column per expression, all nullable as in arrow-written files), in parallel when <code>gmultitasking</code> is on.</p></li>
 <li><p>New <code><a href="../reference/gtrack.import_parquet.html">gtrack.import_parquet()</a></code> imports the value columns of Parquet files as dense tracks, one track per column. <code><a href="../reference/gtrack.import.html">gtrack.import()</a></code> also reads a Parquet file with one value column.</p></li>
 </ul></div>
 <div class="section level4">
@@ -51,6 +53,11 @@
 <ul><li><p><code>gextract(file = ...)</code> and <code>intervals.set.out</code> were ignored under <code>options(gmultitasking.strategy = "tracks")</code>: nothing was written and a data.frame was returned.</p></li>
 <li><p><strong>Behavior fix:</strong> <code><a href="../reference/gtrack.import.html">gtrack.import()</a></code> keeps bigWig values at full precision (they were rounded to 6 digits). <code>options(misha.bigWigToWig)</code> is removed.</p></li>
 <li><p>Concurrent bigWig imports could fail or silently import only part of the file.</p></li>
+<li><p>A call that could not fully write a track or intervals set (full disk, quota, NFS error) reported success and left it truncated; it now fails.</p></li>
+</ul></div>
+<div class="section level4">
+<h4 id="performance-5-14-0">Performance<a class="anchor" aria-label="anchor" href="#performance-5-14-0"></a></h4>
+<ul><li>Importing a bigWig uses less memory.</li>
 </ul></div>
 </div>
     <div class="section level2">

@@ -246,6 +246,8 @@ Data manipulation functions
   sequences
 - [`gextract()`](https://tanaylab.github.io/misha/reference/gextract.md)
   : Returns evaluated track expression
+- [`gextract.variants()`](https://tanaylab.github.io/misha/reference/gextract.variants.md)
+  : Evaluate a track expression under single-base substitutions
 - [`glookup()`](https://tanaylab.github.io/misha/reference/glookup.md) :
   Returns values from a lookup table based on track expression
 - [`gpartition()`](https://tanaylab.github.io/misha/reference/gpartition.md)

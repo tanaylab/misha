@@ -36,8 +36,8 @@ gdb.init_examples()
 gvtrack.create("vtrack1", "dense_track", "max")
 gvtrack.create("vtrack2", "dense_track", "avg")
 gvtrack.ls()
-#> [1] "g_frac"      "c_frac"      "cg_frac"     "masked_frac" "vtrack1"    
-#> [6] "vtrack2"    
+#> [1] "motif"       "g_frac"      "c_frac"      "cg_frac"     "masked_frac"
+#> [6] "vtrack1"     "vtrack2"    
 gvtrack.clear()
 gvtrack.ls()
 #> NULL
