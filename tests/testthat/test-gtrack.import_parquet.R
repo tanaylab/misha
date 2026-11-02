@@ -419,3 +419,32 @@ test_that("a kid error removes everything", {
     expect_false(any(dir.exists(file.path(db, "tracks", paste0("k_", pq6_cols, ".track")))))
     expect_length(staging_leftovers(db), 0)
 })
+
+test_that("gtrack.import reads a one-column Parquet file", {
+    local_pq_db()
+    gtrack.import("pq_one", "test", pq_fixture("single.parquet"), binsize = 32)
+    expect_equal(track_values("pq_one"), expected_values("a"))
+    expect_false(is.null(gtrack.attr.get("pq_one", "created.by")) || !nzchar(gtrack.attr.get("pq_one", "created.by")))
+})
+
+test_that("gtrack.import refuses a multi-column Parquet file", {
+    db <- local_pq_db()
+    expect_error(
+        gtrack.import("pq_two", "test", pq_fixture("pandas_default.parquet"), binsize = 32),
+        "gtrack.import_parquet"
+    )
+    expect_no_tracks_left(db, "pq_two")
+})
+
+test_that("gtrack.import needs binsize > 0 for Parquet", {
+    local_pq_db()
+    expect_error(gtrack.import("pq_one", "test", pq_fixture("single.parquet"), binsize = 0), "dense tracks")
+    expect_error(gtrack.import("pq_one", "test", pq_fixture("single.parquet")), "dense tracks")
+})
+
+test_that("a .parquet name is not needed", {
+    local_pq_db()
+    src <- local_fixture_dir(list(x.dat = "single.parquet"))
+    gtrack.import("pq_dat", "test", file.path(src, "x.dat"), binsize = 32)
+    expect_equal(track_values("pq_dat"), expected_values("a"))
+})

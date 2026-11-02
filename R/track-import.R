@@ -128,7 +128,10 @@ get_bigWigToWig_bin <- function(sysname = Sys.info()[["sysname"]]) {
 #'
 #' @param track track name
 #' @param description a character string description
-#' @param file file path
+#' @param file file path. A Parquet file (recognized by its first bytes, whatever its name)
+#' is imported when it has exactly one value column besides 'chrom', 'start' and 'end';
+#' it always makes a dense track, so 'binsize' must be > 0. Use
+#' \code{\link{gtrack.import_parquet}} for several columns.
 #' @param binsize bin size of the newly created 'Dense' track or '0' for a
 #' 'Sparse' track
 #' @param defval default track value
@@ -220,7 +223,20 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
                 file <- file.unzipped
             }
 
-            if (is_bed_input || length(grep("^.+\\.bed$", file, perl = TRUE))) {
+            pq_columns <- NULL
+            if (file.exists(file) && identical(readBin(file, "raw", 4), charToRaw("PAR1"))) {
+                if (is.null(binsize) || is.na(binsize) || binsize == 0) {
+                    stop("Parquet import creates dense tracks; binsize must be > 0", call. = FALSE)
+                }
+                pq_columns <- .gcall("parquet_columns", file, .misha_env())$name
+                pq_columns <- setdiff(pq_columns, c("chrom", "start", "end"))
+                if (length(pq_columns) != 1) {
+                    stop(sprintf(
+                        "gtrack.import needs a Parquet file with exactly one value column, but %s has %d (%s); use gtrack.import_parquet to import several columns",
+                        file.original, length(pq_columns), paste(pq_columns, collapse = ", ")
+                    ), call. = FALSE)
+                }
+            } else if (is_bed_input || length(grep("^.+\\.bed$", file, perl = TRUE))) {
                 message("Importing BED file...\n")
                 report.progress <- TRUE
                 bed_parsed <- .gtrack_read_bed(file)
@@ -251,7 +267,14 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
             }
 
             .gtrack.create_atomic(trackstr, function() {
-                if (used_bed) {
+                if (!is.null(pq_columns)) {
+                    pq_stage <- .misha$.create_dir_override
+                    assign(".create_dir_override", NULL, envir = .misha)
+                    if (!.gwith_umask(dir.create(pq_stage, mode = "0777"))) {
+                        stop(sprintf("Failed to create a directory %s", pq_stage), call. = FALSE)
+                    }
+                    .gcall("gtrackimportparquet", pq_stage, file, pq_columns, binsize, defval, .misha_env())
+                } else if (used_bed) {
                     if (!is.null(binsize) && !is.na(binsize) && binsize > 0) {
                         intervalData <- data.frame(
                             chrom = bed_parsed$intervals$chrom,
