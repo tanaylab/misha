@@ -42,6 +42,7 @@ Convention used throughout: `binsize > 0` produces a dense fixed-bin track (one 
 | Single WIG / bigWig file | `gtrack.import(name, desc, file, binsize, defval = NaN)` | auto-dispatch on `.wig` / `.bw` / `.bigWig` / magic bytes; pass `defval = NaN` (not `0`) for continuous signal so uncovered bins read as NA |
 | Single BED file (or 4-col TSV) | same `gtrack.import` — pass `binsize` for a dense track, omit it for a sparse track | misha ≥ 5.7.1 required if you pass `binsize` (5.7.0 errors with `func argument is not a string`) |
 | R-computed values via TSV (chrom/start/end/value) | `gtrack.import(name, desc, file, binsize)` | run `options(scipen = 20)` BEFORE `write.table` — scientific-notation coords parse as malformed |
+| Parquet file(s): chrom/start/end + value columns (misha >= 5.14.0) | `gtrack.import_parquet(description, path, binsize, track.prefix = NULL, columns = NULL, defval = NaN)`; one value column: `gtrack.import(name, desc, file, binsize)` | one dense track per column; see "Deep-learning bridge" below |
 | Directory or URL-with-wildcards of WIG/bigWig files | `gtrack.import_set(description, path, binsize, track.prefix = "", defval = NaN)` | bulk import; `path` may be a glob (`/data/*.bw`) or an `ftp://` URL; continues on per-file errors and returns successes/failures |
 | ChIP/ATAC pileup from read intervals (data.frame in R) | `gtrack.create_dense(name, desc, intervals = reads, values = rep(1, nrow(reads)), binsize = 20, defval = 0, func = "coverage")` | one-call replacement for the old `gtrack.import_mappedseq` route when reads are already in R |
 | Mapped reads (SAM, tab-delimited, or gzipped `.sam.gz` / `.tsv.gz`) | `gtrack.import_mappedseq(name, desc, file, pileup, binsize, cols.order = c(9, 11, 13, 14), remove.dups = TRUE)` | for SAM pass `cols.order = NULL`; gzip is auto-detected by magic bytes (misha ≥ 5.8.0); the default `remove.dups = TRUE` is correct for ChIP/ATAC/CUT&RUN |
@@ -234,6 +235,8 @@ fwrite(borzoi_data, here("output/data-for-borzoi/borzoi_data.tsv"), sep = "\t")
 ```
 
 `misha.ext::gextract.left_join` is the older R-side wrapper that does the same join via `dplyr::left_join`; deprecated in misha 5.7.1 (the built-in is ~2x faster on wide-window workloads and drops the misha.ext dependency). Don't introduce new calls.
+
+**Parquet (misha >= 5.14.0).** For a genome-wide matrix, `gextract(exprs, intervals = gintervals.all(), iterator = 32, colnames = cols, file = "x.parquet")` writes Parquet directly, in parallel: `chrom`, `start`, `end`, then one float32 column per expression, which pyarrow and pandas read as is. Nothing passes through R, so put per-column transforms in the expressions (e.g. `ifelse(is.na(v1), 0, v1) / 6.1 * (blacklisted == 0)`). The other way, `gtrack.import_parquet(description, path, binsize, track.prefix = NULL, columns = NULL, defval = NaN)` creates one dense track per value column, named `<track.prefix><column>`; `path` may be a glob over per-chromosome files, columns are matched by name, and the import is all or nothing. A Parquet file with a single value column also goes through `gtrack.import(name, desc, file, binsize)`.
 
 Prediction-side import (after the external model run produces per-bin TSVs):
 
