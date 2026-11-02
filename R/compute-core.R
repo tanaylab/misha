@@ -27,7 +27,8 @@
 #' integers unless a chromosome of the scope is 2^31 bp or longer. NaN values
 #' are written as NaN, not as missing values. Only 1D iterators are supported,
 #' and the column names must be unique and other than 'chrom', 'start' and
-#' 'end'. The file is written under a temporary name in the same directory and
+#' 'end'. The file is written under a temporary name in its directory (a
+#' symbolic link is followed, and the file it points to is replaced) and
 #' renamed when complete, so an error or an interrupt leaves an existing file
 #' as it was. With a numeric 'iterator' the file is a table of dense bins
 #' that pyarrow reads directly.
