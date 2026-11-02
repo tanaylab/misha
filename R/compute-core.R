@@ -48,8 +48,9 @@
 #' implicitly based on track expressions.
 #' @param band track expression band. If 'NULL' no band is used.
 #' @param file file name where the function result is optionally outputted:
-#' Parquet if the name ends in '.parquet' (chrom, start, end and one float32
-#' column per expression), tab-delimited otherwise
+#' GZIP-compressed Parquet if the name ends in '.parquet' (chrom, start, end
+#' and one float32 column per expression, all nullable as in arrow-written
+#' files), tab-delimited otherwise
 #' @param intervals.set.out intervals set name where the function result is
 #' optionally outputted
 #' @param intervals_join how the output relates to the input intervals data

@@ -2,7 +2,7 @@
 
 ### New features
 
-* `gextract(file = "x.parquet")` writes a Parquet file (chrom, start, end and one float32 column per expression), in parallel when `gmultitasking` is on.
+* `gextract(file = "x.parquet")` writes a GZIP-compressed Parquet file (chrom, start, end and one float32 column per expression, all nullable as in arrow-written files), in parallel when `gmultitasking` is on.
 
 * New `gtrack.import_parquet()` imports the value columns of Parquet files as dense tracks, one track per column. `gtrack.import()` also reads a Parquet file with one value column.
 

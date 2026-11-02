@@ -29,8 +29,9 @@ implicitly based on track expressions.}
 \item{band}{track expression band. If 'NULL' no band is used.}
 
 \item{file}{file name where the function result is optionally outputted:
-Parquet if the name ends in '.parquet' (chrom, start, end and one float32
-column per expression), tab-delimited otherwise}
+GZIP-compressed Parquet if the name ends in '.parquet' (chrom, start, end
+and one float32 column per expression, all nullable as in arrow-written
+files), tab-delimited otherwise}
 
 \item{intervals.set.out}{intervals set name where the function result is
 optionally outputted}
