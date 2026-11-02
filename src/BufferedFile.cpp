@@ -4,6 +4,8 @@
 #include "BufferedFile.h"
 #include "TGLException.h"
 
+char BufferedFile::s_write_error[1000];
+
 int64_t BufferedFile::file_size(const char *path)
 {
 	struct stat st;
@@ -19,6 +21,7 @@ int BufferedFile::open(const char *path, const char *mode, bool lock)
 	m_filename = path;
 	m_fp = fopen(path, mode);
 	if (m_fp) {
+		m_writable = mode && (*mode == 'w' || *mode == 'a' || strchr(mode, '+'));
 		// Bump stdio buffer to 1 MiB on write/append modes so streaming
 		// writes coalesce into few syscalls. Default libc buffer is 4-8 KiB,
 		// which produces thousands of NFS write syscalls per MB of payload.
@@ -54,7 +57,13 @@ int BufferedFile::open(const char *path, const char *mode, bool lock)
 int BufferedFile::close()
 {
 	if (m_fp) {
+		bool write_failed = m_writable && ferror(m_fp);
 		int retv = fclose(m_fp);
+
+		if (m_writable && (retv || write_failed) && !s_write_error[0])
+			snprintf(s_write_error, sizeof(s_write_error), "Failed to write %s: %s", m_filename.c_str(),
+			         retv ? strerror(errno) : "an earlier write failed");
+		m_writable = false;
 		m_fp = NULL;
 		m_eof = true;
 		m_phys_pos = -1;

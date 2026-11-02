@@ -14,6 +14,8 @@
 
 * Concurrent bigWig imports could fail or silently import only part of the file.
 
+* A call that could not fully write a track or intervals set (full disk, quota, NFS error) reported success and left it truncated; it now fails.
+
 ### Performance
 
 * Importing a bigWig uses less memory.

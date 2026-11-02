@@ -15,7 +15,9 @@
 #include <setjmp.h>
 #include <stdarg.h>
 #include <unistd.h>
+#include <signal.h>
 #include <sys/mman.h>
+#include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -33,6 +35,7 @@
 
 #include "rdbinterval.h"
 #include "rdbutils.h"
+#include "BufferedFile.h"
 #include "System.h"
 #include "Thread.h"
 #include "TGLException.h"
@@ -589,6 +592,18 @@ int64_t RdbInitializer::update_kids_mem_usage()
 	return total_mem_usage;
 }
 
+void RdbInitializer::report_kid_write_error()
+{
+	if (!s_is_kid || !BufferedFile::write_error()[0] || s_shm == (Shm *)MAP_FAILED || s_shm_sem == SEM_FAILED)
+		return;
+
+	SemLocker sl(s_shm_sem);
+	if (!s_shm->error_msg[0]) {
+		strncpy(s_shm->error_msg, BufferedFile::write_error(), sizeof(s_shm->error_msg) - 1);
+		s_shm->error_msg[sizeof(s_shm->error_msg) - 1] = '\0';
+	}
+}
+
 // Both branches end in a function that cannot return - rexit() in the child, Rf_errorcall()
 // (declared NORET by R) in the parent - so control never reaches the end of this one.
 [[noreturn]] void RdbInitializer::handle_error(const char *msg)
@@ -1101,6 +1116,11 @@ void rdb::RSaneSerialize(SEXP rexp, const char *fname)
 		verror("Failed to open file %s: %s", fname, strerror(errno));
 
 	RSaneSerialize(rexp, fp.get());
+
+	// The last buffer is written by fclose(): check it, or a short file passes for a saved one.
+	bool write_failed = ferror(fp.get());
+	if (fclose(fp.release()) || write_failed)
+		verror("Failed to write %s: %s", fname, write_failed ? "write error" : strerror(errno));
 }
 
 struct RSaneUnserializeData {
@@ -1263,6 +1283,56 @@ SEXP C_lifetime_counters()
 
 	UNPROTECT(2);
 	return counters;
+}
+
+// Returns the write error BufferedFile recorded (see BufferedFile::write_error), or NULL, and
+// leaves `restore` (a string, or NULL for none) in its place. .gcall() takes the outer call's
+// error when it starts and puts it back when it ends, so a misha call nested inside another
+// (an R function evaluated by a track expression) neither raises nor drops the outer one's.
+// No RdbInitializer, like C_lifetime_counters: it only reads and writes a static, and
+// allocates only when there is an error to return.
+SEXP C_take_write_error(SEXP restore)
+{
+	SEXP msg = R_NilValue;
+
+	if (BufferedFile::write_error()[0])
+		msg = PROTECT(Rf_mkString(BufferedFile::write_error()));
+	BufferedFile::set_write_error(Rf_isString(restore) && Rf_length(restore) == 1 ? CHAR(STRING_ELT(restore, 0)) : "");
+	if (msg != R_NilValue)
+		UNPROTECT(1);
+	return msg;
+}
+
+// Test support: caps the size of the files this process (and the children it forks) may write,
+// so that a write fails exactly where a test needs it to; a negative limit lifts the cap.
+// SIGXFSZ is ignored while the cap is set, so an oversized write fails with EFBIG instead of
+// killing the process. No RdbInitializer, like C_lifetime_counters: it touches no misha state.
+SEXP C_test_file_size_limit(SEXP _limit)
+{
+	static struct rlimit s_saved;
+	static struct sigaction s_saved_act;
+	static bool s_capped = false;
+	double limit = Rf_asReal(_limit);
+
+	if (limit >= 0) {
+		struct sigaction ignore;
+
+		if (!s_capped) {
+			getrlimit(RLIMIT_FSIZE, &s_saved);
+			memset(&ignore, 0, sizeof(ignore));
+			ignore.sa_handler = SIG_IGN;
+			sigaction(SIGXFSZ, &ignore, &s_saved_act);
+			s_capped = true;
+		}
+		struct rlimit rl = s_saved;
+		rl.rlim_cur = (rlim_t)limit;
+		setrlimit(RLIMIT_FSIZE, &rl);
+	} else if (s_capped) {
+		setrlimit(RLIMIT_FSIZE, &s_saved);
+		sigaction(SIGXFSZ, &s_saved_act, NULL);
+		s_capped = false;
+	}
+	return R_NilValue;
 }
 
 }

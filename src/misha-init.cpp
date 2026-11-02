@@ -129,6 +129,8 @@ extern "C" {
     extern SEXP C_register_filter(SEXP, SEXP, SEXP);
     extern SEXP C_get_filter_info(SEXP);
     extern SEXP C_lifetime_counters(void);
+    extern SEXP C_test_file_size_limit(SEXP);
+    extern SEXP C_take_write_error(SEXP);
 }
 
 static const R_CallMethodDef CallEntries[] = {
@@ -252,6 +254,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"C_register_filter", (DL_FUNC)&C_register_filter, 3},
     {"C_get_filter_info", (DL_FUNC)&C_get_filter_info, 1},
     {"C_lifetime_counters", (DL_FUNC)&C_lifetime_counters, 0},
+    {"C_test_file_size_limit", (DL_FUNC)&C_test_file_size_limit, 1},
+    {"C_take_write_error", (DL_FUNC)&C_take_write_error, 1},
     {NULL, NULL, 0}
 };
 
