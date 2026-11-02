@@ -21,6 +21,14 @@
   `options(gmultitasking.strategy = "tracks")`: nothing was written and
   a data.frame was returned.
 
+- **Behavior fix:**
+  [`gtrack.import()`](https://tanaylab.github.io/misha/reference/gtrack.import.md)
+  keeps bigWig values at full precision (they were rounded to 6 digits).
+  `options(misha.bigWigToWig)` is removed.
+
+- Concurrent bigWig imports could fail or silently import only part of
+  the file.
+
 ## misha 5.13.3
 
 - **Behavior fix:** track and big-set files named by a chromosome alias

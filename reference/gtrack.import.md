@@ -58,6 +58,9 @@ This function creates a track from WIG / BigWig / BedGraph /
 tab-delimited file. Zipped files are supported (file name must have
 '.gz' or '.zip' suffix).
 
+BigWig files are read directly at full resolution (zoom levels are not
+used). A truncated bigWig is an error.
+
 Tab-delimited files must start with a header line with the following
 column names (tab-separated): 'chrom', 'start', 'end', and exactly one
 value column name (e.g. 'value'). Each subsequent line provides a single

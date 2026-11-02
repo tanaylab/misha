@@ -96,6 +96,8 @@ it always makes a dense track, so 'binsize' must be &gt; 0. Use
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
     <p>This function creates a track from WIG / BigWig / BedGraph / tab-delimited
 file. Zipped files are supported (file name must have '.gz' or '.zip' suffix).</p>
+<p>BigWig files are read directly at full resolution (zoom levels are not
+used). A truncated bigWig is an error.</p>
 <p>Tab-delimited files must start with a header line with the following column
 names (tab-separated): 'chrom', 'start', 'end', and exactly one value column
 name (e.g. 'value'). Each subsequent line provides a single interval:

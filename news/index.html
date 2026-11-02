@@ -48,8 +48,9 @@
 </ul></div>
 <div class="section level4">
 <h4 id="bug-fixes-5-14-0">Bug fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-5-14-0"></a></h4>
-<ul><li>
-<code>gextract(file = ...)</code> and <code>intervals.set.out</code> were ignored under <code>options(gmultitasking.strategy = "tracks")</code>: nothing was written and a data.frame was returned.</li>
+<ul><li><p><code>gextract(file = ...)</code> and <code>intervals.set.out</code> were ignored under <code>options(gmultitasking.strategy = "tracks")</code>: nothing was written and a data.frame was returned.</p></li>
+<li><p><strong>Behavior fix:</strong> <code><a href="../reference/gtrack.import.html">gtrack.import()</a></code> keeps bigWig values at full precision (they were rounded to 6 digits). <code>options(misha.bigWigToWig)</code> is removed.</p></li>
+<li><p>Concurrent bigWig imports could fail or silently import only part of the file.</p></li>
 </ul></div>
 </div>
     <div class="section level2">
