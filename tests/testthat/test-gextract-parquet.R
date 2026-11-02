@@ -23,9 +23,10 @@ skip_without_pyarrow <- function() {
 # (and fails the type check rather than the script).
 pq_dump_script <- '
 import json, sys
+import pyarrow as pa
 import pyarrow.parquet as pq
 
-path, out_tsv, out_json = sys.argv[1:4]
+path, out_tsv, out_json, coord_type = sys.argv[1:5]
 
 def py(v):
     if isinstance(v, bytes):
@@ -36,13 +37,29 @@ def py(v):
 
 f = pq.ParquetFile(path)
 md = f.metadata
-meta = {"schema": [{"name": x.name, "type": str(x.type)} for x in f.schema_arrow], "row_groups": []}
+t = f.read()
+
+# The same table written by pyarrow itself: chrom string, start and end int32 (int64 if
+# coord_type says so), the values float32, all nullable
+coord = pa.int64() if coord_type == "int64" else pa.int32()
+ref_schema = pa.schema([("chrom", pa.string()), ("start", coord), ("end", coord)] + [(n, pa.float32()) for n in t.column_names[3:]])
+ref_path = out_json + ".ref.parquet"
+pq.write_table(pa.Table.from_pydict({n: t.column(n).to_pylist() for n in t.column_names}, schema=ref_schema), ref_path)
+ref = pq.read_table(ref_path)
+try:
+    pa.concat_tables([t, ref])
+    concat_ok = True
+except Exception:
+    concat_ok = False
+
+meta = {"schema": [{"name": x.name, "type": str(x.type), "nullable": x.nullable} for x in f.schema_arrow], "row_groups": [],
+        "schema_equals_reference": t.schema.equals(ref.schema), "concat_ok": concat_ok}
 for i in range(md.num_row_groups):
     rg = md.row_group(i)
     cols = []
     for j in range(rg.num_columns):
         c = rg.column(j)
-        col = {"name": c.path_in_schema, "encodings": list(c.encodings)}
+        col = {"name": c.path_in_schema, "encodings": list(c.encodings), "compression": c.compression}
         s = c.statistics
         if s is not None and s.has_min_max:
             col["min"] = py(s.min)
@@ -58,7 +75,6 @@ with open(out_json, "w") as fh:
     json.dump(meta, fh)
     fh.write("\\n")
 
-t = f.read()
 cols = [t.column(k).to_pylist() for k in range(t.num_columns)]
 with open(out_tsv, "w") as fh:
     fh.write("\\t".join(t.column_names) + "\\n")
@@ -67,13 +83,15 @@ with open(out_tsv, "w") as fh:
 '
 
 # Reads a Parquet file with pyarrow: the table (value columns as doubles holding the exact
-# float32 values), the arrow schema (name, type) and per-row-group metadata.
-read_pq <- function(path) {
+# float32 values), the arrow schema (name, type, nullable), per-row-group metadata, and how
+# the file compares with pyarrow's own write of the same table (coord_type: its start and end).
+read_pq <- function(path, coord_type = "int32") {
     script <- withr::local_tempfile(fileext = ".py")
     out_tsv <- withr::local_tempfile(fileext = ".tsv")
     out_json <- withr::local_tempfile(fileext = ".json")
+    withr::defer(unlink(paste0(out_json, ".ref.parquet")))
     writeLines(pq_dump_script, script)
-    status <- system2(pyarrow_python(), c("-I", shQuote(script), shQuote(path), shQuote(out_tsv), shQuote(out_json)))
+    status <- system2(pyarrow_python(), c("-I", shQuote(script), shQuote(path), shQuote(out_tsv), shQuote(out_json), coord_type))
     if (!identical(status, 0L)) {
         stop("pyarrow could not read ", path)
     }
@@ -89,14 +107,27 @@ read_pq <- function(path) {
         table = tab,
         names = vapply(meta$schema, function(x) x$name, ""),
         types = vapply(meta$schema, function(x) x$type, ""),
+        nullable = vapply(meta$schema, function(x) x$nullable, TRUE),
         row_groups = meta$row_groups,
         iter_batches_rows = meta$iter_batches_rows,
-        read_table_rows = meta$read_table_rows
+        read_table_rows = meta$read_table_rows,
+        schema_equals_reference = meta$schema_equals_reference,
+        concat_ok = meta$concat_ok
     )
 }
 
 rg_column <- function(rg, name) {
     Filter(function(x) identical(x$name, name), rg$columns)[[1]]
+}
+
+# Every column nullable and every column chunk GZIP, as arrow writes them: the arrow schema
+# equals that of pyarrow's own write of the table, and the two tables concatenate
+expect_arrow_like <- function(pq) {
+    expect_true(all(pq$nullable))
+    expect_true(pq$schema_equals_reference)
+    expect_true(pq$concat_ok)
+    codecs <- unlist(lapply(pq$row_groups, function(rg) vapply(rg$columns, function(x) x$compression, "")))
+    expect_true(length(codecs) > 0 && all(codecs == "GZIP"), label = paste(unique(codecs), collapse = ", "))
 }
 
 # A fresh database rooted for the calling test only
@@ -147,6 +178,7 @@ test_that("parquet output equals in-memory gextract", {
 
     expect_identical(pq$names, c("chrom", "start", "end", cols))
     expect_identical(pq$types, c("string", "int32", "int32", "float", "float", "float"))
+    expect_arrow_like(pq)
     expect_equal(nrow(pq$table), 32 + 19)
     expect_same_rows(pq$table, inmem, cols)
 
@@ -181,6 +213,7 @@ test_that("many columns (Thrift lists of 15 elements or more), values rounded to
     pq <- read_pq(f)
 
     expect_identical(pq$names, c("chrom", "start", "end", exprs))
+    expect_arrow_like(pq)
     expect_false(identical(float32(inmem[["pq / 3"]]), inmem[["pq / 3"]]))
     expect_same_rows(pq$table, inmem, exprs)
 })
@@ -199,6 +232,7 @@ test_that("an empty result is one empty row group, as pyarrow writes an empty ta
 
     expect_identical(pq$names, c("chrom", "start", "end", "pq", "pq * 2"))
     expect_identical(pq$types, c("string", "int32", "int32", "float", "float"))
+    expect_arrow_like(pq)
     expect_equal(nrow(pq$table), 0)
     expect_equal(pq$iter_batches_rows, 0)
     expect_equal(pq$read_table_rows, 0)
@@ -220,6 +254,8 @@ test_that("row groups split at the cap and at chromosome changes", {
     pq <- read_pq(f)
 
     expect_equal(vapply(pq$row_groups, function(rg) rg$num_rows, 0), c(1048576, 51424, 1000))
+    # a full row group: one data page per column chunk, its definition levels one RLE run
+    expect_arrow_like(pq)
     expect_false("RLE_DICTIONARY" %in% rg_column(pq$row_groups[[1]], "pos")$encodings)
     for (rg in pq$row_groups) {
         expect_true("RLE_DICTIONARY" %in% rg_column(rg, "pos * 0")$encodings)
@@ -259,9 +295,10 @@ test_that("a chromosome of 2^31 bp or more gets INT64 coordinates", {
 
     inmem <- gextract("big", intervals = scope, iterator = 1e6)
     gextract("big", intervals = scope, iterator = 1e6, file = f)
-    pq <- read_pq(f)
+    pq <- read_pq(f, "int64")
 
     expect_identical(pq$types, c("string", "int64", "int64", "float"))
+    expect_arrow_like(pq)
     expect_equal(max(pq$table$end), 2147483648)
     expect_equal(rg_column(pq$row_groups[[1]], "end")$max, 2147483648)
     expect_same_rows(pq$table, inmem, "big")
@@ -351,6 +388,7 @@ test_that("multitask output equals serial output", {
         pq <- read_pq(f)
 
         expect_equal(nrow(pq$table), 6 * 26000, label = label)
+        expect_arrow_like(pq)
         expect_same_rows(pq$table, inmem, cols)
         # one chromosome per row group; the rows' order is checked above
         rg_chroms <- vapply(pq$row_groups, function(rg) rg_column(rg, "chrom")$min, "")
@@ -385,6 +423,7 @@ test_that("a kid with no rows still merges", {
     pq <- read_pq(f)
 
     expect_same_rows(pq$table, inmem, c("six", "sp"))
+    expect_arrow_like(pq)
     expect_identical(vapply(pq$row_groups, function(rg) rg$num_rows, 0), rep(1, 5))
 })
 
@@ -431,8 +470,9 @@ test_that("every part takes INT64 coordinates when one chromosome of the scope n
 
     inmem <- gextract("big", intervals = scope)
     gextract("big", intervals = scope, file = f)
-    pq <- read_pq(f)
+    pq <- read_pq(f, "int64")
 
     expect_identical(pq$types, c("string", "int64", "int64", "float"))
+    expect_arrow_like(pq)
     expect_same_rows(pq$table, inmem, "big")
 })

@@ -620,7 +620,7 @@ void ParquetWriter::open(const string &filename, const vector<string> &value_nam
 	m_meta.schema[0].num_children = 3 + value_names.size();
 	for (size_t i = 1; i < m_meta.schema.size(); ++i) {
 		SchemaElement &col = m_meta.schema[i];
-		col.repetition_type = FieldRepetitionType::REQUIRED;
+		col.repetition_type = FieldRepetitionType::OPTIONAL;  // nullable, as arrow writes them
 		col.type = i == 1 ? Type::BYTE_ARRAY : i <= 3 ? (int64_coords ? Type::INT64 : Type::INT32) : Type::FLOAT;
 		col.name = i <= 3 ? coords[i - 1] : value_names[i - 4];
 	}
@@ -823,9 +823,10 @@ void ParquetWriter::write_fixed_column(ColumnChunk &cc, int type, const string &
 	header.data_page_header.num_values = vals.size();
 	header.data_page_header.encoding = Encoding::PLAIN;
 	md.data_page_offset = m_offset;
-	write_page(header, string((const char *)vals.data(), vals.size() * sizeof(T)));
+	md.codec = CompressionCodec::GZIP;
+	md.total_uncompressed_size = write_page(header, string((const char *)vals.data(), vals.size() * sizeof(T)));
 	md.encodings = { Encoding::PLAIN, Encoding::RLE };
-	md.total_uncompressed_size = md.total_compressed_size = m_offset - cc.file_offset;
+	md.total_compressed_size = m_offset - cc.file_offset;
 }
 
 // A PLAIN dictionary page followed by one RLE_DICTIONARY data page
@@ -838,7 +839,8 @@ void ParquetWriter::write_dictionary_chunk(ColumnMetaData &md, const string &dic
 	header.dictionary_page_header.num_values = dict_size;
 	header.dictionary_page_header.encoding = Encoding::PLAIN;
 	md.dictionary_page_offset = m_offset;
-	write_page(header, dict);
+	md.codec = CompressionCodec::GZIP;
+	md.total_uncompressed_size = write_page(header, dict);
 
 	int bit_width = 1;
 	while (((uint64_t)1 << bit_width) < dict_size)
@@ -850,19 +852,57 @@ void ParquetWriter::write_dictionary_chunk(ColumnMetaData &md, const string &dic
 	header.data_page_header.num_values = indices.size();
 	header.data_page_header.encoding = Encoding::RLE_DICTIONARY;
 	md.data_page_offset = m_offset;
-	write_page(header, data);
+	md.total_uncompressed_size += write_page(header, data);
 
 	md.encodings = { Encoding::PLAIN, Encoding::RLE, Encoding::RLE_DICTIONARY };
-	md.total_uncompressed_size = md.total_compressed_size = m_offset - start;
+	md.total_compressed_size = m_offset - start;
 }
 
-void ParquetWriter::write_page(PageHeader &header, const string &payload)
+// One gzip stream: the GZIP codec of Parquet (RFC 1952, not zlib or raw deflate)
+static string gzip_compress(const string &in)
 {
-	header.uncompressed_page_size = header.compressed_page_size = payload.size();
+	z_stream z;
+	memset(&z, 0, sizeof(z));
+	if (deflateInit2(&z, 6, Z_DEFLATED, 16 + MAX_WBITS, 8, Z_DEFAULT_STRATEGY) != Z_OK)
+		TGLError<ParquetWriter>(ParquetWriter::FORMAT_ERROR, "zlib initialization failed");
+	string out(deflateBound(&z, in.size()), '\0');  // enough for deflate() to finish in one call
+	z.next_in = (Bytef *)in.data();
+	z.avail_in = in.size();
+	z.next_out = (Bytef *)&out[0];
+	z.avail_out = out.size();
+	int res = deflate(&z, Z_FINISH);
+	out.resize(z.total_out);
+	deflateEnd(&z);
+	if (res != Z_STREAM_END)
+		TGLError<ParquetWriter>(ParquetWriter::FORMAT_ERROR, "zlib compression failed");
+	return out;
+}
+
+// Writes the page GZIP-compressed and returns its uncompressed size, header included. A data
+// page (v1) starts with the definition levels of its OPTIONAL column, all 1 as misha writes no
+// nulls: the 4-byte length, then one RLE run (bit width 1) of num_values ones; no run when
+// there are no values, as a run cannot be empty.
+uint64_t ParquetWriter::write_page(PageHeader &header, const string &payload)
+{
+	string page;
+	if (header.type == PageType::DATA_PAGE) {
+		string levels;
+		if (header.data_page_header.num_values) {
+			put_varint(levels, (uint64_t)header.data_page_header.num_values << 1);
+			levels += '\1';
+		}
+		page = plain((uint32_t)levels.size()) + levels;
+	}
+	page += payload;
+
+	string compressed = gzip_compress(page);
+	header.uncompressed_page_size = page.size();
+	header.compressed_page_size = compressed.size();
 	string bytes;
 	header.encode(bytes);
 	write(bytes);
-	write(payload);
+	write(compressed);
+	return bytes.size() + page.size();
 }
 
 void ParquetWriter::write(const string &bytes)

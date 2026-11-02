@@ -152,8 +152,9 @@ struct FileMetaData {
 }
 
 // Writes a Parquet file of intervals and values: chrom (string), start, end (INT32, or INT64
-// with int64_coords) and one FLOAT column per value name, all REQUIRED. Rows must arrive
-// grouped by chromosome; a row group holds one chromosome and at most MAX_ROW_GROUP_ROWS rows.
+// with int64_coords) and one FLOAT column per value name, all OPTIONAL (nullable, though no
+// value is null) and GZIP-compressed, as arrow writes them. Rows must arrive grouped by
+// chromosome; a row group holds one chromosome and at most MAX_ROW_GROUP_ROWS rows.
 // The file is complete only after close(); the destructor closes the file without finishing it.
 //
 // merge() concatenates files written by ParquetWriter with the same schema into one: their row
@@ -195,7 +196,7 @@ private:
 	void write_coord_column(parquet::ColumnChunk &cc, const string &name, const vector<int64_t> &coords);
 	template <typename T> void write_fixed_column(parquet::ColumnChunk &cc, int type, const string &name, const vector<T> &vals);
 	void write_dictionary_chunk(parquet::ColumnMetaData &md, const string &dict, uint32_t dict_size, const vector<uint32_t> &indices);
-	void write_page(parquet::PageHeader &header, const string &payload);
+	uint64_t write_page(parquet::PageHeader &header, const string &payload);
 	void write(const string &bytes);
 	void append(int fd, const string &filename, uint64_t offset, uint64_t size);
 };
