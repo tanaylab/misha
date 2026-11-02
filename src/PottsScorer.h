@@ -36,11 +36,11 @@ public:
     // it to ~7 digits on the way in.
     PottsScorer(const PottsModel &model, const std::string &genome_root,
                 bool extend, ScoringMode mode, bool bidirect, char strand,
-                double score_thresh);
+                double score_thresh, int max_edits = 0);
 
     PottsScorer(const PottsModel &model, GenomeSeqFetch *shared_seqfetch,
                 bool extend, ScoringMode mode, bool bidirect, char strand,
-                double score_thresh);
+                double score_thresh, int max_edits = 0);
 
     double score_interval(const GInterval &interval, const GenomeChromKey &chromkey) override;
 
@@ -62,6 +62,9 @@ public:
     // this.
     double get_last_max_score() const { return m_last_max_score; }
 
+protected:
+    int64_t pattern_length() const override { return (int64_t)m_model.width(); }
+
 private:
     // The value of the anchor at m_codes[i], in the ORIGINAL genome's
     // orientation. `union_max` picks the strand union: false is log-sum-exp
@@ -75,6 +78,12 @@ private:
     // float this returns through and -inf out of the aggregators below can
     // only mean "no scorable anchor".
     double anchor_value(size_t i, bool union_max, int &dir) const;
+
+    // max_edits = 1: the best anchor score reachable with at most one
+    // substitution. Max over substitutions and max over anchors commute, and a
+    // substitution outside an anchor's window leaves it unchanged, so each
+    // anchor is maximised on its own.
+    double score_one_edit(size_t i_min, size_t i_max, size_t motif_len);
 
     // 1-based position of `index`, in forward-strand orientation, signed by
     // `direction` when bidirect. Transliterated from
@@ -187,6 +196,7 @@ private:
     ScoringMode m_mode;
     bool m_bidirect;
     double m_score_thresh;
+    int m_max_edits;
     double m_last_max_score = -std::numeric_limits<double>::infinity();
 
     // Scratch, reused across calls so a per-bp iterator does not reallocate.

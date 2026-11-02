@@ -93,6 +93,7 @@ public:
         if (!p1.empty())
             m_J.assign(j_rowmajor, j_rowmajor + p1.size() * 16);
         build_blocked_tables();
+        build_pair_index();
     }
 
     int width() const { return m_W; }
@@ -164,6 +165,27 @@ public:
         return m_use_blocked ? score_codes_blocked(bc) : score_codes_naive(c);
     }
 
+    // Change in score_codes(c) when position j is changed from c[j] to base b
+    // (0..3), every other position as in c. Touches only the field at j and
+    // the pairs that contain j (m_pairs_at), so it costs 1 + deg(j) lookups
+    // instead of a full rescore.
+    inline double delta_codes(const int8_t *c, int j, int b) const
+    {
+        const int x = c[j];
+        double d = m_e[(std::size_t)j * 4 + b] - m_e[(std::size_t)j * 4 + x];
+        for (const int k : m_pairs_at[j]) {
+            const double *Jk = &m_J[(std::size_t)k * 16];
+            if (m_p1[k] == j) {
+                const std::size_t row = (std::size_t)c[m_p2[k]] * 4;
+                d += Jk[row + b] - Jk[row + x];
+            } else {
+                const int a = c[m_p1[k]];
+                d += Jk[(std::size_t)b * 4 + a] - Jk[(std::size_t)x * 4 + a];
+            }
+        }
+        return d;
+    }
+
     // The complemented twin: rc().score_codes(w) == score_codes(revcomp(w)).
     //
     //   e'[i][b]         = e[W-1-i][comp(b)]
@@ -196,6 +218,7 @@ public:
                         m_J[k * 16 + (std::size_t)comp[a] * 4 + comp[b]];
         }
         o.build_blocked_tables();
+        o.build_pair_index();
         return o;
     }
 
@@ -206,6 +229,16 @@ private:
     // close (every test width, and a realistic motif width, is well under
     // 100).
     static constexpr int MAX_BLOCKS = 128;
+
+    // m_pairs_at[i]: indices k of the pairs that contain position i.
+    void build_pair_index()
+    {
+        m_pairs_at.assign((std::size_t)m_W, std::vector<int>());
+        for (std::size_t k = 0; k < m_p1.size(); ++k) {
+            m_pairs_at[m_p1[k]].push_back((int)k);
+            m_pairs_at[m_p2[k]].push_back((int)k);
+        }
+    }
 
     void build_blocked_tables()
     {
@@ -344,6 +377,7 @@ private:
     std::vector<double> m_e; // W*4,      [i*4 + base]
     std::vector<double> m_J; // npair*16, [k*16 + b*4 + a]
     std::vector<int> m_p1, m_p2;
+    std::vector<std::vector<int>> m_pairs_at;
 
     // Blocked-kernel tables, built by build_blocked_tables(). m_nblocks == 0
     // means "not built" (W too wide for MAX_BLOCKS) - blocked_available()

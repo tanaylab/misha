@@ -2,6 +2,10 @@
 
 ### New features
 
+* New `gextract.variants()`: the value of a track expression under each single-base substitution that can change it, or under the variants of a table such as `gintervals.import_vcf()` output.
+
+* `potts.max` virtual tracks accept `max_edits = 1`: the best score within one substitution.
+
 * `gextract(file = "x.parquet")` writes a GZIP-compressed Parquet file (chrom, start, end and one float32 column per expression, all nullable as in arrow-written files), in parallel when `gmultitasking` is on.
 
 * New `gtrack.import_parquet()` imports the value columns of Parquet files as dense tracks, one track per column. `gtrack.import()` also reads a Parquet file with one value column.
