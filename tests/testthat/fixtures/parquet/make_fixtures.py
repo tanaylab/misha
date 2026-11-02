@@ -242,3 +242,26 @@ with open(path("more_rows_than_bases.parquet"), "wb") as fh:
 md = pq.ParquetFile(path("more_rows_than_bases.parquet")).metadata
 assert md.num_rows == 1601 and md.row_group(0).num_rows == 1601
 assert all(md.row_group(0).column(k).num_values == 1601 for k in range(4))
+
+# Many chromosomes per row group: chr1 .. chr41 of 100 + 7 * k bp (k = 1 .. 41), chr41 without rows.
+# Odd k: rows that are the 32 bp bins; even k: 50 bp rows, without [100, 150). value = k + start / 1024.
+# many_chroms.parquet holds them in order in row groups of 37 rows (each holds several
+# chromosomes, and chromosomes span row groups); many_chroms_shuffled.parquet in random order in
+# row groups of 40 rows (each holds rows of half the chromosomes or more). many_chroms.tsv holds
+# the same rows for gtrack.import.
+many = []
+for k in range(1, 41):
+    size = 100 + 7 * k
+    step = 32 if k % 2 else 50
+    for start in range(0, size, step):
+        if step == 50 and start == 100:
+            continue
+        many.append(("chr%d" % k, start, min(start + step, size), k + start / 1024))
+many = pd.DataFrame(many, columns=["chrom", "start", "end", "value"])
+pq.write_table(table(many), path("many_chroms.parquet"), row_group_size=37)
+pq.write_table(table(many.sample(frac=1, random_state=1)), path("many_chroms_shuffled.parquet"), row_group_size=40)
+many.to_csv(path("many_chroms.tsv"), sep="\t", index=False)
+for name, min_chroms in (("many_chroms.parquet", 3), ("many_chroms_shuffled.parquet", 20)):
+    pf = pq.ParquetFile(path(name))
+    assert pf.metadata.num_row_groups > 5
+    assert all(len(set(pf.read_row_group(i).column("chrom").to_pylist())) >= min_chroms for i in range(pf.metadata.num_row_groups - 1))

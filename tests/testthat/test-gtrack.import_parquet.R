@@ -389,6 +389,27 @@ test_that("binning equals gtrack.import of the same rows", {
     }
 })
 
+test_that("many chromosomes per row group, in order or not, import as gtrack.import does, serial and in kids", {
+    local_db_state()
+    db <- file.path(withr::local_tempdir(), "manydb")
+    create_test_db(db, data.frame(chrom = paste0("chr", 1:41), size = 100 + 7 * (1:41)))
+    gdb.init(db)
+    gtrack.import("tsv", "test", pq_fixture("many_chroms.tsv"), 32)
+    expected <- gextract("tsv", gintervals.all(), iterator = 32)$tsv
+
+    for (fx in c("many_chroms", "many_chroms_shuffled")) {
+        for (multitasking in c(FALSE, TRUE)) {
+            prefix <- paste0(fx, if (multitasking) "_par_" else "_ser_")
+            withr::with_options(
+                list(gmultitasking = multitasking, gmax.processes = 4),
+                gtrack.import_parquet("test", pq_fixture(paste0(fx, ".parquet")), 32, track.prefix = prefix)
+            )
+            track <- paste0(prefix, "value")
+            expect_identical(gextract(track, gintervals.all(), iterator = 32)[[track]], expected, info = prefix)
+        }
+    }
+})
+
 test_that("attributes and indexed database", {
     db <- local_pq_db()
     gtrack.import_parquet("my description", pq_fixture("pandas_default.parquet"), 32, track.prefix = "at_")

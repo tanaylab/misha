@@ -12,6 +12,7 @@
 #include <limits>
 #include <memory>
 #include <numeric>
+#include <tuple>
 
 #include "DataFrameUtils.h"
 #include "GenomeTrack.h"
@@ -35,6 +36,11 @@ namespace {
 // A unit of work is a chromosome and a batch of at most this many columns
 const int MAX_UNIT_COLS = 16;
 
+// A process imports its units of a batch together, at most this many rows at a time (or one
+// chromosome, if it has more): a row group that holds rows of several of the chromosomes is
+// decoded once for all of them. Their rows are held in memory together, about 24 bytes a row.
+const uint64_t MAX_ROWS_AT_ONCE = 1 << 22;
+
 // The value of one bin, as gtrackimportwig computes it: sum and covered_bases from the
 // non-NaN values that overlap the bin, the rest of the bin filled with defval unless it is NaN
 inline float bin_value(double sum, uint64_t covered_bases, uint64_t bin_size_actual, double defval)
@@ -56,8 +62,8 @@ struct Run {
 };
 
 // Imports columns of a set of Parquet files. index() finds which rows of which row groups lie
-// on each chromosome (reading only the chrom columns); import_chrom() then writes the track
-// files of one chromosome for any subset of the columns.
+// on each chromosome (reading only the chrom columns); import_chroms() then writes the track
+// files of some chromosomes for any subset of the columns.
 class ParquetImport {
 public:
 	enum { CHROM, START, END, NUM_COORDS };
@@ -73,10 +79,17 @@ public:
 	// Fills runs, unknown chromosome names and the files they came from
 	void index();
 
-	void import_chrom(int chromid, const vector<int> &cols);
+	// Writes the track files of the chromosomes for the columns. Each column chunk that holds
+	// their rows is decoded once, however many of the chromosomes it holds.
+	void import_chroms(const vector<int> &chromids, const vector<int> &cols);
 
 	const UnknownChroms &unknown() const { return m_unknown; }
 	uint64_t num_matched_chroms() const;
+	uint64_t num_rows(int chromid) const;
+
+	// Where the first row of the chromosome is: file, row group, row; chromosomes without rows
+	// come after all the others
+	tuple<int, int, int64_t> first_row(int chromid) const;
 
 	// The files that named chromosomes the database does not have, for messages
 	string unknown_chroms_files() const;
@@ -95,7 +108,27 @@ private:
 	UnknownChroms                     m_unknown;
 	vector<bool>                      m_file_has_unknown;
 
+	// The rows of a chromosome, in the order of its runs
+	struct ChromRows {
+		vector<int64_t>  starts;
+		vector<int64_t>  ends;
+		vector<float>    vals;     // of the column being written
+		vector<uint32_t> order;    // the rows sorted by start, unless aligned
+		bool             aligned;  // every row is exactly a bin
+	};
+
+	// A run of chromosome chromids[chrom] of import_chroms()
+	struct ChromRun {
+		size_t     chrom;
+		const Run *run;
+	};
+
 	[[noreturn]] void rows_error(const char *what, const Run &run1, const Run &run2) const;
+
+	template <typename T, typename D>
+	void gather(const vector<ChromRun> &runs, int col_idx, void (ParquetReader::*read)(int, int, vector<T> &), D dest);
+	void prepare_rows(int chromid, ChromRows &rows) const;
+	void write_bins(int chromid, const ChromRows &rows, int col, vector<float> &bins) const;
 };
 
 void ParquetImport::open()
@@ -169,6 +202,22 @@ void ParquetImport::index()
 	}
 }
 
+uint64_t ParquetImport::num_rows(int chromid) const
+{
+	uint64_t num = 0;
+	for (const Run &run : m_runs[chromid])
+		num += run.end - run.begin;
+	return num;
+}
+
+tuple<int, int, int64_t> ParquetImport::first_row(int chromid) const
+{
+	if (m_runs[chromid].empty())
+		return make_tuple(numeric_limits<int>::max(), 0, (int64_t)0);
+	const Run &run = m_runs[chromid].front();
+	return make_tuple(run.file, run.row_group, run.begin);
+}
+
 uint64_t ParquetImport::num_matched_chroms() const
 {
 	uint64_t num = 0;
@@ -202,34 +251,46 @@ void ParquetImport::rows_error(const char *what, const Run &run1, const Run &run
 	       m_names[run2.file].c_str(), run2.row_group, what);
 }
 
-void ParquetImport::import_chrom(int chromid, const vector<int> &cols)
+// Appends the values of column col_idx (an index into m_col_idx) of each run to dest(run.chrom).
+// runs are in the order of the files and row groups, so each column chunk is decoded once.
+template <typename T, typename D>
+void ParquetImport::gather(const vector<ChromRun> &runs, int col_idx, void (ParquetReader::*read)(int, int, vector<T> &), D dest)
+{
+	vector<T> buf;
+
+	for (size_t r = 0; r < runs.size(); ++r) {
+		const Run &run = *runs[r].run;
+
+		if (!r || run.file != runs[r - 1].run->file || run.row_group != runs[r - 1].run->row_group) {
+			((*m_readers[run.file]).*read)(run.row_group, m_col_idx[run.file][col_idx], buf);
+			check_interrupt();
+		}
+		if ((uint64_t)run.end > buf.size())
+			rows_error("fewer rows than when it was indexed", run, run);
+
+		auto &out = dest(runs[r].chrom);
+		out.insert(out.end(), buf.begin() + run.begin, buf.begin() + run.end);
+	}
+}
+
+// Checks the coordinates of the rows, sets aligned and, unless they are aligned, sorts them
+void ParquetImport::prepare_rows(int chromid, ChromRows &rows) const
 {
 	const vector<Run> &runs = m_runs[chromid];
 	uint64_t chromsize = m_chromkey.get_chrom_size(chromid);
 	uint64_t num_bins = (chromsize + m_binsize - 1) / m_binsize;
-	vector<int64_t> starts, ends;  // the chromosome's rows in the order of runs
-	vector<size_t> run_of_row;     // index into runs of the first row of each run, for messages
-	vector<int64_t> buf_starts, buf_ends;
-	bool aligned = true;           // every row is exactly a bin
+	const vector<int64_t> &starts = rows.starts;
+	const vector<int64_t> &ends = rows.ends;
+	vector<size_t> run_of_row;  // the first row of each run, for messages
 
-	// Coordinates. Runs of one row group are consecutive in runs, so each row group's start and
-	// end columns are decoded once.
-	for (size_t r = 0; r < runs.size(); ++r) {
+	rows.aligned = true;
+	for (size_t r = 0, i = 0; r < runs.size(); ++r) {
 		const Run &run = runs[r];
-		ParquetReader &reader = *m_readers[run.file];
 
-		if (!r || run.file != runs[r - 1].file || run.row_group != runs[r - 1].row_group) {
-			reader.read_int64s(run.row_group, m_col_idx[run.file][START], buf_starts);
-			reader.read_int64s(run.row_group, m_col_idx[run.file][END], buf_ends);
-		}
-
-		if ((uint64_t)run.end > min(buf_starts.size(), buf_ends.size()))
-			rows_error("fewer rows than when it was indexed", run, run);
-
-		run_of_row.push_back(starts.size());
-		for (int64_t i = run.begin; i < run.end; ++i) {
-			int64_t start = buf_starts[i];
-			int64_t end = buf_ends[i];
+		run_of_row.push_back(i);
+		for (int64_t k = run.begin; k < run.end; ++k, ++i) {
+			int64_t start = starts[i];
+			int64_t end = ends[i];
 
 			if (start < 0)
 				rows_error("start coordinate is negative", run, run);
@@ -237,9 +298,7 @@ void ParquetImport::import_chrom(int chromid, const vector<int> &cols)
 				rows_error("start coordinate exceeds or equals the end coordinate", run, run);
 			if ((uint64_t)end > chromsize)
 				rows_error("end coordinate exceeds chromosome's size", run, run);
-			aligned = aligned && start % m_binsize == 0 && (uint64_t)end == min((uint64_t)start + m_binsize, chromsize);
-			starts.push_back(start);
-			ends.push_back(end);
+			rows.aligned = rows.aligned && start % m_binsize == 0 && (uint64_t)end == min((uint64_t)start + m_binsize, chromsize);
 		}
 	}
 
@@ -250,8 +309,7 @@ void ParquetImport::import_chrom(int chromid, const vector<int> &cols)
 	// Rows that are exactly the bins (the common case) are placed by their start; any other rows
 	// are sorted by start, as GenomeArraysCsv sorts them. Overlapping or duplicate rows are errors
 	// either way.
-	vector<uint32_t> order;
-	if (aligned) {
+	if (rows.aligned) {
 		vector<uint32_t> row_of_bin(num_bins, UINT32_MAX);
 		for (size_t i = 0; i < starts.size(); ++i) {
 			uint32_t &row = row_of_bin[starts[i] / m_binsize];
@@ -260,6 +318,7 @@ void ParquetImport::import_chrom(int chromid, const vector<int> &cols)
 			row = i;
 		}
 	} else {
+		vector<uint32_t> &order = rows.order;
 		order.resize(starts.size());
 		iota(order.begin(), order.end(), 0);
 		sort(order.begin(), order.end(), [&](uint32_t a, uint32_t b) { return starts[a] < starts[b] || (starts[a] == starts[b] && ends[a] < ends[b]); });
@@ -268,74 +327,98 @@ void ParquetImport::import_chrom(int chromid, const vector<int> &cols)
 				rows_error("rows overlap", run_of(order[k - 1]), run_of(order[k]));
 		}
 	}
+}
 
-	vector<float> vals(starts.size());
-	vector<float> bins(num_bins);
-	vector<double> buf_vals;
+// Bins rows.vals and writes the track file of column col
+void ParquetImport::write_bins(int chromid, const ChromRows &rows, int col, vector<float> &bins) const
+{
+	uint64_t chromsize = m_chromkey.get_chrom_size(chromid);
+	uint64_t num_bins = (chromsize + m_binsize - 1) / m_binsize;
+	const vector<int64_t> &starts = rows.starts;
+	const vector<int64_t> &ends = rows.ends;
+	const vector<float> &vals = rows.vals;
+	const vector<uint32_t> &order = rows.order;
 	char filename[FILENAME_MAX];
 
-	for (int col : cols) {
-		// the column's values, in the order of runs
-		size_t row = 0;
-		for (size_t r = 0; r < runs.size(); ++r) {
-			const Run &run = runs[r];
-			if (!r || run.file != runs[r - 1].file || run.row_group != runs[r - 1].row_group)
-				m_readers[run.file]->read_doubles(run.row_group, m_col_idx[run.file][NUM_COORDS + col], buf_vals);
-			if ((uint64_t)run.end > buf_vals.size())
-				rows_error("fewer rows than when it was indexed", run, run);
-			for (int64_t i = run.begin; i < run.end; ++i)
-				vals[row++] = buf_vals[i];
-		}
+	bins.resize(num_bins);
+	if (rows.aligned) {
+		for (uint64_t bin = 0; bin < num_bins; ++bin)
+			bins[bin] = bin_value(0, 0, min((bin + 1) * m_binsize, chromsize) - bin * m_binsize, m_defval);
+		for (size_t i = 0; i < starts.size(); ++i) {
+			uint64_t len = ends[i] - starts[i];
+			double sum = 0;
+			uint64_t covered_bases = 0;
+			float v = vals[i];
 
-		if (aligned) {
-			for (uint64_t bin = 0; bin < num_bins; ++bin)
-				bins[bin] = bin_value(0, 0, min((bin + 1) * m_binsize, chromsize) - bin * m_binsize, m_defval);
-			for (size_t i = 0; i < starts.size(); ++i) {
-				uint64_t len = ends[i] - starts[i];
-				double sum = 0;
-				uint64_t covered_bases = 0;
-				float v = vals[i];
-
-				if (!std::isnan(v)) {
-					sum += v * len;  // a float product, as in gtrackimportwig
-					covered_bases += len;
-				}
-				bins[starts[i] / m_binsize] = bin_value(sum, covered_bases, len, m_defval);
+			if (!std::isnan(v)) {
+				sum += v * len;  // a float product, as in gtrackimportwig
+				covered_bases += len;
 			}
-		} else {
-			// gtrackimportwig's dense loop
-			size_t k = 0;
-			for (uint64_t start_coord = 0, bin = 0; start_coord < chromsize; start_coord += m_binsize, ++bin) {
-				double sum = 0;
-				uint64_t covered_bases = 0;
-				uint64_t end_coord = min(start_coord + m_binsize, chromsize);
+			bins[starts[i] / m_binsize] = bin_value(sum, covered_bases, len, m_defval);
+		}
+	} else {
+		// gtrackimportwig's dense loop
+		size_t k = 0;
+		for (uint64_t start_coord = 0, bin = 0; start_coord < chromsize; start_coord += m_binsize, ++bin) {
+			double sum = 0;
+			uint64_t covered_bases = 0;
+			uint64_t end_coord = min(start_coord + m_binsize, chromsize);
 
-				while (k < order.size() && (uint64_t)ends[order[k]] <= start_coord)
-					++k;
+			while (k < order.size() && (uint64_t)ends[order[k]] <= start_coord)
+				++k;
 
-				for (size_t c = k; c < order.size() && (uint64_t)starts[order[c]] < end_coord; ++c) {
-					uint64_t overlap_start = max(start_coord, (uint64_t)starts[order[c]]);
-					uint64_t overlap_end = min(end_coord, (uint64_t)ends[order[c]]);
+			for (size_t c = k; c < order.size() && (uint64_t)starts[order[c]] < end_coord; ++c) {
+				uint64_t overlap_start = max(start_coord, (uint64_t)starts[order[c]]);
+				uint64_t overlap_end = min(end_coord, (uint64_t)ends[order[c]]);
 
-					if (overlap_end > overlap_start) {
-						float v = vals[order[c]];
-						if (!std::isnan(v)) {
-							uint64_t overlap_len = overlap_end - overlap_start;
-							sum += v * overlap_len;
-							covered_bases += overlap_len;
-						}
+				if (overlap_end > overlap_start) {
+					float v = vals[order[c]];
+					if (!std::isnan(v)) {
+						uint64_t overlap_len = overlap_end - overlap_start;
+						sum += v * overlap_len;
+						covered_bases += overlap_len;
 					}
 				}
-				bins[bin] = bin_value(sum, covered_bases, end_coord - start_coord, m_defval);
 			}
+			bins[bin] = bin_value(sum, covered_bases, end_coord - start_coord, m_defval);
 		}
+	}
 
-		snprintf(filename, sizeof(filename), "%s/%s", m_dirs[col].c_str(), GenomeTrack::get_1d_filename(m_chromkey, chromid).c_str());
-		GenomeTrackFixedBin gtrack;
-		gtrack.init_write(filename, m_binsize, chromid);
-		gtrack.write_next_bins(bins.data(), bins.size());
-		gtrack.flush_writes();
-		check_interrupt();
+	snprintf(filename, sizeof(filename), "%s/%s", m_dirs[col].c_str(), GenomeTrack::get_1d_filename(m_chromkey, chromid).c_str());
+	GenomeTrackFixedBin gtrack;
+	gtrack.init_write(filename, m_binsize, chromid);
+	gtrack.write_next_bins(bins.data(), bins.size());
+	gtrack.flush_writes();
+}
+
+void ParquetImport::import_chroms(const vector<int> &chromids, const vector<int> &cols)
+{
+	vector<ChromRows> rows(chromids.size());
+	vector<ChromRun> runs;  // the runs of all the chromosomes, in the order of the files and row groups
+	vector<float> bins;
+
+	for (size_t c = 0; c < chromids.size(); ++c) {
+		for (const Run &run : m_runs[chromids[c]])
+			runs.push_back(ChromRun{ c, &run });
+	}
+	// index() made the runs of each chromosome in this order, so the sort keeps it
+	sort(runs.begin(), runs.end(), [](const ChromRun &a, const ChromRun &b) {
+		return make_tuple(a.run->file, a.run->row_group, a.run->begin) < make_tuple(b.run->file, b.run->row_group, b.run->begin);
+	});
+
+	gather(runs, START, &ParquetReader::read_int64s, [&](size_t c) -> vector<int64_t> & { return rows[c].starts; });
+	gather(runs, END, &ParquetReader::read_int64s, [&](size_t c) -> vector<int64_t> & { return rows[c].ends; });
+	for (size_t c = 0; c < chromids.size(); ++c)
+		prepare_rows(chromids[c], rows[c]);
+
+	for (int col : cols) {
+		for (ChromRows &chrom_rows : rows)
+			chrom_rows.vals.clear();
+		gather(runs, NUM_COORDS + col, &ParquetReader::read_doubles, [&](size_t c) -> vector<float> & { return rows[c].vals; });
+		for (size_t c = 0; c < chromids.size(); ++c) {
+			write_bins(chromids[c], rows[c], col, bins);
+			check_interrupt();
+		}
 	}
 }
 
@@ -444,36 +527,69 @@ SEXP gtrackimportparquet(SEXP _dirs, SEXP _files, SEXP _names, SEXP _columns, SE
 		uint64_t num_matched = import.num_matched_chroms();
 		verify_chroms_matched(chromkey, srcname.c_str(), import.unknown(), num_matched, _envir);
 
-		// Units: each chromosome, largest first, times batches of columns of nearly equal size.
-		// Kid i takes units i, i + num_kids, ... A batch decodes the chromosome's coordinates
-		// again, so in one process all the columns are one batch.
+		// Units: each chromosome times batches of columns of nearly equal size, ordered by batch and
+		// then by where the chromosome's rows start in the files. Kid i takes the i-th of num_kids
+		// contiguous blocks of units of about equal work (rows plus bins) and imports the units of
+		// a batch together (see MAX_ROWS_AT_ONCE): a row group that holds many chromosomes is
+		// decoded once by each kid that needs it, not once per chromosome. A batch decodes the
+		// coordinates again, so in one process all the columns are one batch.
 		int num_cols = columns.size();
 		int num_batches = (num_cols + MAX_UNIT_COLS - 1) / MAX_UNIT_COLS;
 		int num_kids = import_num_kids(iu, chromkey.get_num_chroms() * num_batches);
 		if (num_kids == 1)
 			num_batches = 1;
-		vector<int> chromids(chromkey.get_num_chroms());
-		vector<pair<int, vector<int>>> units;
 
+		vector<vector<int>> batch_cols(num_batches);
+		for (int batch = 0; batch < num_batches; ++batch) {
+			batch_cols[batch].resize(num_cols * (batch + 1) / num_batches - num_cols * batch / num_batches);
+			iota(batch_cols[batch].begin(), batch_cols[batch].end(), num_cols * batch / num_batches);
+		}
+
+		vector<int> chromids(chromkey.get_num_chroms());
 		iota(chromids.begin(), chromids.end(), 0);
-		stable_sort(chromids.begin(), chromids.end(), [&](int a, int b) { return chromkey.get_chrom_size(a) > chromkey.get_chrom_size(b); });
-		for (int chromid : chromids) {
-			for (int batch = 0; batch < num_batches; ++batch) {
-				vector<int> cols(num_cols * (batch + 1) / num_batches - num_cols * batch / num_batches);
-				iota(cols.begin(), cols.end(), num_cols * batch / num_batches);
-				units.emplace_back(chromid, cols);
+		stable_sort(chromids.begin(), chromids.end(), [&](int a, int b) { return import.first_row(a) < import.first_row(b); });
+
+		struct Unit {
+			int      chromid;
+			int      batch;
+			uint64_t rows;
+			int      kid;
+		};
+		vector<Unit> units;
+		vector<uint64_t> work;
+		uint64_t total_work = 0;
+
+		for (int batch = 0; batch < num_batches; ++batch) {
+			for (int chromid : chromids) {
+				uint64_t rows = import.num_rows(chromid);
+				units.push_back(Unit{ chromid, batch, rows, 0 });
+				work.push_back(rows + (chromkey.get_chrom_size(chromid) + binsize - 1) / binsize);
+				total_work += work.back();
 			}
 		}
+		for (size_t u = 0, before = 0; u < units.size(); before += work[u++])
+			units[u].kid = min(num_kids - 1, (int)((double)before / total_work * num_kids));
 
 		// Kids read through the file descriptors they inherit, not by opening the files again: a file
 		// replaced since index() would no longer match it
 		run_kids(iu, num_kids, [&](int kid) {
+			auto by_kid = [](const Unit &unit, int k) { return unit.kid < k; };
+			size_t begin = lower_bound(units.begin(), units.end(), kid, by_kid) - units.begin();
+			size_t end = lower_bound(units.begin(), units.end(), kid + 1, by_kid) - units.begin();
 			Progress_reporter progress;
-			progress.init((units.size() - kid + num_kids - 1) / num_kids, 1);
-			for (size_t u = kid; u < units.size(); u += num_kids) {
+
+			progress.init(end - begin, 1);
+			for (size_t u = begin, next; u < end; u = next) {
+				vector<int> chroms;
+				uint64_t rows = 0;
+
+				for (next = u; next < end && units[next].batch == units[u].batch && (next == u || rows + units[next].rows <= MAX_ROWS_AT_ONCE); ++next) {
+					chroms.push_back(units[next].chromid);
+					rows += units[next].rows;
+				}
 				check_interrupt();
-				import.import_chrom(units[u].first, units[u].second);
-				progress.report(1);
+				import.import_chroms(chroms, batch_cols[units[u].batch]);
+				progress.report(next - u);
 			}
 			progress.report_last();
 			return (char)0;
