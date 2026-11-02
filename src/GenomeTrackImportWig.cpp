@@ -64,7 +64,7 @@ static string format_alias_hint(SEXP envir)
 // between names in the file that resolved and names that did not - not between database
 // chromosomes the file covered and ones it did not. A chr1-only bedGraph dropped nothing,
 // so it is silent; it is unmatched names that prove data in the file never reached the track.
-static void verify_chroms_matched(const GenomeChromKey &chromkey, const char *fname,
+void verify_chroms_matched(const GenomeChromKey &chromkey, const char *fname,
                                   const UnknownChroms &unknown, uint64_t num_matched, SEXP envir)
 {
 	if (unknown.empty() || num_matched)
@@ -88,7 +88,7 @@ static void verify_chroms_matched(const GenomeChromKey &chromkey, const char *fn
 //   - a primary chromosome (chr7, X): the database was supposed to have that one, so the
 //     naming is probably wrong. A warning, with the alias hint. Mitochondria are the first
 //     kind, not this one - see UnknownChroms.
-static void report_skipped_chroms(const char *fname, const UnknownChroms &unknown, uint64_t num_matched, SEXP envir)
+void report_skipped_chroms(const char *fname, const UnknownChroms &unknown, uint64_t num_matched, SEXP envir)
 {
 	if (unknown.empty())
 		return;

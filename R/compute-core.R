@@ -21,6 +21,18 @@
 #' physical memory.  The resulted file can be used as an input for
 #' 'gtrack.import' or 'gtrack.array.import' functions.
 #'
+#' A 'file' name ending in '.parquet' (in any case) writes a Parquet file
+#' instead: columns 'chrom', 'start' and 'end', then one float32 column per
+#' track expression, named as in the text file. 'start' and 'end' are 32-bit
+#' integers unless a chromosome of the scope is 2^31 bp or longer. NaN values
+#' are written as NaN, not as missing values. Only 1D iterators are supported,
+#' and the column names must be unique and other than 'chrom', 'start' and
+#' 'end'. The file is written under a temporary name in its directory (a
+#' symbolic link is followed, and the file it points to is replaced) and
+#' renamed when complete, so an error or an interrupt leaves an existing file
+#' as it was. With a numeric 'iterator' the file is a table of dense bins
+#' that pyarrow reads directly.
+#'
 #' If 'intervals.set.out' is not 'NULL' the result is saved as an intervals
 #' set. Similarly to 'file' parameter 'intervals.set.out' can be useful to
 #' overcome the limits of the physical memory.
@@ -36,8 +48,10 @@
 #' @param iterator track expression iterator. If 'NULL' iterator is determined
 #' implicitly based on track expressions.
 #' @param band track expression band. If 'NULL' no band is used.
-#' @param file file name where the function result is optionally outputted in
-#' tab-delimited format
+#' @param file file name where the function result is optionally outputted:
+#' GZIP-compressed Parquet if the name ends in '.parquet' (chrom, start, end
+#' and one float32 column per expression, all nullable as in arrow-written
+#' files), tab-delimited otherwise
 #' @param intervals.set.out intervals set name where the function result is
 #' optionally outputted
 #' @param intervals_join how the output relates to the input intervals data

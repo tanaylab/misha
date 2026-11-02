@@ -5,7 +5,10 @@
  *      Author: hoichman
  */
 
+#include <cctype>
+#include <climits>
 #include <cstdint>
+#include <dirent.h>
 #include <inttypes.h>
 #include <atomic>
 #include <chrono>
@@ -13,6 +16,8 @@
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <strings.h>
+#include <sys/stat.h>
 #include <thread>
 #include <vector>
 
@@ -21,6 +26,7 @@
 #include "GenomeTrack.h"
 #include "GIntervalsBigSet1D.h"
 #include "GIntervalsBigSet2D.h"
+#include "Parquet.h"
 #include "TrackExpressionScanner.h"
 #include "TrackExpressionFixedBinIterator.h"
 #include "TrackExpressionFixedRectIterator.h"
@@ -517,6 +523,178 @@ static SEXP transform_intervals_join(SEXP answer, SEXP _intervals,
 	return out;
 }
 
+static bool is_parquet_file(const char *filename)
+{
+	size_t len = strlen(filename);
+	return len >= 8 && !strcasecmp(filename + len - 8, ".parquet");
+}
+
+// Files removed when this goes out of scope. In a multitasking child it removes nothing: the
+// parent owns every temporary file of the call.
+struct TmpFiles {
+	vector<string> paths;
+	~TmpFiles() {
+		if (!RdbInitializer::is_kid()) {
+			for (const string &path : paths)
+				unlink(path.c_str());
+		}
+	}
+};
+
+// The file a write to filename replaces: filename, or where its chain of symlinks leads, whether
+// that file exists or not. An ofstream writes through a link, and so does a Parquet output.
+static string resolve_symlinks(const char *filename)
+{
+	string path(filename);
+	struct stat st;
+
+	for (int hops = 0; !lstat(path.c_str(), &st) && S_ISLNK(st.st_mode); ++hops) {
+		if (hops == 40)
+			verror("Failed to write %s: too many levels of symbolic links", filename);
+
+		char text[PATH_MAX];
+		ssize_t len = readlink(path.c_str(), text, sizeof(text));
+		if (len <= 0 || len == (ssize_t)sizeof(text))
+			verror("Failed to read symbolic link %s: %s", path.c_str(), len < 0 ? strerror(errno) : "invalid length");
+		// a relative link is relative to the directory of the link (npos + 1 == 0: no directory)
+		size_t slash = path.rfind('/');
+		path = (text[0] == '/' ? "" : path.substr(0, slash + 1)) + string(text, len);
+	}
+	return path;
+}
+
+// This host as temporary names carry it, as .gdb.host_tag() writes it: the name up to the first
+// dot, anything but [A-Za-z0-9_] replaced by '_'
+static string host_tag()
+{
+	char buf[256] = "";
+	gethostname(buf, sizeof(buf) - 1);
+	string host(buf, strcspn(buf, "."));
+	for (char &ch : host) {
+		if (!isalnum((unsigned char)ch) && ch != '_')
+			ch = '_';
+	}
+	return host.empty() ? "unknown" : host;
+}
+
+// A number as to_string() writes it, small enough for a pid
+static bool is_decimal(const string &s)
+{
+	return !s.empty() && s.size() <= 9 && s.find_first_not_of("0123456789") == string::npos && (s[0] != '0' || s.size() == 1);
+}
+
+// Where a Parquet output goes, and the hidden file it is written to first: tmp, next to target
+// (the same filesystem, so rename() works), named for this host and process, as two hosts on
+// shared storage may run writers of the same pid. The parts of a multitasking write add .<kid>.
+struct ParquetOutput {
+	string target;  // the target, or where its symlinks lead
+	string tmp;     // .<target name>.tmp.<host>.<pid>
+};
+
+// Also removes the leftovers of writers of the same target on this host that were killed
+// (a SIGKILL leaves them no chance to clean up): temporary files and parts of pids that no longer
+// exist. Files of another host, of a live pid, or with a name of another form are left alone.
+static ParquetOutput parquet_output(const char *filename)
+{
+	ParquetOutput out;
+	out.target = resolve_symlinks(filename);
+	size_t slash = out.target.rfind('/');  // npos + 1 == 0: no directory
+	string dir = out.target.substr(0, slash + 1);
+	string prefix = "." + out.target.substr(slash + 1) + ".tmp." + host_tag() + ".";
+	out.tmp = dir + prefix + to_string(getpid());
+
+	DIR *dp = opendir(dir.empty() ? "." : dir.c_str());
+	if (!dp)
+		return out;  // writing tmp fails with the reason
+	for (struct dirent *ent; (ent = readdir(dp)); ) {
+		string name(ent->d_name);
+		if (name.compare(0, prefix.size(), prefix))
+			continue;
+		string rest = name.substr(prefix.size());  // <pid> or <pid>.<kid>
+		size_t dot = rest.find('.');
+		string pid = rest.substr(0, dot);
+		if (is_decimal(pid) && (dot == string::npos || is_decimal(rest.substr(dot + 1))) && kill((pid_t)stol(pid), 0) && errno == ESRCH)
+			unlink((dir + name).c_str());
+	}
+	closedir(dp);
+	return out;
+}
+
+// Renames the finished temporary file onto the target. A target it replaces passes on its
+// permission bits, as a write in place would keep them (best effort: if chmod fails, the file
+// has the permissions it was created with).
+static void commit_parquet(const ParquetOutput &out)
+{
+	struct stat st;
+
+	if (!stat(out.target.c_str(), &st))
+		chmod(out.tmp.c_str(), st.st_mode & 0777);
+	if (rename(out.tmp.c_str(), out.target.c_str()))
+		verror("Failed to rename %s to %s: %s", out.tmp.c_str(), out.target.c_str(), strerror(errno));
+}
+
+// The value columns: colnames, or else the expressions
+static vector<string> parquet_value_names(SEXP _exprs, SEXP _colnames)
+{
+	vector<string> names;
+	for (int iexpr = 0; iexpr < Rf_length(_exprs); ++iexpr)
+		names.push_back(CHAR(STRING_ELT(Rf_isNull(_colnames) ? _exprs : _colnames, iexpr)));
+	return names;
+}
+
+// start and end are INT64 only if a chromosome of the scope does not fit in INT32
+static bool parquet_int64_coords(IntervUtils &iu, GIntervalsFetcher1D *scope)
+{
+	const GenomeChromKey &chromkey = iu.get_chromkey();
+	for (int chromid = 0; chromid < (int)chromkey.get_num_chroms(); ++chromid) {
+		if (scope->size(chromid) && chromkey.get_chrom_size(chromid) > (uint64_t)numeric_limits<int32_t>::max())
+			return true;
+	}
+	return false;
+}
+
+static string parquet_created_by()
+{
+	SEXP version = run_in_R("as.character(utils::packageVersion(\"misha\"))", R_BaseEnv);
+	if (!Rf_isString(version) || Rf_length(version) != 1)
+		verror("Failed to read the version of misha");
+	return string("misha version ") + CHAR(STRING_ELT(version, 0));
+}
+
+// Writes the rows of a begun scan to a new Parquet file, path; messages call it target
+static void write_parquet_rows(TrackExprScanner &scanner, IntervUtils &iu, const string &path, const char *target, const vector<string> &names,
+							   bool int64_coords, const string &created_by)
+{
+	if (!scanner.get_iterator()->is_1d())
+		verror("Parquet output does not support 2D iterators");
+
+	ParquetWriter writer;
+	vector<double> values(names.size());
+
+	writer.open(path, names, int64_coords, created_by, target);
+	for (; !scanner.isend(); scanner.next()) {
+		const GInterval &interval = scanner.last_interval1d();
+		for (unsigned iexpr = 0; iexpr < values.size(); ++iexpr)
+			values[iexpr] = scanner.last_real(iexpr);
+		writer.add_row(iu.id2chrom(interval.chromid), interval.start, interval.end, values.data());
+		check_interrupt();
+	}
+	writer.close();
+}
+
+// Writes the scan to a Parquet file. The rows go to a temporary file renamed onto the target once
+// complete, so an error or an interrupt leaves the target as it was.
+static void write_parquet(TrackExprScanner &scanner, IntervUtils &iu, const char *filename, SEXP _exprs, SEXP _colnames,
+						  GIntervalsFetcher1D *intervals1d, GIntervalsFetcher2D *intervals2d, SEXP _iterator_policy, SEXP _band)
+{
+	scanner.begin(_exprs, intervals1d, intervals2d, _iterator_policy, _band);
+
+	ParquetOutput out = parquet_output(filename);
+	TmpFiles tmp { { out.tmp } };
+	write_parquet_rows(scanner, iu, out.tmp, filename, parquet_value_names(_exprs, _colnames), parquet_int64_coords(iu, intervals1d), parquet_created_by());
+	commit_parquet(out);
+	tmp.paths.clear();
+}
 
 extern "C" {
 
@@ -567,6 +745,11 @@ SEXP C_gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_pol
 		intervals2d->verify_no_overlaps(iu.get_chromkey());
 
 		TrackExprScanner scanner(iu);
+
+		if (filename && is_parquet_file(filename)) {
+			write_parquet(scanner, iu, filename, _exprs, _colnames, intervals1d, intervals2d, _iterator_policy, _band);
+			return R_NilValue;
+		}
 
 		if (filename) {
 			ofstream outfile;
@@ -1137,6 +1320,10 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 	bool single_shard = false;
 
 	try {
+		// The parts and the temporary target of a Parquet output. Declared before the
+		// RdbInitializer, whose destructor kills and reaps the kids, so that they are removed
+		// only once no kid can still be writing one.
+		TmpFiles parquet_tmp;
 		RdbInitializer rdb_init;
 		const bool profile = is_gextract_profile_enabled();
 
@@ -1168,6 +1355,7 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 		}
 
 		const char *filename = Rf_isNull(_file) ? NULL : CHAR(STRING_ELT(_file, 0));
+
 		unsigned num_exprs = (unsigned)Rf_length(_exprs);
 		uint64_t num_intervals;
 		GIntervals out_intervals1d;
@@ -1186,6 +1374,43 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 		intervals2d->verify_no_overlaps(iu.get_chromkey());
 
 		string intervset_out = Rf_isNull(_intervals_set_out) ? "" : CHAR(STRING_ELT(_intervals_set_out, 0));
+
+		// Parquet: each kid writes its shard to a part file of its own, and the parent merges the
+		// parts in kid order, which is genome order (prepare4multitasking() plans the shards
+		// along the sorted scope)
+		if (filename && is_parquet_file(filename)) {
+			int num_kids = iu.prepare4multitasking(_exprs, intervals1d, intervals2d, _iterator_policy, _band,
+												   allow_multichrom_range_split_for_gextract(_iterator_policy, intervset_out));
+
+			// one shard, or an empty scope (whose file C_gextract writes too)
+			if (num_kids <= 1)
+				throw rdb::SingleShard();
+
+			// decided once, on the whole scope, so that every part has the same schema
+			vector<string> names = parquet_value_names(_exprs, _colnames);
+			bool int64_coords = parquet_int64_coords(iu, intervals1d);
+			string created_by = parquet_created_by();
+			ParquetOutput out = parquet_output(filename);
+			vector<string> parts;
+
+			for (int i = 0; i < num_kids; ++i)
+				parts.push_back(out.tmp + "." + to_string(i));
+			parquet_tmp.paths = parts;
+			parquet_tmp.paths.push_back(out.tmp);
+
+			if (iu.distribute_task(0, 0)) {  // child process
+				TrackExprScanner scanner(iu);
+
+				scanner.begin(_exprs, iu.get_kid_intervals1d(), iu.get_kid_intervals2d(), _iterator_policy, _band);
+				write_parquet_rows(scanner, iu, parts[RdbInitializer::get_kid_idx()], filename, names, int64_coords, created_by);
+				rreturn(R_NilValue);
+			}
+
+			ParquetWriter::merge(out.tmp, parts, filename);
+			commit_parquet(out);
+			parquet_tmp.paths.pop_back();  // out.tmp is now the target
+			rreturn(R_NilValue);
+		}
 
 		if (filename) {
 			TrackExprScanner scanner(iu);

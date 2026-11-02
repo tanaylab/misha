@@ -25,7 +25,13 @@
                                     band = NULL) {
     strategy <- getOption("gmultitasking.strategy", "auto")
 
-    # Explicit override always wins.
+    # File / bigset output is only written by the tile path, whatever the
+    # option says: track-parallel workers would drop it and return a data.frame.
+    if (!is.null(file) || !is.null(intervals.set.out)) {
+        return("tiles")
+    }
+
+    # Explicit override wins for everything else.
     if (identical(strategy, "tiles") || identical(strategy, "tracks")) {
         return(strategy)
     }
@@ -39,10 +45,6 @@
         )
     }
 
-    # Track-parallel hard disqualifiers (correctness / output-shape).
-    if (!is.null(file) || !is.null(intervals.set.out)) {
-        return("tiles")
-    }
     if (!is.null(band)) {
         return("tiles")
     }

@@ -1,3 +1,15 @@
+# misha 5.14.0
+
+### New features
+
+* `gextract(file = "x.parquet")` writes a GZIP-compressed Parquet file (chrom, start, end and one float32 column per expression, all nullable as in arrow-written files), in parallel when `gmultitasking` is on.
+
+* New `gtrack.import_parquet()` imports the value columns of Parquet files as dense tracks, one track per column. `gtrack.import()` also reads a Parquet file with one value column.
+
+### Bug fixes
+
+* `gextract(file = ...)` and `intervals.set.out` were ignored under `options(gmultitasking.strategy = "tracks")`: nothing was written and a data.frame was returned.
+
 # misha 5.13.3
 
 * **Behavior fix:** track and big-set files named by a chromosome alias (`1`, `1-chr2`, as earlier pymisha wrote them) are used like canonically named ones; 2D tracks read as empty and big sets failed to load. Delete a stale `.meta` of such a 2D track.
