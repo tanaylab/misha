@@ -571,7 +571,7 @@ static string parquet_created_by()
 	SEXP version = run_in_R("as.character(utils::packageVersion(\"misha\"))", R_BaseEnv);
 	if (!Rf_isString(version) || Rf_length(version) != 1)
 		verror("Failed to read the version of misha");
-	return string("misha ") + CHAR(STRING_ELT(version, 0));
+	return string("misha version ") + CHAR(STRING_ELT(version, 0));
 }
 
 // Writes the rows of a begun scan to a new Parquet file

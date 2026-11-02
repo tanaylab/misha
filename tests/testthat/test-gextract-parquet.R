@@ -199,6 +199,11 @@ test_that("parquet output equals in-memory gextract", {
     f2 <- file.path(dirname(f), "X.PARQUET")
     gextract("pq", intervals = gintervals.all(), iterator = 32, file = f2)
     expect_identical(readBin(f2, "raw", 4), charToRaw("PAR1"))
+
+    # created_by is "<application> version <version>", the form parquet-mr parses
+    bytes <- readBin(f, "raw", file.size(f))
+    footer <- rawToChar(bytes[bytes != as.raw(0)])
+    expect_match(footer, paste0("misha version ", as.character(packageVersion("misha"))), fixed = TRUE, useBytes = TRUE)
 })
 
 test_that("many columns (Thrift lists of 15 elements or more), values rounded to float32", {
