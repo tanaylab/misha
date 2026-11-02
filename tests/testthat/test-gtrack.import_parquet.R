@@ -78,6 +78,35 @@ test_that("nulls become NaN", {
     expect_identical(track_values("n_b"), expected_values("b"))
 })
 
+test_that("a column chunk that is entirely null takes defval", {
+    db <- local_pq_db()
+    for (fx in c("allnull_dict", "allnull_plain")) {
+        for (defval in c(NaN, -7)) {
+            prefix <- paste0(fx, "_", if (is.nan(defval)) "nan" else "num", "_")
+            gtrack.import_parquet("test", pq_fixture(paste0(fx, ".parquet")), 32, track.prefix = prefix, defval = defval)
+            expected <- expected_values("a")
+            expected[bin_chrom_index == 1] <- defval
+            expect_identical(track_values(paste0(prefix, "a")), expected, label = prefix)
+            expect_identical(track_values(paste0(prefix, "b")), expected_values("b"), label = prefix)
+        }
+    }
+})
+
+test_that("a column chunk that claims more values than its row group has is refused up front", {
+    db <- local_pq_db()
+    expect_error(
+        gtrack.import_parquet("test", pq_fixture("huge_num_values.parquet"), 32, track.prefix = "h_"),
+        "column chrom: .*number of values differs from the number of rows"
+    )
+    expect_no_tracks_left(db, c("h_a"))
+})
+
+test_that("description is validated up front", {
+    db <- local_pq_db()
+    expect_error(gtrack.import_parquet(NULL, pq_fixture("single.parquet"), 32), "Usage: gtrack.import_parquet")
+    expect_no_tracks_left(db, "a")
+})
+
 test_that("columns selects and orders tracks", {
     db <- local_pq_db()
     created <- gtrack.import_parquet("test", pq_fixture("pandas_default.parquet"), 32, track.prefix = "s_", columns = c("b", "a"))

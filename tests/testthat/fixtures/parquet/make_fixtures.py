@@ -191,3 +191,27 @@ assert pq.read_table(path("unknown_fields.parquet")).equals(pq.read_table(path("
 with pq.ParquetWriter(path("no_rowgroups.parquet"), table(frame(rows, ("chrom", "start", "end", "a"))).schema):
     pass
 assert pq.ParquetFile(path("no_rowgroups.parquet")).metadata.num_row_groups == 0
+
+# a is entirely null in the chr2 row group (one row group per chromosome): the column chunk has no
+# values, and with dictionary encoding its dictionary page has none either
+allnull = df.copy()
+allnull.loc[allnull["chrom"] == "chr2", "a"] = float("nan")
+write("allnull_dict.parquet", allnull, row_group_size=32)
+write("allnull_plain.parquet", allnull, row_group_size=32, use_dictionary=False)
+for name in ("allnull_dict.parquet", "allnull_plain.parquet"):
+    assert pq.ParquetFile(path(name)).metadata.num_row_groups == 2
+
+# single.parquet with the num_values of its first column chunk (the chrom column) set to 2**40 while
+# the row group has 51 rows: the reader must refuse it before decoding anything. The footer
+# holds num_values as the zigzag varint 102 (0x66) after the field header 0x16; the first such
+# pair that matters is the second one (the first is in the schema); the asserts below check it
+data = open(path("single.parquet"), "rb").read()
+n = int.from_bytes(data[-8:-4], "little")
+footer = data[-8 - n:-8]
+i = footer.index(b"\x16\x66", footer.index(b"\x16\x66") + 1)
+footer = footer[:i + 1] + varint(2 * 2**40) + footer[i + 2:]
+with open(path("huge_num_values.parquet"), "wb") as fh:
+    fh.write(data[:-8 - n] + footer + len(footer).to_bytes(4, "little") + b"PAR1")
+md = pq.ParquetFile(path("huge_num_values.parquet")).metadata
+assert md.row_group(0).num_rows == 51 and md.row_group(0).column(0).num_values == 2**40
+assert md.row_group(0).column(1).num_values == 51

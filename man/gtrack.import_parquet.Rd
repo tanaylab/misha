@@ -54,8 +54,8 @@ overwritten and no directories are created.
 
 Values are binned as \code{\link{gtrack.import}} bins the same rows read
 from a tab-delimited file: each bin holds the mean of the values that
-overlap it, weighted by the overlap. Bases no row covers count as 'defval'
-(unless it is NaN), and null values are NaN. The rows of a chromosome may
+overlap it, weighted by the overlap. Bases no row covers, and rows whose
+value is null or NaN, count as 'defval' (unless it is NaN). The rows of a chromosome may
 be spread over several files and row groups in any order, but may not
 overlap. Chromosome names are matched through the chromosome alias chain
 as in \code{\link{gtrack.import}}, with the same reporting of names the

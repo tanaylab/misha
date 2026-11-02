@@ -1180,6 +1180,8 @@ template <typename T> static void get_plain(const uint8_t *p, const uint8_t *end
 {
 	if ((uint64_t)(end - p) / sizeof(T) < n)
 		corrupt("PLAIN values");
+	if (!n)  // an all-null page: &out[old] would be past the end
+		return;
 	size_t old = out.size();
 	out.resize(old + n);
 	memcpy(&out[old], p, n * sizeof(T));
@@ -1386,6 +1388,9 @@ void ParquetReader::read_chunk(int row_group, int col, vector<T> &vals, vector<u
 		vector<uint32_t> scratch;
 		int64_t num_values = 0;
 
+		if (md.num_values != rg.num_rows)  // before anything is allocated from a page's counts
+			corrupt("number of values differs from the number of rows");
+
 		while (num_values < md.num_values) {
 			if (p == chunk_end)
 				corrupt("column chunk ends before its values");
@@ -1462,9 +1467,6 @@ void ParquetReader::read_chunk(int row_group, int col, vector<T> &vals, vector<u
 			get_values(encoding, page, page_end, num_present, has_dict ? &dict : NULL, vals, scratch);
 			num_values += n;
 		}
-
-		if (md.num_values != rg.num_rows)
-			corrupt("number of values differs from the number of rows");
 	} catch (TGLException &e) {
 		TGLError<ParquetReader>(e.code(), "File %s, row group %d, column %s: %s", m_filename.c_str(), row_group, m_columns[col].name.c_str(), e.msg());
 	} catch (const out_of_range &) {
