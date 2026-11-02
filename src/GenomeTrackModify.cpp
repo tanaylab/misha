@@ -267,6 +267,10 @@ SEXP gtrack_modify(SEXP _track, SEXP _track_expr, SEXP _intervals, SEXP _iterato
 		// Everything is written and reported before anything is published: a
 		// short write must fail here, not silently at fclose() after commit.
 		gtrack.flush_writes();
+		// A chromosome's staged file is closed when the next one is opened, and a failure there
+		// is only recorded (BufferedFile::write_error): it must stop the commit too.
+		if (BufferedFile::write_error()[0])
+			verror("%s", BufferedFile::write_error());
 		stager.commit();
 
 		// The commit replaced the file each modified chromosome was read from. Its other names (links to the

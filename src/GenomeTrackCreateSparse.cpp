@@ -41,7 +41,8 @@ void write_empty_sparse_signature(const std::string &path, int32_t sig,
     }
     ssize_t n = ::write(fd, &sig, sizeof(sig));
     int werr = (n != (ssize_t)sizeof(sig)) ? (errno ? errno : EIO) : 0;
-    ::close(fd);
+    if (::close(fd) && !werr)   // NFS reports a failed write here
+        werr = errno ? errno : EIO;
     if (werr) {
         int expected = 0;
         first_errno.compare_exchange_strong(expected, werr);

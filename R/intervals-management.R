@@ -661,7 +661,11 @@ gintervals.update <- function(intervals.set = NULL, intervals = "", chrom = NULL
         if (.gintervals.needs_bigset(tgt.intervals)) {
             .gintervals.small2big(intervals.set, tgt.intervals)
         } else {
-            .gintervals.save_file(fullpath, tgt.intervals)
+            tryCatch(.gintervals.save_file(fullpath, tgt.intervals), error = function(e) {
+                # the failed write removed the set's file ("wb" had already truncated the old one)
+                .gdb.rm_intervals.set(intervals.set)
+                stop(e)
+            })
         }
     }
 

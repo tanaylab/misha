@@ -648,11 +648,8 @@
         }
     }
 
-    .gwith_umask({
-        f <- file(filename, "wb")
-        serialize(intervs, f)
-        close(f)
-    })
+    # a failed write must not leave a truncated set to be found on the next scan
+    .gwith_umask(.gserialize_file(intervs, filename))
     nrow(intervs)
 }
 

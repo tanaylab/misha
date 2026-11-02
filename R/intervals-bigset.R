@@ -201,9 +201,7 @@
 
 .gintervals.big.save_meta <- function(path, stats, zeroline) {
     .gwith_umask({
-        f <- file(sprintf("%s/.meta", path), "wb")
-        serialize(list(stats = stats, zeroline = zeroline), f)
-        close(f)
+        .gserialize_file(list(stats = stats, zeroline = zeroline), sprintf("%s/.meta", path))
     })
 }
 

@@ -141,9 +141,7 @@
     trackdir <- .track_dir(trackstr)
     filename <- paste(trackdir, ".colnames", sep = "/")
     .gwith_umask({
-        f <- file(filename, "wb")
-        serialize(colnames, f)
-        close(f)
+        .gserialize_file(colnames, filename)
     })
 }
 
