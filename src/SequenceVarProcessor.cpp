@@ -384,134 +384,23 @@ void SequenceVarProcessor::process_sequence_vars(
 		classify_track_vars(track_vars);
 	}
 
-	// Batch process if we have multiple sequence vtracks (threshold: 4+) AND no filters
-	// (batch processing with filters is complex due to variable-length segments)
-	if (!m_any_filtered && m_kmer_vtracks.size() + m_pwm_vtracks.size() + m_potts_vtracks.size() + m_masked_vtracks.size() >= 4) {
-		batch_process_sequence_vtracks(m_kmer_vtracks, m_pwm_vtracks, interval, idx);
-		// Score potts vtracks individually even in batch mode: there is nothing
-		// to batch, each one carries its own model.
-		//
-		// No filter handling needed here: this whole branch is guarded by
-		// !m_any_filtered above, and m_any_filtered is set the moment ANY
-		// sequence vtrack in the scan - potts included - carries a filter
-		// (classify_track_vars() above checks m_potts_vtracks explicitly). So
-		// a filtered potts vtrack always takes the individual path via
-		// process_individual_sequence_vars(), which calls score_potts_var(),
-		// never this one.
-		for (TrackExpressionVars::Track_var* ivar : m_potts_vtracks) {
-			if (seq_var_out_of_range(ivar, idx))
-				continue;
-
-			const GInterval &seq_interval = ivar->seq_imdf1d ? ivar->seq_imdf1d->interval : interval;
-			ivar->var[idx] = ivar->potts_scorer
-				? ivar->potts_scorer->score_interval(seq_interval, m_iu.get_chromkey())
-				: numeric_limits<double>::quiet_NaN();
-		}
-		// Process masked vtracks individually even in batch mode (simpler than batching)
-		for (TrackExpressionVars::Track_var* ivar : m_masked_vtracks) {
-			if (seq_var_out_of_range(ivar, idx))
-				continue;
-
-			const GInterval &seq_interval = ivar->seq_imdf1d ? ivar->seq_imdf1d->interval : interval;
-			ivar->var[idx] = ivar->masked_counter->score_interval(seq_interval, m_iu.get_chromkey());
-		}
-		// Process edit distance vtracks individually (no batching support)
-		for (TrackExpressionVars::Track_var* ivar : m_pwm_edit_distance_vtracks) {
-			if (seq_var_out_of_range(ivar, idx))
-				continue;
-
-			const GInterval &seq_interval = ivar->seq_imdf1d ? ivar->seq_imdf1d->interval : interval;
-
-			if (!ivar->pwm_edit_distance_scorer) {
-				ivar->var[idx] = numeric_limits<double>::quiet_NaN();
-				continue;
-			}
-
-			if (ivar->filter) {
-				vector<GInterval> unmasked_parts;
-				ivar->filter->subtract(seq_interval, unmasked_parts);
-
-				if (unmasked_parts.empty()) {
-					ivar->var[idx] = numeric_limits<double>::quiet_NaN();
-					continue;
-				}
-
-				if (unmasked_parts.size() == 1) {
-					ivar->var[idx] = ivar->pwm_edit_distance_scorer->score_interval(unmasked_parts[0], m_iu.get_chromkey());
-					continue;
-				}
-
-				// Multiple unmasked parts - score each and aggregate
-				EditDistAggMode mode = get_agg_mode(ivar->val_func);
-				vector<EditDistPartResult> part_results;
-				part_results.reserve(unmasked_parts.size());
-				for (const auto& part : unmasked_parts) {
-					double score = ivar->pwm_edit_distance_scorer->score_interval(part, m_iu.get_chromkey());
-					part_results.push_back({
-						score,
-						ivar->pwm_edit_distance_scorer->get_last_min_edits(),
-						ivar->pwm_edit_distance_scorer->get_last_pwm_max_logp(),
-						part.start
-					});
-				}
-				ivar->var[idx] = aggregate_edit_distance_parts(part_results, mode, seq_interval.start);
-			} else {
-				ivar->var[idx] = ivar->pwm_edit_distance_scorer->score_interval(seq_interval, m_iu.get_chromkey());
-			}
-		}
-		// Process LSE edit distance vtracks individually (no batching support)
-		for (TrackExpressionVars::Track_var* ivar : m_pwm_lse_edit_distance_vtracks) {
-			if (seq_var_out_of_range(ivar, idx))
-				continue;
-
-			const GInterval &seq_interval = ivar->seq_imdf1d ? ivar->seq_imdf1d->interval : interval;
-
-			if (!ivar->pwm_lse_edit_distance_scorer) {
-				ivar->var[idx] = numeric_limits<double>::quiet_NaN();
-				continue;
-			}
-
-			if (ivar->filter) {
-				vector<GInterval> unmasked_parts;
-				ivar->filter->subtract(seq_interval, unmasked_parts);
-
-				if (unmasked_parts.empty()) {
-					ivar->var[idx] = numeric_limits<double>::quiet_NaN();
-					continue;
-				}
-
-				if (unmasked_parts.size() == 1) {
-					ivar->var[idx] = ivar->pwm_lse_edit_distance_scorer->score_interval(unmasked_parts[0], m_iu.get_chromkey());
-					continue;
-				}
-
-				// Multiple unmasked parts - score each and aggregate
-				EditDistAggMode mode = get_agg_mode(ivar->val_func);
-				vector<EditDistPartResult> part_results;
-				part_results.reserve(unmasked_parts.size());
-				for (const auto& part : unmasked_parts) {
-					double score = ivar->pwm_lse_edit_distance_scorer->score_interval(part, m_iu.get_chromkey());
-					part_results.push_back({
-						score,
-						ivar->pwm_lse_edit_distance_scorer->get_last_min_edits(),
-						0.0, // LSE does not use pwm_max_logp
-						part.start
-					});
-				}
-				ivar->var[idx] = aggregate_edit_distance_parts(part_results, mode, seq_interval.start);
-			} else {
-				ivar->var[idx] = ivar->pwm_lse_edit_distance_scorer->score_interval(seq_interval, m_iu.get_chromkey());
-			}
-		}
+	// Only k-mer vtracks are batched: one scan of the bin's sequence serves all
+	// of them. That costs more per bin than a scan per k-mer unless there are
+	// many k-mers and the bin is long. On mm10 the batched path was slower with
+	// fewer than 32 k-mers or bins under 100 bp (2-5x on 1 bp bins at any
+	// count) and up to 13x faster beyond both. Both paths give the same values,
+	// so the choice is made per bin. Filtered vtracks are never batched.
+	if (!m_any_filtered && m_kmer_vtracks.size() >= 32 && interval.range() >= 100) {
+		batch_process_sequence_vtracks(m_kmer_vtracks, interval, idx);
+		vector<TrackExpressionVars::Track_var*> no_kmers;
+		process_individual_sequence_vars(no_kmers, m_pwm_vtracks, m_potts_vtracks, m_masked_vtracks, m_pwm_edit_distance_vtracks, m_pwm_lse_edit_distance_vtracks, interval, idx);
 	} else {
-		// Process individually if too few or has filters
 		process_individual_sequence_vars(m_kmer_vtracks, m_pwm_vtracks, m_potts_vtracks, m_masked_vtracks, m_pwm_edit_distance_vtracks, m_pwm_lse_edit_distance_vtracks, interval, idx);
 	}
 }
 
 void SequenceVarProcessor::batch_process_sequence_vtracks(
 	vector<TrackExpressionVars::Track_var*> &kmer_vtracks,
-	vector<TrackExpressionVars::Track_var*> &pwm_vtracks,
 	const GInterval &interval,
 	unsigned idx)
 {
@@ -617,15 +506,6 @@ void SequenceVarProcessor::batch_process_sequence_vtracks(
 		}
 	}
 
-	// Process PWM vtracks using score_interval
-	// The shared cache prevents redundant disk I/O
-	for (TrackExpressionVars::Track_var* var : pwm_vtracks) {
-		if (seq_var_out_of_range(var, idx))
-			continue;
-
-		const GInterval &seq_interval = var->seq_imdf1d ? var->seq_imdf1d->interval : interval;
-		var->var[idx] = var->pwm_scorer->score_interval(seq_interval, m_iu.get_chromkey());
-	}
 }
 
 void SequenceVarProcessor::process_individual_sequence_vars(

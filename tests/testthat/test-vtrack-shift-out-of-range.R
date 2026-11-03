@@ -12,8 +12,9 @@ shift_pssm <- function() {
 }
 
 # Create every vtrack flavor that has its own out-of-range path, and return the
-# extracted values for the given shift.
-shifted_values <- function(sshift, eshift, scope) {
+# extracted values for the given shift. With batched = TRUE, 31 more k-mer
+# vtracks make 32, so the k-mers take the batched path on the 1 kb bins.
+shifted_values <- function(sshift, eshift, scope, batched = FALSE) {
     remove_all_vtracks()
     src <- gintervals("chr1", c(3000100, 3000500), c(3000200, 3000600))
 
@@ -29,12 +30,16 @@ shifted_values <- function(sshift, eshift, scope) {
         "s_pwm", "s_pwm_max", "s_kmer", "s_masked",
         "s_coverage", "s_neighbor", "s_distance", "s_track"
     )
+    if (batched) {
+        pads <- paste0("s_kmer_", 1:31)
+        for (p in pads) gvtrack.create(p, NULL, func = "kmer.count", kmer = "ACGT", strand = 1)
+        vtracks <- c(vtracks, pads)
+    }
 
     for (v in vtracks) {
         gvtrack.iterator(v, sshift = sshift, eshift = eshift)
     }
 
-    # 4+ sequence vtracks in one call also exercises the batched sequence path
     r <- gextract(vtracks, scope, iterator = scope)
     unlist(r[1, vtracks])
 }
@@ -43,19 +48,21 @@ test_that("a shift that leaves the chromosome yields NaN for every vtrack functi
     withr::defer(remove_all_vtracks())
     scope <- gintervals("chr1", 3000000, 3001000)
 
-    baseline <- shifted_values(0, 0, scope)
-    expect_false(any(is.na(baseline)))
-
-    # window pushed 5Mb to the left of the chromosome start
-    expect_true(all(is.na(shifted_values(-5e6, -5e6, scope))))
-
-    # window pushed past the chromosome end
     chr1_end <- gintervals.all()$end[gintervals.all()$chrom == "chr1"]
     tail_scope <- gintervals("chr1", chr1_end - 1000, chr1_end)
-    expect_true(all(is.na(shifted_values(10000, 10000, tail_scope))))
+    for (batched in c(FALSE, TRUE)) {
+        baseline <- shifted_values(0, 0, scope, batched)
+        expect_false(any(is.na(baseline)))
 
-    # sshift/eshift that collapse the window to nothing
-    expect_true(all(is.na(shifted_values(500, -500, scope))))
+        # window pushed 5Mb to the left of the chromosome start
+        expect_true(all(is.na(shifted_values(-5e6, -5e6, scope, batched))))
+
+        # window pushed past the chromosome end
+        expect_true(all(is.na(shifted_values(10000, 10000, tail_scope, batched))))
+
+        # sshift/eshift that collapse the window to nothing
+        expect_true(all(is.na(shifted_values(500, -500, scope, batched))))
+    }
 })
 
 test_that("a shift that only partly leaves the chromosome clamps the window", {
