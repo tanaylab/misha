@@ -382,6 +382,9 @@ gseq.pwm <- function(seqs,
             stop(sprintf("%s must be a single 1-based position (>= 1)", nm), call. = FALSE)
         }
     }
+    if (!is.null(spat.max) && spat.max - (if (is.null(spat.min)) 1 else spat.min) + 1 < w) {
+        stop(sprintf("the spat.min..spat.max window is shorter than the motif (%d bp), so no position can be scored", w), call. = FALSE)
+    }
 
     # Prepare spatial parameters as a list
     spat_params <- list(

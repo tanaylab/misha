@@ -268,6 +268,9 @@
             stop(sprintf("%s must be a single 1-based position (>= 1)", nm), call. = FALSE)
         }
     }
+    if (!is.null(spat_max) && spat_max - (if (is.null(spat_min)) 1 else spat_min) + 1 < nrow(pssm)) {
+        stop(sprintf("the spat_min..spat_max window is shorter than the motif (%d bp), so no position can be scored", nrow(pssm)), call. = FALSE)
+    }
 
     # Build params with processed values
     result <- list(
