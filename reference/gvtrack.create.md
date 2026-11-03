@@ -506,9 +506,11 @@ context.
   `strand = 0` issues a warning in that case.
 
 - For `kmer.frac` the denominator is the number of possible anchor
-  positions in the interval; with `strand = 0` positions on both strands
-  are counted, so the fraction stays in `[0, 1]` and remains comparable
-  to the single-strand fraction.
+  positions in the interval: every anchor with `extend = TRUE` (minus
+  the last k-1 at a chromosome end), the first L-k+1 of an interval of
+  length L with `extend = FALSE`; with `strand = 0` positions on both
+  strands are counted, so the fraction stays in `[0, 1]` and remains
+  comparable to the single-strand fraction.
 
 K-mer parameters can be supplied as a list or via named arguments (see
 examples), but not both in the same call.
@@ -721,17 +723,17 @@ gextract("pmax(potts_p, potts_m)", gintervals(1, 0, 1000), iterator = 200)
 gvtrack.create("cg_count", NULL, "kmer.count", kmer = "CG", strand = 1)
 gvtrack.create("cg_frac", NULL, "kmer.frac", kmer = "CG", strand = 1)
 gextract(c("cg_count", "cg_frac"), gintervals(1, 0, 10000), iterator = 1000)
-#>    chrom start   end cg_count    cg_frac intervalID
-#> 1   chr1     0  1000       73 0.07307307          1
-#> 2   chr1  1000  2000       27 0.02702703          1
-#> 3   chr1  2000  3000       23 0.02302302          1
-#> 4   chr1  3000  4000       15 0.01501502          1
-#> 5   chr1  4000  5000       27 0.02702703          1
-#> 6   chr1  5000  6000       25 0.02502503          1
-#> 7   chr1  6000  7000       18 0.01801802          1
-#> 8   chr1  7000  8000       25 0.02502503          1
-#> 9   chr1  8000  9000       20 0.02002002          1
-#> 10  chr1  9000 10000       24 0.02402402          1
+#>    chrom start   end cg_count cg_frac intervalID
+#> 1   chr1     0  1000       73   0.073          1
+#> 2   chr1  1000  2000       27   0.027          1
+#> 3   chr1  2000  3000       23   0.023          1
+#> 4   chr1  3000  4000       15   0.015          1
+#> 5   chr1  4000  5000       27   0.027          1
+#> 6   chr1  5000  6000       25   0.025          1
+#> 7   chr1  6000  7000       18   0.018          1
+#> 8   chr1  7000  8000       25   0.025          1
+#> 9   chr1  8000  9000       20   0.020          1
+#> 10  chr1  9000 10000       24   0.024          1
 
 gvtrack.create("at_pos", NULL, "kmer.count", kmer = "AT", strand = 1)
 gvtrack.create("at_neg", NULL, "kmer.count", kmer = "AT", strand = -1)

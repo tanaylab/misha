@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">misha</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.14.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.14.2</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -36,7 +36,7 @@
   <main id="main" class="col-md-9"><div class="page-header">
 
       <h1>Creates a new virtual track</h1>
-      <small class="dont-index">Source: <a href="https://github.com/tanaylab/misha/blob/v5.14.1/R/vtrack.R" class="external-link"><code>R/vtrack.R</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/tanaylab/misha/blob/master/R/vtrack.R" class="external-link"><code>R/vtrack.R</code></a></small>
       <div class="d-none name"><code>gvtrack.create.Rd</code></div>
     </div>
 
@@ -235,7 +235,7 @@ range divisible by <code>spat_bin</code> if needed.</p>
 <p><strong>K-mer notes</strong></p><ul><li><p><code>kmer</code>: DNA sequence (case-insensitive) to count.</p></li>
 <li><p><code>extend</code>: If TRUE (default), counts kmers whose anchor lies in the interval even if the kmer extends beyond it; when FALSE, only kmers fully contained in the interval are considered.</p></li>
 <li><p><code>strand</code>: 1 counts matches on the forward strand, -1 counts matches on the reverse-complement strand, 0 counts both strands and sums them (default). Unlike the PWM functions - where the both-strand mode is set by <code>bidirect</code> and <code>strand</code> must be 1 or -1 - the k-mer functions accept <code>strand = 0</code> directly. For palindromic kmers (equal to their own reverse complement) use 1 or -1 to avoid double counting; <code>strand = 0</code> issues a warning in that case.</p></li>
-<li><p>For <code>kmer.frac</code> the denominator is the number of possible anchor positions in the interval; with <code>strand = 0</code> positions on both strands are counted, so the fraction stays in <code>[0, 1]</code> and remains comparable to the single-strand fraction.</p></li>
+<li><p>For <code>kmer.frac</code> the denominator is the number of possible anchor positions in the interval: every anchor with <code>extend = TRUE</code> (minus the last k-1 at a chromosome end), the first L-k+1 of an interval of length L with <code>extend = FALSE</code>; with <code>strand = 0</code> positions on both strands are counted, so the fraction stays in <code>[0, 1]</code> and remains comparable to the single-strand fraction.</p></li>
 </ul><p>K-mer parameters can be supplied as a list or via named arguments (see examples), but not both in the same call.</p>
 <p>Modify iterator behavior with 'gvtrack.iterator' or 'gvtrack.iterator.2d'.</p>
     </div>
@@ -438,17 +438,17 @@ range divisible by <code>spat_bin</code> if needed.</p>
 <span class="r-in"><span><span class="fu">gvtrack.create</span><span class="op">(</span><span class="st">"cg_count"</span>, <span class="cn">NULL</span>, <span class="st">"kmer.count"</span>, kmer <span class="op">=</span> <span class="st">"CG"</span>, strand <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="fu">gvtrack.create</span><span class="op">(</span><span class="st">"cg_frac"</span>, <span class="cn">NULL</span>, <span class="st">"kmer.frac"</span>, kmer <span class="op">=</span> <span class="st">"CG"</span>, strand <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="fu"><a href="gextract.html">gextract</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"cg_count"</span>, <span class="st">"cg_frac"</span><span class="op">)</span>, <span class="fu"><a href="gintervals.html">gintervals</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">0</span>, <span class="fl">10000</span><span class="op">)</span>, iterator <span class="op">=</span> <span class="fl">1000</span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>    chrom start   end cg_count    cg_frac intervalID</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 1   chr1     0  1000       73 0.07307307          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 2   chr1  1000  2000       27 0.02702703          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 3   chr1  2000  3000       23 0.02302302          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 4   chr1  3000  4000       15 0.01501502          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 5   chr1  4000  5000       27 0.02702703          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 6   chr1  5000  6000       25 0.02502503          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 7   chr1  6000  7000       18 0.01801802          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 8   chr1  7000  8000       25 0.02502503          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 9   chr1  8000  9000       20 0.02002002          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 10  chr1  9000 10000       24 0.02402402          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>    chrom start   end cg_count cg_frac intervalID</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1   chr1     0  1000       73   0.073          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2   chr1  1000  2000       27   0.027          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 3   chr1  2000  3000       23   0.023          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 4   chr1  3000  4000       15   0.015          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 5   chr1  4000  5000       27   0.027          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 6   chr1  5000  6000       25   0.025          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 7   chr1  6000  7000       18   0.018          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 8   chr1  7000  8000       25   0.025          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 9   chr1  8000  9000       20   0.020          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 10  chr1  9000 10000       24   0.024          1</span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="fu">gvtrack.create</span><span class="op">(</span><span class="st">"at_pos"</span>, <span class="cn">NULL</span>, <span class="st">"kmer.count"</span>, kmer <span class="op">=</span> <span class="st">"AT"</span>, strand <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="fu">gvtrack.create</span><span class="op">(</span><span class="st">"at_neg"</span>, <span class="cn">NULL</span>, <span class="st">"kmer.count"</span>, kmer <span class="op">=</span> <span class="st">"AT"</span>, strand <span class="op">=</span> <span class="op">-</span><span class="fl">1</span><span class="op">)</span></span></span>

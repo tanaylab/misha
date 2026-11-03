@@ -1,5 +1,17 @@
 # Changelog
 
+## misha 5.14.2
+
+- **Behavior fix:** `kmer.frac` with `extend = TRUE` (the default) could
+  exceed 1. It now divides by every start position in the interval, so
+  values for k \> 1 drop by a factor of (L - k + 1) / L for an interval
+  of length L.
+
+- `kmer.frac` with
+  [`gvtrack.filter()`](https://tanaylab.github.io/misha/reference/gvtrack.filter.md)
+  now pools the unmasked parts (total count over total positions)
+  instead of averaging their fractions by length.
+
 ## misha 5.14.1
 
 - **Behavior fix:** `kmer.count` and `kmer.frac` could be wrong near bin

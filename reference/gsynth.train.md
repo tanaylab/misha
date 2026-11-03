@@ -215,6 +215,6 @@ model <- gsynth.train(
 )
 #> Extracting track values...
 #> Training Markov model...
-#> Warning: 127 bin(s) had zero observations; their prior fell back to uniform 1/4.
+#> Warning: 129 bin(s) had zero observations; their prior fell back to uniform 1/4.
 #> Trained Markov-5 model: 835,310 6-mers across 200 bins (2 dimensions)
 ```

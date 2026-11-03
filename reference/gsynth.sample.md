@@ -183,11 +183,11 @@ model <- gsynth.train(
 )
 #> Extracting track values...
 #> Training Markov model...
-#> Warning: 108 bin(s) had zero observations; their prior fell back to uniform 1/4.
-#> Warning: 124 out of 200 bins have fewer than 1000 observations and are marked as NA.
+#> Warning: 111 bin(s) had zero observations; their prior fell back to uniform 1/4.
+#> Warning: 129 out of 200 bins have fewer than 1000 observations and are marked as NA.
 #> Use bin_merge to merge sparse bins before sampling, or they will use uniform sampling.
 #> Trained Markov-5 model: 835,310 6-mers across 200 bins (2 dimensions)
-#>   Note: 124 bins have < 1000 observations (marked as NA)
+#>   Note: 129 bins have < 1000 observations (marked as NA)
 
 # Sample with mask_copy to preserve repeats from original genome
 temp_dir <- tempdir()
@@ -202,8 +202,8 @@ gsynth.sample(model, synthetic_genome_file,
     )
 )
 #> Extracting track values for sampling...
-#> Warning: 16 sparse bins (with < 1000 observations) will be used during sampling.
+#> Warning: 17 sparse bins (with < 1000 observations) will be used during sampling.
 #> These bins will use uniform base distribution. Consider using bin_merge to merge them.
 #> Sampling synthetic genome...
-#> Synthetic genome written to: /tmp/Rtmptdv3ad/synthetic_genome.fa
+#> Synthetic genome written to: /tmp/RtmpA9o43M/synthetic_genome.fa
 ```
