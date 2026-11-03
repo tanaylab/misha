@@ -43,6 +43,7 @@
 <h2 class="pkg-version" data-toc-text="5.14.2" id="misha-5142">misha 5.14.2<a class="anchor" aria-label="anchor" href="#misha-5142"></a></h2>
 <ul><li><p><strong>Behavior fix:</strong> <code>kmer.frac</code> with <code>extend = TRUE</code> (the default) could exceed 1. It now divides by every start position in the interval, so values for k &gt; 1 drop by a factor of (L - k + 1) / L for an interval of length L.</p></li>
 <li><p><code>kmer.frac</code> with <code><a href="../reference/gvtrack.filter.html">gvtrack.filter()</a></code> now pools the unmasked parts (total count over total positions) instead of averaging their fractions by length.</p></li>
+<li><p><code>kmer.count</code> and <code>kmer.frac</code> are faster in expressions that combine several sequence virtual tracks.</p></li>
 </ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="5.14.1" id="misha-5141">misha 5.14.1<a class="anchor" aria-label="anchor" href="#misha-5141"></a></h2>
