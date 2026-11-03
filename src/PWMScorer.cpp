@@ -342,6 +342,11 @@ double PWMScorer::get_max_likelihood_pos_with_spatial(const std::string& target,
     }
 
     m_last_max_score = best_val;
+    if (!std::isfinite(best_val)) {
+        // No anchor was scorable: NaN, as in score_without_spatial(). best_index
+        // is still 0 here and would report a made-up position.
+        return std::numeric_limits<double>::quiet_NaN();
+    }
     return compute_position_result(best_index, target.length(), motif_length, best_dir);
 }
 

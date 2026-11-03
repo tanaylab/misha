@@ -260,6 +260,15 @@
         spat_bin <- as.integer(spat_bin)
     }
 
+    # 1-based positions: 0 used to become -1 below and start the scan one base
+    # before the sequence
+    for (nm in c("spat_min", "spat_max")) {
+        v <- dots[[nm]]
+        if (!is.null(v) && (!is.numeric(v) || length(v) != 1 || is.na(v) || v < 1)) {
+            stop(sprintf("%s must be a single 1-based position (>= 1)", nm), call. = FALSE)
+        }
+    }
+
     # Build params with processed values
     result <- list(
         pssm = pssm,
