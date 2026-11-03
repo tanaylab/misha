@@ -238,16 +238,19 @@ static ScoreResult score_pwm_over_range(
         return logp;
     };
 
-    if (!skip_gaps || gaps == nullptr) {
-        if (start_max0 < start_min0) {
-            if (pwm_mode == PWM_COUNT) {
-                result.value = 0.0;
-            } else {
-                result.value = R_NaReal;
-            }
-            return result;
+    // No window start allowed (an ROI shorter than the motif, or spat.min past
+    // the last start). Checked before the gap path too, whose projector over
+    // [start_min0, start_max0 + w - 1] would get a negative size.
+    if (start_max0 < start_min0) {
+        if (pwm_mode == PWM_COUNT) {
+            result.value = 0.0;
+        } else {
+            result.value = R_NaReal;
         }
+        return result;
+    }
 
+    if (!skip_gaps || gaps == nullptr) {
         double best_score = R_NegInf;
         int best_start0 = -1;
         int best_strand = 1;

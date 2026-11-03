@@ -438,6 +438,14 @@ test_that("gseq.pwm spat.min/spat.max match the pwm virtual tracks", {
             expect_equal(vt, gs, tolerance = 1e-5, info = func)
         }
     }
+    # spat.min past the last window start: no window, with or without gap skipping
+    for (g in c(TRUE, FALSE)) {
+        for (m in c("lse", "max", "pos")) {
+            expect_true(is.na(gseq.pwm("ACGTACGTACGTACGTACGT", pssm, mode = m, spat.min = 25, skip_gaps = g)), info = paste(m, g))
+        }
+        expect_equal(gseq.pwm("ACGTACGTACGTACGTACGT", pssm, mode = "count", score.thresh = -1, spat.min = 25, skip_gaps = g), 0)
+        expect_true(is.na(gseq.pwm("ACGTACGTACGTACGTACGT", pssm, start_pos = 5, spat.min = 18, skip_gaps = g)))
+    }
     # The window [spat.min, spat.max] counts from start_pos
     s <- seqs[1]
     expect_equal(
