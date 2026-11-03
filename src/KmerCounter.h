@@ -35,7 +35,12 @@ public:
     float score_from_positions(const std::vector<size_t> &fwd_positions,
                                const std::vector<size_t> &rev_positions,
                                const GInterval &original_interval,
-                               const GInterval &fetch_interval) const;
+                               const GInterval &fetch_interval,
+                               const GenomeChromKey &chromkey) const;
+
+    // The kmer.frac denominator: anchors in the interval whose k-mer fits in the
+    // sequence read for it, counted on each strand scored.
+    size_t possible_positions(const GInterval &interval, const GenomeChromKey &chromkey) const;
 
 protected:
     int64_t pattern_length() const override { return (int64_t)m_kmer.length(); }
@@ -45,7 +50,7 @@ private:
     CountMode m_mode;
 
     // Helper method to count kmers in an interval with a specific strand
-    size_t count_in_interval(const GInterval &fetch_interval, const GenomeChromKey &chromkey,
+    void count_in_interval(const GInterval &fetch_interval, const GenomeChromKey &chromkey,
                             const GInterval &original_interval, size_t &count);
 };
 

@@ -1,3 +1,9 @@
+# misha 5.14.2
+
+* **Behavior fix:** `kmer.frac` with `extend = TRUE` (the default) could exceed 1. It now divides by every start position in the interval, so values for k > 1 drop by a factor of (L - k + 1) / L for an interval of length L.
+
+* `kmer.frac` with `gvtrack.filter()` now pools the unmasked parts (total count over total positions) instead of averaging their fractions by length.
+
 # misha 5.14.1
 
 * **Behavior fix:** `kmer.count` and `kmer.frac` could be wrong near bin edges when an expression used 4 or more sequence virtual tracks; they now match the same virtual track used alone.
