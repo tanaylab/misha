@@ -426,9 +426,11 @@ test_that("gseq.pwm spat.min/spat.max match the pwm virtual tracks", {
         do.call(gvtrack.create, c(list("v", NULL, func, pssm = pssm, bidirect = TRUE, prior = 0.01), sp))
         vt <- gextract("v", intervals = iv, iterator = iv)$v
         mode <- c(pwm = "lse", pwm.max = "max", pwm.max.pos = "pos")[[func]]
-        gs <- gseq.pwm(seqs, pssm, mode = mode, bidirect = TRUE, prior = 0.01, end_pos = 300L,
+        gs <- gseq.pwm(seqs, pssm,
+            mode = mode, bidirect = TRUE, prior = 0.01, end_pos = 300L,
             extend = TRUE, spat.factor = sp$spat_factor, spat.bin = sp$spat_bin,
-            spat.min = sp$spat_min, spat.max = sp$spat_max)
+            spat.min = sp$spat_min, spat.max = sp$spat_max
+        )
         if (func == "pwm.max.pos") {
             # the vtrack reports the anchor's 1-based offset from the interval start
             expect_equal(abs(vt), gs, info = func)
