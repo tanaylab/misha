@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">misha</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.14.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.14.3</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -39,6 +39,11 @@
       <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="5.14.3" id="misha-5143">misha 5.14.3<a class="anchor" aria-label="anchor" href="#misha-5143"></a></h2>
+<ul><li>
+<code>kmer.*</code> and <code>pwm.*</code> virtual tracks accept an integer <code>strand</code>, such as the loop variable of <code>for (s in -1:1)</code>, and <code>pwm.*</code> virtual tracks accept an integer <code>prior</code> or <code>spat_factor</code>. These used to stop with an error.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="5.14.2" id="misha-5142">misha 5.14.2<a class="anchor" aria-label="anchor" href="#misha-5142"></a></h2>
 <ul><li><p><strong>Behavior fix:</strong> <code>kmer.frac</code> with <code>extend = TRUE</code> (the default) could exceed 1. It now divides by every start position in the interval, so values for k &gt; 1 drop by a factor of (L - k + 1) / L for an interval of length L.</p></li>

@@ -30,7 +30,7 @@ Character vector of paths or data frame with detailed information
 dataset_path <- gdataset.example_path()
 gdataset.load(dataset_path)
 gdataset.ls()
-#> [1] "/tmp/RtmpiFcg7o/trackdb/test"             
-#> [2] "/tmp/RtmpiFcg7o/misha_dataset_1b6abfbce59"
+#> [1] "/tmp/RtmpB6fzBP/trackdb/test"              
+#> [2] "/tmp/RtmpB6fzBP/misha_dataset_1b6c73b3783a"
 gdataset.unload(dataset_path)
 ```

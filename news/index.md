@@ -1,5 +1,12 @@
 # Changelog
 
+## misha 5.14.3
+
+- `kmer.*` and `pwm.*` virtual tracks accept an integer `strand`, such
+  as the loop variable of `for (s in -1:1)`, and `pwm.*` virtual tracks
+  accept an integer `prior` or `spat_factor`. These used to stop with an
+  error.
+
 ## misha 5.14.2
 
 - **Behavior fix:** `kmer.frac` with `extend = TRUE` (the default) could
