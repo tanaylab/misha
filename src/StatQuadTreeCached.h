@@ -578,7 +578,8 @@ int64_t StatQuadTreeCached<T, Size>::serialize_subtree(BufferedFile &file, const
 	int64_t top_node_fpos;
 
 	if (node.is_leaf) {
-		Leaf new_leaf{};
+		Leaf new_leaf;
+		memset(static_cast<void *>(&new_leaf), 0, sizeof(new_leaf));  // padding too: it is written to the file
 
 		new_leaf.is_leaf = true;
 		new_leaf.stat = node.stat;
@@ -604,7 +605,8 @@ int64_t StatQuadTreeCached<T, Size>::serialize_subtree(BufferedFile &file, const
 			file.write(&obj, sizeof(obj));
 		}
 	} else {
-		Node new_node{};
+		Node new_node;
+		memset(static_cast<void *>(&new_node), 0, sizeof(new_node));  // padding too: it is written to the file
 
 		new_node.is_leaf = false;
 		new_node.stat = node.stat;

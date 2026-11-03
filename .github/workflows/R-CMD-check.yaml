@@ -49,3 +49,13 @@ jobs:
       - uses: r-lib/actions/check-r-package@v2
         with:
           upload-snapshots: true
+
+      # R CMD check runs no tests here (NOT_CRAN is false), and this is the only
+      # clang build. The 2D padding test needs clang: gcc zeroes struct padding
+      # even where C++ does not require it. Uses the build R CMD check installed.
+      - name: 2D track padding test (clang)
+        if: runner.os == 'macOS'
+        env:
+          NOT_CRAN: true
+        run: |
+          Rscript -e '.libPaths(c("check/misha.Rcheck", .libPaths())); cat("misha from", system.file(package = "misha"), "\n"); testthat::test_file("tests/testthat/test-2d-track-padding.R", package = "misha", load_package = "installed", stop_on_failure = TRUE)'

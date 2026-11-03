@@ -179,3 +179,52 @@ test_that("writing the same 2D track twice produces byte-identical files", {
     expect_equal(nrow(extracted), length(x1))
     expect_equal(extracted$v, vals, tolerance = 1e-6)
 })
+
+test_that("internal quad-tree nodes of a 2D track carry no uninitialised padding", {
+    local_db_state()
+    pad_test_db()
+
+    set.seed(17)
+    x1 <- (seq_len(500) - 1) * 4
+    y1 <- sample(seq(0, 1900, by = 4), 500, replace = TRUE)
+
+    # 500 objects do not fit in one leaf, so the root is a Node written by
+    # serialize_subtree().
+    gtrack.2d.create(
+        "pad_nodes", "padding regression",
+        gintervals.2d("chr1", x1, x1 + 2, "chr2", y1, y1 + 2), seq_len(500)
+    )
+
+    # Importing with gmax.data.size = 50 splits the pair into 4 subtrees, so the
+    # root is a Node written by the serializer's serialize_top_tree(), alone in
+    # the last chunk of the file.
+    src <- tempfile(fileext = ".txt")
+    withr::defer(unlink(src))
+    utils::write.table(
+        data.frame(
+            chrom1 = "chr1", start1 = x1, end1 = x1 + 1,
+            chrom2 = "chr2", start2 = y1, end2 = y1 + 1, value = seq_len(500)
+        ),
+        src,
+        sep = "\t", row.names = FALSE, quote = FALSE
+    )
+    withr::local_options(list(gmax.data.size = 50))
+    gtrack.2d.import("pad_top", "padding regression", src)
+
+    for (track in c("pad_nodes", "pad_top")) {
+        r <- read_track_pair_file(track)
+        root_chunk <- qt_i64(r, 12)
+        node <- root_chunk + qt_i64(r, root_chunk + 8)
+        if (track == "pad_top") {
+            expect_equal(root_chunk + QT_CHUNK_HEADER + 104, length(r))
+        }
+        expect_equal(as.integer(r[node + 1]), 0L, info = track) # is_leaf
+        expect_equal(
+            sapply(c(40, 48, 56, 64), function(off) qt_i64(r, node + off)),
+            c(0, 0, 2000, 2000),
+            info = paste(track, "root arena")
+        )
+        # The 7 bytes after the 1-byte is_leaf are padding.
+        expect_equal(as.integer(r[node + 2:8]), rep(0L, 7), info = paste(track, "root padding"))
+    }
+})
