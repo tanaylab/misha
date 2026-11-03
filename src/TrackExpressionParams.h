@@ -132,9 +132,9 @@ struct PWMParams {
             if (prior_idx >= 0) {
                 SEXP rprior = VECTOR_ELT(rparams, prior_idx);
                 if (rprior != R_NilValue) {
-                    if (!Rf_isReal(rprior) || Rf_length(rprior) != 1)
+                    if ((!Rf_isReal(rprior) && !Rf_isInteger(rprior)) || Rf_length(rprior) != 1)
                         rdb::verror("Virtual track %s: prior parameter must be numeric", vtrack.c_str());
-                    params.core.prior = REAL(rprior)[0];
+                    params.core.prior = Rf_asReal(rprior);
                 }
             }
         } else {
@@ -150,9 +150,9 @@ struct PWMParams {
             if (strand_idx >= 0) {
                 SEXP rstrand = VECTOR_ELT(rparams, strand_idx);
                 if (rstrand != R_NilValue) {
-                    if (!Rf_isReal(rstrand) || Rf_length(rstrand) != 1)
+                    if ((!Rf_isReal(rstrand) && !Rf_isInteger(rstrand)) || Rf_length(rstrand) != 1)
                         rdb::verror("Virtual track %s: strand parameter must be numeric", vtrack.c_str());
-                    params.core.strand_mode = (int)REAL(rstrand)[0];
+                    params.core.strand_mode = (int)Rf_asReal(rstrand);
                 }
             }
         }
@@ -172,14 +172,14 @@ struct PWMParams {
                 rspat = VECTOR_ELT(rparams, spat_idx);
             }
             if (rspat != R_NilValue) {
-                if (!Rf_isReal(rspat))
+                if (!Rf_isReal(rspat) && !Rf_isInteger(rspat))
                     rdb::verror("Virtual track %s: spat_factor must be a numeric vector", vtrack.c_str());
                 int n = Rf_length(rspat);
                 if (n <= 0)
                     rdb::verror("Virtual track %s: spat_factor must have at least one element", vtrack.c_str());
                 std::vector<float> factors(n);
                 for (int i = 0; i < n; ++i) {
-                    factors[i] = REAL(rspat)[i];
+                    factors[i] = Rf_isReal(rspat) ? REAL(rspat)[i] : INTEGER(rspat)[i];
                     if (factors[i] <= 0)
                         rdb::verror("Virtual track %s: all spat_factor values must be positive", vtrack.c_str());
                 }
@@ -284,11 +284,12 @@ struct KmerParams {
 
             SEXP rstrand = VECTOR_ELT(rparams, findListElementIndex(rparams, "strand"));
             if (rstrand != R_NilValue) {
-                if (!Rf_isNumeric(rstrand) || Rf_length(rstrand) != 1)
+                if ((!Rf_isReal(rstrand) && !Rf_isInteger(rstrand)) || Rf_length(rstrand) != 1)
                     rdb::verror("Virtual track %s: strand parameter must be -1, 0, or 1", vtrack.c_str());
-                params.strand = (char)REAL(rstrand)[0];
-                if (params.strand != -1 && params.strand != 0 && params.strand != 1)
+                const double strand = Rf_asReal(rstrand);
+                if (strand != -1 && strand != 0 && strand != 1)
                     rdb::verror("Virtual track %s: strand parameter must be -1, 0, or 1", vtrack.c_str());
+                params.strand = (char)strand;
             }
         } else if (Rf_isString(rparams) && Rf_length(rparams) == 1) {
             // Handle direct string parameter (backward compatibility)
