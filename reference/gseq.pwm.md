@@ -89,11 +89,14 @@ gseq.pwm(
 
 - spat.min:
 
-  numeric; start of scanning window
+  numeric; 1-based position, counted from `start_pos`, where the
+  scanning window starts; spatial bins are counted from it (optional)
 
 - spat.max:
 
-  numeric; end of scanning window
+  numeric; 1-based position, counted from `start_pos`, where the
+  scanning window ends: only windows ending at or before it are scored
+  (optional)
 
 - return_strand:
 

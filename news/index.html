@@ -41,8 +41,12 @@
 
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="5.14.1" id="misha-5141">misha 5.14.1<a class="anchor" aria-label="anchor" href="#misha-5141"></a></h2>
-<ul><li>
-<strong>Behavior fix:</strong> <code>kmer.count</code> and <code>kmer.frac</code> could be wrong near bin edges when an expression used 4 or more sequence virtual tracks; they now match the same virtual track used alone.</li>
+<ul><li><p><strong>Behavior fix:</strong> <code>kmer.count</code> and <code>kmer.frac</code> could be wrong near bin edges when an expression used 4 or more sequence virtual tracks; they now match the same virtual track used alone.</p></li>
+<li><p><strong>Behavior fix:</strong> <code>pwm.count</code> with <code>spat_factor</code> ignored <code>spat_min</code> and <code>spat_max</code> in most intervals of a scan and counted the whole interval.</p></li>
+<li><p><strong>Behavior fix:</strong> <code><a href="../reference/gseq.pwm.html">gseq.pwm()</a></code> ignored <code>spat.min</code> and <code>spat.max</code>; they now restrict the scan as in the PWM virtual tracks, counting from <code>start_pos</code>.</p></li>
+<li><p>PWM virtual tracks give NaN for an interval where no motif fits between <code>spat_min</code> and <code>spat_max</code>; they used to score positions outside that window.</p></li>
+<li><p><code>pwm.max.pos</code> with <code>spat_factor</code> gave a position instead of NaN for intervals where no position could be scored.</p></li>
+<li><p><code>spat_min</code>/<code>spat_max</code> below 1, or a window shorter than the motif, is now an error in PWM virtual tracks and <code><a href="../reference/gseq.pwm.html">gseq.pwm()</a></code>.</p></li>
 </ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="5.14.0" id="misha-5140">misha 5.14.0<a class="anchor" aria-label="anchor" href="#misha-5140"></a></h2>

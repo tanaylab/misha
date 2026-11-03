@@ -134,11 +134,13 @@ spatial weights - calibrate with <code>mode="max"</code> before choosing one.</p
 
 
 <dt id="arg-spat-min">spat.min<a class="anchor" aria-label="anchor" href="#arg-spat-min"></a></dt>
-<dd><p>numeric; start of scanning window</p></dd>
+<dd><p>numeric; 1-based position, counted from <code>start_pos</code>, where the
+scanning window starts; spatial bins are counted from it (optional)</p></dd>
 
 
 <dt id="arg-spat-max">spat.max<a class="anchor" aria-label="anchor" href="#arg-spat-max"></a></dt>
-<dd><p>numeric; end of scanning window</p></dd>
+<dd><p>numeric; 1-based position, counted from <code>start_pos</code>, where the
+scanning window ends: only windows ending at or before it are scored (optional)</p></dd>
 
 
 <dt id="arg-return-strand">return_strand<a class="anchor" aria-label="anchor" href="#arg-return-strand"></a></dt>
