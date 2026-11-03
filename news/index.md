@@ -1,5 +1,12 @@
 # Changelog
 
+## misha 5.14.4
+
+- 2D tracks written by a misha built with clang (the usual compiler on
+  macOS) no longer carry uninitialized bytes in the padding of their
+  quad-tree nodes, so the same input gives the same file. Values read
+  from these tracks were never affected.
+
 ## misha 5.14.3
 
 - `kmer.*` and `pwm.*` virtual tracks accept an integer `strand`, such
