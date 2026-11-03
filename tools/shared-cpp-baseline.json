@@ -171,12 +171,14 @@
   },
   "KmerCounter.cpp": {
     "identical": false,
-    "misha": "4edf0cf544e4e1d0",
+    "misha": "75355413a7ac6175",
+    "needs_port": true,
     "pymisha": "28491998294f32f0"
   },
   "KmerCounter.h": {
-    "identical": true,
-    "misha": "8071b026ba4a1d88",
+    "identical": false,
+    "misha": "bd897a4fd151ac32",
+    "needs_port": true,
     "pymisha": "8071b026ba4a1d88"
   },
   "MaskUtils.h": {
