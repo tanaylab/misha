@@ -158,8 +158,10 @@ gseq.comp <- function(seq) {
 #' @param extend logical or integer; extension of allowed window starts (default: FALSE)
 #' @param spat.factor numeric vector; spatial weighting factors (optional)
 #' @param spat.bin integer; bin size for spatial weighting
-#' @param spat.min numeric; start of scanning window
-#' @param spat.max numeric; end of scanning window
+#' @param spat.min numeric; 1-based position, counted from \code{start_pos}, where the
+#'   scanning window starts; spatial bins are counted from it (optional)
+#' @param spat.max numeric; 1-based position, counted from \code{start_pos}, where the
+#'   scanning window ends: only windows ending at or before it are scored (optional)
 #' @param return_strand logical; if TRUE and \code{mode="pos"}, returns data.frame with
 #'   \code{pos} and \code{strand} columns
 #' @param skip_gaps logical; if TRUE, treat gap characters as holes and skip them while
@@ -374,12 +376,22 @@ gseq.pwm <- function(seqs,
     # Normalize bounds
     b <- .normalize_bounds(seqs, start_pos, end_pos, w, extend)
 
+    for (nm in c("spat.min", "spat.max")) {
+        v <- get(nm)
+        if (!is.null(v) && (!is.numeric(v) || length(v) != 1 || is.na(v) || v < 1)) {
+            stop(sprintf("%s must be a single 1-based position (>= 1)", nm), call. = FALSE)
+        }
+    }
+    if (!is.null(spat.max) && spat.max - (if (is.null(spat.min)) 1 else spat.min) + 1 < w) {
+        stop(sprintf("the spat.min..spat.max window is shorter than the motif (%d bp), so no position can be scored", w), call. = FALSE)
+    }
+
     # Prepare spatial parameters as a list
     spat_params <- list(
         spat.factor = spat.factor,
         spat.bin = as.integer(spat.bin),
-        spat.min = spat.min,
-        spat.max = spat.max
+        spat.min = if (!is.null(spat.min)) as.integer(spat.min),
+        spat.max = if (!is.null(spat.max)) as.integer(spat.max)
     )
 
     # Call C++ implementation (multitask or sequential)

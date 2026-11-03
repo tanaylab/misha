@@ -238,16 +238,19 @@ static ScoreResult score_pwm_over_range(
         return logp;
     };
 
-    if (!skip_gaps || gaps == nullptr) {
-        if (start_max0 < start_min0) {
-            if (pwm_mode == PWM_COUNT) {
-                result.value = 0.0;
-            } else {
-                result.value = R_NaReal;
-            }
-            return result;
+    // No window start allowed (an ROI shorter than the motif, or spat.min past
+    // the last start). Checked before the gap path too, whose projector over
+    // [start_min0, start_max0 + w - 1] would get a negative size.
+    if (start_max0 < start_min0) {
+        if (pwm_mode == PWM_COUNT) {
+            result.value = 0.0;
+        } else {
+            result.value = R_NaReal;
         }
+        return result;
+    }
 
+    if (!skip_gaps || gaps == nullptr) {
         double best_score = R_NegInf;
         int best_start0 = -1;
         int best_strand = 1;
@@ -742,6 +745,18 @@ SEXP C_gseq_pwm(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect,
             core.set_spatial_factors(spat_factors, spat_bin_size);
         }
 
+        // spat.min / spat.max: 1-based positions counted from the ROI start, as
+        // spat_min / spat_max are counted from the interval start in the pwm
+        // virtual tracks. Windows must lie inside them, and spatial bins count
+        // from spat.min.
+        int spat_min = NA_INTEGER, spat_max = NA_INTEGER;
+        if (!Rf_isNull(r_spat_params) && Rf_isNewList(r_spat_params) && Rf_length(r_spat_params) >= 4) {
+            SEXP smin = VECTOR_ELT(r_spat_params, 2);
+            SEXP smax = VECTOR_ELT(r_spat_params, 3);
+            if (!Rf_isNull(smin)) spat_min = Rf_asInteger(smin);
+            if (!Rf_isNull(smax)) spat_max = Rf_asInteger(smax);
+        }
+
 // Prepare result vectors
         SEXP r_result = R_NilValue;
         SEXP r_pos = R_NilValue;
@@ -789,10 +804,17 @@ SEXP C_gseq_pwm(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect,
             // Compute allowed window starts
             int start_min0, start_max0;
             compute_bounds(L, w, roi_start, roi_end, extend_val, start_min0, start_max0);
-            
+            int bin_origin = roi_start;
+            if (spat_min != NA_INTEGER) {
+                start_min0 = std::max(start_min0, roi_start + spat_min - 2);
+                bin_origin = roi_start + spat_min - 1;
+            }
+            if (spat_max != NA_INTEGER)
+                start_max0 = std::min(start_max0, roi_start + spat_max - 1 - w);
+
             // Score the sequence
             ScoreResult result = score_pwm_over_range(
-                seq, start_min0, start_max0, mode, roi_start, core,
+                seq, start_min0, start_max0, mode, bin_origin, core,
                 skip_gaps, skip_gaps ? &gap_charset : nullptr,
                 has_neutral_chars ? &neutral_charset : nullptr,
                 core.neutral_policy

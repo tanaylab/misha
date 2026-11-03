@@ -56,9 +56,11 @@ spatial weights - calibrate with \code{mode="max"} before choosing one.}
 
 \item{spat.bin}{integer; bin size for spatial weighting}
 
-\item{spat.min}{numeric; start of scanning window}
+\item{spat.min}{numeric; 1-based position, counted from \code{start_pos}, where the
+scanning window starts; spatial bins are counted from it (optional)}
 
-\item{spat.max}{numeric; end of scanning window}
+\item{spat.max}{numeric; 1-based position, counted from \code{start_pos}, where the
+scanning window ends: only windows ending at or before it are scored (optional)}
 
 \item{return_strand}{logical; if TRUE and \code{mode="pos"}, returns data.frame with
 \code{pos} and \code{strand} columns}

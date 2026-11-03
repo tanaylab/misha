@@ -235,10 +235,12 @@ double PWMScorer::count_motif_hits_no_spatial(const std::string& target, size_t 
     const bool scan_rev  = scan_both || (m_strand == -1);
 
     int count = 0;
-    size_t max_pos = target.length() - motif_length;
+    // Only anchors inside the spat_min/spat_max window
+    const size_t lo = std::max(0, m_pssm.get_min_range());
+    const size_t max_pos = m_pssm.max_offset(target.length());
 
     // Per-position union (LSE) across permitted strands
-    for (size_t i = 0; i <= max_pos; ++i) {
+    for (size_t i = lo; i <= max_pos; ++i) {
         float comb = -std::numeric_limits<float>::infinity();
         bool have = false;
         if (scan_fwd) {
@@ -268,11 +270,14 @@ double PWMScorer::count_motif_hits_with_spatial(const std::string& target, size_
     const bool scan_rev  = scan_both || (m_strand == -1);
 
     int count = 0;
-    size_t max_pos = target.length() - motif_length;
+    // Only anchors inside the spat_min/spat_max window
+    const size_t lo = std::max(0, m_pssm.get_min_range());
+    const size_t max_pos = m_pssm.max_offset(target.length());
 
-    // Per-position union (LSE) across permitted strands, with spatial offset
-    for (size_t i = 0; i <= max_pos; ++i) {
-        float spat_log = get_spatial_log_factor(i);
+    // Per-position union (LSE) across permitted strands, with spatial offset.
+    // Bins count from the window start, as in the other spatial paths.
+    for (size_t i = lo; i <= max_pos; ++i) {
+        float spat_log = get_spatial_log_factor(i - lo);
         float comb = -std::numeric_limits<float>::infinity();
         bool have = false;
         if (scan_fwd) {
@@ -342,6 +347,11 @@ double PWMScorer::get_max_likelihood_pos_with_spatial(const std::string& target,
     }
 
     m_last_max_score = best_val;
+    if (!std::isfinite(best_val)) {
+        // No anchor was scorable: NaN, as in score_without_spatial(). best_index
+        // is still 0 here and would report a made-up position.
+        return std::numeric_limits<double>::quiet_NaN();
+    }
     return compute_position_result(best_index, target.length(), motif_length, best_dir);
 }
 
@@ -1043,9 +1053,15 @@ double PWMScorer::score_interval(const GInterval& interval, const GenomeChromKey
                 }
             }
 
-            // Ensure valid range
+            // No anchor inside both the iterator and the spat_min/spat_max
+            // window (spat_min past a short bin's end): NaN, as for any
+            // interval with no anchor. This used to reset i_min to 0 and scan
+            // anchors outside the window. The caches are dropped, so the next
+            // interval reseeds rather than slides from a window it did not see.
             if (i_min > i_max) {
-                i_min = 0;
+                m_slide.valid = false;
+                m_spat_slide.valid = false;
+                return std::numeric_limits<float>::quiet_NaN();
             }
 
             // Try spatial sliding window optimization

@@ -2,6 +2,16 @@
 
 * **Behavior fix:** `kmer.count` and `kmer.frac` could be wrong near bin edges when an expression used 4 or more sequence virtual tracks; they now match the same virtual track used alone.
 
+* **Behavior fix:** `pwm.count` with `spat_factor` ignored `spat_min` and `spat_max` in most intervals of a scan and counted the whole interval.
+
+* **Behavior fix:** `gseq.pwm()` ignored `spat.min` and `spat.max`; they now restrict the scan as in the PWM virtual tracks, counting from `start_pos`.
+
+* PWM virtual tracks give NaN for an interval where no motif fits between `spat_min` and `spat_max`; they used to score positions outside that window.
+
+* `pwm.max.pos` with `spat_factor` gave a position instead of NaN for intervals where no position could be scored.
+
+* `spat_min`/`spat_max` below 1, or a window shorter than the motif, is now an error in PWM virtual tracks and `gseq.pwm()`.
+
 # misha 5.14.0
 
 ### New features

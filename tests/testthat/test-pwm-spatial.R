@@ -161,7 +161,7 @@ test_that("spatial range parameters work", {
             prior = 0.01,
             spat_factor = spat_factors,
             spat_bin = spat_bin,
-            spat_min = 0L,
+            spat_min = 1L,
             spat_max = 100L
         )
     )
@@ -376,4 +376,142 @@ test_that("spatial sliding agrees with non-sliding scoring", {
     # would pass without exercising anything.
     expect_gt(nrow(ref), 1L)
     expect_gt(checked, 0L)
+})
+
+test_that("pwm.max.pos with spat_factor is NaN when no anchor can be scored", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    # prior = 0 makes every anchor that is not this exact word score -Inf
+    word <- strsplit("GATTACAGATTACA", "")[[1]]
+    pssm <- t(sapply(word, function(b) as.numeric(c("A", "C", "G", "T") == b)))
+    colnames(pssm) <- c("A", "C", "G", "T")
+    iv <- gintervals(1, 1000, 3000)
+    s <- toupper(gseq.extract(iv))
+    expect_false(grepl("GATTACAGATTACA|TGTAATCTGTAATC", s))
+
+    for (kw in list(list(bidirect = TRUE), list(bidirect = FALSE, strand = 1), list(bidirect = FALSE, strand = -1))) {
+        for (spatial in c(FALSE, TRUE)) {
+            args <- c(list("nopos", NULL, "pwm.max.pos", pssm = pssm, prior = 0), kw)
+            if (spatial) args <- c(args, list(spat_factor = c(1, 2), spat_bin = 500L))
+            do.call(gvtrack.create, args)
+            # 500 bp bins: the first is seeded by the sliding cache, the rest
+            # are too far apart to slide and take the full spatial scan
+            r <- gextract("nopos", intervals = iv, iterator = 500)
+            expect_true(all(is.nan(r$nopos)), info = paste(names(kw), kw, "spatial", spatial, collapse = " "))
+        }
+    }
+})
+
+test_that("spat_min and spat_max below 1 are an error", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+    pssm <- create_test_pssm()
+    expect_error(gvtrack.create("v", NULL, "pwm", pssm = pssm, spat_factor = 1, spat_min = 0), "spat_min")
+    expect_error(gvtrack.create("v", NULL, "pwm", pssm = pssm, spat_factor = 1, spat_max = 0), "spat_max")
+    expect_error(gseq.pwm("ACGTACGT", pssm, spat.min = 0), "spat.min")
+    expect_error(gseq.pwm("ACGTACGT", pssm, spat.max = 0), "spat.max")
+})
+
+test_that("gseq.pwm spat.min/spat.max match the pwm virtual tracks", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+    pssm <- create_test_pssm()
+    w <- nrow(pssm)
+    iv <- gintervals(1, c(1000, 5000, 9000), c(1300, 5300, 9300))
+    # extend = TRUE pads the end by w - 1
+    seqs <- toupper(gseq.extract(transform(iv, end = end + w - 1)))
+    sp <- list(spat_factor = c(0.5, 1, 2, 1, 0.5), spat_bin = 40L, spat_min = 30L, spat_max = 270L)
+    for (func in c("pwm", "pwm.max", "pwm.max.pos")) {
+        do.call(gvtrack.create, c(list("v", NULL, func, pssm = pssm, bidirect = TRUE, prior = 0.01), sp))
+        vt <- gextract("v", intervals = iv, iterator = iv)$v
+        mode <- c(pwm = "lse", pwm.max = "max", pwm.max.pos = "pos")[[func]]
+        gs <- gseq.pwm(seqs, pssm,
+            mode = mode, bidirect = TRUE, prior = 0.01, end_pos = 300L,
+            extend = TRUE, spat.factor = sp$spat_factor, spat.bin = sp$spat_bin,
+            spat.min = sp$spat_min, spat.max = sp$spat_max
+        )
+        if (func == "pwm.max.pos") {
+            # the vtrack reports the anchor's 1-based offset from the interval start
+            expect_equal(abs(vt), gs, info = func)
+        } else {
+            expect_equal(vt, gs, tolerance = 1e-5, info = func)
+        }
+    }
+    # spat.min past the last window start: no window, with or without gap skipping
+    for (g in c(TRUE, FALSE)) {
+        for (m in c("lse", "max", "pos")) {
+            expect_true(is.na(gseq.pwm("ACGTACGTACGTACGTACGT", pssm, mode = m, spat.min = 25, skip_gaps = g)), info = paste(m, g))
+        }
+        expect_equal(gseq.pwm("ACGTACGTACGTACGTACGT", pssm, mode = "count", score.thresh = -1, spat.min = 25, skip_gaps = g), 0)
+        expect_true(is.na(gseq.pwm("ACGTACGTACGTACGTACGT", pssm, start_pos = 5, spat.min = 18, skip_gaps = g)))
+    }
+    # The window [spat.min, spat.max] counts from start_pos
+    s <- seqs[1]
+    expect_equal(
+        gseq.pwm(s, pssm, mode = "lse", start_pos = 11L, spat.min = 20L, spat.max = 200L, spat.factor = c(1, 3), spat.bin = 50L),
+        gseq.pwm(substr(s, 30, 210), pssm, mode = "lse", spat.factor = c(1, 3), spat.bin = 50L),
+        tolerance = 1e-12
+    )
+})
+
+test_that("a spat_min..spat_max window shorter than the motif is an error", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+    pssm <- create_test_pssm()
+    pssm8 <- rbind(pssm, pssm, pssm, pssm)
+    expect_error(gvtrack.create("v", NULL, "pwm", pssm = pssm8, spat_min = 300, spat_max = 200), "shorter than the motif")
+    expect_error(gvtrack.create("v", NULL, "pwm", pssm = pssm8, spat_max = 7), "shorter than the motif")
+    expect_error(gvtrack.create("v", NULL, "pwm", pssm = pssm8, spat_min = 10, spat_max = 16), "shorter than the motif")
+    expect_no_error(gvtrack.create("v", NULL, "pwm", pssm = pssm8, spat_min = 10, spat_max = 17))
+    expect_error(gseq.pwm("ACGTACGTACGT", pssm8, spat.max = 7), "shorter than the motif")
+    expect_error(gseq.pwm("ACGTACGTACGT", pssm8, spat.min = 5, spat.max = 4), "shorter than the motif")
+})
+
+test_that("pwm vtracks with spat_min/spat_max score exactly the windows inside them", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+    set.seed(1)
+    pssm <- matrix(runif(32), 8)
+    pssm <- pssm / rowSums(pssm)
+    colnames(pssm) <- c("A", "C", "G", "T")
+    iv <- gintervals(1, 1000, 3000)
+    # [101, 300] of each 500 bp bin = the anchors of [s + 100, s + 300) without extension
+    inner <- gintervals(1, seq(1100, 2600, 500), seq(1300, 2800, 500))
+    for (spatial in c(FALSE, TRUE)) {
+        for (func in c("pwm", "pwm.max", "pwm.max.pos", "pwm.count")) {
+            a <- list("e", NULL, func, pssm = pssm, prior = 0.01, spat_min = 101, spat_max = 300)
+            b <- list("r", NULL, func, pssm = pssm, prior = 0.01, extend = FALSE)
+            # flat weights, so the spatial path must give the plain values
+            if (spatial) a <- c(a, list(spat_factor = c(1, 1), spat_bin = 100L))
+            if (func == "pwm.count") a$score.thresh <- b$score.thresh <- -12
+            do.call(gvtrack.create, a)
+            do.call(gvtrack.create, b)
+            # 500 bp bins: the first is seeded, the rest take the full scan
+            x <- gextract("e", iv, iterator = 500)$e
+            y <- gextract("r", inner, iterator = inner)$r
+            if (func == "pwm.max.pos") y <- sign(y) * (abs(y) + 100)
+            expect_equal(x, y, tolerance = 1e-5, info = paste(func, "spatial", spatial))
+        }
+    }
+})
+
+test_that("a spat_min past the end of a bin gives NaN", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+    set.seed(1)
+    pssm <- matrix(runif(32), 8)
+    pssm <- pssm / rowSums(pssm)
+    colnames(pssm) <- c("A", "C", "G", "T")
+    iv <- gintervals(1, 1000, 3000)
+    for (spatial in c(FALSE, TRUE)) {
+        for (func in c("pwm", "pwm.max", "pwm.max.pos", "pwm.count")) {
+            a <- list("e", NULL, func, pssm = pssm, prior = 0.01, spat_min = 600)
+            if (spatial) a <- c(a, list(spat_factor = c(1, 2), spat_bin = 100L))
+            if (func == "pwm.count") a$score.thresh <- -12
+            do.call(gvtrack.create, a)
+            x <- gextract("e", iv, iterator = 500)$e
+            expect_true(all(is.nan(x)), info = paste(func, "spatial", spatial))
+        }
+    }
 })
