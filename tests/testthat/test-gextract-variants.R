@@ -128,7 +128,7 @@ test_that("reach is complete: changing every base outside it leaves the value un
         for (p in pads) gvtrack.create(p, NULL, "kmer.count", kmer = "CGT", extend = TRUE, strand = 0)
     }
     expr <- paste(c("v_kmer", "0 * v_pwm", "0 * v_potts", "0 * v_masked", paste0("0 * ", pads)), collapse = " + ")
-    bin <- gintervals("chr1", b - 50, b + 50)
+    bin <- gintervals("chr1", b, b + 100)
     value_on <- function(root) {
         suppressMessages(gsetroot(root))
         define_vtracks()
@@ -137,7 +137,7 @@ test_that("reach is complete: changing every base outside it leaves the value un
     suppressMessages(gsetroot(db))
     define_vtracks()
     res <- gextract.variants(expr, bin, iterator = 100)
-    outside <- setdiff(100:300, res$pos)
+    outside <- setdiff(150:350, res$pos)
     new_base <- c(A = "C", C = "G", G = "T", T = "A")[toupper(strsplit(seq, "")[[1]][outside + 1])]
     edb <- make_seq_db(substitute_bases(seq, outside, new_base))
     expect_equal(value_on(edb), value_on(db), info = "batched expression")

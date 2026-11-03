@@ -1525,8 +1525,10 @@ test_that("batched kmer vtracks count the same k-mers as a kmer vtrack scored al
     soft <- ifelse(((seq_along(soft) - 1) %/% 25) %% 2 == 1, tolower(soft), soft)
     local_kmer_seq_db(c(chr1 = paste(rand_seq(601), collapse = ""), chr2 = paste(soft, collapse = "")))
 
-    # 600 bp ending at each chromosome end, in 100 and 150 bp bins: the last
-    # bin is batched too.
+    # 600 bp ending at each chromosome end, cut into 100 and 150 bp bins from
+    # its start, so the last bin ends at the chromosome end and is batched too.
+    # (A numeric iterator starts its bins at multiples of its size, which here
+    # leaves short, unbatched bins at both ends.)
     intervals <- gintervals(c("chr1", "chr2"), c(1, 13), c(601, 613))
     dimers <- as.vector(outer(c("A", "C", "G", "T"), c("A", "C", "G", "T"), paste0))
     other_kmers <- c(
@@ -1551,7 +1553,9 @@ test_that("batched kmer vtracks count the same k-mers as a kmer vtrack scored al
                             gvtrack.iterator("k1", sshift = shift[1], eshift = shift[2])
                         }
                         for (iterator in c(100, 150)) {
-                            res <- kmer_alone_and_batched("k1", others, intervals, iterator)
+                            starts <- c(seq(1, 600, by = iterator), seq(13, 612, by = iterator))
+                            bins <- gintervals(rep(c("chr1", "chr2"), each = 600 / iterator), starts, starts + iterator)
+                            res <- kmer_alone_and_batched("k1", others, intervals, bins)
                             expect_equal(res$batched, res$alone,
                                 info = sprintf(
                                     "%s kmer=%s strand=%d extend=%s shift=%s iterator=%d",
@@ -1609,8 +1613,15 @@ test_that("kmer.frac divides by the anchors whose k-mer fits, so it stays in [0,
     vt <- c(paste0("count_", seq_len(nrow(cases))), paste0("frac_", seq_len(nrow(cases))))
 
     for (it in c(1, 7, 25, 100)) {
+        # Bins of `it` bp cut from each interval's start. A numeric iterator
+        # starts its bins at multiples of `it`, which leaves a short bin at the
+        # chromosome end, too short to be batched.
+        tiles <- do.call(rbind, lapply(seq_len(nrow(bins)), function(j) {
+            s <- seq(bins$start[j], bins$end[j] - 1, by = it)
+            gintervals(as.character(bins$chrom[j]), s, pmin(s + it, bins$end[j]))
+        }))
         alone <- do.call(rbind, lapply(seq_len(nrow(cases)), function(i) {
-            r <- gextract(c(paste0("count_", i), paste0("frac_", i)), bins, iterator = it, colnames = c("count", "frac"))
+            r <- gextract(c(paste0("count_", i), paste0("frac_", i)), bins, iterator = tiles, colnames = c("count", "frac"))
             cs <- cases[i, ]
             r$expected <- ifelse(possible(r, nchar(cs$kmer), cs$extend, cs$strand) > 0,
                 r$count / possible(r, nchar(cs$kmer), cs$extend, cs$strand), 0
@@ -1621,7 +1632,7 @@ test_that("kmer.frac divides by the anchors whose k-mer fits, so it stays in [0,
         expect_equal(alone$frac, alone$expected, tolerance = 1e-6)
 
         # All 36 in one call: with 100 bp bins they take the batched path
-        batched <- gextract(vt, bins, iterator = it)
+        batched <- gextract(vt, bins, iterator = tiles)
         expect_equal(unlist(batched[, paste0("frac_", seq_len(nrow(cases)))], use.names = FALSE), alone$frac, tolerance = 1e-6)
     }
 
