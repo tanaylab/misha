@@ -282,3 +282,35 @@ test_that("pwm.edit_distance.lse takes the same score.thresh values as pwm.count
     expect_true(all(res$lse_num > 0))
     expect_equal(res$lse_chr, res$lse_num)
 })
+
+test_that("sequence vtracks take integer strand, prior and spat_factor like their double forms", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    pssm <- test_pssm()
+    scope <- gintervals(1, 0, 3000)
+    same_values <- function(int_args, dbl_args, func, info) {
+        do.call(gvtrack.create, c(list("v_int", NULL, func), int_args))
+        do.call(gvtrack.create, c(list("v_dbl", NULL, func), dbl_args))
+        res <- gextract(c("v_int", "v_dbl"), scope, iterator = 100)
+        expect_gt(length(unique(res$v_dbl)), 1)
+        expect_equal(res$v_int, res$v_dbl, info = info)
+    }
+
+    # -1:1 is an integer vector, so looping over it passes integer strands.
+    for (s in -1:1) {
+        for (func in c("kmer.count", "kmer.frac")) {
+            same_values(list(kmer = "AC", strand = s), list(kmer = "AC", strand = as.numeric(s)), func, paste(func, s))
+        }
+    }
+
+    thresh <- list(pwm.count = list(score.thresh = -5), pwm.edit_distance = list(score.thresh = -1.5, max_edits = 1))
+    for (func in c("pwm", "pwm.max", "pwm.max.pos", "pwm.count", "pwm.edit_distance")) {
+        base <- c(list(pssm = pssm, bidirect = FALSE), thresh[[func]])
+        same_values(c(base, strand = -1L), c(base, strand = -1), func, paste(func, "strand"))
+        if (func != "pwm.edit_distance") {
+            same_values(c(base, prior = 0L), c(base, prior = 0), func, paste(func, "prior"))
+            same_values(c(base, list(spat_factor = 1:3, spat_bin = 10L)), c(base, list(spat_factor = c(1, 2, 3), spat_bin = 10)), func, paste(func, "spat_factor"))
+        }
+    }
+})

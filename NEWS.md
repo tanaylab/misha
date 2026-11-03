@@ -1,3 +1,7 @@
+# misha 5.14.3
+
+* `kmer.*` and `pwm.*` virtual tracks accept an integer `strand`, such as the loop variable of `for (s in -1:1)`, and `pwm.*` virtual tracks accept an integer `prior` or `spat_factor`. These used to stop with an error.
+
 # misha 5.14.2
 
 * **Behavior fix:** `kmer.frac` with `extend = TRUE` (the default) could exceed 1. It now divides by every start position in the interval, so values for k > 1 drop by a factor of (L - k + 1) / L for an interval of length L.

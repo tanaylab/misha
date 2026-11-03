@@ -1251,9 +1251,9 @@ TrackExpressionVars::Track_var &TrackExpressionVars::add_vtrack_var_src_track(SE
 				SEXP rstrand = get_rvector_col(rvtrack, "strand", vtrack.c_str(), false);
 				char strand = 0; // default value (both strands)
 				if (!Rf_isNull(rstrand)) {
-					if (!Rf_isReal(rstrand) || Rf_length(rstrand) != 1)
+					if ((!Rf_isReal(rstrand) && !Rf_isInteger(rstrand)) || Rf_length(rstrand) != 1)
 						verror("Virtual track %s: strand parameter must be numeric", vtrack.c_str());
-					strand = (char)REAL(rstrand)[0];
+					strand = (char)Rf_asReal(rstrand);
 				}
 
 				// Get the kmer string
