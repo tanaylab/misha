@@ -120,18 +120,24 @@ test_that("reach is complete: changing every base outside it leaves the value un
         edb <- make_seq_db(substitute_bases(seq, outside, new_base))
         expect_equal(values_on_db(edb, vt, b), values_on_db(db, vt, b), info = vt)
     }
-    # Single-vtrack expressions never take the batched sequence path (it runs
-    # for >= 4 kmer/pwm/potts/masked vtracks), so check one such expression too.
-    expr <- "v_kmer + 0 * v_pwm + 0 * v_potts + 0 * v_masked"
+    # K-mers take the batched path only with 32+ k-mer vtracks on bins of
+    # 100 bp or more, so check one such expression too.
+    pads <- paste0("v_pad", 1:31)
+    define_vtracks <- function() {
+        define_variant_vtracks()
+        for (p in pads) gvtrack.create(p, NULL, "kmer.count", kmer = "CGT", extend = TRUE, strand = 0)
+    }
+    expr <- paste(c("v_kmer", "0 * v_pwm", "0 * v_potts", "0 * v_masked", paste0("0 * ", pads)), collapse = " + ")
+    bin <- gintervals("chr1", b, b + 100)
     value_on <- function(root) {
         suppressMessages(gsetroot(root))
-        define_variant_vtracks()
-        gextract(expr, gintervals("chr1", b, b + 1), iterator = 1, colnames = "x")$x
+        define_vtracks()
+        gextract(expr, bin, iterator = 100, colnames = "x")$x
     }
     suppressMessages(gsetroot(db))
-    define_variant_vtracks()
-    res <- gextract.variants(expr, gintervals("chr1", b, b + 1), iterator = 1)
-    outside <- setdiff(170:240, res$pos)
+    define_vtracks()
+    res <- gextract.variants(expr, bin, iterator = 100)
+    outside <- setdiff(150:350, res$pos)
     new_base <- c(A = "C", C = "G", G = "T", T = "A")[toupper(strsplit(seq, "")[[1]][outside + 1])]
     edb <- make_seq_db(substitute_bases(seq, outside, new_base))
     expect_equal(value_on(edb), value_on(db), info = "batched expression")

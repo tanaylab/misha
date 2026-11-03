@@ -371,13 +371,13 @@ test_that("pwm.count prior reduces counts when threshold is fixed", {
     expect_true(out$count_prior0[1] >= out$count_prior01[1])
 })
 
-test_that("pwm.count batch path (many vtracks) returns consistent values", {
+test_that("pwm.count with many vtracks in one call returns consistent values", {
     remove_all_vtracks()
 
     pssm <- create_test_pssm()
     test_interval <- gintervals(1, 200, 300)
 
-    # Create 5 identical pwm.count vtracks to trigger batch processing path
+    # Create 5 identical pwm.count vtracks scored in one call
     for (i in 1:5) {
         gvtrack.create(paste0("count_rep_", i), NULL, "pwm.count",
             pssm = pssm, bidirect = FALSE, extend = TRUE,

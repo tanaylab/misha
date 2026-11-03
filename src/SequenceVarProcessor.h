@@ -37,7 +37,6 @@ private:
 
 	void batch_process_sequence_vtracks(
 		std::vector<TrackExpressionVars::Track_var*> &kmer_vtracks,
-		std::vector<TrackExpressionVars::Track_var*> &pwm_vtracks,
 		const GInterval &interval,
 		unsigned idx
 	);
