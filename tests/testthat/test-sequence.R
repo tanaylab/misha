@@ -1196,7 +1196,7 @@ test_that("gseq.kmer matches gextract kmer.frac vtrack", {
     seq <- toupper(gseq.extract(test_interval))
 
     # Create virtual track for k-mer fraction
-    gvtrack.create("frac_ta", NULL, "kmer.frac", kmer = "TA", strand = 1)
+    gvtrack.create("frac_ta", NULL, "kmer.frac", kmer = "TA", strand = 1, extend = FALSE)
 
     # Extract using gextract
     vtrack_result <- gextract("frac_ta", test_interval, iterator = test_interval)
@@ -1217,8 +1217,8 @@ test_that("gseq.kmer matches gextract kmer vtrack with longer k-mer", {
     seq <- toupper(gseq.extract(test_interval))
 
     # Create virtual tracks for longer k-mer
-    gvtrack.create("count_ccc", NULL, "kmer.count", kmer = "CCC", strand = 1)
-    gvtrack.create("frac_ccc", NULL, "kmer.frac", kmer = "CCC", strand = 1)
+    gvtrack.create("count_ccc", NULL, "kmer.count", kmer = "CCC", strand = 1, extend = FALSE)
+    gvtrack.create("frac_ccc", NULL, "kmer.frac", kmer = "CCC", strand = 1, extend = FALSE)
 
     # Extract using gextract
     vtrack_result <- gextract(c("count_ccc", "frac_ccc"), test_interval, iterator = test_interval)

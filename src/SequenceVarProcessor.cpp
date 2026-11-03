@@ -612,7 +612,8 @@ void SequenceVarProcessor::batch_process_sequence_vtracks(
 				fwd_positions[target_kmer],
 				rev_positions[target_kmer],
 				var_interval,
-				fetch_interval);
+				fetch_interval,
+				m_iu.get_chromkey());
 		}
 	}
 
@@ -803,7 +804,7 @@ void SequenceVarProcessor::process_individual_sequence_vars(
 				} else {
 					// Multiple unmasked parts - score each and aggregate
 					double total_count = 0.0;
-					int64_t total_bases = 0;
+					size_t total_positions = 0;
 
 					for (const auto& part : unmasked_parts) {
 						double part_score = ivar->kmer_counter->score_interval(part, m_iu.get_chromkey());
@@ -812,14 +813,17 @@ void SequenceVarProcessor::process_individual_sequence_vars(
 							// Sum counts
 							total_count += part_score;
 						} else {
-							// KMER_FRAC - need to weight by length
-							total_count += part_score * part.range();
-							total_bases += part.range();
+							// KMER_FRAC: a part's fraction times its possible
+							// positions is its count, so the parts pool into
+							// total count / total possible positions.
+							const size_t positions = ivar->kmer_counter->possible_positions(part, m_iu.get_chromkey());
+							total_count += part_score * positions;
+							total_positions += positions;
 						}
 					}
 
-					if (ivar->val_func == TrackExpressionVars::Track_var::KMER_FRAC && total_bases > 0) {
-						ivar->var[idx] = total_count / total_bases;
+					if (ivar->val_func == TrackExpressionVars::Track_var::KMER_FRAC) {
+						ivar->var[idx] = total_positions > 0 ? total_count / total_positions : 0.0;
 					} else {
 						ivar->var[idx] = total_count;
 					}

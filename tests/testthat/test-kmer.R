@@ -19,23 +19,22 @@ count_kmers_manually <- function(sequence, kmer, original_interval, extended_int
         original_end_pos <- original_end_pos - (extended_interval$end - original_interval$end)
     }
 
-    # Count kmers whose starting position falls within the original interval
+    # Count kmers whose starting position falls within the original interval;
+    # the possible positions are the anchors whose kmer fits in the sequence
     count <- 0
+    possible_positions <- 0
     kmer_length <- nchar(kmer)
 
     # Only search positions within the original interval bounds
     for (i in (original_offset + 1):(original_offset + original_interval$end - original_interval$start)) {
         # Make sure we don't go out of bounds
         if (i + kmer_length - 1 <= nchar(sequence)) {
+            possible_positions <- possible_positions + 1
             if (substr(sequence, i, i + kmer_length - 1) == kmer) {
                 count <- count + 1
             }
         }
     }
-
-    # Calculate possible positions for fraction
-    possible_positions <- original_interval$end - original_interval$start - kmer_length + 1
-    possible_positions <- max(0, possible_positions)
 
     return(list(
         count = count,
@@ -61,8 +60,8 @@ test_that("kmer.count and kmer.frac vtracks work with basic inputs", {
 
     # Retrieve extended sequence to account for extension
     extended_interval <- test_intervals
-    extended_interval$start <- extended_interval$start - 1 # For 2-letter kmer, extend by 1 on each side
-    extended_interval$end <- extended_interval$end + 1
+    extended_interval$start <- extended_interval$start - 1
+    extended_interval$end <- extended_interval$end + 2 # extend = TRUE reads k - 1 past the end; CCC needs 2
     extended_seq <- toupper(gseq.extract(extended_interval))
 
     # Use our helper function for "TA"
@@ -288,9 +287,10 @@ test_that("kmer.count and kmer.frac handle edge cases correctly", {
 
     a_results <- count_kmers_manually(extended_seq_a, "A", test_intervals, extended_interval_a)
 
-    # Test results - full sequence should have exactly one occurrence
+    # Test results - full sequence should have exactly one occurrence. With
+    # extend = TRUE all 40 anchors can hold the 40-mer, so its fraction is 1/40.
     expect_equal(scores$count_full, 1)
-    expect_equal(scores$frac_full, 1)
+    expect_equal(scores$frac_full, 1 / 40, tolerance = 1e-6)
 
     # Single letter kmer
     expect_equal(scores$count_a, a_results$count)
@@ -363,14 +363,16 @@ test_that("kmer.count and kmer.frac work with overlapping k-mers", {
     seq <- toupper(gseq.extract(test_intervals))
 
     # Manual count with extension
+    # Anchors are the interval's own bases; extend = TRUE lets each of them
+    # hold the k-mer, so all of them are possible positions
     taa_count <- 0
     original_offset <- 2
-    for (i in original_offset:(original_offset + nchar(seq) - nchar("TAA"))) {
+    for (i in (original_offset + 1):(original_offset + nchar(seq))) {
         if (substr(extended_seq, i, i + nchar("TAA") - 1) == "TAA") {
             taa_count <- taa_count + 1
         }
     }
-    taa_possible_positions <- nchar(seq) - nchar("TAA") + 1
+    taa_possible_positions <- nchar(seq)
 
     # Test counts
     expect_equal(scores$count_taa, taa_count)
@@ -1484,8 +1486,7 @@ test_that("kmer honors iterator shifts for both strands (extend=TRUE)", {
         res_rev <- count_kmers_manually(seq_ext, rc_k, orig, fetch)
 
         expected_count <- res_fwd$count + res_rev$count
-        possible_positions <- (orig$end - orig$start) - nchar(k) + 1
-        possible_positions <- max(0, possible_positions)
+        possible_positions <- res_fwd$possible_positions
         expected_frac <- if (possible_positions > 0) expected_count / (2 * possible_positions) else 0
 
         expect_equal(scores[[count_names[i]]], expected_count)
@@ -1574,4 +1575,73 @@ test_that("batched kmer.count does not count a reverse-strand k-mer anchored lef
     bins <- gintervals(c("chr1", "chr2"), 100, 110)
     expect_equal(gextract("k1", bins, iterator = 10, colnames = "v")$v, c(0, 0))
     expect_equal(gextract("k1 + 0 * k2 + 0 * k3 + 0 * k4", bins, iterator = 10, colnames = "v")$v, c(0, 0))
+})
+
+test_that("kmer.frac divides by the anchors whose k-mer fits, so it stays in [0, 1]", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    chr1_end <- with(gintervals.all(), end[chrom == "chr1"])
+    bins <- rbind(
+        gintervals(1, 200, 240), # CCCTAACCC... telomere repeat
+        gintervals(1, 10000, 10500),
+        gintervals(1, chr1_end - 7, chr1_end) # no room past the chromosome end
+    )
+    cases <- expand.grid(kmer = c("CC", "CCCTAA"), strand = c(1, -1, 0), extend = c(TRUE, FALSE), stringsAsFactors = FALSE)
+    possible <- function(iv, k, extend, strand) {
+        read_end <- if (extend) pmin(iv$end + k - 1, chr1_end) else iv$end
+        pmax(0, pmin(iv$end, read_end - k + 1) - iv$start) * (if (strand == 0) 2 else 1)
+    }
+
+    for (i in seq_len(nrow(cases))) {
+        cs <- cases[i, ]
+        for (fn in c("kmer.count", "kmer.frac")) {
+            gvtrack.create(paste0(sub("kmer.", "", fn, fixed = TRUE), "_", i), NULL, fn, kmer = cs$kmer, strand = cs$strand, extend = cs$extend)
+        }
+    }
+    vt <- c(paste0("count_", seq_len(nrow(cases))), paste0("frac_", seq_len(nrow(cases))))
+
+    for (it in c(1, 7, 25)) {
+        alone <- do.call(rbind, lapply(seq_len(nrow(cases)), function(i) {
+            r <- gextract(c(paste0("count_", i), paste0("frac_", i)), bins, iterator = it, colnames = c("count", "frac"))
+            cs <- cases[i, ]
+            r$expected <- ifelse(possible(r, nchar(cs$kmer), cs$extend, cs$strand) > 0,
+                r$count / possible(r, nchar(cs$kmer), cs$extend, cs$strand), 0
+            )
+            r
+        }))
+        expect_true(all(alone$frac >= 0 & alone$frac <= 1))
+        expect_equal(alone$frac, alone$expected, tolerance = 1e-6)
+
+        # The batched path (4+ sequence vtracks in one call) gives the same values
+        batched <- gextract(vt, bins, iterator = it)
+        expect_equal(unlist(batched[, paste0("frac_", seq_len(nrow(cases)))], use.names = FALSE), alone$frac, tolerance = 1e-6)
+    }
+
+    # 1 bp bins with extend = TRUE: a matching anchor is the whole bin
+    one <- gextract(c("count_1", "frac_1"), gintervals(1, 200, 210), iterator = 1)
+    expect_equal(one$frac_1, one$count_1)
+})
+
+test_that("kmer.frac over a filtered bin pools the unmasked parts' counts and possible positions", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    bin <- gintervals(1, 1000, 1100)
+    mask <- gintervals(1, c(1040, 1070), c(1042, 1071))
+    parts <- gintervals(1, c(1000, 1042, 1071), c(1040, 1070, 1100))
+
+    for (extend in c(TRUE, FALSE)) {
+        for (strand in c(1, 0)) {
+            gvtrack.create("f", NULL, "kmer.frac", kmer = "CCT", extend = extend, strand = strand)
+            gvtrack.create("c", NULL, "kmer.count", kmer = "CCT", extend = extend, strand = strand)
+            gvtrack.filter("f", mask)
+            got <- gextract("f", bin, iterator = bin)$f
+
+            per_part <- gextract("c", parts, iterator = parts)$c
+            read_end <- if (extend) parts$end + 2 else parts$end
+            possible <- (pmin(parts$end, read_end - 2) - parts$start) * (if (strand == 0) 2 else 1)
+            expect_equal(got, sum(per_part) / sum(possible), tolerance = 1e-6)
+        }
+    }
 })
