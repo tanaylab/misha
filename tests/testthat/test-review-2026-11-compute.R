@@ -105,3 +105,25 @@ test_that("gintervals.liftover returns an empty result when no chromosome is in 
     r <- gintervals.liftover(data.frame(chrom = c("chrC", "chrA"), start = c(5, 500), end = c(60, 600)), ch)
     expect_equal(c(r$start, r$end, r$intervalID), c(1500, 1600, 2))
 })
+
+test_that("gintervals.2d.intersect gives every pairwise intersection over many rectangles", {
+    set.seed(11)
+    mk <- function(n) {
+        s1 <- sample(0:9000, n, TRUE)
+        s2 <- sample(0:9000, n, TRUE)
+        gintervals.2d("chr1", s1, s1 + sample(1:300, n, TRUE), "chr1", s2, s2 + sample(1:300, n, TRUE))
+    }
+    a <- mk(1500)
+    b <- mk(1000)
+    # pairs with both axes overlapping, the a row varying fastest
+    hit <- outer(a$start1, b$end1, "<") & outer(a$end1, b$start1, ">") & outer(a$start2, b$end2, "<") & outer(a$end2, b$start2, ">")
+    idx <- which(hit, arr.ind = TRUE)
+    exp_df <- data.frame(
+        start1 = pmax(a$start1[idx[, 1]], b$start1[idx[, 2]]), end1 = pmin(a$end1[idx[, 1]], b$end1[idx[, 2]]),
+        start2 = pmax(a$start2[idx[, 1]], b$start2[idx[, 2]]), end2 = pmin(a$end2[idx[, 1]], b$end2[idx[, 2]])
+    )
+    r <- gintervals.2d.intersect(a, b)
+    key <- function(d) sort(paste(d$start1, d$end1, d$start2, d$end2))
+    expect_equal(nrow(r), nrow(exp_df))
+    expect_equal(key(r), key(exp_df))
+})
