@@ -88,11 +88,18 @@ test_that("gintervals.liftover returns an empty result when no chromosome is in 
         chrom = "chr1", start = 1000, end = 2000, strand = 1, chromsrc = "chrA", startsrc = 0, endsrc = 1000,
         strandsrc = 1, chain_id = 1, score = 10
     ))
-    expect_null(gintervals.liftover(data.frame(chrom = "chrC", start = 5, end = 60), ch))
-    expect_null(gintervals.liftover(data.frame(chrom = "chrC", start = 5, end = 60, v = 1), ch, value_col = "v"))
-    # as when the chromosome is in the chain but nothing overlaps it
-    expect_null(gintervals.liftover(data.frame(chrom = "chrA", start = 5000, end = 6000), ch))
-    r <- gintervals.liftover(data.frame(chrom = c("chrC", "chrA"), start = c(5, 500), end = c(60, 600)), ch)
+    # no input chromosome in the chain (often a naming mismatch): empty, with a warning
+    expect_warning(
+        expect_null(gintervals.liftover(data.frame(chrom = "chrC", start = 5, end = 60), ch)),
+        "source chromosome of the chain"
+    )
+    expect_warning(
+        expect_null(gintervals.liftover(data.frame(chrom = "chrC", start = 5, end = 60, v = 1), ch, value_col = "v")),
+        "source chromosome of the chain"
+    )
+    # as when the chromosome is in the chain but nothing overlaps it, which does not warn
+    expect_no_warning(expect_null(gintervals.liftover(data.frame(chrom = "chrA", start = 5000, end = 6000), ch)))
+    expect_no_warning(r <- gintervals.liftover(data.frame(chrom = c("chrC", "chrA"), start = c(5, 500), end = c(60, 600)), ch))
     expect_equal(c(r$start, r$end, r$intervalID), c(1500, 1600, 2))
 })
 
