@@ -30,3 +30,14 @@ test_that("summaries give a NaN standard deviation when a value is infinite, as 
     # a finite set still has a finite one
     expect_equal(gsummary("test.fixedbin", iv, iterator = 100)[["Std dev"]], sd(gextract("test.fixedbin", iv, iterator = 100)$test.fixedbin))
 })
+
+test_that("2D gintervals.annotate with tie_method and maxneighbors > 1 gives a clear error", {
+    q <- gintervals.2d(1, 100, 200, 1, 300, 400)
+    a <- gintervals.2d(1, c(500, 1000), c(600, 1100), 1, c(700, 1200), c(800, 1300))
+    a$lab <- c("x", "y")
+    expect_error(
+        gintervals.annotate(q, a, annotation_columns = "lab", maxneighbors = 2, tie_method = "min.start"),
+        "1D intervals only"
+    )
+    expect_equal(gintervals.annotate(q, a, annotation_columns = "lab", maxneighbors = 2)$lab, c("x", "y"))
+})
