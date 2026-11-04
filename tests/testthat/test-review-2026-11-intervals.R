@@ -350,3 +350,28 @@ test_that("gtrack.liftover applies min_score of a pre-loaded chain", {
     )
     expect_equal(res$start, 3000)
 })
+
+test_that("gintervals.random gives every valid start the same chance", {
+    root <- tempfile("rand_db")
+    on.exit(unlink(root, recursive = TRUE), add = TRUE)
+    create_test_db(root, data.frame(chrom = c("chrA", "chrB"), size = c(1000, 100000)))
+    old_root <- get("GROOT", envir = .misha)
+    withr::defer(gsetroot(old_root))
+    gsetroot(root)
+
+    # chrA has 1 start for size 1000 and chrB 99001: chrA is drawn about once in 1e5
+    set.seed(5)
+    res <- gintervals.random(1000, 1e5, dist_from_edge = 0)
+    expect_lt(sum(as.character(res$chrom) == "chrA"), 20)
+
+    # the last start, chrom end - size, is drawn, with and without a filter
+    set.seed(6)
+    res <- gintervals.random(10, 20000, dist_from_edge = 0, chromosomes = "chrA")
+    expect_equal(range(res$start), c(0, 990))
+    res <- gintervals.random(10, 2000, dist_from_edge = 0, chromosomes = "chrA", filter = gintervals("chrA", 0, 985))
+    expect_equal(sort(unique(res$start)), 985:990)
+    # with a filter, a chromosome with a single valid start is kept: chrA has start 0 and
+    # the filter leaves chrB only start 99000, so both are drawn
+    res <- gintervals.random(1000, 200, dist_from_edge = 0, filter = gintervals("chrB", 0, 99000))
+    expect_equal(sort(unique(paste(res$chrom, res$start))), c("chrA 0", "chrB 99000"))
+})

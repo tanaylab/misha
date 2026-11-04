@@ -208,9 +208,10 @@ SEXP C_grandom_genome(SEXP _size, SEXP _n, SEXP _dist_from_edge, SEXP _chrom_df,
                 int64_t chrom_start = chrom_starts[chromid];
                 int64_t chrom_end = chrom_ends[chromid];
 
-                // Apply dist_from_edge constraints
+                // Valid starts are [valid_start, valid_end): an interval starting at
+                // valid_end - 1 ends exactly dist_from_edge before the chromosome end
                 int64_t valid_start = chrom_start + (int64_t)dist_from_edge;
-                int64_t valid_end = chrom_end - (int64_t)dist_from_edge - size;
+                int64_t valid_end = chrom_end - (int64_t)dist_from_edge - size + 1;
 
                 if (valid_start >= valid_end)
                     continue; // Chromosome too short
@@ -254,16 +255,18 @@ SEXP C_grandom_genome(SEXP _size, SEXP _n, SEXP _dist_from_edge, SEXP _chrom_df,
             }
 
             // Calculate cumulative probabilities
-            double total_length = 0.0;
+            // Each start position is equally likely: weight segments by their number of starts
+            double total_starts = 0.0;
             for (size_t i = 0; i < valid_segments.size(); i++) {
-                total_length += valid_segments[i].length;
+                total_starts += valid_segments[i].num_starts;
             }
 
             double cum_prob = 0.0;
             for (size_t i = 0; i < valid_segments.size(); i++) {
-                cum_prob += valid_segments[i].length / total_length;
+                cum_prob += valid_segments[i].num_starts / total_starts;
                 valid_segments[i].cum_prob = cum_prob;
             }
+            valid_segments.back().cum_prob = 1.0; // rounding must not leave a draw past the last segment
 
         } else {
             // No filter: use simple chromosome-based sampling. seg.length is the
@@ -295,21 +298,23 @@ SEXP C_grandom_genome(SEXP _size, SEXP _n, SEXP _dist_from_edge, SEXP _chrom_df,
                 seg.start = seg_start;
                 seg.end = seg_end;
                 seg.length = seg_len;
-                seg.num_starts = seg_len - size;
+                seg.num_starts = seg_len - size + 1;
                 valid_segments.push_back(seg);
             }
 
             // Calculate cumulative probabilities
-            double total_length = 0.0;
+            // Each start position is equally likely: weight segments by their number of starts
+            double total_starts = 0.0;
             for (size_t i = 0; i < valid_segments.size(); i++) {
-                total_length += valid_segments[i].length;
+                total_starts += valid_segments[i].num_starts;
             }
 
             double cum_prob = 0.0;
             for (size_t i = 0; i < valid_segments.size(); i++) {
-                cum_prob += valid_segments[i].length / total_length;
+                cum_prob += valid_segments[i].num_starts / total_starts;
                 valid_segments[i].cum_prob = cum_prob;
             }
+            valid_segments.back().cum_prob = 1.0; // rounding must not leave a draw past the last segment
         }
 
         // Allocate output vectors

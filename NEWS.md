@@ -16,7 +16,7 @@ This release fixes defects found in a review of 5.14.4. Several change results, 
 
 * **Behavior fix:** `gsummary()`, `gintervals.summary()`, `gbins.summary()` and the array `stddev` slice function compute the standard deviation accurately; it could be badly wrong (0, NA or off by orders of magnitude) when values were large relative to their spread. `gbins.summary()` and `gintervals.summary()` with `intervals.set.out` keep values in double precision instead of float.
 
-* `gintervals.random(filter =)` samples uniformly: it skipped the last `size` positions before each filter and gaps shorter than `2 * size`.
+* **Behavior fix:** `gintervals.random()` samples every valid start with the same chance. Without a filter, chromosomes were weighted by length rather than by number of starts, which oversampled short ones; the last start of a chromosome was never drawn; and with a filter it skipped the last `size` positions before each filter, gaps shorter than `2 * size`, and chromosomes with a single valid start.
 
 * Subsetting a `gintervals.to_mat()` matrix by row names no longer turns its intervals into NA.
 
