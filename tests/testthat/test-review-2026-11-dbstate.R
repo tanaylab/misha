@@ -607,3 +607,41 @@ test_that("a stale .db.cache lock is broken, and a held one makes a writer mark 
     expect_true(.gdb.cache_is_dirty(db))
     unlink(lock)
 })
+
+# Replaces a base function for the duration of the calling test
+mock_base <- function(name, fun, env = parent.frame()) {
+    real <- get(name, envir = baseenv())
+    unlockBinding(name, .BaseNamespaceEnv)
+    assign(name, fun, envir = .BaseNamespaceEnv)
+    lockBinding(name, .BaseNamespaceEnv)
+    withr::defer(
+        {
+            unlockBinding(name, .BaseNamespaceEnv)
+            assign(name, real, envir = .BaseNamespaceEnv)
+            lockBinding(name, .BaseNamespaceEnv)
+        },
+        envir = env
+    )
+    real
+}
+
+test_that("a failed gtrack.copy(overwrite = TRUE) keeps what another session put at the name", {
+    local_db_state()
+    db <- review_db(withr::local_tempdir())
+    tracks <- file.path(db, "tracks")
+    gtrack.create_sparse("orig", "", gintervals("chr1", 0, 10), 42)
+    gtrack.create_sparse("src", "", gintervals("chr1", 100, 110), 7)
+    gtrack.create_sparse("other", "", gintervals("chr1", 200, 210), 99)
+    other_bytes <- readBin(file.path(tracks, "other.track", "track.dat"), "raw", 1e6)
+
+    # another session's copy lands at the name between this one's two renames
+    rename <- mock_base("file.rename", function(from, to) {
+        if (length(to) == 1 && basename(to) == "orig.track" && grepl("\\.tmp\\.", basename(from)) && !dir.exists(to)) {
+            dir.create(to)
+            file.copy(list.files(file.path(tracks, "other.track"), full.names = TRUE, all.files = TRUE, no.. = TRUE), to, recursive = TRUE)
+        }
+        rename(from, to)
+    })
+    expect_error(suppressWarnings(gtrack.copy("src", "orig", overwrite = TRUE)), "Failed to rename")
+    expect_equal(readBin(file.path(tracks, "orig.track", "track.dat"), "raw", 1e6), other_bytes)
+})

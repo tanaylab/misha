@@ -746,6 +746,8 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
 
     aside <- NULL
     success <- FALSE
+    # whether this call's copy is at the real name: only then is what is there this call's to move away
+    placed <- FALSE
     if (dir.exists(dest_dir)) {
         # The existing track is set aside until the copy is in place and has succeeded, and comes
         # back if any step fails (bypassing gtrack.rm, which insists the database is loaded). Its name
@@ -759,9 +761,10 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
             if (!success && !is.null(aside) && dir.exists(aside)) {
                 # the failed copy is moved away first (it may not be removable at once, e.g. read-only
                 # files kept by copy.mode), then the existing track comes back, with the session's
-                # track list as it was
+                # track list as it was. Only this call's copy: what another session put at the name
+                # meanwhile stays, and the track set aside is then kept where it is.
                 failed <- file.path(dest_parent, .gdb.staging_name(basename(dest_dir)))
-                if (dir.exists(dest_dir) && !suppressWarnings(file.rename(dest_dir, failed))) {
+                if (!placed || (dir.exists(dest_dir) && !suppressWarnings(file.rename(dest_dir, failed)))) {
                     failed <- NULL
                 }
                 if (!dir.exists(dest_dir) && suppressWarnings(file.rename(aside, dest_dir))) {
@@ -803,6 +806,7 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
     if (!suppressWarnings(file.rename(stage_dir, dest_dir))) {
         stop(sprintf("Failed to rename %s -> %s", stage_dir, dest_dir), call. = FALSE)
     }
+    placed <- TRUE
     .gdb.fsync(dest_parent)
     .gdb.invalidate_dir_cache(dest_dir)
     tryCatch(
