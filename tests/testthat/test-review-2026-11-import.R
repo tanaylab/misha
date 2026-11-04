@@ -442,3 +442,18 @@ test_that("a forced 2D re-conversion finds per-pair files named by aliases, and 
         "Remove the per-pair files and run it again"
     )
 })
+
+test_that("BED import leaves inverted records to the creator, and fails when no record is left", {
+    import_test_db("indexed")
+
+    # chrM is 500 bp long: an inverted record past the end is an error, as an inverted one inside it
+    inverted <- write_file("chr1\t0\t10\nchrM\t600\t550\n", ".bed")
+    expect_error(suppressMessages(gtrack.import("bed_inverted", "", inverted, 0)), "start coordinate must be lesser than end coordinate")
+    expect_false(gtrack.exists("bed_inverted"))
+
+    all_empty <- write_file("chr1\t5\t5\nchrM\t600\t700\n", ".bed")
+    for (binsize in c(0, 10)) {
+        expect_error(suppressMessages(gtrack.import("bed_all_empty", "", all_empty, binsize)), "all of its 2 record\\(s\\) are empty.*nothing to import")
+        expect_false(gtrack.exists("bed_all_empty"))
+    }
+})

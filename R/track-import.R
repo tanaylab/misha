@@ -36,16 +36,23 @@
 
 # BED files from other tools often have records that run past the end of the chromosome, or that are empty.
 # Clips the first to the chromosome end and drops records left empty (zero length, or starting at or past the
-# end), which the track creators would reject, and sets $warning to a message giving the counts, if any. The
-# chromosomes of bed must exist in the database.
+# end), which the track creators would reject, and sets $warning to a message giving the counts, if any. Fails
+# when no record is left. The chromosomes of bed must exist in the database.
 .gtrack_bed_fit_chroms <- function(bed, file) {
     allgenome <- get("ALLGENOME", envir = .misha)[[1]]
     iv <- bed$intervals
     sizes <- allgenome$end[match(as.character(.gchroms(iv$chrom)), as.character(allgenome$chrom))]
-    past <- iv$end > sizes
-    end <- pmin(iv$end, sizes)
+    # an inverted record (start > end) is left for the creator to reject
+    past <- iv$end > sizes & iv$start <= iv$end
+    end <- ifelse(past, sizes, iv$end)
     empty <- iv$end == iv$start | (past & end <= iv$start)
     num_clipped <- sum(past & !empty)
+    if (length(empty) && all(empty)) {
+        stop(sprintf(
+            "BED file %s: all of its %d record(s) are empty (zero length, or starting at or past the end of their chromosome): nothing to import",
+            file, length(empty)
+        ), call. = FALSE)
+    }
     if (num_clipped || any(empty)) {
         iv$end <- end
         bed$intervals <- iv[!empty, , drop = FALSE]
@@ -115,7 +122,7 @@
 #' 'defval' for regions not covered). BED records that run past the end of
 #' their chromosome are clipped to it, and records left empty (zero length, or
 #' starting at or past the chromosome end) are dropped, with one warning giving
-#' the counts.
+#' the counts; a BED file with no record left is an error.
 #'
 #' If 'binsize' is 0 the resulted track is created in 'Sparse' format.
 #' Otherwise the 'Dense' format is chosen with a bin size equal to 'binsize'.
