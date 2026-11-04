@@ -450,3 +450,50 @@ test_that("avg with a filter is the mean of the unmasked values, each counted on
     expect_equal(gextract("s_avg", iv, iterator = iv)$s_avg, mean(c(4, 1, 2)), tolerance = 1e-6)
     expect_equal(gextract("a_avg", iv, iterator = iv)$a_avg, mean(c(4, 1, 2)), tolerance = 1e-6)
 })
+
+vt_n_db <- function() {
+    set.seed(5)
+    s <- sample(c("A", "C", "G", "T"), 400, TRUE)
+    s[101:106] <- "N"
+    s[201] <- "R"
+    s[300:330] <- "N"
+    setup_db(list(sprintf(">chr1\n%s\n", paste(s, collapse = ""))), return_db = TRUE)
+    s
+}
+
+test_that("gseq.pwm leaves out windows holding N by default, as the pwm vtracks do", {
+    local_db_state()
+    vt_n_db()
+    withr::defer(gvtrack.clear())
+    pssm <- vt_fix_pssm()
+    for (f in c("pwm", "pwm.max", "pwm.max.pos")) gvtrack.create(gsub(".", "_", f, fixed = TRUE), NULL, f, pssm = pssm)
+    gvtrack.create("pwm_count", NULL, "pwm.count", pssm = pssm, score.thresh = -7)
+    for (st in c(95, 98, 195, 296)) {
+        iv <- gintervals("chr1", st, st + 10)
+        v <- gextract(c("pwm", "pwm_max", "pwm_max_pos", "pwm_count"), iv, iterator = iv)
+        s <- gseq.extract(gintervals("chr1", st, st + 15))
+        g <- function(m, ...) gseq.pwm(s, pssm, mode = m, end_pos = 10, extend = TRUE, ...)
+        expect_equal(g("lse"), v$pwm, tolerance = 1e-5, info = paste(st))
+        expect_equal(g("max"), v$pwm_max, tolerance = 1e-5, info = paste(st))
+        if (is.finite(v$pwm_max)) {
+            expect_equal(abs(g("pos")), abs(v$pwm_max_pos), info = paste(st))
+        } else {
+            expect_true(is.na(g("pos")), info = paste(st))
+            expect_true(is.na(v$pwm_max_pos), info = paste(st))
+        }
+        expect_equal(g("count", score.thresh = -7), v$pwm_count, info = paste(st))
+    }
+    # nothing scorable
+    expect_equal(gseq.pwm("NNNNNNNNNN", pssm, mode = "lse"), -Inf)
+    expect_equal(gseq.pwm("NNNNNNNNNN", pssm, mode = "max"), -Inf)
+    expect_true(is.na(gseq.pwm("NNNNNNNNNN", pssm, mode = "pos")))
+    expect_true(is.na(gseq.pwm("RRRRRRRRRR", pssm, mode = "pos")))
+    expect_equal(gseq.pwm("NNNNNNNNNN", pssm, mode = "count", score.thresh = -100), 0)
+    # scoring N on request still charges the column mean
+    lp <- log((pssm + 0.01) / rowSums(pssm + 0.01))
+    expect_equal(
+        gseq.pwm("ACGNNN", pssm, mode = "max", bidirect = FALSE, neutral_chars = "N"),
+        sum(lp[cbind(1:3, 1:3)]) + sum(rowMeans(lp)[4:6]),
+        tolerance = 1e-5
+    )
+})

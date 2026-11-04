@@ -362,7 +362,8 @@ static ScoreResult score_pwm_over_range(
         } else if (pwm_mode == PWM_COUNT) {
             result.value = count;
         } else if (pwm_mode == PWM_POS) {
-            if (best_start0 >= 0) {
+            // no scorable window (every score -Inf, which the tie rule above can still select): no position
+            if (best_start0 >= 0 && std::isfinite(best_score)) {
                 result.has_pos = true;
                 result.pos_1based = best_start0 + 1;
                 result.strand = best_strand;
@@ -496,7 +497,8 @@ static ScoreResult score_pwm_over_range(
         } else if (pwm_mode == PWM_COUNT) {
             result.value = count;
         } else if (pwm_mode == PWM_POS) {
-            if (best_j >= 0) {
+            // no scorable window (every score -Inf, which the tie rule above can still select): no position
+            if (best_j >= 0 && std::isfinite(best_score)) {
                 result.has_pos = true;
                 result.pos_1based = gp.log_to_phys[best_j] + 1;
                 result.strand = best_strand;
