@@ -5,6 +5,7 @@
 #include <memory>
 #include <mutex>
 #include <map>
+#include <string>
 #include "GIntervals2D.h"
 #include "GIntervalsBigSet.h"
 #include "GIntervalsFetcher2D.h"
@@ -108,6 +109,7 @@ private:
 
 	// Static index cache (thread-safe)
 	static std::map<std::string, std::shared_ptr<IntervalsIndex2D>> s_index_cache;
+	static std::map<std::string, std::string> s_index_stamp; // intervals2d.idx stamp (index_file_stamp) when cached
 	static std::mutex s_cache_mutex;
 
 	// Helper to get or load index from cache
@@ -120,6 +122,10 @@ public:
 	// Drop the cached IntervalsIndex2D for `intervset_dir`. Call after
 	// rm/recreate/convert operations.
 	static void invalidate_index_cache(const std::string &intervset_dir);
+
+	// Drop the cached index for `intervset_dir` if its index file was replaced since it was cached
+	// (by another session) or is gone. Returns true if it was dropped (GenomeTrack::drop_stale_index).
+	static bool drop_stale_index(const std::string &intervset_dir);
 
 	// Wipe every cached entry.
 	static void clear_index_cache();

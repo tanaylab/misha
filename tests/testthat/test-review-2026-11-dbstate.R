@@ -475,3 +475,41 @@ test_that("2D computations over the deferred whole-genome 2D scope stop and name
         expect_equal(gextract("mr", gintervals.2d.all())$mr, 10)
     })
 })
+
+test_that("tracks and interval sets another session re-created with another layout are read right", {
+    skip_on_os("windows")
+    local_db_state()
+    db <- review_db(withr::local_tempdir())
+    gtrack.create_sparse("st", "", gintervals(c("chr1", "chr2"), 0, 10), c(1, 2))
+    gtrack.create("dt", "", "st", iterator = 10)
+    gtrack.2d.create("rt", "", data.frame(chrom1 = "chr1", start1 = 0, end1 = 10, chrom2 = "chr2", start2 = 0, end2 = 10), 1)
+    withr::with_options(list(gmax.data.size = 1), gintervals.save("bs", gintervals(c("chr1", "chr2"), 0, 10)))
+    gintervals.convert_to_indexed("bs", remove.old = TRUE)
+    expect_true(file.exists(file.path(db, "tracks", "st.track", "track.idx")))
+    expect_true(file.exists(file.path(db, "tracks", "bs.interv", "intervals.idx")))
+    # this session caches their indexes
+    gextract("st", gintervals.all())
+    gextract("dt", gintervals.all())
+    gextract("rt", gintervals.2d("chr1", 0, 100, "chr2", 0, 100))
+    gextract("st", intervals = "bs")
+
+    in_other_session({
+        gtrack.rm("st", force = TRUE)
+        gtrack.create_sparse("st", "", gintervals(c("chr1", "chr1", "chr1", "chr2"), c(0, 20, 40, 0), c(10, 30, 50, 10)), c(5, 6, 7, 8))
+        gtrack.rm("dt", force = TRUE)
+        gtrack.create("dt", "", "st", iterator = 7)
+        gtrack.rm("rt", force = TRUE)
+        gtrack.2d.create("rt", "", data.frame(
+            chrom1 = c("chr1", "chr1", "chr1"), start1 = c(0, 20, 40), end1 = c(10, 30, 50),
+            chrom2 = c("chr1", "chr2", "chr2"), start2 = c(0, 0, 20), end2 = c(10, 10, 30)
+        ), c(3, 4, 5))
+        gintervals.rm("bs", force = TRUE)
+        withr::with_options(list(gmax.data.size = 1), gintervals.save("bs", gintervals(c("chr1", "chr1", "chr2"), c(0, 40, 0), c(10, 50, 10))))
+        gintervals.convert_to_indexed("bs", remove.old = TRUE)
+    })
+
+    expect_equal(gextract("st", gintervals.all())$st, c(5, 6, 7, 8))
+    expect_equal(gextract("dt", gintervals("chr1", 0, 14))$dt, c(5, 5))
+    expect_equal(gextract("rt", gintervals.2d("chr1", 0, 100, "chr2", 0, 100))$rt, c(4, 5))
+    expect_equal(gextract("st", intervals = "bs")$st, c(5, 7, 8))
+})

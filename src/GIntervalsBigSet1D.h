@@ -5,6 +5,7 @@
 #include <memory>
 #include <mutex>
 #include <map>
+#include <string>
 #include "GInterval.h"
 #include "GIntervalsBigSet.h"
 #include "GIntervalsMeta1D.h"
@@ -101,6 +102,7 @@ private:
 
 	// Static index cache (thread-safe)
 	static std::map<std::string, std::shared_ptr<IntervalsIndex1D>> s_index_cache;
+	static std::map<std::string, std::string> s_index_stamp; // intervals.idx stamp (index_file_stamp) when cached
 	static std::mutex s_cache_mutex;
 
 	// Helper to get or load index from cache
@@ -114,6 +116,10 @@ public:
 	// rm/recreate/convert operations that change the on-disk interval
 	// set contents.
 	static void invalidate_index_cache(const std::string &intervset_dir);
+
+	// Drop the cached index for `intervset_dir` if its index file was replaced since it was cached
+	// (by another session) or is gone. Returns true if it was dropped (GenomeTrack::drop_stale_index).
+	static bool drop_stale_index(const std::string &intervset_dir);
 
 	// Wipe every cached entry.
 	static void clear_index_cache();

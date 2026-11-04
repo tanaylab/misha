@@ -4,6 +4,8 @@
  * Implementation of 2D track index loader, writer, and cache
  */
 
+#include <string>
+#include <fcntl.h>
 #include <errno.h>
 #include <cstring>
 #include <sys/stat.h>
@@ -18,7 +20,26 @@ const char TrackIndex2D::MAGIC_HEADER[8] = {'M','I','S','H','T','2','D','\0'};
 
 // Static cache members
 std::map<std::string, std::shared_ptr<TrackIndex2D>> TrackIndex2D::s_index_cache;
+std::map<std::string, std::string> TrackIndex2D::s_index_stamp;
 std::mutex TrackIndex2D::s_cache_mutex;
+
+// The stamp of an index file: its size and its header, which holds the checksum of its entries (the
+// offsets and lengths read through it); "" if it cannot be read. One that another session wrote
+// since it was cached with another layout differs. (Not the file's inode and mtime: a file deleted
+// and written again within the same second can get the same ones.)
+static std::string index_file_stamp(const std::string &path)
+{
+    char header[64];
+    struct stat st;
+    int fd = open(path.c_str(), O_RDONLY);
+    if (fd < 0)
+        return std::string();
+    ssize_t n = fstat(fd, &st) ? -1 : read(fd, header, sizeof(header));
+    close(fd);
+    if (n < 0)
+        return std::string();
+    return std::to_string((long long)st.st_size) + ":" + std::string(header, n);
+}
 
 TrackIndex2D::TrackIndex2D() : m_loaded(false), m_track_type(MishaTrack2DType::RECTS) {}
 
@@ -236,6 +257,8 @@ std::shared_ptr<TrackIndex2D> TrackIndex2D::get_track_index_2d(const std::string
     auto idx = std::make_shared<TrackIndex2D>();
     std::string idx_path = track_dir + "/track.idx";
 
+    // stamped before the load: a file replaced in between is seen as replaced
+    std::string stamp = index_file_stamp(idx_path);
     if (!idx->load(idx_path)) {
         // Index file doesn't exist - return nullptr
         return nullptr;
@@ -245,6 +268,8 @@ std::shared_ptr<TrackIndex2D> TrackIndex2D::get_track_index_2d(const std::string
     {
         std::lock_guard<std::mutex> lock(s_cache_mutex);
         auto [it, inserted] = s_index_cache.emplace(track_dir, idx);
+        if (inserted && !stamp.empty())
+            s_index_stamp[track_dir] = stamp;
         return it->second;  // return existing if another thread inserted first
     }
 }
@@ -252,11 +277,25 @@ std::shared_ptr<TrackIndex2D> TrackIndex2D::get_track_index_2d(const std::string
 void TrackIndex2D::invalidate_cache(const std::string &track_dir) {
     std::lock_guard<std::mutex> lock(s_cache_mutex);
     s_index_cache.erase(track_dir);
+    s_index_stamp.erase(track_dir);
 }
 
 void TrackIndex2D::clear_cache() {
     std::lock_guard<std::mutex> lock(s_cache_mutex);
     s_index_cache.clear();
+    s_index_stamp.clear();
+}
+
+bool TrackIndex2D::drop_stale_index(const std::string &track_dir) {
+    std::lock_guard<std::mutex> lock(s_cache_mutex);
+    if (s_index_cache.find(track_dir) == s_index_cache.end())
+        return false;
+    auto it = s_index_stamp.find(track_dir);
+    if (it != s_index_stamp.end() && index_file_stamp(track_dir + "/track.idx") == it->second)
+        return false;
+    s_index_cache.erase(track_dir);
+    s_index_stamp.erase(track_dir);
+    return true;
 }
 
 // --- Static write method ---

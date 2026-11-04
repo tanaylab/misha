@@ -88,6 +88,26 @@ void GenomeTrackSparse::read_header_at_current_pos_(BufferedFile &bf)
 
 void GenomeTrackSparse::init_read(const char *filename, int chromid)
 {
+	// An indexed track whose track.idx another session replaced since this process cached it would
+	// be read at the old offsets. The cached index is checked against the file once per track and
+	// call, where the track's type is read (GenomeTrack::get_type); a size or signature error that is
+	// still met (a track read without that, or replaced in between) has the read done once more
+	// with the index as it is now and track.dat reopened (a handle kept open from before may be the
+	// replaced file). An error with the current index is raised as it is.
+	const std::string track_dir = GenomeTrack::get_track_dir(filename);
+	try {
+		init_read_once(filename, chromid);
+	} catch (TGLException &) {
+		if (!drop_stale_index(track_dir) && !m_dat_open)
+			throw;
+		m_bfile.close();
+		m_dat_open = false;
+		init_read_once(filename, chromid);
+	}
+}
+
+void GenomeTrackSparse::init_read_once(const char *filename, int chromid)
+{
 	m_loaded = false; // Critical for read_file_into_mem()
 	m_fast_path_mode = 0;
 	uint64_t header_start = 0;
@@ -121,6 +141,8 @@ void GenomeTrackSparse::init_read(const char *filename, int chromid)
 			return;
 		}
 
+		if (entry->offset + entry->length > (uint64_t)m_bfile.file_size())
+			TGLError<GenomeTrackSparse>("Index entry of chromosome %d extends past the end of %s", chromid, dat_path.c_str());
 		if (m_bfile.seek(entry->offset, SEEK_SET))
 			TGLError<GenomeTrackSparse>("Failed to seek to offset %llu in %s",
 				(unsigned long long)entry->offset, dat_path.c_str());

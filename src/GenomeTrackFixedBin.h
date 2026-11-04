@@ -105,6 +105,7 @@ protected:
 	bool        m_dat_open{false};
 
 	void init_read(const char *filename, const char *mode, int chromid, bool setup_mmap = true);
+	void init_read_once(const char *filename, const char *mode, int chromid, bool setup_mmap);
 
 	// Helper to parse header at current file position
 	void read_header_at_current_pos_(BufferedFile &bf);
