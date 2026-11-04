@@ -353,6 +353,10 @@ public:
 	// Returns the upper limit for memory usage
 	uint64_t get_max_mem_usage() const { return m_config.get_max_mem_usage(); }
 
+	// Size in bytes of the multitasking shared memory that distribute_task() maps when the size
+	// asked for by the data size limit cannot be mapped (see there)
+	uint64_t get_ram_shm_size() const;
+
 	// Returns the threshold for creating a big intervals set
 	uint64_t get_big_intervals_size() const { return m_config.get_big_intervals_size(); }
 

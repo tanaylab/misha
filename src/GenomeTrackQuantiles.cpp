@@ -325,6 +325,10 @@ SEXP gquantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 			uint64_t estimated_bins = iu.estimate_num_bins(_iterator_policy, intervals1d, intervals2d);
 			if (estimated_bins > 0 && estimated_bins < kid_rnd_sampling_buf_size)
 				kid_rnd_sampling_buf_size = estimated_bins;
+			// Each kid's sample goes into the shared memory as a fixed-size block. With no data size
+			// limit (gmax.data.size = Inf) the blocks alone would not fit into any arena that can be
+			// mapped, so they share the RAM-sized one distribute_task() falls back to.
+			kid_rnd_sampling_buf_size = min(kid_rnd_sampling_buf_size, iu.get_ram_shm_size() / ((uint64_t)num_kids * sizeof(double)));
 			uint64_t kid_lowest_vals_buf_size = iu.get_quantile_edge_data_size();
 			uint64_t kid_highest_vals_buf_size = iu.get_quantile_edge_data_size();
 

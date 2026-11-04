@@ -299,3 +299,32 @@ test_that("NA breaks are rejected and integer NA breaks are not -2^31", {
     expect_error(gdist("test.fixedbin", c(0L, NA, 2L), intervals = scope), "NA")
     expect_error(gpartition("test.fixedbin", c(0, NaN, 1), scope), "NA")
 })
+
+test_that("with gmax.data.size = Inf or unset, multitasked calls map a RAM-sized arena and give the serial results", {
+    s <- gintervals(c(1, 2), 0, 2e7)
+    iv <- giterator.intervals(intervals = s, iterator = 1e6)
+    run <- function() {
+        list(
+            gquantiles("test.fixedbin", c(0.1, 0.5, 0.9), s),
+            gintervals.quantiles("test.fixedbin", c(0.1, 0.5, 0.9), iv),
+            gintervals.mapply(max, "test.fixedbin", intervals = iv),
+            glookup(1:2, "test.fixedbin", c(0, 0.15, 1), intervals = s)
+        )
+    }
+    withr::local_options(gmultitasking = FALSE)
+    expected <- run()
+    withr::local_options(gmultitasking = TRUE, gmax.processes = 4)
+    for (limit in list(Inf, NULL)) {
+        withr::local_options(gmax.data.size = limit)
+        t0 <- proc.time()[["user.child"]]
+        expect_equal(run(), expected)
+        # the kids ran: their CPU time is the parent's child time
+        expect_gt(proc.time()[["user.child"]], t0)
+    }
+
+    # a result that does not fit into the arena (here bounded by gmax.mem.usage, in KB) is an
+    # error; gextract still falls back to a serial run
+    withr::local_options(gmax.data.size = Inf, gmax.mem.usage = 10)
+    expect_error(glookup(1:2, "test.fixedbin", c(0, 0.15, 1), intervals = s), "Result size exceeded")
+    expect_equal(nrow(gextract("test.fixedbin", s)), nrow(expected[[4]]))
+})
