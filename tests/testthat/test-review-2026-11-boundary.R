@@ -226,12 +226,10 @@ test_that("gintervals.load_chain accepts an integer min_score", {
 test_that("logical flags are TRUE or FALSE, not NA", {
     a <- data.frame(chrom = "chr1", start = c(100, 5000), end = c(200, 5100))
     b <- data.frame(chrom = "chr1", start = c(1000, 5300), end = c(1100, 5400))
-    big <- gintervals(1, 0, 1e6)
+    # (gsegment and gwilcox already stop on onetailed = NA in R, before the C++ check)
     expect_error(glookup(1:2, "test.fixedbin", c(0, 0.1, 1), intervals = scope, force.binning = NA), "force.binning")
     expect_error(gintervals.neighbors(a, b, na.if.notfound = NA), "na.if.notfound")
     expect_error(gintervals.neighbors(a, b, use_intervals1_strand = NA), "use_intervals1_strand")
-    expect_error(gsegment("test.fixedbin", 10000, 0.0001, onetailed = NA, intervals = big), "One-tailed")
-    expect_error(gwilcox("test.fixedbin", 100000, 1000, onetailed = NA, intervals = big), "One-tailed")
     withr::defer(if (gtrack.exists("temp.review_smooth_na")) gtrack.rm("temp.review_smooth_na", force = TRUE))
     expect_error(gtrack.smooth("temp.review_smooth_na", "", "test.fixedbin", 1000, smooth_nans = NA), "nans")
 })
@@ -262,4 +260,31 @@ test_that("a chain data frame with a numeric chromsrc is read; character strands
     expect_identical(.glifetime_counters(), c(ref_count = 0L, protect_count = 0L))
     expect_error(gintervals.liftover(src, transform(chain, chromsrc = NA_integer_)), "Invalid format")
     expect_identical(.glifetime_counters(), c(ref_count = 0L, protect_count = 0L))
+})
+
+test_that("options(gmax.data.size = Inf) is no limit for gbins.quantiles, gtrack.2d.import and a cartesian grid iterator", {
+    vals <- gextract("test.fixedbin", scope)$test.fixedbin
+    breaks <- c(0, 0.1, 0.2, 1)
+    expected <- tapply(vals, cut(vals, breaks), max)
+    withr::local_options(gmax.data.size = Inf)
+    res <- gbins.quantiles("test.fixedbin", breaks, expr = "test.fixedbin", percentiles = 1, intervals = scope)
+    expect_equal(unname(res[, 1]), unname(as.numeric(expected)), tolerance = 1e-6)
+
+    withr::defer(if (gtrack.exists("temp.review_2d_inf")) gtrack.rm("temp.review_2d_inf", force = TRUE))
+    set.seed(1)
+    n <- 5000
+    pts <- data.frame(chrom1 = "chr1", start1 = sample(1e6, n) - 1, chrom2 = "chr2", start2 = sample(1e6, n) - 1, value = seq_len(n))
+    pts$end1 <- pts$start1 + 1
+    pts$end2 <- pts$start2 + 1
+    f <- tempfile(fileext = ".tsv")
+    write.table(pts[, c("chrom1", "start1", "end1", "chrom2", "start2", "end2", "value")], f, sep = "\t", quote = FALSE, row.names = FALSE)
+    gtrack.2d.import("temp.review_2d_inf", "", f)
+    got <- gextract("temp.review_2d_inf", gintervals.2d(1, 0, 1e6, 2, 0, 1e6))
+    expect_equal(sort(got$temp.review_2d_inf), as.numeric(seq_len(n)))
+
+    # a limit above 2^31 used to be truncated to int by the 2D big set and cartesian grid iterators
+    withr::local_options(gmax.data.size = 2^32)
+    intervs <- gintervals(1, c(1000, 50000), c(2000, 51000))
+    itr <- giterator.cartesian_grid(intervs, c(-100, 100))
+    expect_equal(nrow(giterator.intervals(intervals = gintervals.2d(1), iterator = itr)), 4)
 })

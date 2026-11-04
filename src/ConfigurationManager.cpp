@@ -96,6 +96,11 @@ uint64_t ConfigurationManager::get_min_seqs_work4process() const
 	return m_min_seqs_work4process;
 }
 
+// What gmax.data.size means by "no limit" (Inf, a value of 2^53 or more, or the option unset).
+// The limit is multiplied by record and element sizes to size buffers and the multitasking shared
+// memory; UINT64_MAX overflowed there (multitasked gquantiles crashed its kids), 2^53 cannot.
+static const uint64_t MAX_DATA_SIZE_NO_LIMIT = (uint64_t)1 << 53;
+
 uint64_t ConfigurationManager::get_max_data_size() const
 {
 	if (!m_max_data_size) {
@@ -105,19 +110,19 @@ uint64_t ConfigurationManager::get_max_data_size() const
 			double size = num_elt(r_max_data_size, 0);
 
 			// Casting NA, Inf, a negative value or one of 2^64 or more to uint64_t is undefined.
-			// Inf and any value a uint64_t cannot hold mean no limit. A value in [0, 1) counts as 1,
+			// Inf and any value of 2^53 or more mean no limit. A value in [0, 1) counts as 1,
 			// as in gtrack.liftover: 0 could not be told apart from "not read yet" above, and a
 			// quantile sampling buffer of size 0 crashed R.
 			if (std::isnan(size))
 				verror("options(gmax.data.size) must be a number, not NA");
 			if (size < 0)
 				verror("options(gmax.data.size) must not be negative (got %g)", size);
-			if (size >= (double)misha::config::UNLIMITED)
-				m_max_data_size = misha::config::UNLIMITED;
+			if (size >= (double)MAX_DATA_SIZE_NO_LIMIT)
+				m_max_data_size = MAX_DATA_SIZE_NO_LIMIT;
 			else
 				m_max_data_size = size < 1 ? 1 : (uint64_t)size;
 		} else
-			m_max_data_size = misha::config::UNLIMITED;
+			m_max_data_size = MAX_DATA_SIZE_NO_LIMIT;
 	}
 	return m_max_data_size;
 }

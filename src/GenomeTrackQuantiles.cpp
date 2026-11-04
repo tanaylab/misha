@@ -1303,7 +1303,7 @@ SEXP gbins_quantiles(SEXP _track_exprs, SEXP _breaks, SEXP _include_lowest, SEXP
 					uint64_t old_buf_size = sp.cur_rnd_sampling_buf_size();
 					sp.add(val, unif_rand);
 					data_size += sp.cur_rnd_sampling_buf_size() - old_buf_size;
-					if (data_size > (int64_t)iu.get_max_data_size())
+					if ((uint64_t)data_size > iu.get_max_data_size())
 						verror("Memory limit was reached. To reduce memory usage you can lower down the number of bins.\n"
 								"Note: the memory limit is controlled via gmax.data.size option (see options, getOptions).");
 				}
