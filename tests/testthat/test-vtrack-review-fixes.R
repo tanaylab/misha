@@ -236,3 +236,88 @@ test_that("positions of sparse, value-based and array values are clipped to the 
     expect_equal(r$a_max, 0)
     expect_equal(r$a_min, 400 - 318)
 })
+
+# Scores of the windows starting at 0-based offsets `anchors` of `bases`, read on the forward (strand 1) or the
+# reverse (strand -1) strand. A window holding anything but A, C, G or T is not scored (-Inf).
+vt_ref_window_scores <- function(bases, lp, anchors, strand) {
+    L <- nrow(lp)
+    comp <- c(A = "T", C = "G", G = "C", T = "A")
+    vapply(anchors, function(a) {
+        w <- bases[a + seq_len(L)]
+        if (any(!w %in% c("A", "C", "G", "T"))) {
+            return(-Inf)
+        }
+        if (strand == -1) w <- rev(comp[w])
+        sum(lp[cbind(seq_len(L), match(w, c("A", "C", "G", "T")))])
+    }, numeric(1))
+}
+
+vt_lse <- function(x) {
+    m <- max(x)
+    if (!is.finite(m)) {
+        return(m)
+    }
+    m + log(sum(exp(x - m)))
+}
+
+test_that("pwm vtracks never score a window holding N or another non-ACGT base, on any path", {
+    local_db_state()
+    set.seed(5)
+    s <- sample(c("A", "C", "G", "T"), 400, TRUE)
+    s[101:106] <- "N"
+    s[201] <- "R"
+    s[250:255] <- "Y"
+    setup_db(list(sprintf(">chr1\n%s\n", paste(s, collapse = ""))), return_db = TRUE)
+    withr::defer(gvtrack.clear())
+    pssm <- vt_fix_pssm()
+    lp <- log(pssm)
+    L <- nrow(pssm)
+
+    gvtrack.create("n_pwm", NULL, "pwm", pssm = pssm, prior = 0)
+    gvtrack.create("n_max", NULL, "pwm.max", pssm = pssm, prior = 0)
+    gvtrack.create("n_pos", NULL, "pwm.max.pos", pssm = pssm, prior = 0, bidirect = FALSE)
+    gvtrack.create("n_fmax", NULL, "pwm.max", pssm = pssm, prior = 0, bidirect = FALSE)
+    gvtrack.create("n_spw", NULL, "pwm.max", pssm = pssm, prior = 0, spat_factor = c(1, 2), spat_bin = 5L)
+    gvtrack.create("n_sp", NULL, "pwm", pssm = pssm, prior = 0, spat_factor = c(1, 2), spat_bin = 5L)
+
+    # intervals next to and over the N run, the R and the Y run; anchors whose windows reach past an
+    # interval's end use the bases after it (extend = TRUE)
+    starts <- c(90, 95, 100, 190, 196, 240, 245, 300)
+    for (st in starts) {
+        iv <- gintervals("chr1", st, st + 10)
+        anchors <- st + 0:9
+        fwd <- vt_ref_window_scores(s, lp, anchors, 1)
+        rev <- vt_ref_window_scores(s, lp, anchors, -1)
+        both <- mapply(function(a, b) vt_lse(c(a, b)), fwd, rev)
+        spat_w <- log(c(1, 2)[pmin(0:9 %/% 5 + 1, 2)])
+        r <- gextract(c("n_pwm", "n_max", "n_pos", "n_fmax", "n_spw", "n_sp"), iv, iterator = iv)
+        expect_equal(r$n_pwm, vt_lse(both), tolerance = 1e-4, info = paste(st))
+        expect_equal(r$n_max, max(both), tolerance = 1e-4, info = paste(st))
+        expect_equal(r$n_fmax, max(fwd), tolerance = 1e-4, info = paste(st))
+        if (is.finite(max(fwd))) {
+            expect_equal(r$n_pos, which.max(fwd), info = paste(st))
+        } else {
+            expect_true(is.na(r$n_pos), info = paste(st))
+        }
+        expect_equal(r$n_spw, max(both + spat_w), tolerance = 1e-4, info = paste(st))
+        expect_equal(r$n_sp, vt_lse(both + spat_w), tolerance = 1e-4, info = paste(st))
+
+        # the spatial value of an interval does not depend on the interval scored before it
+        two <- gintervals("chr1", c(10, st), c(20, st + 10))
+        expect_equal(gextract("n_spw", two, iterator = two)$n_spw[2], r$n_spw, info = paste(st))
+    }
+
+    # the same over overlapping windows in one call, where the sliding caches run
+    ivs <- gintervals("chr1", 85:120, 95:130)
+    r <- gextract(c("n_pwm", "n_max", "n_spw", "n_sp"), ivs, iterator = ivs)
+    r <- r[order(r$intervalID), ]
+    spat_w <- log(c(1, 2)[pmin(0:9 %/% 5 + 1, 2)])
+    for (k in seq_len(nrow(ivs))) {
+        anchors <- ivs$start[k] + 0:9
+        both <- mapply(function(a, b) vt_lse(c(a, b)), vt_ref_window_scores(s, lp, anchors, 1), vt_ref_window_scores(s, lp, anchors, -1))
+        expect_equal(r$n_pwm[k], vt_lse(both), tolerance = 1e-4, info = paste(ivs$start[k]))
+        expect_equal(r$n_max[k], max(both), tolerance = 1e-4, info = paste(ivs$start[k]))
+        expect_equal(r$n_spw[k], max(both + spat_w), tolerance = 1e-4, info = paste(ivs$start[k]))
+        expect_equal(r$n_sp[k], vt_lse(both + spat_w), tolerance = 1e-4, info = paste(ivs$start[k]))
+    }
+})
