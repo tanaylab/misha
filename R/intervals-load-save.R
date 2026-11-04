@@ -613,6 +613,19 @@
     }
 }
 
+# The chrom (chrom1, chrom2) columns of an intervals frame with aliases ("1", "MT") replaced by the
+# canonical names (a factor in the genome's order); columns of canonical names only are kept as they are
+.gintervals.canonical_chroms <- function(intervs) {
+    allchroms <- as.character(get("ALLGENOME", envir = .misha)[[1]]$chrom)
+    for (col in intersect(c("chrom", "chrom1", "chrom2"), colnames(intervs))) {
+        chroms <- intervs[[col]]
+        if (!all((if (is.factor(chroms)) levels(chroms) else unique(chroms)) %in% allchroms)) {
+            intervs[[col]] <- .gchroms(as.character(chroms))
+        }
+    }
+    intervs
+}
+
 # Normalize an intervals frame to the canonical on-disk shape:
 #   - plain data.frame (so C++ grbind on round-trip accepts it),
 #   - chrom (or chrom1/chrom2) as factor with the full ALLGENOME level set
@@ -625,11 +638,20 @@
         intervs <- as.data.frame(intervs, stringsAsFactors = FALSE)
     }
     all_levels <- as.character(get("ALLGENOME", envir = .misha)[[1]]$chrom)
+    # an alias ("1", "MT") is stored by its canonical name; a name that is neither is an error, not NA
+    as_levels <- function(chroms) {
+        chroms <- as.character(chroms)
+        res <- factor(chroms, levels = all_levels)
+        if (anyNA(res)) {
+            res <- factor(as.character(.gchroms(chroms)), levels = all_levels)
+        }
+        res
+    }
     if (.gintervals.is1d(intervs)) {
-        intervs$chrom <- factor(as.character(intervs$chrom), levels = all_levels)
+        intervs$chrom <- as_levels(intervs$chrom)
     } else if (.gintervals.is2d(intervs)) {
-        intervs$chrom1 <- factor(as.character(intervs$chrom1), levels = all_levels)
-        intervs$chrom2 <- factor(as.character(intervs$chrom2), levels = all_levels)
+        intervs$chrom1 <- as_levels(intervs$chrom1)
+        intervs$chrom2 <- as_levels(intervs$chrom2)
     }
     intervs
 }

@@ -385,6 +385,12 @@ gintervals.save <- function(intervals.set.out = NULL, intervals = NULL) {
 
     intervals.set.out <- do.call(.gexpr2str, list(substitute(intervals.set.out)), envir = parent.frame())
 
+    # aliases ("1", "MT") by their canonical names: the big-set path below takes each chromosome's
+    # rows by the canonical name, and would drop the others
+    if (is.data.frame(intervals)) {
+        intervals <- .gintervals.canonical_chroms(intervals)
+    }
+
     # Fast path: for plain data frames that don't need bigset format, save directly
     # This avoids per-chromosome iteration which is O(n*m) for n rows and m chromosomes
     # We skip this fast path if the data needs bigset format (per-chromosome files)
