@@ -114,7 +114,8 @@ SEXP gcreate_pwm_energy(SEXP _track, SEXP _pssmset, SEXP _pssmid, SEXP _prior, S
 					verror("Unrecognized type of iterator");
 			}
 
-			GInterval seq_interval(last_interval.chromid, last_interval.start, last_interval.end + pssm.size(), 0);
+			// windows starting in [start, end), as in the pwm virtual track
+			GInterval seq_interval(last_interval.chromid, last_interval.start, last_interval.end + pssm.size() - 1, 0);
 
 			if (seq_interval.end > icur_scope->end)
 				seq_interval.end = icur_scope->end;
@@ -265,7 +266,8 @@ SEXP gcreate_pwm_energy_multitask(SEXP _track, SEXP _pssmset, SEXP _pssmid, SEXP
 						verror("Unrecognized type of iterator");
 				}
 
-				GInterval seq_interval(last_interval.chromid, last_interval.start, last_interval.end + pssm.size(), 0);
+				// windows starting in [start, end), as in the pwm virtual track
+				GInterval seq_interval(last_interval.chromid, last_interval.start, last_interval.end + pssm.size() - 1, 0);
 
 				if (seq_interval.end > icur_scope->end)
 					seq_interval.end = icur_scope->end;

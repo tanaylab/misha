@@ -4,6 +4,8 @@ This release fixes defects found in a review of 5.14.4. Several change results, 
 
 * **Behavior fix:** PWM scoring never uses a window that holds N or another non-ACGT base, in every function: the PWM virtual tracks (`pwm.max.pos` and spatially weighted `pwm`/`pwm.max` used to charge N the column mean and score IUPAC codes as perfect matches), `gseq.pwm()`, the edit distance functions (`pwm.edit_distance*`, `pwm.max.edit_distance`, `pwm.n_mutations`, `gseq.pwm_edits()`) and `gtrack.create_pwm_energy()`. `gseq.pwm()` now defaults to `neutral_chars = character(0)`; pass `neutral_chars = c("N", "n", "*")` for the old scores. An interval with no scorable window gives NA (`gseq.pwm(mode = "pos")` used to return 1), and a `gtrack.create_pwm_energy()` bin with none is NaN.
 
+* **Behavior fix:** `gtrack.create_pwm_energy()` scores the windows that start in each bin, as the `pwm` virtual track does; it also scored the window starting at the bin's end.
+
 * **Behavior fix:** with `bidirect = FALSE, strand = -1`, `spat_factor`/`spat_bin` and `spat_min`/`spat_max` count from the interval's 5' start, as with `strand = 1` and in `gseq.pwm()`.
 
 * **Behavior fix:** `pwm.edit_distance.lse` and `pwm.edit_distance.lse.pos` with `bidirect = TRUE` target the strand-combined score that the `pwm` virtual track returns; each substitution changes both strands.

@@ -640,8 +640,8 @@ test_that("gtrack.create_pwm_energy leaves out windows holding N; an interval wi
     withr::defer(gtrack.rm("en", force = TRUE))
     r <- gextract("en", gintervals("chr1", 60, 340))
     for (k in seq_len(nrow(r))) {
-        # windows anchored at start..end of the bin (the sequence read is [start, end + L))
-        anchors <- r$start[k]:r$end[k]
+        # windows starting in [start, end) of the bin, as in the pwm vtrack
+        anchors <- r$start[k]:(r$end[k] - 1)
         anchors <- anchors[anchors + L <= 400]
         expected <- vt_lse(vt_ref_window_scores(s, lp, anchors, 1))
         # a track stores -Inf as NaN
