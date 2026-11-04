@@ -142,3 +142,21 @@ test_that("sequence and value-based vtracks under a 2D iterator need a dimension
     gvtrack.iterator("val2d", dim = 1)
     expect_equal(gextract("val2d", it2d, iterator = it2d)$val2d, 5)
 })
+
+test_that("gseq.kmer.dist(mask =) leaves out k-mers that reach into the mask", {
+    iv <- gintervals("chr1", 0, 2000)
+    mask <- gintervals("chr1", c(150, 1000), c(160, 1001))
+    k <- 3
+    s <- strsplit(toupper(gseq.extract(iv)), "")[[1]]
+    masked <- rep(FALSE, length(s))
+    masked[151:160] <- TRUE
+    masked[1001] <- TRUE
+    starts <- seq_len(length(s) - k + 1)
+    keep <- vapply(starts, function(p) !any(masked[p:(p + k - 1)]) && all(s[p:(p + k - 1)] %in% c("A", "C", "G", "T")), logical(1))
+    kmers <- vapply(starts[keep], function(p) paste(s[p:(p + k - 1)], collapse = ""), character(1))
+    expected <- table(kmers)
+
+    r <- gseq.kmer.dist(iv, k = k, mask = mask)
+    expect_equal(sum(r$count), length(kmers))
+    expect_equal(r$count[match(names(expected), r$kmer)], as.numeric(expected))
+})
