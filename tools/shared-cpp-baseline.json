@@ -46,7 +46,8 @@
   },
   "DnaPSSM.cpp": {
     "identical": false,
-    "misha": "d00460e7a1336a42",
+    "misha": "826b850974a92f02",
+    "needs_port": true,
     "pymisha": "75ade07fd0661cdc"
   },
   "DnaPSSM.h": {
@@ -121,17 +122,20 @@
   },
   "GenomeTrack1D.h": {
     "identical": false,
-    "misha": "de07199c6d1a7275",
+    "misha": "2cac3dfec1d5bec3",
+    "needs_port": true,
     "pymisha": "20316cc996a5e4ab"
   },
   "GenomeTrackFixedBin.cpp": {
     "identical": false,
-    "misha": "3469cf82e4d809f9",
+    "misha": "2e332c2c6cecbbe1",
+    "needs_port": true,
     "pymisha": "9259e2835cbeb971"
   },
   "GenomeTrackFixedBin.h": {
     "identical": false,
-    "misha": "f5f4ffc6c5099e43",
+    "misha": "83f0f72f7642fb21",
+    "needs_port": true,
     "pymisha": "92dbe81aa88dc406"
   },
   "GenomeTrackSparse.cpp": {
@@ -141,7 +145,8 @@
   },
   "GenomeTrackSparse.h": {
     "identical": false,
-    "misha": "7d1193c2f65cf9c4",
+    "misha": "858a9d152c640e86",
+    "needs_port": true,
     "pymisha": "11a999628ae7c941"
   },
   "GenomeUtils.cpp": {
@@ -200,8 +205,9 @@
     "pymisha": "adca921a2f225b60"
   },
   "PWMEditDistanceScorer.cpp": {
-    "identical": true,
-    "misha": "fec8ecdb336bfff0",
+    "identical": false,
+    "misha": "bfff75719b6346d5",
+    "needs_port": true,
     "pymisha": "fec8ecdb336bfff0"
   },
   "PWMEditDistanceScorer.h": {
@@ -210,23 +216,27 @@
     "pymisha": "cab8e4c57251c742"
   },
   "PWMLseEditDistanceScorer.cpp": {
-    "identical": true,
-    "misha": "c7399bd3358f1b57",
+    "identical": false,
+    "misha": "d746440187cd3ed0",
+    "needs_port": true,
     "pymisha": "c7399bd3358f1b57"
   },
   "PWMLseEditDistanceScorer.h": {
-    "identical": true,
-    "misha": "86562faa92bdc537",
+    "identical": false,
+    "misha": "bcc64d499b16ed4a",
+    "needs_port": true,
     "pymisha": "86562faa92bdc537"
   },
   "PWMScorer.cpp": {
     "identical": false,
-    "misha": "4fdbd49b6e3f05b8",
+    "misha": "55ef3419a2fe397d",
+    "needs_port": true,
     "pymisha": "1f8076ea6beddbd1"
   },
   "PWMScorer.h": {
     "identical": false,
-    "misha": "48ef4a19da7902f4",
+    "misha": "efff596fe5edb60f",
+    "needs_port": true,
     "pymisha": "f87f2c79a1aa305d"
   },
   "Parquet.cpp": {
@@ -296,13 +306,13 @@
   },
   "StatQuadTreeCached.h": {
     "identical": true,
-    "misha": "c59f520a8af49a33",
-    "pymisha": "c59f520a8af49a33"
+    "misha": "2bfc46d2af4d519b",
+    "pymisha": "2bfc46d2af4d519b"
   },
   "StatQuadTreeCachedSerializer.h": {
     "identical": true,
-    "misha": "7be1cf3bf20c6baa",
-    "pymisha": "7be1cf3bf20c6baa"
+    "misha": "27e1975829fc753d",
+    "pymisha": "27e1975829fc753d"
   },
   "StratifiedMarkovModel.cpp": {
     "identical": false,
