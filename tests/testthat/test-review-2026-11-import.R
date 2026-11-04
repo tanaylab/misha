@@ -76,3 +76,29 @@ test_that("gtrack.2d.import_contacts reads a fends file not sorted by fend id", 
     expect_error(gtrack.2d.import_contacts("neg_fend", "", contacts, neg), "fend is out of range")
     expect_false(gtrack.exists("neg_fend"))
 })
+
+test_that("gtrack.create_dense validates the intervals as gtrack.create_sparse does", {
+    import_test_db("indexed")
+
+    expect_error(
+        gtrack.create_dense("neg", "", data.frame(chrom = "chr1", start = c(-10, 20), end = c(50, 60)), c(1, 3), 100),
+        "start coordinate must be greater or equal than zero"
+    )
+    expect_error(
+        gtrack.create_dense("rev", "", data.frame(chrom = "chr1", start = c(50, 20), end = c(10, 60)), c(1, 3), 100),
+        "start coordinate must be lesser than end coordinate"
+    )
+    expect_error(
+        gtrack.create_dense("na", "", data.frame(chrom = "chr1", start = c(NA, 20), end = c(10, 60)), c(1, 3), 100),
+        "Invalid format of interval at index 1"
+    )
+    expect_error(
+        gtrack.create_dense("past_end", "", data.frame(chrom = "chr1", start = 9990, end = 10010), 1, 100),
+        "end coordinate exceeds chromosome boundaries"
+    )
+    expect_false(any(gtrack.exists(c("neg", "rev", "na", "past_end"))))
+
+    # aliases still resolve
+    gtrack.create_dense("alias", "", data.frame(chrom = c("1", "MT"), start = c(0, 0), end = c(50, 100)), c(2, 5), 100)
+    expect_equal(gextract("alias", gintervals(c("chr1", "chrM"), 0, 100))$alias, c(2, 5))
+})

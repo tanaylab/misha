@@ -72,27 +72,15 @@ SEXP gtrack_create_dense(SEXP _track, SEXP _data_frame, SEXP _binsize, SEXP _def
         string dirname = create_track_dir(_envir, track);
         IntervUtils iu(_envir);
 
-        // Process data and create intervals
+        // Convert the data frame to intervals and values. convert_rintervs validates the intervals
+        // (known chromosome, no NA, 0 <= start < end <= chromosome size) as gtrack.create_sparse does.
         GIntervals data;
         vector<float> values;
 
-        // Convert data frame to GIntervals and values
-        for (int i = 0; i < num_rows; i++) {
-            const char *chrom = CHAR(STRING_ELT(chrom_col, i));
-            double start = Rf_isReal(start_col) ? REAL(start_col)[i] : INTEGER(start_col)[i];
-            double end = Rf_isReal(end_col) ? REAL(end_col)[i] : INTEGER(end_col)[i];
-            float value = Rf_isReal(value_col) ? REAL(value_col)[i] : INTEGER(value_col)[i];
-
-            int chromid = iu.get_chromkey().chrom2id(chrom);
-            if (chromid < 0)
-                continue; // Skip unknown chromosomes
-
-            GInterval interval;
-            interval.chromid = chromid;
-            interval.start = (int64_t)start;
-            interval.end = (int64_t)end;
-            data.push_back(interval);
-            values.push_back(value);
+        iu.convert_rintervs(_data_frame, &data, NULL);
+        for (const GInterval &interval : data) {
+            uint64_t i = iu.get_orig_interv_idx(interval);
+            values.push_back(Rf_isReal(value_col) ? REAL(value_col)[i] : INTEGER(value_col)[i]);
         }
 
         // Sort intervals
