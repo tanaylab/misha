@@ -322,7 +322,7 @@
         track_db[[track]] <- db
         assign("GTRACK_DATASET", track_db, envir = .misha)
 
-        .gdb.cache_update_lists(db)
+        .gdb.cache_update_lists(db, track, "tracks", add = TRUE)
     }
 }
 
@@ -407,10 +407,8 @@
         assign("GTRACKS", tracks, envir = .misha)
         assign("GTRACK_DATASET", track_db, envir = .misha)
 
-        .gdb.cache_update_lists(db)
-        if (!is.null(new_db) && new_db != db) {
-            .gdb.cache_update_lists(new_db)
-        }
+        # (the database the name falls back to, new_db, lists it already)
+        .gdb.cache_update_lists(db, track, "tracks", add = FALSE)
     }
 }
 
@@ -454,7 +452,7 @@
         intervals_db[[intervals.set]] <- db
         assign("GINTERVALS_DATASET", intervals_db, envir = .misha)
 
-        .gdb.cache_update_lists(db)
+        .gdb.cache_update_lists(db, intervals.set, "intervals", add = TRUE)
     }
 }
 
@@ -503,6 +501,6 @@
         assign("GINTERVS", intervals, envir = .misha)
         assign("GINTERVALS_DATASET", intervals_db, envir = .misha)
 
-        .gdb.cache_update_lists(db)
+        .gdb.cache_update_lists(db, intervals.set, "intervals", add = FALSE)
     }
 }

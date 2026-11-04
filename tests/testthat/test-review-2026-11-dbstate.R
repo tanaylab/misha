@@ -341,3 +341,65 @@ test_that("gtrack.copy(overwrite = TRUE) killed once the copy is in place leaves
     expect_equal(res$start, 100)
     expect_equal(res$orig, 7)
 })
+
+# Another session on the same database: a forked child, which starts with a copy of this session's
+# state and writes to the same files
+in_other_session <- function(expr) {
+    job <- parallel::mcparallel(withr::with_options(list(gmultitasking = FALSE), {
+        expr
+        TRUE
+    }))
+    res <- parallel::mccollect(job)[[1]]
+    if (!isTRUE(res)) stop("the other session failed: ", format(res))
+    invisible()
+}
+
+read_cache <- function(db) {
+    f <- file(file.path(db, ".db.cache"), "rb")
+    on.exit(close(f))
+    unserialize(f)
+}
+
+test_that(".db.cache keeps the tracks and interval sets another session created or removed", {
+    skip_on_os("windows")
+    local_db_state()
+    db <- review_db(withr::local_tempdir())
+    gtrack.create_sparse("t1", "", gintervals("chr1", 0, 10), 1)
+
+    in_other_session({
+        gtrack.create_sparse("t2", "", gintervals("chr1", 0, 10), 2)
+        gintervals.save("iB", gintervals("chr1", 0, 10))
+    })
+    # this session's lists predate t2 and iB
+    gtrack.create_sparse("t3", "", gintervals("chr1", 0, 10), 3)
+    gintervals.save("iA", gintervals("chr1", 0, 10))
+    expect_setequal(read_cache(db)[[1]], c("t1", "t2", "t3"))
+    expect_setequal(read_cache(db)[[2]], c("iA", "iB"))
+    expect_false(.gdb.cache_is_dirty(db))
+
+    # a new session reads the cache
+    suppressMessages(gsetroot(db))
+    expect_setequal(gtrack.ls(), c("t1", "t2", "t3"))
+    expect_setequal(gintervals.ls(), c("iA", "iB"))
+
+    # the other session removes t2, then this one writes
+    in_other_session(gtrack.rm("t2", force = TRUE))
+    gtrack.create_sparse("t4", "", gintervals("chr1", 0, 10), 4)
+    expect_setequal(read_cache(db)[[1]], c("t1", "t3", "t4"))
+})
+
+test_that("a write leaves a .db.cache that another session marked dirty dirty, and a rescan clears it", {
+    local_db_state()
+    db <- review_db(withr::local_tempdir())
+    dirty <- file.path(db, ".db.cache.dirty")
+    writeLines("set by another session", dirty)
+
+    gtrack.create_sparse("t5", "", gintervals("chr1", 0, 10), 5)
+    expect_equal(readLines(dirty), "set by another session")
+    gintervals.rm("nothing_here", force = TRUE)
+    expect_true(file.exists(dirty))
+
+    suppressMessages(gdb.reload())
+    expect_false(file.exists(dirty))
+    expect_true("t5" %in% read_cache(db)[[1]])
+})

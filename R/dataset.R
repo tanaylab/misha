@@ -796,6 +796,8 @@ gdataset.example_path <- function() {
         return(list(tracks = character(0), intervals = character(0)))
     }
 
+    # the dirty flag as it is before the scan (.gdb.cache_clear_dirty())
+    dirty_token <- .gdb.cache_dirty_token(db)
     res <- .gcall("gfind_tracks_n_intervals", tracks_dir, .misha_env())
     if (is.null(res)) {
         return(list(tracks = character(0), intervals = character(0)))
@@ -810,7 +812,7 @@ gdataset.example_path <- function() {
             f <- .gwith_umask(file(cache_path, "wb"))
             serialize(list(tracks, intervals), f)
             close(f)
-            .gdb.cache_clear_dirty(db)
+            .gdb.cache_clear_dirty(db, dirty_token)
         },
         silent = TRUE
     )
