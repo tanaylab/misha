@@ -90,3 +90,23 @@ test_that("gintervals.update refuses an interval set of a loaded dataset", {
     expect_false(file.exists(file.path(work, "tracks", "dbig.interv")))
     expect_equal(gintervals.load("dsmall")$start, 300)
 })
+
+test_that("interval set attributes survive gintervals.update moving a set between small and big", {
+    local_db_state()
+    db <- review_db(withr::local_tempdir())
+    withr::local_options(gmax.data.size = 30)
+    gintervals.save("at1", gintervals("chr1", seq(0, 900, 100), seq(50, 950, 100)))
+    expect_false(dir.exists(file.path(db, "tracks", "at1.interv")))
+    gintervals.attr.set("at1", "source", "lab")
+
+    # small to big
+    gintervals.update("at1", gintervals("chrX", seq(0, 2900, 100), seq(50, 2950, 100)), chrom = "chrX")
+    expect_true(dir.exists(file.path(db, "tracks", "at1.interv")))
+    expect_equal(gintervals.attr.get("at1", "source"), "lab")
+    expect_false(file.exists(file.path(db, "tracks", "at1.iattr")))
+
+    # big to small
+    gintervals.update("at1", NULL, chrom = "chrX")
+    expect_false(dir.exists(file.path(db, "tracks", "at1.interv")))
+    expect_equal(gintervals.attr.get("at1", "source"), "lab")
+})

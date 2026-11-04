@@ -90,6 +90,8 @@
     path <- paste(path, ".interv", sep = "")
 
     intervals <- .gintervals.load(intervals.set)
+    # the attributes, kept inside a big set's directory and next to a small set's file (.gintervals.attr_path)
+    attrs <- .gintervals.attr_read(file.path(path, ".iattr"))
     tmpfilename <- tempfile(".", dirname(path)) # tmpdir = the parent directory of intervals set, otherwise rename might not work
     # (tmpdir might be at another file system)
     file.rename(path, tmpfilename)
@@ -97,6 +99,7 @@
     tryCatch(
         {
             .gintervals.save_file(path, intervals)
+            .gintervals.attr_write(sub("\\.interv$", ".iattr", path), attrs)
             success <- TRUE
         },
         finally = {
@@ -127,6 +130,9 @@
     path <- paste(get("GWD", envir = .misha), path, sep = "/")
     path <- paste(path, ".interv", sep = "")
 
+    # the attributes, next to a small set's file and inside a big set's directory (.gintervals.attr_path)
+    attr_file <- sub("\\.interv$", ".iattr", path)
+    attrs <- .gintervals.attr_read(attr_file)
     tmpfilename <- tempfile(".", dirname(path)) # tmpdir = the parent directory of intervals set, otherwise rename might not work
     # (tmpdir might be at another file system)
     file.rename(path, tmpfilename)
@@ -136,6 +142,10 @@
     tryCatch(
         {
             .gcall_noninteractive(gintervals.save, intervals.set, intervals)
+            if (dir.exists(path)) {
+                .gintervals.attr_write(file.path(path, ".iattr"), attrs)
+                unlink(attr_file)
+            }
             success <- TRUE
         },
         finally = {
