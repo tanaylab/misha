@@ -53,3 +53,40 @@ test_that("a big set saved in indexed format from a character chrom column reads
     withr::local_options(gmax.data.size = 1e8)
     expect_true(is.factor(gintervals.load("ixc")$chrom))
 })
+
+test_that("gintervals.update takes a data frame with a character chrom column, and aliases", {
+    local_db_state()
+    review_db(withr::local_tempdir())
+    gintervals.save("up", gintervals(c("chr1", "chr2"), 0, 100))
+
+    gintervals.update("up", data.frame(chrom = "chr2", start = 200, end = 300, stringsAsFactors = FALSE), chrom = "chr2")
+    res <- gintervals.load("up")
+    expect_equal(res$start[as.character(res$chrom) == "chr2"], 200)
+
+    # by an alias of the chromosome, in a big set
+    withr::local_options(gmax.data.size = 2)
+    gintervals.save("upb", gintervals(c("chr1", "chrX", "chr2"), 0, 100))
+    gintervals.update("upb", data.frame(chrom = "X", start = c(500, 700), end = c(600, 800)), chrom = "chrX")
+    withr::local_options(gmax.data.size = 1e8)
+    res <- gintervals.load("upb")
+    expect_equal(res$start[as.character(res$chrom) == "chrX"], c(500, 700))
+    expect_equal(nrow(res), 4)
+})
+
+test_that("gintervals.update refuses an interval set of a loaded dataset", {
+    local_db_state()
+    td <- withr::local_tempdir()
+    ds <- review_db(td, "ds")
+    gintervals.save("dsmall", gintervals("chrX", 300, 400))
+    withr::local_options(gmax.data.size = 2)
+    gintervals.save("dbig", gintervals(c("chr1", "chrX", "chr2"), 300, 400))
+    withr::local_options(gmax.data.size = 1e8)
+    work <- review_db(td, "work")
+    gdataset.load(ds)
+
+    expect_error(gintervals.update("dsmall", gintervals("chrX", 1000, 2000), chrom = "chrX"), "read-only dataset")
+    expect_error(gintervals.update("dbig", gintervals("chrX", 1000, 2000), chrom = "chrX"), "read-only dataset")
+    expect_false(file.exists(file.path(work, "tracks", "dsmall.interv")))
+    expect_false(file.exists(file.path(work, "tracks", "dbig.interv")))
+    expect_equal(gintervals.load("dsmall")$start, 300)
+})
