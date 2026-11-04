@@ -382,3 +382,14 @@ test_that("a finite gmax.data.size too large to map stops at once when the kids'
         "Failed to allocate shared memory"
     )
 })
+
+test_that("a pv table with some NaN breaks is rejected; only the no-values table gives NaN", {
+    withr::defer(if (gtrack.exists("temp.review_pv_bad")) gtrack.rm("temp.review_pv_bad", force = TRUE))
+    gtrack.create_dense("temp.review_pv_bad", "", gintervals(1, 0, 1e5), 5, 10000, NaN)
+    pv <- c(0.2, 0.6, 1)
+    attr(pv, "breaks") <- c(0, NaN, 10)
+    .gtrack.var.set("temp.review_pv_bad", "pv.percentiles", pv)
+    gvtrack.create("review_pv_bad", "temp.review_pv_bad", "global.percentile")
+    withr::defer(gvtrack.rm("review_pv_bad"))
+    expect_error(gextract("review_pv_bad", gintervals(1, 0, 1e5), iterator = 10000), "Breaks contain NA")
+})

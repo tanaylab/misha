@@ -1889,10 +1889,11 @@ void TrackExpressionVars::init(const TrackExpressionIteratorBase &expr_itr)
 			// A track with no values at all gets the table c(1, 1) with breaks c(NaN, NaN), in files
 			// written by any version. Leave it empty: the track has no value to look up, and
 			// TrackVarProcessor gives NaN for an empty table.
-			bool nan_breaks = false;
+			// Only an all-NaN table is that one; BinFinder rejects any other NaN break.
+			bool all_nan_breaks = Rf_length(breaks) > 0;
 			for (int i = 0; i < Rf_length(breaks); ++i)
-				nan_breaks |= std::isnan(REAL(breaks)[i]);
-			if (!nan_breaks) {
+				all_nan_breaks &= std::isnan(REAL(breaks)[i]);
+			if (!all_nan_breaks) {
 				pv.bins.assign(REAL(val), REAL(val) + Rf_length(val));
 				pv.binfinder.init(REAL(breaks), Rf_length(breaks));
 			}
