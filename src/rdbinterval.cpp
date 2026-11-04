@@ -874,8 +874,9 @@ bool IntervUtils::distribute_task(uint64_t res_const_size,    // data size in by
 	// Saturated: the product overflowed for a large limit (gmax.data.size = Inf) and mapped a
 	// tiny arena that the kids then wrote past.
 	uint64_t max_res_size, const_size;
+	if (__builtin_mul_overflow((uint64_t)m_num_planned_kids, res_const_size, &const_size))
+		const_size = numeric_limits<uint64_t>::max();
 	if (__builtin_mul_overflow(max_records_limit, res_record_size, &max_res_size) ||
-		__builtin_mul_overflow((uint64_t)m_num_planned_kids, res_const_size, &const_size) ||
 		__builtin_add_overflow(max_res_size, const_size, &max_res_size) ||
 		max_res_size > ((uint64_t)1 << 62))
 		max_res_size = (uint64_t)1 << 62;
@@ -889,12 +890,15 @@ bool IntervUtils::distribute_task(uint64_t res_const_size,    // data size in by
 		// kids write results, and a result that really exceeds this arena fails in allocate_res()
 		// with the usual "Result size exceeded".
 		// Only when the limit sized the arena: a caller that sized it from its own estimate
-		// (gextract, gscreen) backs off the estimate first and then runs serially.
+		// (gextract, gscreen) backs off the estimate first and then runs serially. And only
+		// when the kids' fixed-size blocks fit into it: otherwise every kid would scan its share
+		// and then fail, which a finite limit too large to map (gquantiles, gcor) used to report
+		// at once.
 		uint64_t ram_shm_size = get_ram_shm_size();
-		if (max_records_limit != get_max_data_size() || max_res_size <= ram_shm_size ||
+		if (max_records_limit != get_max_data_size() || max_res_size <= ram_shm_size || const_size > ram_shm_size ||
 			!strstr(e.msg(), "Failed to allocate shared memory"))
 			throw;
-		rdb::prepare4multitasking(res_const_size, res_record_size, ram_shm_size, get_max_mem_usage(), m_num_planned_kids);
+		rdb::prepare4multitasking(res_const_size, res_record_size, ram_shm_size, get_max_mem_usage(), m_num_planned_kids, true);
 	}
 
 	for (vector<GIntervalsFetcher1D *>::const_iterator ikid_intervs = m_kids_intervals1d.begin(); ikid_intervs != m_kids_intervals1d.end(); ++ikid_intervs) {

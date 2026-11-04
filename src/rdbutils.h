@@ -475,7 +475,9 @@ static inline void clear_pending_diagnostics(SEXP envir) {
 }
 
 
-void prepare4multitasking(uint64_t res_const_size, uint64_t res_var_size, uint64_t max_res_size, uint64_t max_mem_usage, unsigned num_planned_kids);
+// res_size_from_ram: max_res_size is the RAM-sized fallback of distribute_task(), not what
+// gmax.data.size asks for; the "Result size exceeded" error then says so.
+void prepare4multitasking(uint64_t res_const_size, uint64_t res_var_size, uint64_t max_res_size, uint64_t max_mem_usage, unsigned num_planned_kids, bool res_size_from_ram = false);
 
 pid_t launch_process();
 
@@ -676,6 +678,7 @@ private:
 	static uint64_t               s_res_var_size;
 	static uint64_t               s_max_res_size;
 	static uint64_t               s_max_mem_usage;
+	static bool                   s_res_size_from_ram;
 	static bool                 s_is_kid;
 	static pid_t                s_parent_pid;
 	static sem_t               *s_shm_sem;
@@ -702,7 +705,7 @@ private:
 	static string  get_alloc_suspend_sem_name();
 	static void    sigint_handler(int);
 	static void    sigchld_handler(int);
-	static void    prepare4multitasking(uint64_t res_const_size, uint64_t res_var_size, uint64_t max_res_size, uint64_t max_mem_usage, unsigned num_planned_kids);
+	static void    prepare4multitasking(uint64_t res_const_size, uint64_t res_var_size, uint64_t max_res_size, uint64_t max_mem_usage, unsigned num_planned_kids, bool res_size_from_ram = false);
 	static pid_t   launch_process();
     static void    check_kids_state(bool ignore_errors);
 	static void    wait_for_kids(rdb::IntervUtils &iu);
@@ -787,7 +790,7 @@ private:
 		friend SEXP rdb::rprotect_ptr(SEXP expr);
 	friend void rdb::rerror(const char *fmt, ...);
 	friend void rdb::verror(const char *fmt, ...);
-	friend void rdb::prepare4multitasking(uint64_t res_const_size, uint64_t res_var_size, uint64_t max_res_size, uint64_t max_mem_usage, unsigned num_planned_kids);
+	friend void rdb::prepare4multitasking(uint64_t res_const_size, uint64_t res_var_size, uint64_t max_res_size, uint64_t max_mem_usage, unsigned num_planned_kids, bool res_size_from_ram);
 	friend pid_t rdb::launch_process();
 	friend void rdb::wait_for_kids(rdb::IntervUtils &iu);
 	friend int rdb::get_num_kids();
@@ -885,9 +888,9 @@ inline string rdb::track2attrs_path(SEXP envir, const string &trackname) {
 	return rdb::track2path(envir, trackname) + "/.attributes";
 }
 
-inline void rdb::prepare4multitasking(uint64_t res_const_size, uint64_t res_var_size, uint64_t max_res_size, uint64_t max_mem_usage, unsigned num_planned_kids)
+inline void rdb::prepare4multitasking(uint64_t res_const_size, uint64_t res_var_size, uint64_t max_res_size, uint64_t max_mem_usage, unsigned num_planned_kids, bool res_size_from_ram)
 {
-	RdbInitializer::prepare4multitasking(res_const_size, res_var_size, max_res_size, max_mem_usage, num_planned_kids);
+	RdbInitializer::prepare4multitasking(res_const_size, res_var_size, max_res_size, max_mem_usage, num_planned_kids, res_size_from_ram);
 }
 
 inline pid_t rdb::launch_process() { return RdbInitializer::launch_process(); }

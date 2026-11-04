@@ -372,3 +372,13 @@ test_that("a global.percentile vtrack on a track with no values gives NaN", {
     withr::defer(gvtrack.rm("review_pv_nan"))
     expect_true(all(is.nan(gextract("review_pv_nan", gintervals(1, 0, 1e5), iterator = 10000)$review_pv_nan)))
 })
+
+test_that("a finite gmax.data.size too large to map stops at once when the kids' blocks cannot fit", {
+    s <- gintervals(c(1, 2), 0, 2e7)
+    withr::local_options(gmultitasking = TRUE, gmax.processes = 4, gmax.data.size = 1e15)
+    expect_error(gquantiles("test.fixedbin", 0.5, s), "Failed to allocate shared memory")
+    expect_error(
+        gcor("test.fixedbin", "test.sparse", intervals = s, iterator = "test.fixedbin", method = "spearman"),
+        "Failed to allocate shared memory"
+    )
+})
