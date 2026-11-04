@@ -408,3 +408,30 @@ test_that("parallel gtrack.2d.import_contacts is converted in an indexed databas
         expect_same_both_ways(res)
     })
 })
+
+test_that("gtrack.2d.import_contacts writes the same bytes whatever the order of the input rows", {
+    local_db_state()
+    withr::with_tempdir({
+        setup_import_db()
+        d <- random_intervals(20000, seed = 11, unknown = 0)
+        set.seed(12)
+        shuffled <- d[sample(nrow(d)), ]
+        for (mds in list(NULL, 1000)) {
+            opts <- list(gmultitasking = FALSE)
+            if (!is.null(mds)) {
+                opts$gmax.data.size <- mds
+            }
+            md5 <- lapply(list(a = d, b = shuffled), function(x) {
+                track <- "imp_order"
+                if (gtrack.exists(track)) {
+                    gtrack.rm(track, force = TRUE)
+                }
+                files <- write_slices(x, 1, "order")
+                withr::with_options(opts, gtrack.2d.import_contacts(track, "test", files))
+                track_files_md5(track)
+            })
+            expect_gt(length(md5$a), 0)
+            expect_identical(md5$b, md5$a)
+        }
+    })
+})
