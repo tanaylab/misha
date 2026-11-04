@@ -377,6 +377,22 @@ for (binsize in c(0, 10)) {
     })
 }
 
+test_that("gtrack.export_bedgraph exports over a big intervals set", {
+    import_test_db("indexed")
+
+    gtrack.create_dense("bins_big", "", data.frame(chrom = "chr1", start = seq(0, 90, 10), end = seq(10, 100, 10)), 1:10, 10)
+    iv <- data.frame(chrom = c("chr1", "chr1", "chr2"), start = c(0, 30, 0), end = c(50, 80, 20))
+    withr::with_options(list(gmax.data.size = 2), gintervals.save("big_export_set", iv))
+    expect_true(.gintervals.is_bigset("big_export_set"))
+
+    out <- tempfile(fileext = ".bedgraph")
+    gtrack.export_bedgraph("bins_big", out, intervals = "big_export_set")
+    res <- read.table(out, skip = 1, col.names = c("chrom", "start", "end", "value"))
+    expect_equal(res$chrom, rep("chr1", 8))
+    expect_equal(res$start, seq(0, 70, 10))
+    expect_equal(res$value, 1:8)
+})
+
 test_that("2D imports say so when chromosome names matched but no record has both chromosomes in the database", {
     import_test_db("indexed")
 
