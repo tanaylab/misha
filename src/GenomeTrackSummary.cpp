@@ -87,8 +87,8 @@ struct IntervalSummary {
 		num_bins(0),
 		num_non_nan_bins(0),
 		total(0),
-		minval(numeric_limits<double>::max()),
-		maxval(-numeric_limits<double>::max()),
+		minval(numeric_limits<double>::infinity()),
+		maxval(-numeric_limits<double>::infinity()),
 		shift(0),
 		shifted_sum(0),
 		shifted_sq_sum(0) {}

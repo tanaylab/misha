@@ -266,3 +266,23 @@ test_that("band distances must be finite and within range", {
     r <- gintervals.2d.band_intersect(sq, band = c(-1e18, 1e18))
     expect_equal(c(r$start1, r$end1, r$start2, r$end2), c(0, 100, 0, 100))
 })
+
+test_that("summaries report infinite min and max as R does", {
+    iv <- gintervals(c(1, 2), 0, 50000)
+    for (expr in c("ifelse(is.na(test.fixedbin), NaN, -Inf)", "ifelse(is.na(test.fixedbin), NaN, Inf)")) {
+        x <- gextract(expr, iv, iterator = 100, colnames = "v")$v
+        x <- x[!is.na(x)]
+        for (mt in c(FALSE, TRUE)) {
+            withr::local_options(list(gmultitasking = mt, gmin.scope4process = 1000, gmax.processes = 4))
+            s <- gsummary(expr, iv, iterator = 100)
+            expect_equal(unname(s[c("Min", "Max")]), c(min(x), max(x)), info = expr)
+            s <- gintervals.summary(expr, iv, iterator = 100)
+            expect_equal(c(s$Min, s$Max), c(rep(min(x), 2), rep(max(x), 2)), info = expr)
+            s <- gbins.summary("test.fixedbin", breaks = c(0, 1), expr = expr, intervals = iv, iterator = 100)
+            expect_equal(unname(s[1, c("Min", "Max")]), c(min(x), max(x)), info = expr)
+        }
+    }
+    # no value at all
+    s <- gsummary("test.fixedbin * NaN", iv, iterator = 100)
+    expect_true(all(is.nan(s[c("Min", "Max")])))
+})
