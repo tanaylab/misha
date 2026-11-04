@@ -497,6 +497,22 @@ gdataset.save <- function(path, description, tracks = NULL, intervals = NULL,
                     sprintf("copy interval set %s from %s to %s", interval, source_file, dirname(dest_path))
                 )
             }
+            # a small set's attributes are in a file next to it (a big set's are inside its directory)
+            source_attr <- sub("\\.interv$", ".iattr", source_file)
+            if (!dir.exists(source_file) && file.exists(source_attr)) {
+                dest_attr <- sub("\\.interv$", ".iattr", dest_path)
+                if (symlinks) {
+                    checked(
+                        file.symlink(source_attr, dest_attr),
+                        sprintf("symlink the attributes of interval set %s (%s -> %s)", interval, source_attr, dest_attr)
+                    )
+                } else {
+                    checked(
+                        .gwith_umask(file.copy(source_attr, dest_attr)),
+                        sprintf("copy the attributes of interval set %s from %s to %s", interval, source_attr, dest_attr)
+                    )
+                }
+            }
         }
     }
 

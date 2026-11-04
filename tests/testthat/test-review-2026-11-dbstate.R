@@ -233,3 +233,17 @@ test_that("removing a working track shows the track of the dataset loaded last",
     suppressMessages(gdb.reload())
     expect_equal(gextract("tt", gintervals("chr1", 0, 10))$tt, 2)
 })
+
+test_that("gdataset.save keeps the attributes of a small interval set", {
+    local_db_state()
+    td <- withr::local_tempdir()
+    db <- review_db(td, "src")
+    gintervals.save("ii", gintervals("chr1", 0, 100))
+    gintervals.attr.set("ii", "who", "DA")
+    gdataset.save(file.path(td, "DS"), "x", intervals = "ii")
+    expect_true(file.exists(file.path(td, "DS", "tracks", "ii.iattr")))
+
+    review_db(td, "other")
+    gdataset.load(file.path(td, "DS"))
+    expect_equal(gintervals.attr.get("ii", "who"), "DA")
+})
