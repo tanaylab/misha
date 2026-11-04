@@ -23,9 +23,18 @@ IntervalConverter::IntervalConverter(rdb::IntervUtils &iu) :
 {
 }
 
+// A chrom column the converter can read: character, or a factor with character levels.
+static bool is_chrom_col(SEXP col)
+{
+	return Rf_isString(col) || (Rf_isFactor(col) && Rf_isString(Rf_getAttrib(col, R_LevelsSymbol)));
+}
+
 unsigned IntervalConverter::get_rintervs_type_mask(SEXP rintervals, const char *error_msg_prefix) const
 {
-	if (!Rf_isVector(rintervals))
+	// Intervals are a data frame, or a list of a 1D and a 2D one. Anything else must stop here:
+	// the code below reads it with VECTOR_ELT() and STRING_ELT(), whose R error on a wrong type
+	// is a longjmp past ~RdbInitializer (C3).
+	if (TYPEOF(rintervals) != VECSXP)
 		verror("%sInvalid format of intervals argument", error_msg_prefix);
 
 	if (Rf_length(rintervals) == 2) {
@@ -49,6 +58,8 @@ unsigned IntervalConverter::get_rintervs_type_mask(SEXP rintervals, const char *
 	}
 
 	if (type == rdb::IntervUtils::INTERVS2D) {
+		if (Rf_length(colnames) < GInterval2D::NUM_COLS)
+			verror("Invalid format of intervals: column names do not match neither 1d nor 2d intervals");
 		for (unsigned i = 0; i < GInterval2D::NUM_COLS; i++) {
 			if (strcmp(CHAR(STRING_ELT(colnames, i)), GInterval2D::COL_NAMES[i]))
 				verror("Invalid format of intervals: column names do not match neither 1d nor 2d intervals");
@@ -75,6 +86,9 @@ unsigned IntervalConverter::get_rintervs_type_mask(SEXP rintervals, const char *
 				verror("%sNumber of rows in column %s differs than the number of rows in column %s", error_msg_prefix, GInterval::COL_NAMES[i - 1], GInterval::COL_NAMES[i]);
 		}
 
+		if (!is_chrom_col(VECTOR_ELT(rintervals, GInterval::CHROM)))
+			verror("%sInvalid format of intervals argument: column chrom must be character or factor", error_msg_prefix);
+
 		if ((!Rf_isReal(starts) && !Rf_isInteger(starts)) || (!Rf_isReal(ends) && !Rf_isInteger(ends)) ||
 			(strands != R_NilValue && !Rf_isReal(strands) && !Rf_isInteger(strands) && !Rf_isString(strands) && !Rf_isFactor(strands)))
 			verror("%sInvalid format of intervals argument", error_msg_prefix);
@@ -89,6 +103,9 @@ unsigned IntervalConverter::get_rintervs_type_mask(SEXP rintervals, const char *
 			if (i != 0 && Rf_length(VECTOR_ELT(rintervals, i)) != Rf_length(VECTOR_ELT(rintervals, i - 1)))
 				verror("%sNumber of rows in column %s differs than the number of rows in column %s", error_msg_prefix, GInterval2D::COL_NAMES[i - 1], GInterval2D::COL_NAMES[i]);
 		}
+
+		if (!is_chrom_col(VECTOR_ELT(rintervals, GInterval2D::CHROM1)) || !is_chrom_col(VECTOR_ELT(rintervals, GInterval2D::CHROM2)))
+			verror("%sInvalid format of intervals argument: columns chrom1 and chrom2 must be character or factor", error_msg_prefix);
 
 		if ((!Rf_isReal(starts1) && !Rf_isInteger(starts1)) || (!Rf_isReal(ends1) && !Rf_isInteger(ends1)) || (!Rf_isReal(starts2) && !Rf_isInteger(starts2)) || (!Rf_isReal(ends2) && !Rf_isInteger(ends2)))
 			verror("%sInvalid format of intervals argument", error_msg_prefix);
@@ -319,7 +336,7 @@ SEXP IntervalConverter::convert_rintervs(SEXP rintervals, GIntervals *intervals,
 		unsigned zero_length_bumped = 0;
 
 		for (unsigned i = 0; i < num_intervals; i++) {
-			if ((Rf_isFactor(chroms) && INTEGER(chroms)[i] < 0) ||
+			if ((Rf_isFactor(chroms) && (INTEGER(chroms)[i] < 1 || INTEGER(chroms)[i] > Rf_length(chrom_levels))) ||
 				(Rf_isReal(starts) && std::isnan(REAL(starts)[i])) || (Rf_isReal(ends) && std::isnan(REAL(ends)[i])) ||
 				(strands != R_NilValue && Rf_isReal(strands) && std::isnan(REAL(strands)[i])))
 				verror("%sInvalid format of interval at index %d", error_msg_prefix, i + 1);
@@ -398,9 +415,9 @@ SEXP IntervalConverter::convert_rintervs(SEXP rintervals, GIntervals *intervals,
 		unsigned num_intervals = (unsigned)Rf_length(starts1);
 
 		for (unsigned i = 0; i < num_intervals; i++) {
-			if ((Rf_isFactor(chroms1) && INTEGER(chroms1)[i] < 0) ||
+			if ((Rf_isFactor(chroms1) && (INTEGER(chroms1)[i] < 1 || INTEGER(chroms1)[i] > Rf_length(chrom_levels1))) ||
 				(Rf_isReal(starts1) && std::isnan(REAL(starts1)[i])) || (Rf_isReal(ends1) && std::isnan(REAL(ends1)[i])) ||
-				(Rf_isFactor(chroms2) && INTEGER(chroms2)[i] < 0) ||
+				(Rf_isFactor(chroms2) && (INTEGER(chroms2)[i] < 1 || INTEGER(chroms2)[i] > Rf_length(chrom_levels2))) ||
 				(Rf_isReal(starts2) && std::isnan(REAL(starts2)[i])) || (Rf_isReal(ends2) && std::isnan(REAL(ends2)[i])))
 				verror("%sInvalid format of interval at index %d", error_msg_prefix, i + 1);
 
