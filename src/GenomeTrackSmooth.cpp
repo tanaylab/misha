@@ -319,7 +319,7 @@ SEXP gsmooth(SEXP _track, SEXP _expr, SEXP _winsize, SEXP _weight_thr, SEXP _smo
 		if (!is_num_vector(_weight_thr) || Rf_length(_weight_thr) != 1)
 			verror("Weight threshold is not numeric");
 
-		if (!Rf_isLogical(_smooth_nans) || Rf_length(_smooth_nans) != 1)
+		if (!is_true_or_false(_smooth_nans))
 			verror("Smooth nans argument is not logical");
 
 		if (!Rf_isString(_type) || Rf_length(_type) != 1)

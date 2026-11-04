@@ -183,11 +183,11 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 		if (maxneighbors < 1) 
 			verror("maxneighbors must be greater or equal to 1");
 
-		if (!Rf_isLogical(_na_if_notfound))
+		if (!is_true_or_false(_na_if_notfound))
 			verror("na.if.notfound argument is not logical");
 		bool na_if_notfound = LOGICAL(_na_if_notfound)[0];
 
-		if (!Rf_isLogical(_use_intervals1_strand))
+		if (!is_true_or_false(_use_intervals1_strand))
 			verror("use_intervals1_strand argument is not logical");
 		bool use_intervals1_strand = LOGICAL(_use_intervals1_strand)[0];
 

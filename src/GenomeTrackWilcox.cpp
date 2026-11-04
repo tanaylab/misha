@@ -241,7 +241,7 @@ SEXP C_gwilcox(SEXP _expr, SEXP _intervals, SEXP _winsize1, SEXP _winsize2, SEXP
 		if (!is_num_vector(_maxz) || Rf_length(_maxz) != 1)
 			verror("Max Z-score argument is not numeric");
 
-		if (!Rf_isLogical(_one_tailed) || Rf_length(_one_tailed) != 1)
+		if (!is_true_or_false(_one_tailed))
 			verror("One-tailed argument is not boolean");
 
 		if (!Rf_isInteger(_what2find) || Rf_length(_what2find) != 1)

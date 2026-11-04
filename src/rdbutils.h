@@ -357,6 +357,9 @@ inline double num_elt(SEXP x, R_xlen_t i)
 	return v == NA_INTEGER ? std::numeric_limits<double>::quiet_NaN() : (double)v;
 }
 
+// True for a single TRUE or FALSE; LOGICAL() of an NA is NA_LOGICAL, which C++ reads as true.
+inline bool is_true_or_false(SEXP x) { return Rf_isLogical(x) && Rf_length(x) == 1 && LOGICAL(x)[0] != NA_LOGICAL; }
+
 // All the elements of a double, integer or logical vector, read with num_elt().
 inline std::vector<double> num_vector(SEXP x)
 {

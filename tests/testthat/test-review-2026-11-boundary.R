@@ -222,3 +222,16 @@ test_that("gintervals.load_chain accepts an integer min_score", {
     chain <- gintervals.load_chain(chain_file, min_score = 4000L)
     expect_equal(chain$score, 5000)
 })
+
+test_that("logical flags are TRUE or FALSE, not NA", {
+    a <- data.frame(chrom = "chr1", start = c(100, 5000), end = c(200, 5100))
+    b <- data.frame(chrom = "chr1", start = c(1000, 5300), end = c(1100, 5400))
+    big <- gintervals(1, 0, 1e6)
+    expect_error(glookup(1:2, "test.fixedbin", c(0, 0.1, 1), intervals = scope, force.binning = NA), "force.binning")
+    expect_error(gintervals.neighbors(a, b, na.if.notfound = NA), "na.if.notfound")
+    expect_error(gintervals.neighbors(a, b, use_intervals1_strand = NA), "use_intervals1_strand")
+    expect_error(gsegment("test.fixedbin", 10000, 0.0001, onetailed = NA, intervals = big), "One-tailed")
+    expect_error(gwilcox("test.fixedbin", 100000, 1000, onetailed = NA, intervals = big), "One-tailed")
+    withr::defer(if (gtrack.exists("temp.review_smooth_na")) gtrack.rm("temp.review_smooth_na", force = TRUE))
+    expect_error(gtrack.smooth("temp.review_smooth_na", "", "test.fixedbin", 1000, smooth_nans = NA), "nans")
+})

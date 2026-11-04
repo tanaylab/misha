@@ -68,7 +68,7 @@ SEXP C_gsegment(SEXP _expr, SEXP _intervals, SEXP _minsegment, SEXP _maxz, SEXP 
 		if (!is_num_vector(_maxz) || Rf_length(_maxz) != 1)
 			verror("Max Z-score argument is not numeric");
 
-		if (!Rf_isLogical(_one_tailed) || Rf_length(_one_tailed) != 1)
+		if (!is_true_or_false(_one_tailed))
 			verror("One-tailed argument is not boolean");
 
 		string intervset_out = Rf_isNull(_intervals_set_out) ? "" : CHAR(STRING_ELT(_intervals_set_out, 0));
