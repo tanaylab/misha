@@ -161,6 +161,42 @@ test_that("intervals given as a data.table or a grouped tibble are accepted", {
     }
 })
 
+test_that("invalid scalar arguments and options are rejected with a clear error", {
+    a <- data.frame(chrom = "chr1", start = c(100, 5000), end = c(200, 5100))
+    b <- data.frame(chrom = "chr1", start = c(1000, 5300), end = c(1100, 5400))
+
+    # an integer NA strand is not strand 0
+    expect_error(gseq.extract(data.frame(chrom = "chr1", start = 0, end = 8, strand = c(1L, NA, -1L))), "strand")
+
+    # NA where a TRUE/FALSE is needed
+    withr::with_options(list(gmultitasking = NA), expect_error(gsummary("test.fixedbin", scope), "gmultitasking"))
+    expect_error(gpartition("test.fixedbin", c(0, 0.1, 1), scope, include.lowest = NA), "include.lowest")
+    expect_error(glookup(1:2, "test.fixedbin", c(0, 0.1, 1), intervals = scope, include.lowest = NA), "include.lowest")
+    expect_error(gdist("test.fixedbin", c(0, 0.1, 1), intervals = scope, include.lowest = NA), "include.lowest")
+
+    # NA, NaN or a missing value where a number is needed
+    expect_error(gquantiles("test.fixedbin", NA_real_, scope), "range")
+    expect_error(gintervals.neighbors(a, b, maxdist = numeric(0)), "maxdist")
+    expect_error(gintervals.neighbors(a, b, maxdist = NA_real_), "maxdist")
+    expect_error(gextract("test.fixedbin", scope, iterator = numeric(0)), "iterator")
+    gvtrack.create("review_vt_shift", "test.fixedbin", "avg")
+    for (shift in list(NaN, Inf, NA_real_)) {
+        expect_error(gvtrack.iterator("review_vt_shift", sshift = shift), "sshift")
+    }
+    gvtrack.rm("review_vt_shift")
+    expect_error(
+        {
+            gvtrack.create("review_vt_q", "test.fixedbin", "quantile", params = NA_real_)
+            gextract("review_vt_q", scope)
+        },
+        "percentile"
+    )
+
+    # an infinite distance limit is no limit
+    expect_equal(gintervals.neighbors(a, b, maxdist = Inf)$dist, c(800, 200))
+    expect_equal(gintervals.neighbors(a, b, mindist = -Inf, maxdist = Inf)$dist, c(800, 200))
+})
+
 test_that("gintervals.load_chain accepts an integer min_score", {
     local_db_state()
     setup_db(list(">chr1\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n"))

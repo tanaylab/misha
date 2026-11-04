@@ -22,7 +22,7 @@ SEXP C_gcis_decay(SEXP _expr, SEXP _breaks, SEXP _src_intervals, SEXP _domain_in
 		if (!is_num_vector(_breaks))
 			verror("Breaks argument is not a number");
 
-		if (!Rf_isLogical(_include_lowest) || Rf_length(_include_lowest) != 1)
+		if (!Rf_isLogical(_include_lowest) || Rf_length(_include_lowest) != 1 || LOGICAL(_include_lowest)[0] == NA_LOGICAL)
 			verror("include.lowest argument is not logical");
 
 		BinFinder bin_finder(num_vector(_breaks), LOGICAL(_include_lowest)[0]);

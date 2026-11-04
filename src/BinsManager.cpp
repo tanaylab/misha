@@ -8,7 +8,7 @@ BinsManager::BinsManager(SEXP _breaks, SEXP _include_lowest)
 	if (!Rf_isVector(_breaks))
 		TGLError<BinsManager>("Breaks argument must be a vector");
 
-	if (!Rf_isLogical(_include_lowest) || Rf_length(_include_lowest) != 1)
+	if (!Rf_isLogical(_include_lowest) || Rf_length(_include_lowest) != 1 || LOGICAL(_include_lowest)[0] == NA_LOGICAL)
 		TGLError<BinsManager>("include.lowest argument is not logical");
 
 	unsigned num_breaks_sets = Rf_length(_breaks);

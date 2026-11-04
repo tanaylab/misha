@@ -324,10 +324,10 @@ void TrackExpressionVars::parse_imdf(SEXP rvtrack, const string &vtrack, Iterato
 		for (int i = 0; i < NUM_SHIFTS; i++) {
 			SEXP rshift = get_rvector_col(rimdf, shift_col_names[i], vname.c_str(), false);
 
-			if (!(Rf_isReal(rshift) || Rf_isInteger(rshift)) || Rf_length(rshift) != 1)
+			if (!is_num_vector(rshift) || Rf_length(rshift) != 1 || !std::isfinite(num_elt(rshift, 0)))
 				verror("Virtual track %s: %s must be an integer", vtrack.c_str(), shift_col_names[i]);
 
-			int64_t shift = Rf_isReal(rshift) ? (int64_t)REAL(rshift)[0] : INTEGER(rshift)[0];
+			int64_t shift = (int64_t)num_elt(rshift, 0);
 
 			if (i == SSHIFT)
 				imdf1d->sshift = shift;
@@ -344,10 +344,10 @@ void TrackExpressionVars::parse_imdf(SEXP rvtrack, const string &vtrack, Iterato
 		for (int i = 0; i < NUM_SHIFTS; i++) {
 			SEXP rshift = get_rvector_col(rimdf, shift_col_names[i], vname.c_str(), false);
 
-			if (!(Rf_isReal(rshift) || Rf_isInteger(rshift)) || Rf_length(rshift) != 1)
+			if (!is_num_vector(rshift) || Rf_length(rshift) != 1 || !std::isfinite(num_elt(rshift, 0)))
 				verror("Virtual track %s: %s must be an integer", vtrack.c_str(), shift_col_names[i]);
 
-			int64_t shift = Rf_isReal(rshift) ? (int64_t)REAL(rshift)[0] : INTEGER(rshift)[0];
+			int64_t shift = (int64_t)num_elt(rshift, 0);
 
 			if (i == SSHIFT1)
 				imdf2d->sshift1 = shift;
@@ -1194,10 +1194,10 @@ TrackExpressionVars::Track_var &TrackExpressionVars::add_vtrack_var_src_track(SE
 			if (ifunc == Track_var::QUANTILE) {
 				if (Rf_isNull(rparams))
 					verror("Virtual track %s: function %s requires an additional parameter (percentile) to be specified", vtrack.c_str(), func.c_str());
-				if (!Rf_isReal(rparams) || Rf_length(rparams) != 1)
+				if (!is_num_vector(rparams) || Rf_length(rparams) != 1)
 					verror("Virtual track %s: invalid parameters used for function %s", vtrack.c_str(), func.c_str());
-				var.percentile = REAL(rparams)[0];
-				if (var.percentile < 0 || var.percentile > 1)
+				var.percentile = num_elt(rparams, 0);
+				if (!(var.percentile >= 0 && var.percentile <= 1))
 					verror("Virtual track %s: parameter (percentile) used for function %s is out of range", vtrack.c_str(), func.c_str());
 				
 			} else	if (ifunc == Track_var::PWM || ifunc == Track_var::PWM_MAX || ifunc == Track_var::PWM_MAX_POS || ifunc == Track_var::PWM_COUNT) {
@@ -1479,7 +1479,7 @@ TrackExpressionVars::Value_var &TrackExpressionVars::add_vtrack_var_src_value(SE
 		else
 			verror("Virtual track %s: invalid percentile parameter for function %s", vtrack.c_str(), func.c_str());
 
-		if (var.percentile < 0 || var.percentile > 1)
+		if (!(var.percentile >= 0 && var.percentile <= 1))
 			verror("Virtual track %s: percentile must be between 0 and 1, got %g", vtrack.c_str(), var.percentile);
 	} else {
 		if (!Rf_isNull(rparams))

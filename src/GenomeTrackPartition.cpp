@@ -125,7 +125,7 @@ SEXP C_gpartition(SEXP _intervals, SEXP _track_expr, SEXP _breaks, SEXP _include
 		if (!is_num_vector(_breaks))
 			verror("Breaks argument is not a number");
 
-		if (!Rf_isLogical(_include_lowest) || Rf_length(_include_lowest) != 1)
+		if (!Rf_isLogical(_include_lowest) || Rf_length(_include_lowest) != 1 || LOGICAL(_include_lowest)[0] == NA_LOGICAL)
 			verror("include.lowest argument is not logical");
 
 		if (!Rf_isNull(_intervals_set_out) && (!Rf_isString(_intervals_set_out) || Rf_length(_intervals_set_out) != 1))

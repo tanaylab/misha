@@ -989,6 +989,9 @@ TrackExpressionIteratorBase *TrackExprScanner::create_expr_iterator(SEXP giterat
 				((TrackExpressionBigSet2DIterator *)expr_itr)->begin(intervset, meta, *scope2d, band, m_iu.get_max_data_size());
 		}
 		runprotect(meta);
+	} else if (is_num_vector(giterator)) {
+		// Neither a bin size nor a rectangle (above); numeric(0) used to pass as empty intervals
+		verror("Invalid iterator: a numeric iterator must be a bin size or a pair of rectangle sizes");
 	} else if ((Rf_isVector(giterator) && !Rf_isString(giterator)) ||
 			   (Rf_isString(giterator) && Rf_length(giterator) == 1 && !m_iu.track_exists(CHAR(STRING_ELT(giterator, 0)))))
 	{   // giterator == intervals
