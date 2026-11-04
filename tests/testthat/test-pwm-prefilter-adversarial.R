@@ -294,8 +294,10 @@ test_that("prefilter: N-bases at strategic positions do not cause false rejectio
 
     threshold <- -5.0
 
-    # Consensus is ACGTACGTA. Block 0: ACG, Block 1: TAC, Block 2: GTA
-    # Place N in block 0 to invalidate it, blocks 1&2 should still pass
+    # Consensus is ACGTACGTA. Block 0: ACG, Block 1: TAC, Block 2: GTA.
+    # A window holding N is not a candidate, so each of these 9-mers alone gives no rows,
+    # exact or with max_edits. Followed by N-free sequence, the windows that avoid the N
+    # are still found, and the max_edits prefilter must not reject any of them.
     seqs_with_N <- c(
         "NCGTACGTA", # N in block 0, pos 0
         "ANGTACGTA", # N in block 0, pos 1
@@ -309,23 +311,32 @@ test_that("prefilter: N-bases at strategic positions do not cause false rejectio
     )
 
     for (s in seqs_with_N) {
-        r_exact <- gseq.pwm_edits(s, pssm,
+        expect_equal(nrow(gseq.pwm_edits(s, pssm, score.thresh = threshold, prior = 0, bidirect = FALSE)), 0,
+            info = s
+        )
+        expect_equal(nrow(gseq.pwm_edits(s, pssm,
+            score.thresh = threshold, max_edits = 2L,
+            prior = 0, bidirect = FALSE
+        )), 0, info = s)
+
+        s2 <- paste0(s, "TTACGTTCGTA")
+        r_exact <- gseq.pwm_edits(s2, pssm,
             score.thresh = threshold, prior = 0, bidirect = FALSE
         )
-        r_heur <- gseq.pwm_edits(s, pssm,
+        r_heur <- gseq.pwm_edits(s2, pssm,
             score.thresh = threshold, max_edits = 2L,
             prior = 0, bidirect = FALSE
         )
+        expect_gt(nrow(r_exact), 0)
 
-        exact_min <- if (nrow(r_exact) > 0) min(r_exact$n_edits) else NA
+        exact_min <- min(r_exact$n_edits)
         heur_min <- if (nrow(r_heur) > 0) min(r_heur$n_edits) else NA
-
-        if (!is.na(exact_min) && exact_min <= 2) {
+        if (exact_min <= 2) {
             expect_false(is.na(heur_min),
-                info = sprintf("seq=%s: exact=%d, heur=NA (N-base false reject)", s, exact_min)
+                info = sprintf("seq=%s: exact=%d, heur=NA (N-base false reject)", s2, exact_min)
             )
             expect_equal(heur_min, exact_min,
-                info = sprintf("seq=%s: exact=%d != heur=%s", s, exact_min, heur_min)
+                info = sprintf("seq=%s: exact=%d != heur=%s", s2, exact_min, heur_min)
             )
         }
     }
