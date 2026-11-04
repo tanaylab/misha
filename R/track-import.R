@@ -34,6 +34,30 @@
     list(intervals = intervals_df, values = values)
 }
 
+# BED files from other tools often have records that run past the end of the chromosome, or that are empty.
+# Clips the first to the chromosome end and drops records left empty (zero length, or starting at or past the
+# end), which the track creators would reject, and sets $warning to a message giving the counts, if any. The
+# chromosomes of bed must exist in the database.
+.gtrack_bed_fit_chroms <- function(bed, file) {
+    allgenome <- get("ALLGENOME", envir = .misha)[[1]]
+    iv <- bed$intervals
+    sizes <- allgenome$end[match(as.character(.gchroms(iv$chrom)), as.character(allgenome$chrom))]
+    past <- iv$end > sizes
+    end <- pmin(iv$end, sizes)
+    empty <- iv$end == iv$start | (past & end <= iv$start)
+    num_clipped <- sum(past & !empty)
+    if (num_clipped || any(empty)) {
+        iv$end <- end
+        bed$intervals <- iv[!empty, , drop = FALSE]
+        bed$values <- bed$values[!empty]
+        bed$warning <- sprintf(
+            "BED file %s: %d record(s) running past the end of their chromosome were clipped to it, and %d empty record(s) (zero length, or starting at or past the chromosome end) were dropped",
+            file, num_clipped, sum(empty)
+        )
+    }
+    bed
+}
+
 .gtrack_set_created_attrs <- function(trackstr, description, created_by, attrs) {
     .gtrack.attr.set(trackstr, "created.by", created_by, TRUE)
     .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
@@ -88,7 +112,10 @@
 #' otherwise a constant value of 1 is used. For BED inputs, 'binsize' controls
 #' the output type: if 'binsize' is 0 the track is 'Sparse'; otherwise the track
 #' is 'Dense' with bin-averaged values based on overlaps with BED intervals (and
-#' 'defval' for regions not covered).
+#' 'defval' for regions not covered). BED records that run past the end of
+#' their chromosome are clipped to it, and records left empty (zero length, or
+#' starting at or past the chromosome end) are dropped, with one warning giving
+#' the counts.
 #'
 #' If 'binsize' is 0 the resulted track is created in 'Sparse' format.
 #' Otherwise the 'Dense' format is chosen with a bin size equal to 'binsize'.
@@ -226,6 +253,7 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
                     bed_parsed$intervals <- bed_parsed$intervals[keep, , drop = FALSE]
                     bed_parsed$values <- bed_parsed$values[keep]
                 }
+                bed_parsed <- .gtrack_bed_fit_chroms(bed_parsed, file.original)
             }
 
             if (!used_bed && report.progress) {
@@ -253,6 +281,9 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
                         .gcall("gtrack_create_sparse", trackstr, bed_parsed$intervals, bed_parsed$values, .misha_env())
                     }
                     .gcall("gimport_check_chroms", bed_chroms, file.original, TRUE, .misha_env())
+                    if (!is.null(bed_parsed$warning)) {
+                        warning(bed_parsed$warning, call. = FALSE)
+                    }
                 } else {
                     # file may be a temporary unzipped copy that is
                     # deleted before this call returns; file.original is what the user

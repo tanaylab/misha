@@ -348,6 +348,35 @@ test_that("gtrack.2d.import_contacts rejects fend ids too large to index and fen
     expect_false(gtrack.exists("dup_fend"))
 })
 
+for (binsize in c(0, 10)) {
+    test_that(sprintf("BED import clips records past the chromosome end and drops empty ones (binsize %g)", binsize), {
+        import_test_db("indexed")
+
+        # chrM is 500 bp long
+        bed <- write_file("chr1\t0\t10\nchr1\t100\t100\nchrM\t490\t520\nchrM\t600\t700\nchrM\t500\t510\n", ".bed")
+        expect_warning(
+            suppressMessages(gtrack.import("bed_fit", "", bed, binsize)),
+            "1 record\\(s\\) running past the end of their chromosome were clipped to it, and 3 empty record\\(s\\)"
+        )
+        res <- gextract("bed_fit", gintervals(c("chr1", "chrM"), c(0, 490), c(10, 500)))
+        expect_equal(res$bed_fit, c(1, 1))
+        if (binsize == 0) {
+            res <- gextract("bed_fit", gintervals.all())
+            expect_equal(paste(res$chrom, res$start, res$end), c("chr1 0 10", "chrM 490 500"))
+        }
+
+        # a BED file that needs neither: no warning
+        ok <- write_file("chr1\t0\t10\n", ".bed")
+        expect_no_warning(suppressMessages(gtrack.import("bed_ok", "", ok, binsize)))
+
+        # the creators called directly stay strict
+        expect_error(
+            gtrack.create_sparse("strict", "", data.frame(chrom = "chrM", start = 490, end = 520), 1),
+            "end coordinate exceeds chromosome boundaries"
+        )
+    })
+}
+
 test_that("2D imports say so when chromosome names matched but no record has both chromosomes in the database", {
     import_test_db("indexed")
 
