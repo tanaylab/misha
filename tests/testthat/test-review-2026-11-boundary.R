@@ -140,6 +140,27 @@ test_that("a multitasked misha call inside a multitasked gintervals.mapply FUN r
     expect_equal(res$value, rep(expected, 36), tolerance = 1e-6)
 })
 
+test_that("intervals given as a data.table or a grouped tibble are accepted", {
+    skip_if_not_installed("data.table")
+    a <- data.frame(chrom = c("chr1", "chr1", "chr2"), start = c(100, 5000, 300), end = c(200, 5100, 400), id = c("a", "b", "c"))
+    b <- data.frame(chrom = c("chr1", "chr2"), start = c(1000, 10), end = c(1100, 20), nm = c("x", "y"))
+    convs <- list(
+        data.table = data.table::as.data.table,
+        grouped_df = function(x) dplyr::group_by(tibble::as_tibble(x), chrom)
+    )
+    for (conv in convs) {
+        res <- gintervals.neighbors(conv(a), conv(b))
+        expect_equal(res$dist, c(800, 3900, 280))
+        expect_equal(res$nm, c("x", "x", "y"))
+        ann <- gintervals.annotate(conv(a), conv(b))
+        expect_equal(ann$nm, c("x", "x", "y"))
+        rb <- gintervals.rbind(conv(a), conv(a))
+        expect_identical(class(rb), "data.frame")
+        expect_equal(rb$id, rep(c("a", "b", "c"), 2))
+        expect_null(attr(rb, "groups"))
+    }
+})
+
 test_that("gintervals.load_chain accepts an integer min_score", {
     local_db_state()
     setup_db(list(">chr1\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n"))

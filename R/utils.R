@@ -257,7 +257,9 @@
 }
 
 .grbind <- function(...) {
-    objs <- list(...)
+    # A tibble, grouped tibble or data.table is bound as the plain data frame it is; their
+    # own attributes (groups, the data.table self reference) would not describe the result.
+    objs <- lapply(list(...), function(obj) if (is.data.frame(obj)) as.data.frame(obj) else obj)
 
     zerolines <- lapply(objs, function(obj) {
         obj[0, ]
