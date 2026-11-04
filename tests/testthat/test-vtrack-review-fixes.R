@@ -197,3 +197,42 @@ test_that("stddev with a filter is the sample sd of the unmasked values, each co
     expect_equal(gextract("s_sd", iv, iterator = iv)$s_sd, sd(c(4, 1, 2)), tolerance = 1e-5)
     expect_equal(gextract("v_sd", iv, iterator = iv)$v_sd, sd(c(4, 1, 2)), tolerance = 1e-5)
 })
+
+test_that("positions of sparse, value-based and array values are clipped to the iterator start", {
+    local_db_state()
+    vt_fix_db()
+    gtrack.create_sparse("sp3", "x", gintervals("chr1", c(313, 400), c(332, 420)), c(5, 1))
+    f <- withr::local_tempfile(fileext = ".tsv")
+    writeLines(c("chrom\tstart\tend\ta", "chr1\t313\t332\t5", "chr1\t400\t420\t1"), f)
+    suppressMessages(gtrack.array.import("arr3", "x", f))
+    withr::defer({
+        gtrack.rm("sp3", force = TRUE)
+        gtrack.rm("arr3", force = TRUE)
+    })
+    withr::defer(gvtrack.clear())
+    vv <- data.frame(chrom = "chr1", start = c(313, 400), end = c(332, 420), score = c(5, 1))
+    iv <- gintervals("chr1", 318, 450)
+    one <- gintervals("chr1", 318, 330)
+
+    for (src in c("sp3", "vv")) {
+        source_obj <- if (src == "vv") vv else src
+        for (fn in c("first", "last", "min", "max", "sample")) {
+            gvtrack.create("pa", source_obj, paste0(fn, ".pos.abs"))
+            gvtrack.create("pr", source_obj, paste0(fn, ".pos.relative"))
+            r <- gextract(c("pa", "pr"), iv, iterator = iv)
+            expected <- c(first = 318, last = 400, min = 400, max = 318)
+            if (fn != "sample") {
+                expect_equal(r$pa, expected[[fn]], info = paste(src, fn))
+                expect_equal(r$pr, expected[[fn]] - 318, info = paste(src, fn))
+            }
+            r <- gextract(c("pa", "pr"), one, iterator = one)
+            expect_equal(r$pa, 318, info = paste(src, fn, "one value"))
+            expect_equal(r$pr, 0, info = paste(src, fn, "one value"))
+        }
+    }
+    gvtrack.create("a_max", "arr3", "max.pos.relative")
+    gvtrack.create("a_min", "arr3", "min.pos.relative")
+    r <- gextract(c("a_max", "a_min"), iv, iterator = iv)
+    expect_equal(r$a_max, 0)
+    expect_equal(r$a_min, 400 - 318)
+})

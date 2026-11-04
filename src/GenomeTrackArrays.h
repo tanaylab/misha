@@ -195,12 +195,12 @@ inline void GenomeTrackArrays::calc_vals(const GInterval &interval)
 				if (v > (*itrack)->m_last_max) {
 					(*itrack)->m_last_max = v;
 					if ((*itrack)->has_function(MAX_POS))
-						(*itrack)->m_last_max_pos = iinterv->start;
+						(*itrack)->m_last_max_pos = std::max(iinterv->start, interval.start);
 				}
 				if (v < (*itrack)->m_last_min) {
 					(*itrack)->m_last_min = v;
 					if ((*itrack)->has_function(MIN_POS))
-						(*itrack)->m_last_min_pos = iinterv->start;
+						(*itrack)->m_last_min_pos = std::max(iinterv->start, interval.start);
 				}
 
 				++(*itrack)->m_num_vs;

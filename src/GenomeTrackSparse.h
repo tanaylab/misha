@@ -180,15 +180,15 @@ inline void GenomeTrackSparse::calc_vals(const GInterval &interval)
 			if (v < m_last_min) {
 				m_last_min = v;
 				if (has_function(MIN_POS))
-					m_last_min_pos = iinterv->start;
+					m_last_min_pos = std::max(iinterv->start, interval.start);
 			} else if (has_function(MIN_POS) && v == m_last_min) {
-				if (std::isnan(m_last_min_pos) || iinterv->start < m_last_min_pos)
-					m_last_min_pos = iinterv->start;
+				if (std::isnan(m_last_min_pos) || std::max(iinterv->start, interval.start) < m_last_min_pos)
+					m_last_min_pos = std::max(iinterv->start, interval.start);
 			}
 			if (v > m_last_max) {
 				m_last_max = v;
 				if (has_function(MAX_POS))
-					m_last_max_pos = iinterv->start;
+					m_last_max_pos = std::max(iinterv->start, interval.start);
 			}
 
 			++num_vs;
@@ -213,18 +213,18 @@ inline void GenomeTrackSparse::calc_vals(const GInterval &interval)
 				m_last_first = v;
 
 			if (has_function(FIRST_POS) && std::isnan(m_last_first_pos))
-				m_last_first_pos = iinterv->start;
+				m_last_first_pos = std::max(iinterv->start, interval.start);
 
 			if (has_function(LAST))
 				m_last_last = v;
 
 			if (has_function(LAST_POS))
-				m_last_last_pos = iinterv->start;
+				m_last_last_pos = std::max(iinterv->start, interval.start);
 
 			if (has_function(SAMPLE))
 				all_values.push_back(v);
 			if (has_function(SAMPLE_POS))
-				all_positions.push_back(iinterv->start);
+				all_positions.push_back(std::max(iinterv->start, interval.start));
 		}
 	}
 
