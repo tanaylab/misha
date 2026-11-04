@@ -314,3 +314,39 @@ test_that("array slice stddev is accurate at a large offset", {
     expect_equal(r$arr_sd_all, sd(vals), tolerance = 1e-6)
     expect_equal(r$arr_sd_slice, sd(vals), tolerance = 1e-6)
 })
+
+test_that("gtrack.liftover applies min_score of a pre-loaded chain", {
+    src_root <- tempfile("src_db")
+    on.exit(unlink(src_root, recursive = TRUE), add = TRUE)
+    create_test_db(src_root, data.frame(chrom = "chrS", size = 1000))
+    tgt_root <- get("GROOT", envir = .misha)
+    withr::defer(gsetroot(tgt_root))
+    gsetroot(src_root)
+    gtrack.create_sparse("src_sp", "", gintervals("chrS", 900, 910), 7)
+    gsetroot(tgt_root)
+    src <- file.path(src_root, "tracks", "src_sp.track")
+
+    two <- data.frame(
+        chrom = "chr1", start = c(1000, 3000), end = c(1100, 3100), strand = 1,
+        chromsrc = "chrS", startsrc = 900, endsrc = 1000, strandsrc = 1, chain_id = c(1L, 2L), score = c(10, 1000)
+    )
+    lifted_starts <- function(...) {
+        nm <- paste0("test.lifted_", sample(1:1e9, 1))
+        gtrack.liftover(nm, "", src, ...)
+        r <- gextract(nm, gintervals("chr1", 0, 5000))
+        gtrack.rm(nm, force = TRUE)
+        r$start
+    }
+    ch <- gintervals.as_chain(two, src_overlap_policy = "keep", tgt_overlap_policy = "keep", min_score = 100)
+    expect_equal(lifted_starts(ch), 3000)
+    # a chain without attributes takes min_score from the call
+    expect_equal(lifted_starts(two, src_overlap_policy = "keep", tgt_overlap_policy = "keep", min_score = 100), 3000)
+
+    # a chain row with an NA score is dropped by min_score
+    na_two <- two
+    na_two$score <- c(NA, 1000)
+    res <- gintervals.liftover(data.frame(chrom = "chrS", start = 900, end = 910), na_two,
+        src_overlap_policy = "keep", tgt_overlap_policy = "keep", min_score = 100
+    )
+    expect_equal(res$start, 3000)
+})

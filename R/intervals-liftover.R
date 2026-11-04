@@ -149,7 +149,7 @@ gintervals.liftover <- function(intervals = NULL,
         # A chain file is filtered by min_score when it is loaded; a pre-loaded chain
         # (e.g. from gintervals.as_chain) is filtered here
         if (!is.null(min_score)) {
-            chain.intervs <- chain.intervs[chain.intervs$score >= min_score, , drop = FALSE]
+            chain.intervs <- chain.intervs[which(chain.intervs$score >= min_score), , drop = FALSE]
         }
     }
 

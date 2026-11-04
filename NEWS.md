@@ -6,7 +6,7 @@ This release fixes defects found in a review of 5.14.4. Several change results, 
 
 * **Behavior fix:** `gintervals.liftover()` and `gtrack.liftover()` use the source strand of a chain: a `gintervals.as_chain()` row with `strandsrc = -1`, or a chain file whose reference strand is "-", lifted in the wrong orientation. `gintervals.load_chain()` reports such blocks with the strands combined in `strand`, and `strandsrc` is always 1.
 
-* **Behavior fix:** `gintervals.as_chain()` treats strand 0 as forward (it was lifted as minus) and applies `min_score`, which it ignored.
+* **Behavior fix:** `gintervals.as_chain()` treats strand 0 as forward (it was lifted as minus). `min_score` of a pre-loaded chain (from `gintervals.as_chain()` or passed with it) is now applied by `gintervals.liftover()` and `gtrack.liftover()`, which ignored it; a chain row with an NA score is dropped.
 
 * **Behavior fix:** `gintervals.neighbors(use_intervals1_strand = TRUE)` and `gintervals.neighbors.upstream()`/`.downstream()` read a factor strand column by its labels; every interval used to count as "+".
 
