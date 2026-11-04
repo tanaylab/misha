@@ -53,8 +53,11 @@ void Wig::init(const GenomeChromKey &chromkey, const string &filename, bool igno
 
 			chrom_rec_type = rec.type;
 
-			if (chromid == -1) // unknown chrom
+			if (chromid == -1) { // unknown chrom
+				// a block of a known chromosome that resumes after it is out of order, as after any other chromosome
+				last_chromid = -1;
 				continue;
+			}
 
 			if (chromid != last_chromid) {
 				last_chromid = chromid;

@@ -179,3 +179,25 @@ test_that("gtrack.import_mappedseq resolves chromosome aliases", {
     expect_equal(res$start, c(100, 500, 10))
     expect_equal(res$ms_alias, c(1, 1, 1))
 })
+
+test_that("a WIG / bedGraph block that resumes after an unknown chromosome is an error, as after a known one", {
+    import_test_db("indexed")
+
+    bg <- write_file("chr1\t0\t10\t1\nchrZZ\t0\t10\t9\nchr1\t20\t30\t3\n", ".bedgraph")
+    expect_error(gtrack.import("resume_bg", "", bg, 0), "not sorted by chromosomes")
+    expect_false(gtrack.exists("resume_bg"))
+
+    wig <- write_file("variableStep chrom=chr1\n1\t1\nvariableStep chrom=chrZZ\n1\t9\nvariableStep chrom=chr1\n21\t3\n", ".wig")
+    expect_error(gtrack.import("resume_wig", "", wig, 0), "not sorted by chromosomes")
+
+    # the sibling case: a known chromosome in the middle
+    bg2 <- write_file("chr1\t0\t10\t1\nchr2\t0\t10\t9\nchr1\t20\t30\t3\n", ".bedgraph")
+    expect_error(gtrack.import("resume_bg2", "", bg2, 0), "not sorted by chromosomes")
+
+    # an unknown block between two different chromosomes is still skipped
+    bg3 <- write_file("chr1\t0\t10\t1\nchrZZ\t0\t10\t9\nchr2\t20\t30\t3\n", ".bedgraph")
+    expect_message(gtrack.import("skip_bg", "", bg3, 0), "chrZZ")
+    res <- gextract("skip_bg", gintervals.all())
+    expect_equal(as.character(res$chrom), c("chr1", "chr2"))
+    expect_equal(res$skip_bg, c(1, 3))
+})
