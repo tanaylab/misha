@@ -1,5 +1,17 @@
 # Changelog
 
+## misha 5.15.1
+
+- [`gtrack.2d.import_contacts()`](https://tanaylab.github.io/misha/reference/gtrack.2d.import_contacts.md)
+  writes the same track files on every platform: it stores the contacts
+  in coordinate order, which used to depend on the C++ library. It is
+  also about twice as fast and needs about 20% less memory. Each contact
+  keeps its value;
+  [`gextract()`](https://tanaylab.github.io/misha/reference/gextract.md)
+  may list contacts in a different order than for a track imported by an
+  earlier version, and a sum over many contacts may differ in
+  floating-point rounding.
+
 ## misha 5.15.0
 
 This release fixes defects found in a review of 5.14.4. Several change

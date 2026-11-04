@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">misha</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.15.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.15.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -39,6 +39,11 @@
       <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="5.15.1" id="misha-5151">misha 5.15.1<a class="anchor" aria-label="anchor" href="#misha-5151"></a></h2>
+<ul><li>
+<code><a href="../reference/gtrack.2d.import_contacts.html">gtrack.2d.import_contacts()</a></code> writes the same track files on every platform: it stores the contacts in coordinate order, which used to depend on the C++ library. It is also about twice as fast and needs about 20% less memory. Each contact keeps its value; <code><a href="../reference/gextract.html">gextract()</a></code> may list contacts in a different order than for a track imported by an earlier version, and a sum over many contacts may differ in floating-point rounding.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="5.15.0" id="misha-5150">misha 5.15.0<a class="anchor" aria-label="anchor" href="#misha-5150"></a></h2>
 <p>This release fixes defects found in a review of 5.14.4. Several change results, marked <strong>Behavior fix</strong>; recompute anything that depends on them.</p>
