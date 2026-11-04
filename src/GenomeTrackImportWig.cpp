@@ -1,6 +1,7 @@
 #include <cstdint>
 #include <cmath>
 #include <cstring>
+#include <set>
 
 #include "rdbinterval.h"
 #include "rdbprogress.h"
@@ -200,6 +201,57 @@ private:
 };
 
 extern "C" {
+
+// The chromosome check of the importers above, for gtrack.import of a BED file: its records are passed to
+// gtrack_create_dense / gtrack_create_sparse, which accept only names the database has. Returns for each of the
+// (distinct) names in _chroms whether the database has it, aliases resolved. With _report FALSE it fails as
+// verify_chroms_matched does when none of the names exists. With _report TRUE, called once the track is created,
+// it queues the report of the names that do not exist (report_skipped_chroms).
+SEXP gimport_check_chroms(SEXP _chroms, SEXP _srcname, SEXP _report, SEXP _envir)
+{
+	try {
+		RdbInitializer rdb_init;
+
+		if (!Rf_isString(_chroms))
+			verror("Chromosomes argument is not a vector of strings");
+
+		if (!Rf_isString(_srcname) || Rf_length(_srcname) != 1)
+			verror("Source name argument is not a string");
+
+		if (!Rf_isLogical(_report) || Rf_length(_report) != 1)
+			verror("Report argument is not a logical value");
+
+		IntervUtils iu(_envir);
+		const GenomeChromKey &chromkey = iu.get_chromkey();
+		const char *srcname = CHAR(STRING_ELT(_srcname, 0));
+		UnknownChroms unknown;
+		set<int> matched;
+		SEXP answer = rprotect_ptr(RSaneAllocVector(LGLSXP, Rf_length(_chroms)));
+
+		for (int i = 0; i < Rf_length(_chroms); ++i) {
+			const char *chrom = CHAR(STRING_ELT(_chroms, i));
+			int chromid = chromkey.find_chromid(chrom);
+
+			LOGICAL(answer)[i] = chromid >= 0;
+			if (chromid >= 0)
+				matched.insert(chromid);
+			else
+				unknown.record(chrom);
+		}
+
+		if (LOGICAL(_report)[0])
+			report_skipped_chroms(srcname, unknown, matched.size(), _envir);
+		else
+			verify_chroms_matched(chromkey, srcname, unknown, matched.size(), _envir);
+		return answer;
+	} catch (TGLException &e) {
+		rerror("%s", e.msg());
+	} catch (const bad_alloc &e) {
+		rerror("Out of memory");
+	}
+
+	return R_NilValue;
+}
 
 SEXP gtrackimportwig(SEXP _track, SEXP _wig, SEXP _srcname, SEXP _binsize, SEXP _defvalue, SEXP _envir)
 {

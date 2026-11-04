@@ -217,6 +217,15 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
                 report.progress <- TRUE
                 bed_parsed <- .gtrack_read_bed(file)
                 used_bed <- TRUE
+                # the creators accept only chromosomes of the database: drop the others here, and report
+                # them once the track is created, as the other formats do
+                bed_chroms <- unique(bed_parsed$intervals$chrom)
+                bed_known <- .gcall("gimport_check_chroms", bed_chroms, file.original, FALSE, .misha_env())
+                if (!all(bed_known)) {
+                    keep <- bed_parsed$intervals$chrom %in% bed_chroms[bed_known]
+                    bed_parsed$intervals <- bed_parsed$intervals[keep, , drop = FALSE]
+                    bed_parsed$values <- bed_parsed$values[keep]
+                }
             }
 
             if (!used_bed && report.progress) {
@@ -243,6 +252,7 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
                     } else {
                         .gcall("gtrack_create_sparse", trackstr, bed_parsed$intervals, bed_parsed$values, .misha_env())
                     }
+                    .gcall("gimport_check_chroms", bed_chroms, file.original, TRUE, .misha_env())
                 } else {
                     # file may be a temporary unzipped copy that is
                     # deleted before this call returns; file.original is what the user

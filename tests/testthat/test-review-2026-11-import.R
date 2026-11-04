@@ -217,3 +217,27 @@ test_that("bedGraph and WIG import skip UCSC browser lines", {
     expect_equal(res$start, c(0, 10))
     expect_equal(res$browser_wig, c(4, 5))
 })
+
+test_that("BED import skips and reports chromosomes missing from the database", {
+    import_test_db("indexed")
+
+    bed <- write_file("chr1\t0\t10\nchrUn_zzz\t0\t10\nchrX\t5\t9\n", ".bed")
+    expect_message(gtrack.import("bed_sparse", "", bed, 0), "skipped: chrUn_zzz")
+    res <- gextract("bed_sparse", gintervals.all())
+    expect_equal(as.character(res$chrom), c("chr1", "chrX"))
+    expect_equal(res$start, c(0, 5))
+    expect_equal(res$bed_sparse, c(1, 1))
+
+    expect_message(gtrack.import("bed_dense", "", bed, 10), "skipped: chrUn_zzz")
+    res <- gextract("bed_dense", gintervals(c("chr1", "chrX"), 0, 10))
+    expect_equal(res$bed_dense, c(1, 1))
+
+    # a primary-looking name gets the warning of the other formats
+    bed7 <- write_file("chr1\t0\t10\nchr7\t0\t10\n", ".bed")
+    expect_warning(suppressMessages(gtrack.import("bed_chr7", "", bed7, 0)), "primary chromosome")
+
+    # nothing matched: an error, and no track
+    none <- write_file("chrUn_a\t0\t10\nchrUn_b\t0\t10\n", ".bed")
+    expect_error(suppressMessages(gtrack.import("bed_none", "", none, 0)), "None of the chromosome names")
+    expect_false(gtrack.exists("bed_none"))
+})
