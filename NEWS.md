@@ -10,7 +10,7 @@ This release fixes defects found in a review of 5.14.4. Several change results, 
 
 * **Behavior fix:** `gintervals.neighbors(use_intervals1_strand = TRUE)` and `gintervals.neighbors.upstream()`/`.downstream()` read a factor strand column by its labels; every interval used to count as "+".
 
-* **Behavior fix:** `gintervals.annotate()` returned the query's own columns as the annotation or distance when column names were shared, and `max_dist` blanked the wrong column. With `keep_order = FALSE`, `tie_method` stopped with an error.
+* **Behavior fix:** `gintervals.annotate()` returned the query's own columns as the annotation or distance when column names were shared, and `max_dist` blanked the wrong column. With `keep_order = FALSE`, `tie_method` stopped with an error, and with stranded annotations it could put a farther neighbor first.
 
 * **Behavior fix:** `giterator.intervals(interval_relative = TRUE)` gives the input row in `intervalID`; it gave the row's position in sorted order.
 

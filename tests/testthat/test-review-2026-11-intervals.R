@@ -375,3 +375,15 @@ test_that("gintervals.random gives every valid start the same chance", {
     res <- gintervals.random(1000, 200, dist_from_edge = 0, filter = gintervals("chrB", 0, 99000))
     expect_equal(sort(unique(paste(res$chrom, res$start))), c("chrA 0", "chrB 99000"))
 })
+
+test_that("gintervals.annotate tie_method keeps neighbors ordered by absolute distance with stranded annotations", {
+    q <- data.frame(chrom = "chr1", start = 1000, end = 1100)
+    ann <- data.frame(
+        chrom = "chr1", start = c(1103, 700, 1390), end = c(1110, 800, 1400), strand = c(-1, 1, 1),
+        label = c("near", "mid", "far")
+    )
+    plain <- gintervals.annotate(q, ann, annotation_columns = "label", maxneighbors = 3)
+    tied <- gintervals.annotate(q, ann, annotation_columns = "label", maxneighbors = 3, tie_method = "min.start")
+    expect_equal(plain$label, c("near", "mid", "far"))
+    expect_equal(tied$label, plain$label)
+})

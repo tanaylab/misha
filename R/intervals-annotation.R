@@ -222,7 +222,8 @@ gintervals.annotate <- function(intervals,
     # Apply tie-breaking if needed
     if (tie_method != "first" && maxneighbors > 1) {
         tie_col <- if (tie_method == "min.start") ann_part$start else ann_part$end
-        ord <- order(query_part$.orig_order, dist, tie_col)
+        # dist is signed when the annotations have a strand; ties are by absolute distance
+        ord <- order(query_part$.orig_order, abs(dist), tie_col)
         query_part <- query_part[ord, , drop = FALSE]
         ann_part <- ann_part[ord, , drop = FALSE]
         dist <- dist[ord]
