@@ -110,3 +110,20 @@ test_that("interval set attributes survive gintervals.update moving a set betwee
     expect_false(dir.exists(file.path(db, "tracks", "at1.interv")))
     expect_equal(gintervals.attr.get("at1", "source"), "lab")
 })
+
+test_that("gtrack.mv and gtrack.copy refuse the name of an interval set", {
+    local_db_state()
+    db <- review_db(withr::local_tempdir())
+    gtrack.create_sparse("t1", "", gintervals("chr1", 0, 10), 1)
+    gintervals.save("iset", gintervals("chr1", 0, 100))
+
+    expect_error(gtrack.mv("t1", "iset"), "iset already exists")
+    expect_true(dir.exists(file.path(db, "tracks", "t1.track")))
+    expect_false(dir.exists(file.path(db, "tracks", "iset.track")))
+    expect_error(gtrack.copy("t1", "iset"), "iset already exists")
+    expect_false(dir.exists(file.path(db, "tracks", "iset.track")))
+
+    # the database still opens
+    suppressMessages(gsetroot(db, rescan = TRUE))
+    expect_true("t1" %in% gtrack.ls())
+})

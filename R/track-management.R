@@ -384,6 +384,10 @@ gtrack.mv <- function(src = NULL, dest = NULL) {
     if (destname %in% get("GTRACKS", envir = .misha)) {
         stop(sprintf("Track %s already exists", destname), call. = FALSE)
     }
+    # (as .gconfirmtrackcreate(): a track and an interval set of one name make the database unloadable)
+    if (destname %in% get("GINTERVS", envir = .misha)) {
+        stop(sprintf("Interval %s already exists", destname), call. = FALSE)
+    }
 
     src_dir <- .track_dir(srcname)
     src_db <- .gtrack_db_path(srcname)
@@ -600,6 +604,12 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
     if ((srcname == destname && identical(src_db, dest_db)) ||
         normalizePath(src_dir, mustWork = FALSE) == normalizePath(dest_dir, mustWork = FALSE)) {
         stop(sprintf("Source and destination are the same track: %s", srcname), call. = FALSE)
+    }
+
+    # a track and an interval set of one name make the database unloadable (as gtrack.mv)
+    if ((dest_db %in% c(get("GROOT", envir = .misha), get("GDATASETS", envir = .misha)) && destname %in% get("GINTERVS", envir = .misha)) ||
+        file.exists(.intervals_dir(destname, dest_db))) {
+        stop(sprintf("Interval %s already exists", destname), call. = FALSE)
     }
 
     # Use the filesystem as the source of truth for "destination already exists".
