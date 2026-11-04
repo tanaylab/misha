@@ -41,3 +41,36 @@ test_that("2D gintervals.annotate with tie_method and maxneighbors > 1 gives a c
     )
     expect_equal(gintervals.annotate(q, a, annotation_columns = "lab", maxneighbors = 2)$lab, c("x", "y"))
 })
+
+test_that("first, last, sample, lse and their positions work on array tracks", {
+    iv <- gintervals("chr1", c(100, 200, 300, 500, 700), c(150, 260, 400, 600, 750))
+    a <- c(1, 2, 3, 4, 5)
+    b <- c(11, 12, 13, 14, 15)
+    vals <- (a + b) / 2
+    f <- tempfile(fileext = ".tsv")
+    on.exit(unlink(f), add = TRUE)
+    write.table(cbind(iv, a = a, b = b), f, sep = "\t", quote = FALSE, row.names = FALSE)
+    nm <- paste0("test.arr_fl_", sample(1:1e9, 1))
+    withr::defer(gtrack.rm(nm, force = TRUE))
+    suppressMessages(gtrack.array.import(nm, "", f))
+    withr::defer(remove_all_vtracks())
+
+    q <- gintervals("chr1", c(0, 120, 230, 410), c(1000, 330, 240, 490))
+    ext <- function(func) {
+        gvtrack.create("arr_v", nm, func)
+        gextract("arr_v", q, iterator = q, colnames = "v")$v
+    }
+    expect_equal(ext("first"), c(vals[1], vals[1], vals[2], NaN))
+    expect_equal(ext("first.pos.abs"), c(100, 120, 230, NaN))
+    expect_equal(ext("last"), c(vals[5], vals[3], vals[2], NaN))
+    expect_equal(ext("last.pos.abs"), c(700, 300, 230, NaN))
+    expect_equal(ext("last.pos.relative"), c(700, 180, 0, NaN))
+    expect_equal(ext("lse"), c(log(sum(exp(vals))), log(sum(exp(vals[1:3]))), vals[2], NaN), tolerance = 1e-6)
+    s <- ext("sample")
+    expect_true(s[1] %in% vals && s[2] %in% vals[1:3])
+    expect_equal(s[3:4], c(vals[2], NaN))
+    sp <- ext("sample.pos.abs")
+    expect_true(sp[1] %in% iv$start)
+    expect_true(sp[2] %in% c(120, 200, 300))
+    expect_equal(sp[3:4], c(230, NaN))
+})
