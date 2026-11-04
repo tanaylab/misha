@@ -12,6 +12,7 @@ using namespace std;
 
 GenomeTrackInMemory::GenomeTrackInMemory() :
 	GenomeTrack1D(COMPUTED),
+	m_cur_chromid(-1),
 	m_last_min_pos(numeric_limits<double>::quiet_NaN())
 {
 	// COMPUTED type since it's not a file-based track
@@ -31,7 +32,21 @@ void GenomeTrackInMemory::init_from_data(
 	m_intervals = intervals;
 	m_vals = vals;
 	m_chromid = chromid;
-	m_icur_interval = m_intervals.begin();
+	m_cur_chromid = -1;
+	select_chrom(chromid);
+}
+
+void GenomeTrackInMemory::select_chrom(int chromid)
+{
+	if (chromid == m_cur_chromid)
+		return;
+	m_cur_chromid = chromid;
+	auto less_chrom = [](const GInterval &a, int c) { return a.chromid < c; };
+	m_chrom_begin = lower_bound(m_intervals.cbegin(), m_intervals.cend(), chromid, less_chrom);
+	m_chrom_end = m_chrom_begin;
+	while (m_chrom_end != m_intervals.cend() && m_chrom_end->chromid == chromid)
+		++m_chrom_end;
+	m_icur_interval = m_chrom_begin;
 }
 
 void GenomeTrackInMemory::read_interval(const GInterval &interval)
@@ -66,31 +81,32 @@ void GenomeTrackInMemory::read_interval(const GInterval &interval)
 	if (m_use_quantile)
 		m_sp.reset();
 
-	if (m_intervals.empty())
+	select_chrom(interval.chromid);
+	if (m_chrom_begin == m_chrom_end)
 		return;
 
 	// Early exit checks (from GenomeTrackSparse)
-	if (m_intervals.front().start >= interval.end) {
-		m_last_nearest = m_vals.front();
+	if (m_chrom_begin->start >= interval.end) {
+		m_last_nearest = m_vals[m_chrom_begin - m_intervals.begin()];
 		return;
 	}
 
-	if (m_intervals.back().end <= interval.start) {
-		m_last_nearest = m_vals.back();
+	if ((m_chrom_end - 1)->end <= interval.start) {
+		m_last_nearest = m_vals[m_chrom_end - 1 - m_intervals.begin()];
 		return;
 	}
 
 	// Try sequential access first (optimization from GenomeTrackSparse)
 	if (check_first_overlap(m_icur_interval, interval)) {
 		calc_vals_coverage_weighted(interval);
-	} else if (m_icur_interval + 1 < m_intervals.end() &&
+	} else if (m_icur_interval + 1 < m_chrom_end &&
 	           check_first_overlap(m_icur_interval + 1, interval)) {
 		++m_icur_interval;
 		calc_vals_coverage_weighted(interval);
 	} else {
 		// Binary search (pattern from GenomeTrackSparse)
-		GIntervals::const_iterator istart_interval = m_intervals.begin();
-		GIntervals::const_iterator iend_interval = m_intervals.end();
+		GIntervals::const_iterator istart_interval = m_chrom_begin;
+		GIntervals::const_iterator iend_interval = m_chrom_end;
 
 		while (iend_interval - istart_interval > 1) {
 			GIntervals::const_iterator imid_interval =
@@ -116,7 +132,7 @@ void GenomeTrackInMemory::read_interval(const GInterval &interval)
 
 		// Handle nearest value
 		if (iend_interval - istart_interval == 1)
-			m_last_nearest = iend_interval == m_intervals.end() ||
+			m_last_nearest = iend_interval == m_chrom_end ||
 			                 interval.dist2interv(*istart_interval) <= interval.dist2interv(*iend_interval) ?
 				m_vals[istart_interval - m_intervals.begin()] : m_vals[iend_interval - m_intervals.begin()];
 	}
@@ -161,7 +177,7 @@ void GenomeTrackInMemory::calc_vals_coverage_weighted(const GInterval &interval)
 
 	// Iterate through all overlapping intervals
 	for (GIntervals::const_iterator iinterv = m_icur_interval;
-	     iinterv != m_intervals.end();
+	     iinterv != m_chrom_end;
 	     ++iinterv) {
 
 		if (!iinterv->do_overlap(interval))

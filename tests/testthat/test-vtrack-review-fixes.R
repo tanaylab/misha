@@ -44,3 +44,19 @@ test_that("a NaN bin of a dense track gives no value to exists, size and the pos
     expect_true(all(is.na(r$mp[in_nan_bin])))
     expect_equal(r$mp[!in_nan_bin], r$start[!in_nan_bin])
 })
+
+test_that("value-based vtracks read only the query's chromosome", {
+    local_db_state()
+    vt_fix_db()
+    vals <- data.frame(chrom = c("chr1", "chr2"), start = c(1000, 10), end = c(1100, 20), score = c(5, 7))
+    gvtrack.create("v_avg", vals, "avg")
+    gvtrack.create("v_near", vals, "nearest")
+    gvtrack.create("v_ex", vals, "exists")
+    withr::defer(gvtrack.clear())
+    q <- gintervals(c("chr1", "chr1", "chr2"), c(1000, 3000, 10), c(1100, 3100, 20))
+    r <- gextract(c("v_avg", "v_near", "v_ex"), q, iterator = q)
+    r <- r[order(r$chrom, r$start), ]
+    expect_equal(r$v_avg, c(5, NaN, 7))
+    expect_equal(r$v_near, c(5, 5, 7))
+    expect_equal(r$v_ex, c(1, 0, 1))
+})

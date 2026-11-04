@@ -1525,7 +1525,7 @@ TrackExpressionVars::Value_var &TrackExpressionVars::add_vtrack_var_src_value(SE
 	// Create the track object
 	var.track = make_shared<GenomeTrackInMemory>();
 
-	// Determine chromid (assuming all intervals are on same chrom, or 0 if empty)
+	// The track holds every chromosome's intervals and restricts each query to the query's chromosome
 	int chromid = sorted_intervals.empty() ? 0 : sorted_intervals.front().chromid;
 
 	// Initialize track with data
