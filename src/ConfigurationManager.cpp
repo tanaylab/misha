@@ -96,11 +96,6 @@ uint64_t ConfigurationManager::get_min_seqs_work4process() const
 	return m_min_seqs_work4process;
 }
 
-// What gmax.data.size means by "no limit" (Inf, a value of 2^53 or more, or the option unset).
-// The limit is multiplied by record and element sizes to size buffers and the multitasking shared
-// memory; UINT64_MAX overflowed there (multitasked gquantiles crashed its kids), 2^53 cannot.
-static const uint64_t MAX_DATA_SIZE_NO_LIMIT = (uint64_t)1 << 53;
-
 uint64_t ConfigurationManager::get_max_data_size() const
 {
 	if (!m_max_data_size) {
@@ -121,12 +116,12 @@ uint64_t ConfigurationManager::get_max_data_size() const
 				verror("options(gmax.data.size) must be a number, not NA");
 			if (size < 0)
 				verror("options(gmax.data.size) must not be negative (got %g)", size);
-			if (size >= (double)MAX_DATA_SIZE_NO_LIMIT)
-				m_max_data_size = MAX_DATA_SIZE_NO_LIMIT;
+			if (size >= (double)misha::config::MAX_DATA_SIZE_NO_LIMIT)
+				m_max_data_size = misha::config::MAX_DATA_SIZE_NO_LIMIT;
 			else
 				m_max_data_size = size < 1 ? 1 : (uint64_t)size;
 		} else
-			m_max_data_size = MAX_DATA_SIZE_NO_LIMIT;
+			m_max_data_size = misha::config::MAX_DATA_SIZE_NO_LIMIT;
 	}
 	return m_max_data_size;
 }
@@ -136,11 +131,21 @@ uint64_t ConfigurationManager::get_max_mem_usage() const
 	if (!m_max_mem_usage) {
 		SEXP r_max_mem_usage = Rf_GetOption1(Rf_install("gmax.mem.usage"));
 
-		if (Rf_isReal(r_max_mem_usage))
-			m_max_mem_usage = (uint64_t)REAL(r_max_mem_usage)[0] * 1000;
-		else if (Rf_isInteger(r_max_mem_usage))
-			m_max_mem_usage = (uint64_t)INTEGER(r_max_mem_usage)[0] * 1000;  // in 64 bits: 4 GB as KB overflows an int
-		else
+		// In KB. As for gmax.data.size: NA (logical or double) and negative values are errors
+		// (casting them to uint64_t is undefined), and Inf or any value too large to hold in
+		// bytes is no limit. 0 stays allowed: it throttles the kids to one at a time.
+		if (Rf_isLogical(r_max_mem_usage) && Rf_length(r_max_mem_usage) >= 1 && LOGICAL(r_max_mem_usage)[0] == NA_LOGICAL)
+			verror("options(gmax.mem.usage) must be a number, not NA");
+
+		if (is_num_vector(r_max_mem_usage) && Rf_length(r_max_mem_usage) >= 1) {
+			double kb = num_elt(r_max_mem_usage, 0);
+
+			if (std::isnan(kb))
+				verror("options(gmax.mem.usage) must be a number, not NA");
+			if (kb < 0)
+				verror("options(gmax.mem.usage) must not be negative (got %g)", kb);
+			m_max_mem_usage = kb * 1000 >= (double)misha::config::UNLIMITED ? misha::config::UNLIMITED : (uint64_t)kb * 1000;
+		} else
 			m_max_mem_usage = misha::config::UNLIMITED;
 	}
 	return m_max_mem_usage;

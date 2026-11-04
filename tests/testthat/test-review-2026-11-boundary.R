@@ -328,3 +328,39 @@ test_that("with gmax.data.size = Inf or unset, multitasked calls map a RAM-sized
     expect_error(glookup(1:2, "test.fixedbin", c(0, 0.15, 1), intervals = s), "Result size exceeded")
     expect_equal(nrow(gextract("test.fixedbin", s)), nrow(expected[[4]]))
 })
+
+test_that("a finite gmax.data.size keeps multitasked gquantiles exact whatever gmax.mem.usage is", {
+    s <- gintervals(1:4, 0, 4e7)
+    vals <- gextract("test.fixedbin", s)$test.fixedbin
+    expect_gt(sum(!is.na(vals)), 2e6)
+    p <- c(0.1, 0.5, 0.9, 0.99)
+    withr::local_options(gmultitasking = TRUE, gmax.processes = 4, gmax.data.size = 1e7, gmax.mem.usage = 1000)
+    t0 <- proc.time()[["user.child"]]
+    expect_no_warning(res <- gquantiles("test.fixedbin", p, s))
+    expect_gt(proc.time()[["user.child"]], t0)
+    expect_equal(unname(res), unname(quantile(vals, p, na.rm = TRUE, type = 1)), tolerance = 1e-6)
+})
+
+test_that("gmax.mem.usage of 0 still leaves a working arena; NA or negative is an error", {
+    s <- gintervals(c(1, 2), 0, 2e7)
+    p <- c(0.1, 0.5, 0.9)
+    expected <- quantile(gextract("test.fixedbin", s)$test.fixedbin, p, na.rm = TRUE, type = 1)
+    withr::local_options(gmultitasking = TRUE, gmax.processes = 4, gmax.data.size = Inf, gmax.mem.usage = 0)
+    expect_equal(unname(gquantiles("test.fixedbin", p, s)), unname(expected), tolerance = 1e-6)
+    for (bad in list(NA, NA_real_, -1)) {
+        withr::local_options(gmax.mem.usage = bad)
+        expect_error(gquantiles("test.fixedbin", p, s), "gmax.mem.usage")
+    }
+})
+
+test_that("multitasked spearman gcor with gmax.data.size = Inf or unset matches cor()", {
+    s <- gintervals(c(1, 2), 0, 2e7)
+    x <- gextract("test.fixedbin", "test.sparse", s, iterator = "test.fixedbin")
+    expected <- cor(x[[4]], x[[5]], method = "spearman", use = "complete.obs")
+    withr::local_options(gmultitasking = TRUE, gmax.processes = 4)
+    for (limit in list(Inf, NULL)) {
+        withr::local_options(gmax.data.size = limit)
+        res <- gcor("test.fixedbin", "test.sparse", intervals = s, iterator = "test.fixedbin", method = "spearman")
+        expect_equal(unname(res), expected, tolerance = 1e-6)
+    }
+})

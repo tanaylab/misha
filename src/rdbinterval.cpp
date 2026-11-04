@@ -21,6 +21,7 @@
 #include <utility>
 
 #include "rdbinterval.h"
+#include "ConfigurationDefaults.h"
 #include "rdbutils.h"
 #include "TrackExpressionScanner.h"
 #include "TrackExpressionFixedBinIterator.h"
@@ -826,7 +827,19 @@ uint64_t IntervUtils::get_ram_shm_size() const
 	long pages = sysconf(_SC_PHYS_PAGES);
 	long page_size = sysconf(_SC_PAGE_SIZE);
 	uint64_t ram = pages > 0 && page_size > 0 ? (uint64_t)pages * (uint64_t)page_size : (uint64_t)8e9; // 8 GB, the fallback of get_system_memory()
-	return min(ram / 2, get_max_mem_usage());
+	return max(min(ram / 2, get_max_mem_usage()), misha::config::MIN_RAM_SHM_SIZE);
+}
+
+bool IntervUtils::is_data_size_unlimited() const
+{
+	return get_max_data_size() >= misha::config::MAX_DATA_SIZE_NO_LIMIT;
+}
+
+uint64_t IntervUtils::get_kid_buf_size(unsigned num_kids, uint64_t num_bufs, uint64_t record_size) const
+{
+	if (!is_data_size_unlimited())
+		return (uint64_t)ceil(get_max_data_size() / (double)num_kids);
+	return max(get_ram_shm_size() / (max(num_bufs, (uint64_t)1) * record_size), (uint64_t)1);
 }
 
 // Original 2-parameter version for backward compatibility

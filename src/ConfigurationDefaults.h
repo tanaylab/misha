@@ -91,6 +91,15 @@ constexpr double SUGGESTED_SIZE_MULTIPLIER = 1.5;
  */
 constexpr uint64_t UNLIMITED = std::numeric_limits<uint64_t>::max();
 
+// What gmax.data.size means by "no limit" (Inf, a value of 2^53 or more, or the option unset).
+// The limit is multiplied by record and element sizes to size buffers and the multitasking shared
+// memory; UINT64_MAX overflowed there (multitasked gquantiles crashed its kids), 2^53 cannot.
+constexpr uint64_t MAX_DATA_SIZE_NO_LIMIT = (uint64_t)1 << 53;
+
+// The smallest arena get_ram_shm_size() returns, whatever gmax.mem.usage is: a smaller one left
+// no room for even one value of a kid's quantile sample.
+constexpr uint64_t MIN_RAM_SHM_SIZE = (uint64_t)16 << 20;
+
 }  // namespace config
 }  // namespace misha
 
