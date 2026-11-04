@@ -796,28 +796,13 @@ gdataset.example_path <- function() {
         return(list(tracks = character(0), intervals = character(0)))
     }
 
-    # the dirty flag as it is before the scan (.gdb.cache_clear_dirty())
-    dirty_token <- .gdb.cache_dirty_token(db)
-    res <- .gcall("gfind_tracks_n_intervals", tracks_dir, .misha_env())
+    # scanned, and the cache written (nothing is written to a database that cannot be)
+    res <- .gdb.cache_rescan(db)
     if (is.null(res)) {
         return(list(tracks = character(0), intervals = character(0)))
     }
 
-    tracks <- .gdb.normalize_cache_list(res[[1]])
-    intervals <- .gdb.normalize_cache_list(res[[2]])
-
-    # Write cache for future use (silently fail if no write permission)
-    try(
-        {
-            f <- .gwith_umask(file(cache_path, "wb"))
-            serialize(list(tracks, intervals), f)
-            close(f)
-            .gdb.cache_clear_dirty(db, dirty_token)
-        },
-        silent = TRUE
-    )
-
-    list(tracks = tracks, intervals = intervals)
+    list(tracks = res[[1]], intervals = res[[2]])
 }
 
 .gdb.scan_tracks <- function(db, use_cache = TRUE) {

@@ -397,7 +397,11 @@ test_that("a write leaves a .db.cache that another session marked dirty dirty, a
     writeLines("set by another session", dirty)
 
     gtrack.create_sparse("t5", "", gintervals("chr1", 0, 10), 5)
-    expect_equal(readLines(dirty), "set by another session")
+    # marked again by this writer: whoever set the flag cannot clear it while t5 is missing too
+    expect_true(file.exists(dirty))
+    expect_false(identical(readLines(dirty), "set by another session"))
+    expect_false(.gdb.cache_clear_dirty(db, "set by another session"))
+    expect_true(file.exists(dirty))
     gintervals.rm("nothing_here", force = TRUE)
     expect_true(file.exists(dirty))
 
@@ -537,4 +541,69 @@ test_that("tracks and interval sets another session re-created with another layo
     expect_equal(gextract("dt", gintervals("chr1", 0, 14))$dt, c(5, 5))
     expect_equal(gextract("rt", gintervals.2d("chr1", 0, 100, "chr2", 0, 100))$rt, c(4, 5))
     expect_equal(gextract("st", intervals = "bs")$st, c(5, 7, 8))
+})
+
+test_that("a rescan does not clear the dirty flag over a track created during its scan", {
+    skip_on_os("windows")
+    local_db_state()
+    db <- review_db(withr::local_tempdir())
+    .gdb.cache_mark_dirty(db)
+    real_gcall <- misha:::.gcall
+    local_mocked_bindings(.gcall = function(...) {
+        res <- real_gcall(...)
+        # another session, loaded before (its lists of this database), creates a track right after
+        # the scan (a forked child of this reload would start from its half-reloaded state)
+        if (identical(..1, "gfind_tracks_n_intervals") && !dir.exists(file.path(db, "tracks", "late.track"))) {
+            in_other_session({
+                assign("GTRACKS", character(0), envir = .misha)
+                assign("GINTERVS", character(0), envir = .misha)
+                assign("GTRACKS_SRC", db, envir = .misha)
+                gtrack.create_sparse("late", "", gintervals("chr1", 0, 10), 1)
+            })
+        }
+        res
+    })
+    suppressMessages(gdb.reload())
+    expect_true(dir.exists(file.path(db, "tracks", "late.track")))
+    expect_true("late" %in% read_cache(db)[[1]] || .gdb.cache_is_dirty(db))
+})
+
+test_that("concurrent sessions leave every track in .db.cache or the cache dirty", {
+    skip_on_os("windows")
+    local_db_state()
+    db <- review_db(withr::local_tempdir())
+    jobs <- lapply(1:8, function(k) {
+        parallel::mcparallel(withr::with_options(list(gmultitasking = FALSE), {
+            for (i in 1:5) gtrack.create_sparse(sprintf("c%d_%d", k, i), "", gintervals("chr1", 0, 10), i)
+            TRUE
+        }))
+    })
+    expect_true(all(vapply(parallel::mccollect(jobs), isTRUE, logical(1))))
+    tracks <- sprintf("c%d_%d", rep(1:8, each = 5), 1:5)
+    expect_true(all(dir.exists(file.path(db, "tracks", paste0(tracks, ".track")))))
+    expect_true(all(tracks %in% read_cache(db)[[1]]) || .gdb.cache_is_dirty(db))
+    expect_false(file.exists(file.path(db, ".db.cache.lock")))
+    suppressMessages(gsetroot(db))
+    expect_true(all(tracks %in% gtrack.ls()))
+})
+
+test_that("a stale .db.cache lock is broken, and a held one makes a writer mark the cache dirty", {
+    local_db_state()
+    db <- review_db(withr::local_tempdir())
+    lock <- file.path(db, ".db.cache.lock")
+
+    # left by a killed writer a minute ago
+    writeLines("n0 1 dead", lock)
+    Sys.setFileTime(lock, Sys.time() - 60)
+    gtrack.create_sparse("after_stale", "", gintervals("chr1", 0, 10), 1)
+    expect_false(file.exists(lock))
+    expect_true("after_stale" %in% read_cache(db)[[1]])
+    expect_false(.gdb.cache_is_dirty(db))
+
+    # held now by another writer
+    writeLines("n0 2 alive", lock)
+    gtrack.create_sparse("while_held", "", gintervals("chr1", 0, 10), 1)
+    expect_equal(readLines(lock), "n0 2 alive")
+    expect_true(.gdb.cache_is_dirty(db))
+    unlink(lock)
 })

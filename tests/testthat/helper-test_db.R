@@ -148,7 +148,7 @@ build_test_db_overlay <- function(path, source_db = shared_test_db_path(), top_l
     # gdb.create). Copied, not linked, so the rewrite stays local.
     copied <- c("chrom_sizes.txt", ".ro_attributes")
     # The overlay builds its own.
-    ignored <- c(".db.cache", ".db.cache.dirty", ".db.cache.tmp")
+    ignored <- c(".db.cache", ".db.cache.dirty", ".db.cache.tmp", ".db.cache.lock")
 
     present <- list.files(source_db, all.files = TRUE, no.. = TRUE)
     if (!is.null(top_level)) {
