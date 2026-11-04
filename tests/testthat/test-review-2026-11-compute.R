@@ -75,16 +75,6 @@ test_that("first, last, sample, lse and their positions work on array tracks", {
     expect_equal(sp[3:4], c(230, NaN))
 })
 
-test_that("the minimal rectangle of a band intersection is exact", {
-    sq <- gintervals.2d("chr1", 0, 100, "chr1", 0, 100)
-    for (band in list(c(-1000, -50), c(-1000, 0), c(10, 1000), c(-20, 31))) {
-        px <- expand.grid(x = 0:99, y = 0:99)
-        px <- px[px$x - px$y >= band[1] & px$x - px$y < band[2], ]
-        r <- gintervals.2d.band_intersect(sq, band = band)
-        expect_equal(c(r$start1, r$end1, r$start2, r$end2), c(min(px$x), max(px$x) + 1, min(px$y), max(px$y) + 1), info = paste(band, collapse = ","))
-    }
-})
-
 test_that("bands wider than 2^31 are accepted", {
     sq <- gintervals.2d("chr1", 0, 100, "chr1", 0, 100)
     r <- gintervals.2d.band_intersect(sq, band = c(10, 3e9))

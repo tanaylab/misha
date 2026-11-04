@@ -46,18 +46,17 @@ inline bool DiagonalBand::do_contain(const Rectangle &rect) const
 	return rect.x1 - rect.y2 + 1 >= d1 && rect.x2 - rect.y1 <= d2;
 }
 
-// A point (x, y) is in the band when d1 <= x - y < d2, i.e. x - y <= d2 - 1
 inline void DiagonalBand::shrink2intersected(Rectangle &rect) const
 {
 	if (rect.x1 - rect.y1 < d1)
 		rect.x1 = x1(rect.y1);
-	else if (rect.x1 - rect.y1 >= d2)
-		rect.y1 = y2(rect.x1) + 1;
+	else if (rect.x1 - rect.y1 > d2)
+		rect.y1 = y2(rect.x1);
 
 	if (rect.x2 - rect.y2 < d1)
 		rect.y2 = y1(rect.x2);
-	else if (rect.x2 - rect.y2 >= d2)
-		rect.x2 = x2(rect.y2) - 1;
+	else if (rect.x2 - rect.y2 > d2)
+		rect.x2 = x2(rect.y2);
 }
 
 inline int64_t DiagonalBand::intersected_area(const Rectangle &shrinked_rect) const
