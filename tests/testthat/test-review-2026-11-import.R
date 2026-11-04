@@ -407,3 +407,20 @@ test_that("2D imports say so when chromosome names matched but no record has bot
     expect_error(suppressMessages(gtrack.2d.import_contacts("one_sided", "", contacts, fends)), "No contact of .* could be placed")
     expect_false(gtrack.exists("one_sided"))
 })
+
+test_that("a forced 2D re-conversion refuses when only some pairs have a per-pair file", {
+    import_test_db("indexed")
+
+    gtrack.2d.create("partial", "", gintervals.2d(c("chr1", "chr2"), 0, 100, c("chr1", "chrX"), 0, 100), c(1, 2))
+    gtrack.2d.convert_to_indexed("partial", remove.old = FALSE, force = TRUE)
+    dir <- file.path(.misha$GWD, "partial.track")
+    pair_files <- setdiff(list.files(dir), c("track.dat", "track.idx", ".attributes"))
+    expect_length(pair_files, 2)
+    unlink(file.path(dir, pair_files[1]))
+    dat_before <- readBin(file.path(dir, "track.dat"), "raw", file.size(file.path(dir, "track.dat")))
+
+    expect_error(gtrack.2d.convert_to_indexed("partial", remove.old = TRUE, force = TRUE), "per-pair files for only some")
+    expect_identical(readBin(file.path(dir, "track.dat"), "raw", file.size(file.path(dir, "track.dat"))), dat_before)
+    expect_true(file.exists(file.path(dir, pair_files[2])))
+    expect_equal(gextract("partial", gintervals.2d.all())$partial, c(1, 2))
+})

@@ -131,16 +131,23 @@ SEXP gtrack2d_convert_to_indexed(SEXP _track, SEXP _remove_old, SEXP _envir) {
             try {
                 auto old_idx = TrackIndex2D::get_track_index_2d(track_dir);
                 if (old_idx && old_idx->is_loaded()) {
-                    // Check if any per-pair files exist
+                    // Check which per-pair files exist
                     bool have_pair_files = false;
+                    string missing_pair_file;
                     for (const auto &entry : old_idx->entries()) {
-                        string pair_file = track_dir + "/" + GenomeTrack::get_2d_filename(chromkey, entry.chrom1_id, entry.chrom2_id);
+                        string pair_file = GenomeTrack::get_2d_filename(chromkey, entry.chrom1_id, entry.chrom2_id);
                         struct stat pst;
-                        if (stat(pair_file.c_str(), &pst) == 0) {
+                        if (stat((track_dir + "/" + pair_file).c_str(), &pst) == 0)
                             have_pair_files = true;
-                            break;
-                        }
+                        else if (missing_pair_file.empty())
+                            missing_pair_file = pair_file;
                     }
+
+                    // Only some of the pairs have a file: packing them would replace track.dat, and lose the data of
+                    // the other pairs. Refuse before anything is changed.
+                    if (have_pair_files && !missing_pair_file.empty())
+                        extract_error = "Track " + track + " is indexed and has per-pair files for only some of its chromosome pairs (" +
+                            missing_pair_file + " is one that is missing): converting it would lose the data of the pairs without a file";
 
                     if (!have_pair_files) {
                         // Extract per-pair data from track.dat back to per-pair files
