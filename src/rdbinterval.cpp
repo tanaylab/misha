@@ -398,8 +398,9 @@ static void split_intervals_1d_by_range(const GIntervals &intervals, int desired
 				int64_t aligned_end = (chunk_end / split_align_1d) * split_align_1d;
 				if (aligned_end <= seg_start)
 					aligned_end = ((seg_start / split_align_1d) + 1) * split_align_1d;
-				if (aligned_end < seg_end_total)
-					chunk_end = aligned_end;
+				// No bin boundary left inside the interval: don't cut it at an
+				// unaligned point, or one iterator bin becomes two rows.
+				chunk_end = aligned_end < seg_end_total ? aligned_end : seg_end_total;
 			}
 
 			if (chunk_end <= seg_start)

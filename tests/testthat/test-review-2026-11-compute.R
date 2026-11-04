@@ -218,3 +218,11 @@ test_that("gseq.pwm_edits reports tied edits in motif order", {
     r <- gseq.pwm_edits(strrep("C", 20), pssm, score.thresh = thr, bidirect = FALSE, prior = 0, max_indels = 1)
     expect_equal(r$motif_col, 1:5)
 })
+
+test_that("multitask range splitting does not cut an iterator bin in two", {
+    withr::local_options(list(gmultitasking = TRUE, gmin.scope4process = 1000, gmax.processes = 4))
+    # 7 bp intervals, each inside one 10 bp bin; the split point falls inside one of them
+    s <- seq(0, by = 20, length.out = 80002) + 1
+    iv <- gintervals("chr1", s, s + 7)
+    expect_equal(gsummary("test.fixedbin", iv, iterator = 10)[["Total intervals"]], 80002)
+})
