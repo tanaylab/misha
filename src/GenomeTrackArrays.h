@@ -187,7 +187,6 @@ inline void GenomeTrackArrays::calc_vals(const GInterval &interval)
 			v = (*itrack)->get_sliced_val(iinterv - m_intervals.begin());
 			if (!std::isnan(v)) {
 				(*itrack)->m_sum_accum += v;
-				(*itrack)->m_last_min = min((*itrack)->m_last_min, v);
 				if (v > (*itrack)->m_last_max) {
 					(*itrack)->m_last_max = v;
 					if ((*itrack)->has_function(MAX_POS))
@@ -250,7 +249,9 @@ inline float GenomeTrackArrays::get_array_val(uint64_t islice)
 	} else
 		prev_hint = 0;
 
-	// run binary search
+	// run binary search; starting at the previous slice's position is valid only when the slice indices ascend
+	if (islice && m_slice[islice - 1] > slice)
+		prev_hint = 0;
 	ArrayVals::const_iterator iarray_val = lower_bound(m_array_vals.begin() + prev_hint, m_array_vals.end(), slice, LessIdx());
 	hint = iarray_val - m_array_vals.begin();
 	return iarray_val < m_array_vals.end() && iarray_val->idx == slice ? iarray_val->val : numeric_limits<float>::quiet_NaN();

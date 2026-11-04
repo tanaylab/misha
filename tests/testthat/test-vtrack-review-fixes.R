@@ -60,3 +60,34 @@ test_that("value-based vtracks read only the query's chromosome", {
     expect_equal(r$v_near, c(5, 5, 7))
     expect_equal(r$v_ex, c(1, 0, 1))
 })
+
+test_that("gtrack.array.extract reads columns given in any order", {
+    asc <- gtrack.array.extract("test.array", c("col1", "col5"), gintervals(c(1, 2)))
+    desc <- gtrack.array.extract("test.array", c("col5", "col1"), gintervals(c(1, 2)))
+    expect_equal(desc$col1, asc$col1)
+    expect_equal(desc$col5, asc$col5)
+    expect_true(any(!is.na(desc$col1)))
+})
+
+test_that("min.pos on an array track reports the position of the minimum", {
+    local_db_state()
+    vt_fix_db()
+    f <- withr::local_tempfile(fileext = ".tsv")
+    writeLines(c(
+        "chrom\tstart\tend\ta\tb",
+        "chr1\t0\t10\t5\t5",
+        "chr1\t20\t30\t1\t1",
+        "chr1\t40\t50\t3\t3"
+    ), f)
+    suppressMessages(gtrack.array.import("arr", "x", f))
+    withr::defer(gtrack.rm("arr", force = TRUE))
+    gvtrack.create("a_minp", "arr", "min.pos.abs")
+    gvtrack.create("a_minr", "arr", "min.pos.relative")
+    gvtrack.create("a_maxp", "arr", "max.pos.abs")
+    withr::defer(gvtrack.clear())
+    iv <- gintervals("chr1", 0, 100)
+    r <- gextract(c("a_minp", "a_minr", "a_maxp"), iv, iterator = iv)
+    expect_equal(r$a_minp, 20)
+    expect_equal(r$a_minr, 20)
+    expect_equal(r$a_maxp, 0)
+})
