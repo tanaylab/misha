@@ -34,10 +34,11 @@ struct IntervalSummary {
 
 	double get_mean() const { return total / num_non_nan_bins; }
 
-	// sum((x - mean)^2)
+	// sum((x - mean)^2). Rounding can leave it slightly negative; NaN (an infinite value) is
+	// kept, so the standard deviation is NaN as in R's sd().
 	double get_sq_dev_sum() const {
 		double sq_dev_sum = shifted_sq_sum - shifted_sum * shifted_sum / num_non_nan_bins;
-		return sq_dev_sum > 0 ? sq_dev_sum : 0;
+		return sq_dev_sum < 0 ? 0 : sq_dev_sum;
 	}
 
 	// unbiased standard deviation: sqrt(sum((x-mean)^2) / (N-1))

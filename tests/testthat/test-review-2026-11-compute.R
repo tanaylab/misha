@@ -16,3 +16,17 @@ test_that("gcor is accurate at a large offset, single process and multitask", {
         expect_equal(r[1, "cor"], 1, tolerance = 1e-9)
     }
 })
+
+test_that("summaries give a NaN standard deviation when a value is infinite, as sd() does", {
+    expr <- "ifelse(test.fixedbin > 0.15, Inf, test.fixedbin)"
+    iv <- gintervals(1, 0, 1000)
+    x <- gextract(expr, iv, iterator = 100, colnames = "v")$v
+    expect_true(any(is.infinite(x)))
+    expect_true(is.nan(sd(x)))
+
+    expect_true(is.nan(gsummary(expr, iv, iterator = 100)[["Std dev"]]))
+    expect_true(is.nan(gintervals.summary(expr, iv, iterator = 100)[["Std dev"]]))
+    expect_true(is.nan(gbins.summary("test.fixedbin", breaks = c(0, 0.5), expr = expr, intervals = iv, iterator = 100)[1, "Std dev"]))
+    # a finite set still has a finite one
+    expect_equal(gsummary("test.fixedbin", iv, iterator = 100)[["Std dev"]], sd(gextract("test.fixedbin", iv, iterator = 100)$test.fixedbin))
+})
