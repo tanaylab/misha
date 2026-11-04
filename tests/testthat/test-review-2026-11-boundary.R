@@ -245,3 +245,21 @@ test_that("computing a track's percentiles for a global.percentile vtrack keeps 
     gextract("review_pv", gintervals(1, 0, 1e5))
     expect_true(getOption("gmultitasking"))
 })
+
+test_that("a chain data frame with a numeric chromsrc is read; character strands are rejected without leaving state behind", {
+    chain <- data.frame(
+        chrom = "chr1", start = 1000, end = 2000, strand = 0, chromsrc = "1", startsrc = 0, endsrc = 1000,
+        strandsrc = 0, chain_id = 1L, score = 1
+    )
+    src <- data.frame(chrom = "1", start = 100, end = 200)
+    expected <- gintervals.liftover(src, chain)
+    expect_equal(expected$start, 1100)
+    for (num in list(1L, 1)) {
+        expect_equal(gintervals.liftover(src, transform(chain, chromsrc = num)), expected)
+        expect_identical(.glifetime_counters(), c(ref_count = 0L, protect_count = 0L))
+    }
+    expect_error(gintervals.liftover(src, transform(chain, strand = "+", strandsrc = "+")), "strand")
+    expect_identical(.glifetime_counters(), c(ref_count = 0L, protect_count = 0L))
+    expect_error(gintervals.liftover(src, transform(chain, chromsrc = NA_integer_)), "Invalid format")
+    expect_identical(.glifetime_counters(), c(ref_count = 0L, protect_count = 0L))
+})

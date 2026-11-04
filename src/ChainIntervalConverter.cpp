@@ -16,7 +16,7 @@ ChainIntervalConverter::ChainIntervalConverter(rdb::IntervUtils &iu) :
 
 void ChainIntervalConverter::convert_rchain_intervs(SEXP rchain, rdb::ChainIntervals &chain_intervs, std::vector<std::string> &src_id2chrom)
 {
-	if (!Rf_isVector(rchain) || Rf_length(rchain) != ChainInterval::NUM_COLS)
+	if (TYPEOF(rchain) != VECSXP || Rf_length(rchain) != ChainInterval::NUM_COLS)
 		TGLError("Invalid format of chain argument");
 
 	SEXP colnames = Rf_getAttrib(rchain, R_NamesSymbol);
@@ -48,16 +48,25 @@ void ChainIntervalConverter::convert_rchain_intervs(SEXP rchain, rdb::ChainInter
 			verror("Number of rows in column %s differs than the number of rows in column %s", ChainInterval::COL_NAMES[i - 1], ChainInterval::COL_NAMES[i]);
 	}
 
-	if (!Rf_isReal(src_starts) && !Rf_isInteger(src_starts))
+	// Every column is checked before it is read: STRING_ELT() or INTEGER() on the wrong type is an
+	// R error, i.e. a longjmp past ~RdbInitializer (C3). A numeric chromsrc is the chromosome of
+	// that name ("1"), as for chrom; the strands are numeric (-1, 0 or 1), as gintervals.as_chain()
+	// requires.
+	if (!is_num_vector(src_starts))
 		verror("Invalid format of intervals argument");
+	if (!is_chrom_col(src_chroms))
+		verror("Invalid format of chain argument: column chromsrc must be character, factor or numeric");
+	if (!is_num_vector(tgt_strands) || !is_num_vector(src_strands))
+		verror("Invalid format of chain argument: columns strand and strandsrc must be numeric (-1, 0 or 1)");
 
 	unordered_map<string, int> src_chrom2id;
 
 	for (unsigned i = 0; i < intervs.size(); i++) {
-		if ((Rf_isFactor(src_chroms) && INTEGER(src_chroms)[i] < 0) || (Rf_isReal(src_starts) && std::isnan(REAL(src_starts)[i])))
+		if (std::isnan(num_elt(src_starts, i)) || std::isnan(num_elt(tgt_strands, i)) || std::isnan(num_elt(src_strands, i)))
 			verror("Invalid format of interval at index %d", i + 1);
 
-		const char *src_chrom = Rf_isString(src_chroms) ? CHAR(STRING_ELT(src_chroms, i)) : CHAR(STRING_ELT(src_chrom_levels, INTEGER(src_chroms)[i] - 1));
+		char src_chrom_buf[32];
+		const char *src_chrom = chrom_name(src_chroms, src_chrom_levels, i, src_chrom_buf, sizeof(src_chrom_buf), "");
 		unordered_map<string, int>::const_iterator isrc_chrom2id = src_chrom2id.find(src_chrom);
 		int src_chromid;
 
@@ -68,11 +77,11 @@ void ChainIntervalConverter::convert_rchain_intervs(SEXP rchain, rdb::ChainInter
 		} else
 			src_chromid = isrc_chrom2id->second;
 
-		int64_t src_start = (int64_t)(Rf_isReal(src_starts) ? REAL(src_starts)[i] : INTEGER(src_starts)[i]);
+		int64_t src_start = (int64_t)num_elt(src_starts, i);
 
 		// Read strands and convert +1/-1 to 0/1 for internal storage. Strand 0 (no strand) is forward.
-		int tgt_strand_val = Rf_isReal(tgt_strands) ? (int)REAL(tgt_strands)[i] : INTEGER(tgt_strands)[i];
-		int src_strand_val = Rf_isReal(src_strands) ? (int)REAL(src_strands)[i] : INTEGER(src_strands)[i];
+		int tgt_strand_val = (int)num_elt(tgt_strands, i);
+		int src_strand_val = (int)num_elt(src_strands, i);
 		int tgt_strand = (tgt_strand_val == -1) ? 1 : 0;
 		int src_strand = (src_strand_val == -1) ? 1 : 0;
 

@@ -26,14 +26,14 @@ IntervalConverter::IntervalConverter(rdb::IntervUtils &iu) :
 
 // A chrom column the converter can read: character, a factor with character levels, or numbers
 // (1 for "1", resolved through the chromosome aliases to chr1, as gintervals(1, ...) does).
-static bool is_chrom_col(SEXP col)
+bool is_chrom_col(SEXP col)
 {
 	return Rf_isString(col) || (Rf_isFactor(col) && Rf_isString(Rf_getAttrib(col, R_LevelsSymbol))) || is_num_vector(col);
 }
 
 // The name of the chromosome in row i of a chrom column accepted by is_chrom_col(). A number is
 // printed into buf the way as.character() prints a whole number; NA or a fraction is an error.
-static const char *chrom_name(SEXP chroms, SEXP chrom_levels, unsigned i, char *buf, size_t bufsize, const char *error_msg_prefix)
+const char *chrom_name(SEXP chroms, SEXP chrom_levels, unsigned i, char *buf, size_t bufsize, const char *error_msg_prefix)
 {
 	if (Rf_isString(chroms))
 		return CHAR(STRING_ELT(chroms, i));
