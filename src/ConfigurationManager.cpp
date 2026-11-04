@@ -115,7 +115,7 @@ uint64_t ConfigurationManager::get_max_data_size() const
 			if (std::isnan(size))
 				verror("options(gmax.data.size) must be a number, not NA");
 			if (size < 0)
-				verror("options(gmax.data.size) must not be negative (got %g)", size);
+				verror(std::isinf(size) ? "options(gmax.data.size) must not be negative (got -Inf)" : "options(gmax.data.size) must not be negative (got %g)", size);
 			if (size >= (double)misha::config::MAX_DATA_SIZE_NO_LIMIT)
 				m_max_data_size = misha::config::MAX_DATA_SIZE_NO_LIMIT;
 			else
@@ -143,7 +143,7 @@ uint64_t ConfigurationManager::get_max_mem_usage() const
 			if (std::isnan(kb))
 				verror("options(gmax.mem.usage) must be a number, not NA");
 			if (kb < 0)
-				verror("options(gmax.mem.usage) must not be negative (got %g)", kb);
+				verror(std::isinf(kb) ? "options(gmax.mem.usage) must not be negative (got -Inf)" : "options(gmax.mem.usage) must not be negative (got %g)", kb);
 			m_max_mem_usage = kb * 1000 >= (double)misha::config::UNLIMITED ? misha::config::UNLIMITED : (uint64_t)kb * 1000;
 		} else
 			m_max_mem_usage = misha::config::UNLIMITED;
