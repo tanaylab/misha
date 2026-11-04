@@ -5,6 +5,7 @@
  * from genomic sequences.
  */
 
+#include <tuple>
 #include <algorithm>
 #include <climits>
 #include <cstdint>
@@ -36,6 +37,7 @@ extern "C" {
  * @param _bin_indices Integer vector of bin indices for each position
  *                     (aligned with the iterator positions)
  * @param _iter_starts Integer vector of iterator interval start positions
+ * @param _iter_ends Integer vector of iterator interval end positions
  * @param _iter_chroms Integer vector of iterator interval chromosome IDs
  * @param _breaks Numeric vector of bin boundaries
  * @param _bin_map Integer vector mapping source bins to target bins (-1 = keep)
@@ -49,7 +51,7 @@ extern "C" {
  * @return A list containing the trained model data
  */
 SEXP C_gsynth_train(SEXP _chrom_ids, SEXP _chrom_starts, SEXP _chrom_ends,
-                     SEXP _bin_indices, SEXP _iter_starts, SEXP _iter_chroms,
+                     SEXP _bin_indices, SEXP _iter_starts, SEXP _iter_ends, SEXP _iter_chroms,
                      SEXP _breaks, SEXP _bin_map, SEXP _mask,
                      SEXP _pseudocount, SEXP _k,
                      SEXP _prior_mode, SEXP _prior_matrix, SEXP _envir) {
@@ -78,6 +80,7 @@ SEXP C_gsynth_train(SEXP _chrom_ids, SEXP _chrom_starts, SEXP _chrom_ends,
         int num_iter_positions = Rf_length(_bin_indices);
         int* bin_indices = INTEGER(_bin_indices);
         int* iter_starts = INTEGER(_iter_starts);
+        int* iter_ends = INTEGER(_iter_ends);
         int* iter_chroms = INTEGER(_iter_chroms);
 
         // Extract breaks
@@ -136,18 +139,6 @@ SEXP C_gsynth_train(SEXP _chrom_ids, SEXP _chrom_starts, SEXP _chrom_ends,
         StratifiedMarkovModel model;
         model.init(num_bins, breaks_vec, k);
 
-        int iter_size = 0;
-        if (num_iter_positions > 0) {
-            // Compute iterator bin size from first two positions on same chrom
-            for (int i = 1; i < num_iter_positions; ++i) {
-                if (iter_chroms[i] == iter_chroms[i - 1]) {
-                    iter_size = iter_starts[i] - iter_starts[i - 1];
-                    break;
-                }
-            }
-            if (iter_size <= 0) iter_size = 1;
-        }
-
         // Set up sequence fetcher
         GenomeSeqFetch seqfetch;
         seqfetch.set_seqdir(string(rdb::get_groot(_envir)) + "/seq");
@@ -168,11 +159,13 @@ SEXP C_gsynth_train(SEXP _chrom_ids, SEXP _chrom_starts, SEXP _chrom_ends,
 
         // Build per-chromosome bin lookup
         int num_chroms_key = iu.get_chromkey().get_num_chroms();
-        vector<vector<pair<int64_t, int>>> chrom_bins(num_chroms_key);
+        // (start, end, bin index) of each iterator interval; the end is taken from the
+        // iterator, not inferred, since the first interval is clipped at the scope start
+        vector<vector<std::tuple<int64_t, int64_t, int>>> chrom_bins(num_chroms_key);
         for (int i = 0; i < num_iter_positions; ++i) {
             int chromid = iter_chroms[i];
             if (chromid >= 0 && chromid < num_chroms_key) {
-                chrom_bins[chromid].push_back({iter_starts[i], bin_indices[i]});
+                chrom_bins[chromid].push_back(std::make_tuple((int64_t)iter_starts[i], (int64_t)iter_ends[i], bin_indices[i]));
             }
         }
         for (int c = 0; c < num_chroms_key; ++c) {
@@ -196,7 +189,7 @@ SEXP C_gsynth_train(SEXP _chrom_ids, SEXP _chrom_starts, SEXP _chrom_ends,
             const vector<GInterval>& mask_ivs = mask_per_chrom[chromid];
             size_t mask_cursor = 0;
 
-            const vector<pair<int64_t, int>>& bins = chrom_bins[chromid];
+            const vector<std::tuple<int64_t, int64_t, int>>& bins = chrom_bins[chromid];
             size_t bin_cursor = 0;
 
             // Scan with (k+1)-mer sliding window
@@ -228,12 +221,12 @@ SEXP C_gsynth_train(SEXP _chrom_ids, SEXP _chrom_starts, SEXP _chrom_ends,
                 int bin_idx = -1;
                 if (!bins.empty()) {
                     while (bin_cursor + 1 < bins.size() &&
-                           genome_pos >= bins[bin_cursor + 1].first) {
+                           genome_pos >= std::get<0>(bins[bin_cursor + 1])) {
                         ++bin_cursor;
                     }
-                    if (genome_pos >= bins[bin_cursor].first &&
-                        genome_pos < bins[bin_cursor].first + iter_size) {
-                        bin_idx = bins[bin_cursor].second;
+                    if (genome_pos >= std::get<0>(bins[bin_cursor]) &&
+                        genome_pos < std::get<1>(bins[bin_cursor])) {
+                        bin_idx = std::get<2>(bins[bin_cursor]);
                     }
                 }
 

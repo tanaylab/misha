@@ -1011,6 +1011,7 @@ gsynth.train <- function(...,
         # Prepare iterator position data
         iter_chroms <- match(as.character(iter_info$chrom), chrom_key) - 1L
         iter_starts <- as.integer(iter_info$start)
+        iter_ends <- as.integer(iter_info$end)
     } else {
         # Multi-dimensional model: existing logic
         n_dims <- length(dim_specs)
@@ -1064,6 +1065,7 @@ gsynth.train <- function(...,
         # Prepare iterator position data
         iter_chroms <- match(as.character(track_data$chrom), chrom_key) - 1L
         iter_starts <- as.integer(track_data$start)
+        iter_ends <- as.integer(track_data$end)
     }
 
     # Handle NA flat indices (convert to -1 for C++)
@@ -1092,6 +1094,7 @@ gsynth.train <- function(...,
         as.integer(chrom_ends),
         flat_indices,
         iter_starts,
+        iter_ends,
         iter_chroms,
         as.numeric(dummy_breaks),
         bin_map_vec,
