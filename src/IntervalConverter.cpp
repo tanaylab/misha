@@ -356,21 +356,34 @@ SEXP IntervalConverter::convert_rintervs(SEXP rintervals, GIntervals *intervals,
 
 		unsigned zero_length_bumped = 0;
 
+		// A numeric chrom column comes in runs of one value: print and look up each run once
+		bool num_chroms = is_num_vector(chroms);
+		double last_num_chrom = std::numeric_limits<double>::quiet_NaN();
+		int last_num_chromid = -1;
+
 		for (unsigned i = 0; i < num_intervals; i++) {
 			if ((Rf_isReal(starts) && std::isnan(REAL(starts)[i])) || (Rf_isReal(ends) && std::isnan(REAL(ends)[i])) ||
 				(strands != R_NilValue && Rf_isReal(strands) && std::isnan(REAL(strands)[i])))
 				verror("%sInvalid format of interval at index %d", error_msg_prefix, i + 1);
 
-			char chrom_buf[32];
-			const char *chrom = chrom_name(chroms, chrom_levels, i, chrom_buf, sizeof(chrom_buf), error_msg_prefix);
 			int chromid;
-			try {
-				chromid = chromkey ? chromkey->chrom2id(chrom) : m_iu.chrom2id(chrom);
-			} catch (const TGLException &) {
-				// If skip_missing_chroms is enabled, skip intervals with chromosomes not in the key
-				if (skip_missing_chroms && chromkey)
-					continue;
-				throw;
+			if (num_chroms && num_elt(chroms, i) == last_num_chrom)
+				chromid = last_num_chromid;
+			else {
+				char chrom_buf[32];
+				const char *chrom = chrom_name(chroms, chrom_levels, i, chrom_buf, sizeof(chrom_buf), error_msg_prefix);
+				try {
+					chromid = chromkey ? chromkey->chrom2id(chrom) : m_iu.chrom2id(chrom);
+				} catch (const TGLException &) {
+					// If skip_missing_chroms is enabled, skip intervals with chromosomes not in the key
+					if (skip_missing_chroms && chromkey)
+						continue;
+					throw;
+				}
+				if (num_chroms) {
+					last_num_chrom = num_elt(chroms, i);
+					last_num_chromid = chromid;
+				}
 			}
 			int64_t start = (int64_t)(Rf_isReal(starts) ? REAL(starts)[i] : INTEGER(starts)[i]);
 			int64_t end = (int64_t)(Rf_isReal(ends) ? REAL(ends)[i] : INTEGER(ends)[i]);
