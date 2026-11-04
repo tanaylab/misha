@@ -144,3 +144,33 @@ test_that("gdataset.load refuses a track that is an interval set elsewhere, leav
     expect_equal(gdataset.ls(), datasets)
     expect_equal(gextract("mine", gintervals("chr1", 0, 10))$mine, 2)
 })
+
+test_that("ggenome.implant from a donor database leaves the session as it was", {
+    local_db_state()
+    td <- withr::local_tempdir()
+    donor <- review_db(td, "donor")
+    ds <- review_db(td, "ds")
+    gtrack.create_sparse("dtrack", "", gintervals("chr1", 0, 10), 5)
+    work <- review_db(td, "work")
+    gdataset.load(ds)
+    datasets <- gdataset.ls()
+    expect_true(ds %in% datasets)
+    fa <- file.path(td, "ref.fa")
+    gdb.export_fasta(fa)
+
+    # failure
+    expect_error(ggenome.implant(data.frame(chrom = "chrNOPE", start = 0, end = 10), donor, file.path(td, "o1.fa"), genome_fasta = fa, create_trackdb = FALSE))
+    expect_equal(.misha$GROOT, work)
+    expect_equal(gdataset.ls(), datasets)
+
+    # success
+    ggenome.implant(data.frame(chrom = "chr1", start = 0, end = 10), donor, file.path(td, "o2.fa"), genome_fasta = fa, create_trackdb = FALSE)
+    expect_equal(.misha$GROOT, work)
+    expect_equal(gdataset.ls(), datasets)
+    expect_equal(gextract("dtrack", gintervals("chr1", 0, 10))$dtrack, 5)
+
+    # gdb.export_fasta of another database, the same way
+    gdb.export_fasta(file.path(td, "donor_export.fa"), groot = donor)
+    expect_equal(.misha$GROOT, work)
+    expect_equal(gdataset.ls(), datasets)
+})

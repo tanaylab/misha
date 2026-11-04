@@ -141,12 +141,13 @@ ggenome.implant <- function(intervals, donor, output, genome_fasta = NULL,
                 )
             }
         }
+        # The session is put back as it was, its datasets and working directory included, also when
+        # the extraction fails; the donor is only read
+        restore <- if (!is.null(old_groot) && old_groot != "") .gdb.session_restorer() else function() NULL
+        on.exit(restore(), add = TRUE)
         suppressMessages(gdb.init(donor))
         donor_seqs <- gseq.extract(intervals)
-        # Restore original root immediately
-        if (!is.null(old_groot) && old_groot != "") {
-            suppressMessages(gdb.init(old_groot))
-        }
+        restore()
     } else if (is.character(donor)) {
         if (length(donor) != nrow(intervals)) {
             stop(sprintf(
