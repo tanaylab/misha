@@ -84,3 +84,11 @@ test_that("the minimal rectangle of a band intersection is exact", {
         expect_equal(c(r$start1, r$end1, r$start2, r$end2), c(min(px$x), max(px$x) + 1, min(px$y), max(px$y) + 1), info = paste(band, collapse = ","))
     }
 })
+
+test_that("bands wider than 2^31 are accepted", {
+    sq <- gintervals.2d("chr1", 0, 100, "chr1", 0, 100)
+    r <- gintervals.2d.band_intersect(sq, band = c(10, 3e9))
+    expect_equal(c(r$start1, r$end1, r$start2, r$end2), c(10, 100, 0, 90))
+    r <- gintervals.2d.band_intersect(sq, band = c(-1e10, 1e10))
+    expect_equal(c(r$start1, r$end1, r$start2, r$end2), c(0, 100, 0, 100))
+})

@@ -322,8 +322,8 @@ DiagonalBand IntervUtils::convert_band(SEXP rband)
 	if ((!Rf_isReal(rband) && !Rf_isInteger(rband)) || Rf_length(rband) != 2)
 		verror("Invalid format of band argument");
 
-	int d1 = Rf_isReal(rband) ? (int)(REAL(rband)[0] > 0 ? REAL(rband)[0] + 0.5 : REAL(rband)[0] - 0.5) : INTEGER(rband)[0];
-	int d2 = Rf_isReal(rband) ? (int)(REAL(rband)[1] > 0 ? REAL(rband)[1] + 0.5 : REAL(rband)[1] - 0.5) : INTEGER(rband)[1];
+	int64_t d1 = Rf_isReal(rband) ? (int64_t)(REAL(rband)[0] > 0 ? REAL(rband)[0] + 0.5 : REAL(rband)[0] - 0.5) : INTEGER(rband)[0];
+	int64_t d2 = Rf_isReal(rband) ? (int64_t)(REAL(rband)[1] > 0 ? REAL(rband)[1] + 0.5 : REAL(rband)[1] - 0.5) : INTEGER(rband)[1];
 
 	if (d1 >= d2)
 		verror("Invalid band argument: distance1 exceeds distance2");
