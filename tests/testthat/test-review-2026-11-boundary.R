@@ -110,18 +110,32 @@ test_that("options(gmax.data.size) of Inf means no limit, below 1 counts as 1, N
     expect_error(gquantiles("test.fixedbin", c(0.1, 0.5), scope), "gmax.data.size")
 })
 
-test_that("a chrom column that is not character or factor is rejected without leaving misha's state behind", {
+test_that("a numeric chrom column is read as chromosome names; other chrom types are rejected without leaving misha's state behind", {
+    # 1 and 2 are "1" and "2", which the chromosome aliases resolve to chr1 and chr2, as in gintervals(1, ...)
+    chr <- data.frame(chrom = c("chr1", "chr2"), start = 0, end = 1000)
+    expected <- gextract("test.fixedbin", chr)
+    for (num in list(1:2, c(1, 2))) {
+        expect_equal(gextract("test.fixedbin", transform(chr, chrom = num)), expected)
+        expect_identical(.glifetime_counters(), c(ref_count = 0L, protect_count = 0L))
+    }
+    chr2d <- gintervals.2d(c("chr1", "chr2"), 0, 1e7, c("chr1", "chr2"), 0, 1e7)
+    expected2d <- gextract("test.rects", chr2d)
+    expect_gt(nrow(expected2d), 0)
+    num2d <- transform(chr2d, chrom1 = c(1L, 2L), chrom2 = c(1, 2))
+    expect_equal(gextract("test.rects", num2d), expected2d)
+
     bad <- list(
-        data.frame(chrom = 1L, start = 0, end = 100),
         data.frame(chrom = I(list("chr1")), start = 0, end = 100),
         c("chr1", "chr2")
     )
+        data.frame(chrom = NA_integer_, start = 0, end = 100),
+        data.frame(chrom = 1.5, start = 0, end = 100),
     for (intervs in bad) {
-        expect_error(gextract("test.fixedbin", intervs), "Invalid format of intervals")
+        expect_error(gextract("test.fixedbin", intervs), "Invalid format of interval")
         expect_identical(.glifetime_counters(), c(ref_count = 0L, protect_count = 0L))
     }
     iv2 <- gintervals.2d(1, 0, 100, 1, 0, 100)
-    iv2$chrom2 <- 1L
+    iv2$chrom2 <- I(list("chr1"))
     expect_error(gextract("test.rects", iv2), "Invalid format of intervals")
     expect_identical(.glifetime_counters(), c(ref_count = 0L, protect_count = 0L))
 })
