@@ -92,11 +92,20 @@ uint64_t ConfigurationManager::get_max_data_size() const
 	if (!m_max_data_size) {
 		SEXP r_max_data_size = Rf_GetOption1(Rf_install("gmax.data.size"));
 
-		if (Rf_isReal(r_max_data_size))
-			m_max_data_size = (uint64_t)REAL(r_max_data_size)[0];
-		else if (Rf_isInteger(r_max_data_size))
-			m_max_data_size = INTEGER(r_max_data_size)[0];
-		else
+		if (is_num_vector(r_max_data_size) && Rf_length(r_max_data_size) >= 1) {
+			double size = num_elt(r_max_data_size, 0);
+
+			// Casting NA, Inf, a negative value or one of 2^64 or more to uint64_t is undefined.
+			// Inf and any value a uint64_t cannot hold mean no limit. A value below 1 counts as 1,
+			// as in gtrack.liftover: 0 could not be told apart from "not read yet" above, and a
+			// quantile sampling buffer of size 0 crashed R.
+			if (std::isnan(size))
+				verror("options(gmax.data.size) must be a number, not NA");
+			if (size >= (double)misha::config::UNLIMITED)
+				m_max_data_size = misha::config::UNLIMITED;
+			else
+				m_max_data_size = size < 1 ? 1 : (uint64_t)size;
+		} else
 			m_max_data_size = misha::config::UNLIMITED;
 	}
 	return m_max_data_size;

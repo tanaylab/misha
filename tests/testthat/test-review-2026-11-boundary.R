@@ -94,6 +94,22 @@ test_that("integer arguments are accepted wherever a number is expected", {
     expect_equal(gextract("temp.review_smooth_i", scope)[[4]], gextract("temp.review_smooth_d", scope)[[4]])
 })
 
+test_that("options(gmax.data.size) of Inf means no limit, below 1 counts as 1, NA is an error", {
+    withr::local_options(gmax.data.size = Inf)
+    expect_equal(unname(gquantiles("test.fixedbin", 1, scope)), max(gextract("test.fixedbin", scope)$test.fixedbin, na.rm = TRUE), tolerance = 1e-6)
+    expect_equal(nrow(gextract("test.fixedbin", scope)), 400)
+    withr::local_options(gmax.data.size = 2^64)
+    expect_equal(nrow(gextract("test.fixedbin", scope)), 400)
+    for (small in list(0, 0.5, -1)) {
+        withr::local_options(gmax.data.size = small)
+        # a sampling buffer of one value, not a crash
+        expect_length(gquantiles("test.fixedbin", c(0.1, 0.5), scope), 2)
+        expect_error(gextract("test.fixedbin", scope), "maximum allowed \\(1 ")
+    }
+    withr::local_options(gmax.data.size = NA_real_)
+    expect_error(gquantiles("test.fixedbin", c(0.1, 0.5), scope), "gmax.data.size")
+})
+
 test_that("a chrom column that is not character or factor is rejected without leaving misha's state behind", {
     bad <- list(
         data.frame(chrom = 1L, start = 0, end = 100),
