@@ -70,6 +70,9 @@ struct KidChroms {
 // Merges what the kids of stage 1 saved into matched (chromosome ids) and unknown, and removes their files
 void load_kid_chroms(const std::string &dirname, int num_kids, std::set<int> &matched, UnknownChroms &unknown);
 
+// Number of distinct chromosomes in the chromosome pairs: those that got data
+uint64_t pairs_num_chroms(const std::vector<PairFiles> &pairs);
+
 // What the messages about unknown chromosomes call the input files: the file, or the first one and a count
 std::string import_src_name(const std::vector<std::string> &files);
 

@@ -457,3 +457,11 @@ test_that("BED import leaves inverted records to the creator, and fails when no 
         expect_false(gtrack.exists("bed_all_empty"))
     }
 })
+
+test_that("2D imports count only the chromosomes that got data as imported", {
+    import_test_db("indexed")
+
+    f <- write_file("chrom1\tstart1\tend1\tchrom2\tstart2\tend2\tvalue\nchr1\t0\t10\tchrUn_q\t0\t10\t1\nchr2\t0\t10\tchr2\t20\t30\t2\n", ".tsv")
+    expect_message(gtrack.2d.import("data_chroms", "", f), "remaining 1 chromosome\\(s\\)")
+    expect_message(gtrack.2d.import_contacts("data_chroms_c", "", f), "remaining 1 chromosome\\(s\\)")
+})

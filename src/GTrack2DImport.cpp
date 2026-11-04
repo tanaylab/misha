@@ -235,6 +235,17 @@ void load_kid_chroms(const string &dirname, int num_kids, set<int> &matched, Unk
 	}
 }
 
+uint64_t pairs_num_chroms(const vector<PairFiles> &pairs)
+{
+	set<int> chromids;
+
+	for (const PairFiles &pair_files : pairs) {
+		chromids.insert(pair_files.chromid1);
+		chromids.insert(pair_files.chromid2);
+	}
+	return chromids.size();
+}
+
 string import_src_name(const vector<string> &files)
 {
 	if (files.size() == 1)
@@ -795,7 +806,8 @@ SEXP gtrack_2d_import(SEXP _track, SEXP _files, SEXP _envir)
 					write_pair(iu, dirname, pair_files, are_all_points);
 				});
 
-			report_skipped_chroms(srcname.c_str(), unknown, num_matched, _envir);
+			// the chromosomes that got data, not all the names that matched
+			report_skipped_chroms(srcname.c_str(), unknown, pairs_num_chroms(pairs), _envir);
 		}
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());

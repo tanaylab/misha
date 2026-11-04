@@ -733,7 +733,8 @@ SEXP gtrack_import_contacts(SEXP _track, SEXP _contacts, SEXP _fends, SEXP _allo
 					write_pair(iu, dirname, pair_files, allow_duplicates);
 				});
 
-			report_skipped_chroms(srcname.c_str(), unknown, num_matched, _envir);
+			// the chromosomes that got data, not all the names that matched
+			report_skipped_chroms(srcname.c_str(), unknown, pairs_num_chroms(pairs), _envir);
 		}
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
