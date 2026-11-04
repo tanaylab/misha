@@ -90,6 +90,11 @@ public:
 	void finish_writing();
 
 	const GIntervals &get_intervals();
+
+	virtual bool item_at(int, int64_t coord, int64_t &start, int64_t &end) {
+		const GIntervals &intervs = get_intervals();
+		return interval_at(intervs.begin(), intervs.end(), coord, start, end);
+	}
 	void get_sliced_vals(GIntervals::const_iterator iinterval, vector<float> &vals, unsigned numcols);
 
 protected:

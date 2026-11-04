@@ -184,10 +184,11 @@ double TrackVarProcessor::aggregate_multi_value(
 		return aggregate_avg_with_filter(track, parts);
 	case TrackExpressionVars::Track_var::STDDEV:
 		return aggregate_stddev_with_filter(track, parts);
+	// The counting reductions read each value once even when the filter splits its bin or interval
 	case TrackExpressionVars::Track_var::SUM:
-		return aggregate_sum_with_filter(track, parts);
+		return aggregate_sum_with_filter(track, track.parts_reading_items_once(parts));
 	case TrackExpressionVars::Track_var::LSE:
-		return aggregate_lse_with_filter(track, parts);
+		return aggregate_lse_with_filter(track, track.parts_reading_items_once(parts));
 	case TrackExpressionVars::Track_var::REG_MIN:
 	case TrackExpressionVars::Track_var::PV_MIN:
 		return aggregate_min_with_filter(track, parts);
@@ -207,11 +208,11 @@ double TrackVarProcessor::aggregate_multi_value(
 		track.read_interval(parts[0]);
 		return track.last_nearest();
 	case TrackExpressionVars::Track_var::QUANTILE:
-		return aggregate_quantile_with_filter(track, parts, var.percentile);
+		return aggregate_quantile_with_filter(track, track.parts_reading_items_once(parts), var.percentile, m_iu);
 	case TrackExpressionVars::Track_var::EXISTS:
 		return aggregate_exists_with_filter(track, parts);
 	case TrackExpressionVars::Track_var::SIZE:
-		return aggregate_size_with_filter(track, parts);
+		return aggregate_size_with_filter(track, track.parts_reading_items_once(parts));
 	case TrackExpressionVars::Track_var::SAMPLE:
 		return aggregate_sample_with_filter(track, parts);
 	case TrackExpressionVars::Track_var::SAMPLE_POS_ABS:
@@ -452,13 +453,14 @@ double TrackVarProcessor::aggregate_stddev_with_filter(GenomeTrack1D &track, con
 	return (total_weight > 0) ? std::sqrt(M2 / total_weight) : numeric_limits<double>::quiet_NaN();
 }
 
-double TrackVarProcessor::aggregate_quantile_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts, double percentile)
+double TrackVarProcessor::aggregate_quantile_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts, double percentile,
+                                                         rdb::IntervUtils &iu)
 {
 	// Create a combined percentiler and add all samples from all parts
 	StreamPercentiler<float> combined_sp;
-	combined_sp.init(m_iu.get_max_data_size(),
-	                 m_iu.get_quantile_edge_data_size(),
-	                 m_iu.get_quantile_edge_data_size());
+	combined_sp.init(iu.get_max_data_size(),
+	                 iu.get_quantile_edge_data_size(),
+	                 iu.get_quantile_edge_data_size());
 
 	for (const auto& part : parts) {
 		track.read_interval(part);

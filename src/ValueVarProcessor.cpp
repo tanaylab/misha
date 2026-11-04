@@ -7,6 +7,7 @@
 #include "ValueVarProcessor.h"
 #include "TrackExpressionVars.h"
 #include "GenomeTrackInMemory.h"
+#include "TrackVarProcessor.h"
 #include "rdbutils.h"
 
 using namespace rdb;
@@ -38,6 +39,8 @@ void ValueVarProcessor::process_single_value_var(
 	if (var.filter) {
 		std::vector<GInterval> eval_intervals;
 		var.filter->subtract(eval_interval, eval_intervals);
+		// Each value is counted once even when the filter splits its interval
+		eval_intervals = var.track->parts_reading_items_once(eval_intervals);
 
 		if (eval_intervals.empty()) {
 			var.var[idx] = numeric_limits<double>::quiet_NaN();
@@ -216,18 +219,9 @@ void ValueVarProcessor::process_single_value_var(
 				case TrackExpressionVars::Value_var::NEAREST:
 					var.var[idx] = agg.nearest_val;
 					break;
-				case TrackExpressionVars::Value_var::QUANTILE: {
-					// For quantile with filter, just use first non-empty result
-					float val = numeric_limits<float>::quiet_NaN();
-					for (const auto &eval_int : eval_intervals) {
-						var.track->read_interval(eval_int);
-						val = var.track->last_quantile(var.percentile);
-						if (!std::isnan(val))
-							break;
-					}
-					var.var[idx] = val;
+				case TrackExpressionVars::Value_var::QUANTILE:
+					var.var[idx] = TrackVarProcessor::aggregate_quantile_with_filter(*var.track, eval_intervals, var.percentile, m_iu);
 					break;
-				}
 				default:
 					var.var[idx] = numeric_limits<double>::quiet_NaN();
 					break;

@@ -46,6 +46,11 @@ public:
 	static void pack_record(std::vector<char> &out, int64_t start, int64_t end, float val);
 
 	const GIntervals &get_intervals();
+
+	virtual bool item_at(int, int64_t coord, int64_t &start, int64_t &end) {
+		const GIntervals &intervs = get_intervals();
+		return interval_at(intervs.begin(), intervs.end(), coord, start, end);
+	}
 	const vector<float> &get_vals();
 
 protected:

@@ -61,6 +61,60 @@ test_that("value-based vtracks read only the query's chromosome", {
     expect_equal(r$v_ex, c(1, 0, 1))
 })
 
+test_that("a filter that splits a bin or an interval does not count its value twice", {
+    local_db_state()
+    vt_fix_db()
+    gtrack.create_dense("dn", "x", gintervals("chr1", c(0, 50, 100), c(50, 100, 150)), c(1, NaN, 3), 50, NaN)
+    gtrack.create_sparse("sp", "x", gintervals("chr1", c(313, 400), c(332, 420)), c(-1.5, 2))
+    withr::defer({
+        gtrack.rm("dn", force = TRUE)
+        gtrack.rm("sp", force = TRUE)
+    })
+    mask <- gintervals("chr1", c(20, 320), c(30, 322))
+    for (f in c("sum", "size", "lse")) {
+        gvtrack.create(paste0("d_", f), "dn", f, filter = mask)
+        gvtrack.create(paste0("s_", f), "sp", f, filter = mask)
+    }
+    gvtrack.create("d_q", "dn", "quantile", 0.5, filter = mask)
+    withr::defer(gvtrack.clear())
+
+    # bin [0,50) is split into [0,20) and [30,50) by the mask; its value 1 counts once
+    iv <- gintervals("chr1", 0, 150)
+    r <- gextract(c("d_sum", "d_size", "d_lse", "d_q"), iv, iterator = iv)
+    expect_equal(r$d_sum, 4)
+    expect_equal(r$d_size, 2)
+    expect_equal(r$d_lse, log(exp(1) + exp(3)), tolerance = 1e-6)
+    expect_equal(r$d_q, median(c(1, 3)))
+
+    # sparse interval [313,332) is split by [320,322); [400,420) is the second value
+    iv <- gintervals("chr1", 300, 450)
+    r <- gextract(c("s_sum", "s_size", "s_lse"), iv, iterator = iv)
+    expect_equal(r$s_sum, 0.5)
+    expect_equal(r$s_size, 2)
+    expect_equal(r$s_lse, log(exp(-1.5) + exp(2)), tolerance = 1e-6)
+
+    # the same for a value-based vtrack
+    vv <- data.frame(chrom = "chr1", start = c(313, 400), end = c(332, 420), score = c(-1.5, 2))
+    gvtrack.create("v_sum", vv, "sum", filter = mask)
+    gvtrack.create("v_size", vv, "size", filter = mask)
+    gvtrack.create("v_avg", vv, "avg", filter = mask)
+    withr::defer(gvtrack.clear())
+    r <- gextract(c("v_sum", "v_size", "v_avg"), iv, iterator = iv)
+    expect_equal(r$v_sum, 0.5)
+    expect_equal(r$v_size, 2)
+    expect_equal(r$v_avg, 0.25)
+})
+
+test_that("a value-based quantile with a filter uses every unmasked part", {
+    local_db_state()
+    vt_fix_db()
+    vv <- data.frame(chrom = "chr1", start = seq(100, 600, 100), end = seq(150, 650, 100), score = c(1, 9, 2, 8, 3, 7))
+    gvtrack.create("v_q", vv, "quantile", 0.5, filter = gintervals("chr1", 360, 380))
+    withr::defer(gvtrack.clear())
+    iv <- gintervals("chr1", 0, 1000)
+    expect_equal(gextract("v_q", iv, iterator = iv)$v_q, median(vv$score))
+})
+
 test_that("edit distance positions are offset when a filter leaves one part that does not start the interval", {
     local_db_state()
     vt_fix_db()
