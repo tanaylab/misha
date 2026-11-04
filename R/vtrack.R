@@ -922,7 +922,7 @@
 #'   \item \code{bidirect}: When TRUE (default), both strands are scanned and combined per genomic start (per-position union). The \code{strand} argument is ignored. When FALSE, only the strand specified by \code{strand} is scanned.
 #'   \item \code{prior}: Pseudocount added to frequencies (default 0.01). Set to 0 to disable.
 #'   \item \code{extend}: Extends the fetched sequence so boundary-anchored motifs retain full context (default TRUE). The END coordinate is padded by motif_length - 1 for all strand modes. Anchors must still start inside the iterator, so with \code{extend = FALSE} an iterator interval narrower than the model holds no anchor at all and every value comes back \code{NA}; under the default \code{extend = TRUE} the END padding supplies the missing context and such an interval is scored.
-#'   \item Neutral characters (\code{N}, \code{n}, \code{*}) contribute the mean log-probability of the corresponding PSSM column on both strands.
+#'   \item A window containing \code{N} or any other character that is not A, C, G or T (in either case) is not scored, on either strand: it is left out, as an anchor outside the interval would be. An interval with no scorable window gives \code{-Inf} for \code{pwm} and \code{pwm.max}, \code{NA} for \code{pwm.max.pos} and \code{0} for \code{pwm.count}.
 #'   \item \code{strand}: Used only when \code{bidirect = FALSE}; 1 scans the forward strand, -1 scans the reverse strand. The \code{*.pos} funcs report the same thing for both strands: the 1-based position of the first base of the match in forward-strand orientation.
 #'   \item \code{score.thresh}: Threshold for \code{pwm.count}, and mandatory for it - there is no default, and it must be a single value.
 #'     Anchors with log-likelihood >= \code{score.thresh} are counted; only one count per genomic start.
@@ -980,6 +980,13 @@
 #' }
 #' Then, across all windows in the iterator interval, the minimum is reported (the position
 #' where it is easiest to create or disrupt a match).
+#'
+#' The LSE variants (\code{pwm.edit_distance.lse}, \code{pwm.edit_distance.lse.pos}) score the whole
+#' interval rather than one window. With \code{bidirect = TRUE} their target is the strand-combined
+#' log-sum-exp, the value the \code{pwm} virtual track returns, and each substitution changes both
+#' strands at once, so the two strands are searched together in either direction.
+#' \code{pwm.edit_distance.lse.pos} is then signed by the strand whose windows the reported edit
+#' changes more.
 #'
 #' \strong{Parameters:}
 #' \itemize{
@@ -1839,7 +1846,7 @@ gvtrack.array.slice <- function(vtrack = NULL, slice = NULL, func = "avg", param
 #'
 #' \strong{Semantics by function type:}
 #' \itemize{
-#'   \item \strong{Aggregations (avg/sum/min/max/stddev/quantile):} Length-weighted over unmasked regions
+#'   \item \strong{Aggregations over values:} a bin or interval of the source that overlaps an unmasked region counts once, even when the mask splits it. \code{avg}, \code{sum}, \code{size}, \code{lse}, \code{min}, \code{max}, \code{quantile} and \code{stddev} (the sample standard deviation) reduce over those values, for a track as for a value-based virtual track.
 #'   \item \strong{coverage:} Returns (covered length in unmasked region) / (total unmasked length)
 #'   \item \strong{distance/distance.center:} Unaffected by mask (pure geometry)
 #'   \item \strong{PWM/kmer/potts:} Masked bases act as hard boundaries; matches cannot span masked regions.

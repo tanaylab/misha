@@ -38,8 +38,16 @@ void PWMLseEditDistanceScorer::precompute_tables()
     m_col_min_scores.resize(L);
     m_S_max = 0.0f;
     m_S_min = 0.0f;
+    m_logp.assign(L * 5, 0.0);
 
     for (int i = 0; i < L; i++) {
+        float sum = 0.0f;
+        for (int b = 0; b < 4; b++) {
+            m_logp[i * 5 + b] = static_cast<double>(m_pssm[i].get_log_prob_from_code(b));
+            sum += m_pssm[i].get_log_prob_from_code(b);
+        }
+        m_logp[i * 5 + 4] = static_cast<double>(sum / 4.0f);
+
         float max_score = -std::numeric_limits<float>::infinity();
         float min_score = std::numeric_limits<float>::infinity();
         for (int b = 0; b < 4; b++) {
@@ -92,16 +100,18 @@ double PWMLseEditDistanceScorer::score_interval(const GInterval& interval,
 
     LseResult best_result;
 
-    if (scan_forward) {
+    if (scan_forward && scan_reverse) {
+        // Both strands: the target is the strand-combined LSE (the pwm vtrack's value), and one substitution
+        // changes both strands, so the two are searched together rather than each on its own.
+        best_result = compute_lse_edit_distance(seq, static_cast<size_t>(interval_len), false, true);
+    } else if (scan_forward) {
         LseResult fwd = compute_lse_edit_distance(seq, static_cast<size_t>(interval_len), false);
         if (!std::isnan(fwd.min_edits)) {
             if (std::isnan(best_result.min_edits) || fwd.min_edits < best_result.min_edits) {
                 best_result = fwd;
             }
         }
-    }
-
-    if (scan_reverse) {
+    } else if (scan_reverse) {
         LseResult rev = compute_lse_edit_distance(seq, static_cast<size_t>(interval_len), true);
         if (!std::isnan(rev.min_edits)) {
             if (std::isnan(best_result.min_edits) || rev.min_edits < best_result.min_edits) {
@@ -144,73 +154,50 @@ float PWMLseEditDistanceScorer::encode_position(size_t index,
     return pos;
 }
 
-float PWMLseEditDistanceScorer::compute_window_score(const char* window_start, bool reverse) const
-{
-    const int L = m_pssm.length();
-    float logp = 0.0f;
-
-    for (int i = 0; i < L; i++) {
-        int seq_idx = reverse ? (L - 1 - i) : i;
-        char base = window_start[seq_idx];
-        if (reverse) {
-            base = complement_base(base);
-        }
-
-        int bidx = base_to_index(base);
-        if (bidx == 4) {
-            // Unknown base: use mean log-probability
-            float sum = 0.0f;
-            for (int b = 0; b < 4; b++) {
-                sum += m_pssm[i].get_log_prob_from_code(b);
-            }
-            logp += sum / 4.0f;
-        } else {
-            logp += m_pssm[i].get_log_prob_from_code(bidx);
-        }
-    }
-
-    return logp;
-}
-
 void PWMLseEditDistanceScorer::init_partition(const std::vector<int>& seq_bases,
                                                int N, int L,
                                                std::vector<double>& S_p,
                                                std::vector<double>& A_p,
                                                double& Z, double& m, double& F) const
 {
-    S_p.resize(N);
-    A_p.resize(N);
+    const int W = m_ndirs * N;
+    S_p.resize(W);
+    A_p.resize(W);
 
-    // Compute per-start scores
-    for (int p = 0; p < N; p++) {
+    // Compute per-window scores. A window holding a non-ACGT base is not scored, as in the pwm vtrack: its
+    // weight is 0 and stays 0 under any edit, since every edit multiplies it.
+    for (int w = 0; w < W; w++) {
+        const int p = w % N;
         double score = 0.0;
         for (int i = 0; i < L; i++) {
-            int b = seq_bases[p + i];
-            if (b == 4) {
-                // Unknown base: use mean log-probability
-                float sum = 0.0f;
-                for (int bb = 0; bb < 4; bb++) {
-                    sum += m_pssm[i].get_log_prob_from_code(bb);
-                }
-                score += static_cast<double>(sum / 4.0f);
-            } else {
-                score += static_cast<double>(m_pssm[i].get_log_prob_from_code(b));
+            if (seq_bases[p + i] == 4) {
+                score = -std::numeric_limits<double>::infinity();
+                break;
             }
+            score += win_score(w, p + i, seq_bases[p + i], N, L);
         }
-        S_p[p] = score;
+        S_p[w] = score;
     }
 
     // Find max for numerical stability
     m = -std::numeric_limits<double>::infinity();
-    for (int p = 0; p < N; p++) {
-        if (S_p[p] > m) m = S_p[p];
+    for (int w = 0; w < W; w++) {
+        if (S_p[w] > m) m = S_p[w];
+    }
+
+    // No scorable window: F = -inf, and the caller reports NaN
+    if (!std::isfinite(m)) {
+        std::fill(A_p.begin(), A_p.end(), 0.0);
+        Z = 0.0;
+        F = m;
+        return;
     }
 
     // Compute shifted weights and partition function
     Z = 0.0;
-    for (int p = 0; p < N; p++) {
-        A_p[p] = std::exp(S_p[p] - m);
-        Z += A_p[p];
+    for (int w = 0; w < W; w++) {
+        A_p[w] = std::exp(S_p[w] - m);
+        Z += A_p[w];
     }
 
     F = std::log(Z) + m;
@@ -226,33 +213,48 @@ double PWMLseEditDistanceScorer::compute_delta_z(int q, int y_idx,
 
     double delta_z = 0.0;
 
-    // For each start p that covers position q: p in [q-L+1, q], clipped to [0, N-1]
-    int p_min = std::max(0, q - L + 1);
-    int p_max = std::min(N - 1, q);
+    // Every window that covers q: starts p in [q-L+1, q], clipped to [0, N-1], on each scanned strand
+    const int p_min = std::max(0, q - L + 1);
+    const int p_max = std::min(N - 1, q);
 
+    // Forward windows: column q - p. DeltaZ contribution = A_w * expm1(delta_s); expm1 is stable for
+    // delta_s near zero.
+    const double *lp = m_logp.data();
     for (int p = p_min; p <= p_max; p++) {
-        int i = q - p;  // column index in the motif
-
-        // Score change at column i: old base -> new base
-        double old_score, new_score;
-        if (cur_base == 4) {
-            float sum = 0.0f;
-            for (int b = 0; b < 4; b++) {
-                sum += m_pssm[i].get_log_prob_from_code(b);
-            }
-            old_score = static_cast<double>(sum / 4.0f);
-        } else {
-            old_score = static_cast<double>(m_pssm[i].get_log_prob_from_code(cur_base));
+        const double *col = lp + (q - p) * 5;
+        delta_z += A_p[p] * std::expm1(col[y_idx] - col[cur_base]);
+    }
+    // Reverse-strand windows of a joint search: column L - 1 - (q - p), complemented base
+    if (m_ndirs == 2) {
+        const int cy = 3 - y_idx;
+        const int cc = cur_base == 4 ? 4 : 3 - cur_base;
+        for (int p = p_min; p <= p_max; p++) {
+            const double *col = lp + (L - 1 - (q - p)) * 5;
+            delta_z += A_p[N + p] * std::expm1(col[cy] - col[cc]);
         }
-        new_score = static_cast<double>(m_pssm[i].get_log_prob_from_code(y_idx));
-
-        double delta_s = new_score - old_score;
-        // DeltaZ contribution = A_p * expm1(delta_s)
-        // Using expm1 for numerical stability when delta_s is near zero
-        delta_z += A_p[p] * std::expm1(delta_s);
     }
 
     return delta_z;
+}
+
+float PWMLseEditDistanceScorer::edit_position(int q, int y, const std::vector<int>& seq_bases,
+                                              const std::vector<double>& A_p, int N, int L, int direction) const
+{
+    const size_t R = seq_bases.size();
+    if (direction != 0)
+        return encode_position(static_cast<size_t>(q), R, static_cast<size_t>(L), direction);
+
+    double dz[2] = {0.0, 0.0};
+    const int p_min = std::max(0, q - L + 1);
+    const int p_max = std::min(N - 1, q);
+    for (int d = 0; d < m_ndirs; d++) {
+        for (int p = p_min; p <= p_max; p++) {
+            const int w = d * N + p;
+            dz[d] += A_p[w] * std::expm1(win_score(w, q, y, N, L) - win_score(w, q, seq_bases[q], N, L));
+        }
+    }
+    const float pos = static_cast<float>(q) + 1.0f;
+    return std::fabs(dz[1]) > std::fabs(dz[0]) ? -pos : pos;
 }
 
 void PWMLseEditDistanceScorer::apply_edit(int q, int y_idx,
@@ -262,49 +264,41 @@ void PWMLseEditDistanceScorer::apply_edit(int q, int y_idx,
                                            double& Z, double& m,
                                            int N, int L)
 {
-    int old_base = seq_bases[q];
+    const int old_base = seq_bases[q];
     seq_bases[q] = y_idx;
 
-    int p_min = std::max(0, q - L + 1);
-    int p_max = std::min(N - 1, q);
+    const int p_min = std::max(0, q - L + 1);
+    const int p_max = std::min(N - 1, q);
 
-    for (int p = p_min; p <= p_max; p++) {
-        int i = q - p;  // column index
-
-        double old_score;
-        if (old_base == 4) {
-            float sum = 0.0f;
-            for (int b = 0; b < 4; b++) {
-                sum += m_pssm[i].get_log_prob_from_code(b);
-            }
-            old_score = static_cast<double>(sum / 4.0f);
-        } else {
-            old_score = static_cast<double>(m_pssm[i].get_log_prob_from_code(old_base));
+    for (int d = 0; d < m_ndirs; d++) {
+        for (int p = p_min; p <= p_max; p++) {
+            const int w = d * N + p;
+            const double delta_s = win_score(w, q, y_idx, N, L) - win_score(w, q, old_base, N, L);
+            const double A_old = A_p[w];
+            S_p[w] += delta_s;
+            A_p[w] = A_old * std::exp(delta_s);
+            Z += A_old * std::expm1(delta_s);
         }
-        double new_score = static_cast<double>(m_pssm[i].get_log_prob_from_code(y_idx));
-        double delta_s = new_score - old_score;
-
-        double A_old = A_p[p];
-        S_p[p] += delta_s;
-        A_p[p] = A_old * std::exp(delta_s);
-        Z += A_old * std::expm1(delta_s);
     }
 
     // Renormalize if drift is too large (threshold for double: ~700)
     double max_sp = -std::numeric_limits<double>::infinity();
-    for (int p = p_min; p <= p_max; p++) {
-        if (S_p[p] > max_sp) max_sp = S_p[p];
+    for (int d = 0; d < m_ndirs; d++) {
+        for (int p = p_min; p <= p_max; p++) {
+            if (S_p[d * N + p] > max_sp) max_sp = S_p[d * N + p];
+        }
     }
 
     if (max_sp - m > 500.0) {
         // Full renormalization
+        const int W = m_ndirs * N;
         double new_m = -std::numeric_limits<double>::infinity();
-        for (int p = 0; p < N; p++) {
-            if (S_p[p] > new_m) new_m = S_p[p];
+        for (int w = 0; w < W; w++) {
+            if (S_p[w] > new_m) new_m = S_p[w];
         }
         double scale = std::exp(m - new_m);
-        for (int p = 0; p < N; p++) {
-            A_p[p] *= scale;
+        for (int w = 0; w < W; w++) {
+            A_p[w] *= scale;
         }
         Z *= scale;
         m = new_m;
@@ -329,6 +323,7 @@ PWMLseEditDistanceScorer::try_k1_exhaustive(const std::vector<int>& seq_bases,
     double best_F_after = is_below ? std::numeric_limits<double>::infinity()
                                    : -std::numeric_limits<double>::infinity();
     int best_q = -1;
+    int best_y = -1;
 
     for (int q = 0; q < R; q++) {
         int cur = seq_bases[q];
@@ -347,6 +342,7 @@ PWMLseEditDistanceScorer::try_k1_exhaustive(const std::vector<int>& seq_bases,
                 if (is_better) {
                     best_F_after = new_F;
                     best_q = q;
+                    best_y = y;
                 }
             }
         }
@@ -356,8 +352,7 @@ PWMLseEditDistanceScorer::try_k1_exhaustive(const std::vector<int>& seq_bases,
         result.min_edits = 1.0f;
         result.best_edit_index = best_q;
         result.best_edit_direction = direction;
-        result.best_pos = encode_position(static_cast<size_t>(best_q),
-                                          target_length, motif_length, direction);
+        result.best_pos = edit_position(best_q, best_y, seq_bases, A_p, N, L, direction);
     }
 
     return result;
@@ -379,6 +374,10 @@ PWMLseEditDistanceScorer::try_k2_exhaustive(const std::vector<int>& seq_bases,
     double best_F_after = is_below ? std::numeric_limits<double>::infinity()
                                    : -std::numeric_limits<double>::infinity();
     int best_q1 = -1;
+    int best_y1 = -1;
+
+    std::vector<double> A_p_temp;
+    std::vector<int> bases_temp(seq_bases);
 
     // For each first edit (q1, y1)
     for (int q1 = 0; q1 < R; q1++) {
@@ -387,66 +386,32 @@ PWMLseEditDistanceScorer::try_k2_exhaustive(const std::vector<int>& seq_bases,
         for (int y1 = 0; y1 < 4; y1++) {
             if (y1 == cur1) continue;
 
-            // Compute the effect of first edit on partition function
-            // We need to temporarily apply it, then check all second edits
+            // Apply the first edit to a copy of the weights, then check all second edits
+            const int p_min1 = std::max(0, q1 - L + 1);
+            const int p_max1 = std::min(N - 1, q1);
 
-            // Compute updated A_p values for starts affected by q1
-            int p_min1 = std::max(0, q1 - L + 1);
-            int p_max1 = std::min(N - 1, q1);
-
-            // Store changes from first edit
-            std::vector<double> A_p_temp(A_p);
-            std::vector<double> S_p_temp(S_p);
+            A_p_temp = A_p;
             double Z_temp = Z;
 
-            for (int p = p_min1; p <= p_max1; p++) {
-                int i = q1 - p;
-                double old_s, new_s;
-                if (cur1 == 4) {
-                    float sum = 0.0f;
-                    for (int b = 0; b < 4; b++) sum += m_pssm[i].get_log_prob_from_code(b);
-                    old_s = static_cast<double>(sum / 4.0f);
-                } else {
-                    old_s = static_cast<double>(m_pssm[i].get_log_prob_from_code(cur1));
+            for (int d = 0; d < m_ndirs; d++) {
+                for (int p = p_min1; p <= p_max1; p++) {
+                    const int w = d * N + p;
+                    const double ds = win_score(w, q1, y1, N, L) - win_score(w, q1, cur1, N, L);
+                    const double A_old = A_p_temp[w];
+                    A_p_temp[w] = A_old * std::exp(ds);
+                    Z_temp += A_old * std::expm1(ds);
                 }
-                new_s = static_cast<double>(m_pssm[i].get_log_prob_from_code(y1));
-                double ds = new_s - old_s;
-
-                double A_old = A_p_temp[p];
-                S_p_temp[p] += ds;
-                A_p_temp[p] = A_old * std::exp(ds);
-                Z_temp += A_old * std::expm1(ds);
             }
 
             // Now try all second edits (q2, y2) with q2 > q1
-            // (q2 < q1 was already covered when q1 was smaller)
+            // (q2 < q1 was already covered when q1 was smaller); q2 != q1, so the
+            // base at q2 is still the original one
+            bases_temp[q1] = y1;
             for (int q2 = q1 + 1; q2 < R; q2++) {
-                // Use original base at q2 (first edit was at q1, not q2)
-                int cur2 = seq_bases[q2];
-
                 for (int y2 = 0; y2 < 4; y2++) {
-                    if (y2 == cur2) continue;
+                    if (y2 == seq_bases[q2]) continue;
 
-                    // Compute DeltaZ for second edit using updated A_p
-                    double dz2 = 0.0;
-                    int p_min2 = std::max(0, q2 - L + 1);
-                    int p_max2 = std::min(N - 1, q2);
-
-                    for (int p = p_min2; p <= p_max2; p++) {
-                        int i = q2 - p;
-                        double old_s2;
-                        if (cur2 == 4) {
-                            float sum = 0.0f;
-                            for (int b = 0; b < 4; b++) sum += m_pssm[i].get_log_prob_from_code(b);
-                            old_s2 = static_cast<double>(sum / 4.0f);
-                        } else {
-                            old_s2 = static_cast<double>(m_pssm[i].get_log_prob_from_code(cur2));
-                        }
-                        double new_s2 = static_cast<double>(m_pssm[i].get_log_prob_from_code(y2));
-                        double ds2 = new_s2 - old_s2;
-                        dz2 += A_p_temp[p] * std::expm1(ds2);
-                    }
-
+                    double dz2 = compute_delta_z(q2, y2, bases_temp, A_p_temp, N, L);
                     double new_Z = Z_temp + dz2;
                     if (new_Z <= 0.0) continue;
 
@@ -457,10 +422,12 @@ PWMLseEditDistanceScorer::try_k2_exhaustive(const std::vector<int>& seq_bases,
                         if (is_better) {
                             best_F_after = new_F;
                             best_q1 = q1;
+                            best_y1 = y1;
                         }
                     }
                 }
             }
+            bases_temp[q1] = cur1;
         }
     }
 
@@ -468,8 +435,7 @@ PWMLseEditDistanceScorer::try_k2_exhaustive(const std::vector<int>& seq_bases,
         result.min_edits = 2.0f;
         result.best_edit_index = best_q1;
         result.best_edit_direction = direction;
-        result.best_pos = encode_position(static_cast<size_t>(best_q1),
-                                          target_length, motif_length, direction);
+        result.best_pos = edit_position(best_q1, best_y1, seq_bases, A_p, N, L, direction);
     }
 
     return result;
@@ -514,6 +480,7 @@ PWMLseEditDistanceScorer::greedy_search(std::vector<int>& seq_bases,
     }
 
     int first_greedy_edit_pos = -1;
+    float first_greedy_edit_value = std::numeric_limits<float>::quiet_NaN();
     int k = edits_so_far;
     int max_k = (m_max_edits > 0) ? m_max_edits : R;  // Practical limit
 
@@ -582,14 +549,14 @@ PWMLseEditDistanceScorer::greedy_search(std::vector<int>& seq_bases,
                 continue;
             }
 
-            // Apply edit
+            // Apply edit (its reported position is taken before: it depends on the weights it changes)
+            if (first_greedy_edit_pos < 0) {
+                first_greedy_edit_pos = q;
+                first_greedy_edit_value = edit_position(q, best_y, seq_bases, A_p, N, L, direction);
+            }
             apply_edit(q, best_y, seq_bases, S_p, A_p, Z, m, N, L);
             F = std::log(Z) + m;
             k++;
-
-            if (first_greedy_edit_pos < 0) {
-                first_greedy_edit_pos = q;
-            }
 
             // Recompute DeltaZ in the (2L-1)-wide diamond around q
             int q_lo = std::max(0, q - L + 1);
@@ -622,8 +589,10 @@ PWMLseEditDistanceScorer::greedy_search(std::vector<int>& seq_bases,
             if (report_pos >= 0) {
                 result.best_edit_index = report_pos;
                 result.best_edit_direction = direction;
-                result.best_pos = encode_position(static_cast<size_t>(report_pos),
-                                                  target_length, motif_length, direction);
+                result.best_pos = report_pos == first_greedy_edit_pos && first_edit_pos < 0
+                                      ? first_greedy_edit_value
+                                      : encode_position(static_cast<size_t>(report_pos),
+                                                        target_length, motif_length, direction);
             }
         }
     } else {
@@ -690,14 +659,14 @@ PWMLseEditDistanceScorer::greedy_search(std::vector<int>& seq_bases,
                 continue;
             }
 
-            // Apply edit
+            // Apply edit (its reported position is taken before: it depends on the weights it changes)
+            if (first_greedy_edit_pos < 0) {
+                first_greedy_edit_pos = q;
+                first_greedy_edit_value = edit_position(q, best_y, seq_bases, A_p, N, L, direction);
+            }
             apply_edit(q, best_y, seq_bases, S_p, A_p, Z, m, N, L);
             F = std::log(Z) + m;
             k++;
-
-            if (first_greedy_edit_pos < 0) {
-                first_greedy_edit_pos = q;
-            }
 
             // Recompute DeltaZ in the (2L-1)-wide diamond around q
             int q_lo = std::max(0, q - L + 1);
@@ -731,8 +700,10 @@ PWMLseEditDistanceScorer::greedy_search(std::vector<int>& seq_bases,
             if (report_pos >= 0) {
                 result.best_edit_index = report_pos;
                 result.best_edit_direction = direction;
-                result.best_pos = encode_position(static_cast<size_t>(report_pos),
-                                                  target_length, motif_length, direction);
+                result.best_pos = report_pos == first_greedy_edit_pos && first_edit_pos < 0
+                                      ? first_greedy_edit_value
+                                      : encode_position(static_cast<size_t>(report_pos),
+                                                        target_length, motif_length, direction);
             }
         }
     }
@@ -743,7 +714,8 @@ PWMLseEditDistanceScorer::greedy_search(std::vector<int>& seq_bases,
 PWMLseEditDistanceScorer::LseResult
 PWMLseEditDistanceScorer::compute_lse_edit_distance(const std::string& seq,
                                                      size_t interval_length,
-                                                     bool reverse)
+                                                     bool reverse,
+                                                     bool joint)
 {
     LseResult result;
 
@@ -758,7 +730,11 @@ PWMLseEditDistanceScorer::compute_lse_edit_distance(const std::string& seq,
 
     const int N = static_cast<int>(max_start);  // Number of starts
     const int R = static_cast<int>(target_length);  // Sequence length
-    const int direction = reverse ? -1 : 1;
+    // A joint search reads both strands on the forward sequence (direction 0); a one-strand search reads
+    // its strand as the forward strand of the sequence or of its reverse complement.
+    m_ndirs = joint ? 2 : 1;
+    const int direction = joint ? 0 : (reverse ? -1 : 1);
+    if (joint) reverse = false;
 
     // Resolve sequence to base indices (handling reverse complement)
     std::vector<int> seq_bases(R);
@@ -775,6 +751,11 @@ PWMLseEditDistanceScorer::compute_lse_edit_distance(const std::string& seq,
     std::vector<double> S_p, A_p;
     double Z, m, F;
     init_partition(seq_bases, N, L, S_p, A_p, Z, m, F);
+
+    // No window without a non-ACGT base: nothing to edit towards or away from the threshold
+    if (!std::isfinite(F)) {
+        return result;
+    }
 
     // score.min/score.max filter: if current LSE score is out of range, skip
     if (!std::isnan(m_score_min) && F < static_cast<double>(m_score_min)) {
@@ -812,7 +793,7 @@ PWMLseEditDistanceScorer::compute_lse_edit_distance(const std::string& seq,
         }
     } else {
         // For ABOVE: S_max + log(N) is the maximum possible F
-        double max_possible_F = static_cast<double>(m_S_max) + std::log(static_cast<double>(N));
+        double max_possible_F = static_cast<double>(m_S_max) + std::log(static_cast<double>(m_ndirs * N));
         if (T > max_possible_F + 1e-9) {
             return result;  // Unreachable even with all bases optimal
         }

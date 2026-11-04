@@ -2,6 +2,18 @@
 
 This release fixes defects found in a review of 5.14.4. Several change results, marked **Behavior fix**; recompute anything that depends on them.
 
+* **Behavior fix:** PWM scoring never uses a window that holds N or another non-ACGT base, in every function: the PWM virtual tracks (`pwm.max.pos` and spatially weighted `pwm`/`pwm.max` used to charge N the column mean and score IUPAC codes as perfect matches), `gseq.pwm()`, the edit distance functions (`pwm.edit_distance*`, `pwm.max.edit_distance`, `pwm.n_mutations`, `gseq.pwm_edits()`) and `gtrack.create_pwm_energy()`. `gseq.pwm()` now defaults to `neutral_chars = character(0)`; pass `neutral_chars = c("N", "n", "*")` for the old scores. An interval with no scorable window gives NA (`gseq.pwm(mode = "pos")` used to return 1), and a `gtrack.create_pwm_energy()` bin with none is NaN.
+
+* **Behavior fix:** `gtrack.create_pwm_energy()` scores the windows that start in each bin, as the `pwm` virtual track does; it also scored the window starting at the bin's end.
+
+* **Behavior fix:** with `bidirect = FALSE, strand = -1`, `spat_factor`/`spat_bin` and `spat_min`/`spat_max` count from the interval's 5' start, as with `strand = 1` and in `gseq.pwm()`.
+
+* **Behavior fix:** `pwm.edit_distance.lse` and `pwm.edit_distance.lse.pos` with `bidirect = TRUE` target the strand-combined score that the `pwm` virtual track returns; each substitution changes both strands.
+
+* **Behavior fix:** virtual tracks with a filter count each value once, even when the filter splits its bin or interval. This changes `sum`, `size`, `lse` and `quantile`. `avg` is now the mean of the unmasked values (it was length-weighted by unmasked part), `stddev` is their sample standard deviation (it could be NaN or drop parts), and a value-based `quantile` uses every unmasked part, not just the first.
+
+* **Behavior fix:** `*.pos` functions of sparse, value-based and array tracks clip to the start of the iterator interval, as dense tracks do, so `*.pos.relative` is never negative.
+
 * **Behavior fix:** `gsynth.train()` trained on only part of the data when the scope start was not a multiple of the iterator bin size. Retrain models built from such scopes.
 
 * **Behavior fix:** `gintervals.liftover()` and `gtrack.liftover()` use the source strand of a chain: a `gintervals.as_chain()` row with `strandsrc = -1`, or a chain file whose reference strand is "-", lifted in the wrong orientation. `gintervals.load_chain()` reports such blocks with the strands combined in `strand`, and `strandsrc` is always 1.
@@ -17,6 +29,14 @@ This release fixes defects found in a review of 5.14.4. Several change results, 
 * **Behavior fix:** `gsummary()`, `gintervals.summary()`, `gbins.summary()` and the array `stddev` slice function compute the standard deviation accurately; it could be badly wrong (0, NA or off by orders of magnitude) when values were large relative to their spread. `gbins.summary()` and `gintervals.summary()` with `intervals.set.out` keep values in double precision instead of float.
 
 * **Behavior fix:** `gintervals.random()` samples every valid start with the same chance. Without a filter, chromosomes were weighted by length rather than by number of starts, which oversampled short ones; the last start of a chromosome was never drawn; and with a filter it skipped the last `size` positions before each filter, gaps shorter than `2 * size`, and chromosomes with a single valid start.
+
+* Dense tracks: `exists`, `size` and the `*.pos` functions no longer report a value for a NaN bin when the iterator interval lies inside one bin.
+
+* Value-based virtual tracks (a data frame as source) give correct results when the data covers more than one chromosome; overlapping intervals could return NaN and `nearest` a value from another chromosome.
+
+* `pwm.edit_distance.pos` and `pwm.edit_distance.lse.pos` with a filter report positions relative to the iterator interval when the filter leaves one unmasked part.
+
+* `gtrack.array.extract()` returns correct values when slice columns are given in descending order, and `min.pos.abs`/`min.pos.relative` work on array tracks.
 
 * Subsetting a `gintervals.to_mat()` matrix by row names no longer turns its intervals into NA.
 

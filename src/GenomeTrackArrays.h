@@ -90,6 +90,11 @@ public:
 	void finish_writing();
 
 	const GIntervals &get_intervals();
+
+	bool item_at(int, int64_t coord, int64_t &start, int64_t &end) override {
+		const GIntervals &intervs = get_intervals();
+		return interval_at(intervs.begin(), intervs.end(), coord, start, end);
+	}
 	void get_sliced_vals(GIntervals::const_iterator iinterval, vector<float> &vals, unsigned numcols);
 
 protected:
@@ -187,16 +192,15 @@ inline void GenomeTrackArrays::calc_vals(const GInterval &interval)
 			v = (*itrack)->get_sliced_val(iinterv - m_intervals.begin());
 			if (!std::isnan(v)) {
 				(*itrack)->m_sum_accum += v;
-				(*itrack)->m_last_min = min((*itrack)->m_last_min, v);
 				if (v > (*itrack)->m_last_max) {
 					(*itrack)->m_last_max = v;
 					if ((*itrack)->has_function(MAX_POS))
-						(*itrack)->m_last_max_pos = iinterv->start;
+						(*itrack)->m_last_max_pos = std::max(iinterv->start, interval.start);
 				}
 				if (v < (*itrack)->m_last_min) {
 					(*itrack)->m_last_min = v;
 					if ((*itrack)->has_function(MIN_POS))
-						(*itrack)->m_last_min_pos = iinterv->start;
+						(*itrack)->m_last_min_pos = std::max(iinterv->start, interval.start);
 				}
 
 				++(*itrack)->m_num_vs;
@@ -215,6 +219,8 @@ inline void GenomeTrackArrays::calc_vals(const GInterval &interval)
 
 	for (vector<GenomeTrackArrays *>::iterator itrack = m_dependent_objs.begin(); itrack != m_dependent_objs.end(); ++itrack) {
 		(*itrack)->m_last_sum = (float)(*itrack)->m_sum_accum;
+		(*itrack)->m_last_size = (*itrack)->m_num_vs;
+		(*itrack)->m_last_exists = (*itrack)->m_num_vs > 0;
 		if ((*itrack)->m_num_vs > 0)
 			(*itrack)->m_last_avg = (*itrack)->m_last_nearest = (float)((*itrack)->m_sum_accum / (*itrack)->m_num_vs);
 		else {
@@ -250,7 +256,9 @@ inline float GenomeTrackArrays::get_array_val(uint64_t islice)
 	} else
 		prev_hint = 0;
 
-	// run binary search
+	// run binary search; starting at the previous slice's position is valid only when the slice indices ascend
+	if (islice && m_slice[islice - 1] > slice)
+		prev_hint = 0;
 	ArrayVals::const_iterator iarray_val = lower_bound(m_array_vals.begin() + prev_hint, m_array_vals.end(), slice, LessIdx());
 	hint = iarray_val - m_array_vals.begin();
 	return iarray_val < m_array_vals.end() && iarray_val->idx == slice ? iarray_val->val : numeric_limits<float>::quiet_NaN();

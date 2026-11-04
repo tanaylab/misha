@@ -30,11 +30,22 @@ public:
 	virtual double last_max_pos() const;
 	virtual double last_min_pos() const;
 
+	virtual bool item_at(int chromid, int64_t coord, int64_t &start, int64_t &end) {
+		select_chrom(chromid);
+		return interval_at(m_chrom_begin, m_chrom_end, coord, start, end);
+	}
+
 protected:
 	GIntervals    m_intervals;
 	vector<float> m_vals;
 	GIntervals::const_iterator m_icur_interval;
+	// m_intervals holds every chromosome (sorted by chrom, then start); queries see only [m_chrom_begin, m_chrom_end)
+	GIntervals::const_iterator m_chrom_begin;
+	GIntervals::const_iterator m_chrom_end;
+	int           m_cur_chromid;
 	double        m_last_min_pos;
+
+	void select_chrom(int chromid);
 
 	// Count-based calculation (matching GenomeTrackSparse exactly)
 	void calc_vals_coverage_weighted(const GInterval &interval);

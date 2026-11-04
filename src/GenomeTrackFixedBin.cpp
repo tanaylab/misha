@@ -149,6 +149,12 @@ void GenomeTrackFixedBin::classify_fast_path_mode()
 
 void GenomeTrackFixedBin::assign_single_bin_value(float value, double overlap_start)
 {
+	// A stored NaN is a bin without a value: no exists/size count, no positions.
+	if (std::isnan(value)) {
+		assign_single_bin_missing();
+		return;
+	}
+
 	m_last_avg = value;
 	m_last_min = m_last_max = m_last_nearest = m_last_sum = m_last_avg;
 	m_last_stddev = numeric_limits<float>::quiet_NaN();

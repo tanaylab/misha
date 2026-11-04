@@ -404,16 +404,12 @@ test_that("gseq.pwm_edits score_before/score_after correct with N and zero-prob 
     mandatory_rows <- r[r$edit_num > 0, ]
     expect_true(all(mandatory_rows$gain > 0 | is.infinite(mandatory_rows$gain)))
 
-    # Test with N bases
+    # A window holding N is not a candidate (as in the pwm vtrack): "NC" has no window, so no row
     r_n <- gseq.pwm_edits("NC", pssm_zero,
         score.thresh = -0.5,
         prior = 0, bidirect = FALSE
     )
-    expect_true(nrow(r_n) > 0)
-    # N base should be a mandatory edit
-    expect_true(any(r_n$ref == "N"))
-    # score_after should be better than score_before
-    expect_true(all(r_n$score_after[r_n$n_edits > 0] > r_n$score_before[r_n$n_edits > 0]))
+    expect_equal(nrow(r_n), 0)
 })
 
 test_that("pwm.edit_distance.pos with filter returns positions relative to original interval", {

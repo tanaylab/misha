@@ -22,6 +22,10 @@ public:
 		unsigned idx
 	);
 
+	// Quantile over the filter's unmasked parts (shared with the value-based vtracks)
+	static double aggregate_quantile_with_filter(GenomeTrack1D &track, const std::vector<GInterval> &parts, double percentile,
+	                                             rdb::IntervUtils &iu);
+
 private:
 	rdb::IntervUtils &m_iu;
 
@@ -55,7 +59,6 @@ private:
 	bool find_best_max_pos_with_filter(GenomeTrack1D &track, const std::vector<GInterval> &parts, double &best_pos);
 	bool find_best_min_pos_with_filter(GenomeTrack1D &track, const std::vector<GInterval> &parts, double &best_pos);
 	double aggregate_stddev_with_filter(GenomeTrack1D &track, const std::vector<GInterval> &parts);
-	double aggregate_quantile_with_filter(GenomeTrack1D &track, const std::vector<GInterval> &parts, double percentile);
 	double aggregate_exists_with_filter(GenomeTrack1D &track, const std::vector<GInterval> &parts);
 	double aggregate_size_with_filter(GenomeTrack1D &track, const std::vector<GInterval> &parts);
 	double aggregate_sample_with_filter(GenomeTrack1D &track, const std::vector<GInterval> &parts);

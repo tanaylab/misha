@@ -43,7 +43,7 @@ Filters are applied \emph{after} iterator modifiers (sshift/eshift/dim). The ord
 
 \strong{Semantics by function type:}
 \itemize{
-  \item \strong{Aggregations (avg/sum/min/max/stddev/quantile):} Length-weighted over unmasked regions
+  \item \strong{Aggregations over values:} a bin or interval of the source that overlaps an unmasked region counts once, even when the mask splits it. \code{avg}, \code{sum}, \code{size}, \code{lse}, \code{min}, \code{max}, \code{quantile} and \code{stddev} (the sample standard deviation) reduce over those values, for a track as for a value-based virtual track.
   \item \strong{coverage:} Returns (covered length in unmasked region) / (total unmasked length)
   \item \strong{distance/distance.center:} Unaffected by mask (pure geometry)
   \item \strong{PWM/kmer/potts:} Masked bases act as hard boundaries; matches cannot span masked regions.

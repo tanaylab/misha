@@ -226,6 +226,7 @@ void GenomeTrackArrays::read_interval(const GInterval &interval)
 
 	for (vector<GenomeTrackArrays *>::iterator itrack = m_dependent_objs.begin(); itrack != m_dependent_objs.end(); ++itrack) {
 		(*itrack)->m_last_avg = (*itrack)->m_last_nearest = (*itrack)->m_last_min = (*itrack)->m_last_max = (*itrack)->m_last_stddev = (*itrack)->m_last_sum = numeric_limits<float>::quiet_NaN();
+		(*itrack)->m_last_size = (*itrack)->m_last_exists = 0;
 		if ((*itrack)->has_function(MAX_POS))
 			(*itrack)->m_last_max_pos = numeric_limits<double>::quiet_NaN();
 		if ((*itrack)->has_function(MIN_POS))

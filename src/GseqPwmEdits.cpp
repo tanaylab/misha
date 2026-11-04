@@ -967,11 +967,23 @@ WindowResult find_best_window_edits(
     best.strand = 0;
     best.window_start = 0;
 
+    // A window holding N or any other non-ACGT base is not a candidate, as in the pwm vtrack:
+    // acgt_run[j] is the number of consecutive ACGT bases from j, and a window (or an indel alignment)
+    // at offset j may use only those.
+    std::vector<int> acgt_run(seqlen + 1, 0);
+    for (int j = seqlen - 1; j >= 0; --j) {
+        acgt_run[j] = base_to_index(seq[j]) < 4 ? acgt_run[j + 1] + 1 : 0;
+    }
+    const int min_span = std::max(1, L - std::max(0, max_indels));
+
     for (int s0 = roi_start_0; s0 <= roi_end_0; ++s0) {
         const char* window_start = seq.data() + s0;
+        if (s0 < 0 || s0 >= seqlen || std::min(seqlen - s0, acgt_run[s0]) < min_span) {
+            continue;
+        }
 
         auto try_window = [&](bool reverse, int direction) {
-            int seq_avail = seqlen - s0;
+            int seq_avail = std::min(seqlen - s0, acgt_run[s0]);
             // Score filter: compute L-length window score for filtering
             if (has_score_filter && seq_avail >= L) {
                 float logp = 0.0f;

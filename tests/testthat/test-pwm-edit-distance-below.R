@@ -1855,17 +1855,14 @@ test_that("pwm.edit_distance.lse direction=below with bidirectional", {
     if (!is.na(rev)) expect_true(rev >= 0)
     if (!is.na(bidi)) expect_true(bidi >= 0)
 
-    # The bidirectional version operates on both strands. Since a single edit
-    # can reduce scores on both strands simultaneously, the bidirectional edit
-    # count may be less than, equal to, or greater than individual strands.
-    # We verify all three produce valid results.
-    if (!is.na(fwd) || !is.na(rev)) {
-        # If at least one strand is reachable, bidirectional should also be reachable
-        # (the algorithm can always degrade both strands or one)
-        expect_false(is.na(bidi),
-            info = "Bidirectional should be reachable when at least one strand is"
-        )
-    }
+    # The bidirectional version targets the strand-combined LSE, which is at
+    # least each strand's own. Each strand alone can be pushed below this
+    # threshold, but no 50 bp sequence brings the combined score below -1.85
+    # (min-sum over 3-mers of both strands' window probabilities), far above
+    # it, so the answer is NA.
+    expect_false(is.na(fwd))
+    expect_false(is.na(rev))
+    expect_true(is.na(bidi))
 })
 
 test_that("pwm.edit_distance.lse direction=below with max_edits cap", {

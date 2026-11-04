@@ -804,28 +804,14 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
         rev_bidx[j] = base_to_index(complement_base(base));
     }
 
-    // Sliding-window N-count for fast skip of N-heavy regions.
-    // N bases force mandatory edits; if a window has more than max_edits Ns,
-    // it's unreachable. We maintain a running count, O(1) per window step.
-    //
-    // This is only sound for ABOVE direction with substitutions only:
-    //   - BELOW: an N is NOT a mandatory edit (m_mandatory_table[i][4] == false,
-    //     see precompute_tables). An N is scored at col_max (worst case for going
-    //     below), so an all-N window can already be <= threshold (0 edits). Skipping
-    //     it on N-count alone wrongly returns NA / misses the true minimum.
-    //   - indels (m_max_indels > 0): the alignment span is not fixed at
-    //     motif_length, so an N counted in the leading motif_length window may fall
-    //     outside the optimal alignment (e.g. shortened by deletions) and not force
-    //     an edit. Counting over a fixed window then over-rejects.
-    // For ABOVE + subs-only the true edit count is >= mandatory_edits >= n_count,
-    // so the skip is exact (matches the pigeonhole prefilter's own domain).
-    bool use_n_skip = (m_max_edits >= 0 && max_start > 0 && !is_below() && m_max_indels == 0);
-    int n_count = 0;
-    if (use_n_skip) {
-        for (size_t j = 0; j < motif_length && j < target_length; j++) {
-            n_count += (fwd_bidx[j] >= 4) ? 1 : 0;
-        }
+    // A window holding N or any other non-ACGT base is not a candidate, as in the pwm vtrack: acgt_run[j]
+    // is the number of consecutive ACGT bases from j, and a window (or an indel alignment) at offset j may
+    // use only those. A window with fewer than min_span of them has no alignment at all.
+    std::vector<int> acgt_run(target_length + 1, 0);
+    for (size_t j = target_length; j-- > 0;) {
+        acgt_run[j] = fwd_bidx[j] < 4 ? acgt_run[j + 1] + 1 : 0;
     }
+    const int min_span = std::max(1, static_cast<int>(motif_length) - std::max(0, m_max_indels));
 
     bool pwm_found = false;
 
@@ -851,6 +837,9 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
         if (!need_pwm) {
             return;
         }
+        if (!std::isfinite(logp)) {
+            return;  // an unscorable window is not a candidate
+        }
         if (!pwm_found || logp > metrics.best_pwm_logp) {
             metrics.best_pwm_logp = logp;
             metrics.best_pwm_index = idx;
@@ -870,23 +859,11 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
     };
 
     for (size_t offset = 0; offset < max_start; ++offset) {
-        // Sliding N-count maintenance (for offset > 0, slide the window by 1)
-        if (use_n_skip && offset > 0) {
-            // Remove the base that just left the window
-            n_count -= (fwd_bidx[offset - 1] >= 4) ? 1 : 0;
-            // Add the base that just entered the window
-            if (offset + motif_length - 1 < target_length) {
-                n_count += (fwd_bidx[offset + motif_length - 1] >= 4) ? 1 : 0;
-            }
-        }
-
-        // Skip windows with too many N-bases (each N forces a mandatory edit)
-        if (use_n_skip && n_count > m_max_edits) {
+        const char* window_start = seq_data + offset;
+        const int seq_avail = std::min(static_cast<int>(target_length - offset), acgt_run[offset]);
+        if (seq_avail < min_span) {
             continue;
         }
-
-        const char* window_start = seq_data + offset;
-        int seq_avail = static_cast<int>(target_length - offset);
 
         // Inline prefilter for subs-only mode: check the pigeonhole viable table
         // directly, avoiding two function calls (compute_window_edits → passes_prefilter)
@@ -1113,7 +1090,8 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
              (has_score_max && metrics.best_pwm_logp > m_score_max))) {
             metrics.best_pwm_edits = std::numeric_limits<float>::quiet_NaN();
         } else {
-            int seq_avail = static_cast<int>(target_length - metrics.best_pwm_index);
+            int seq_avail = std::min(static_cast<int>(target_length - metrics.best_pwm_index),
+                                     acgt_run[metrics.best_pwm_index]);
             bool is_reverse = metrics.best_pwm_direction < 0;
             const int* bidx = is_reverse
                 ? rev_bidx.data() + metrics.best_pwm_index
