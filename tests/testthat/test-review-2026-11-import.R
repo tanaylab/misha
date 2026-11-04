@@ -297,3 +297,26 @@ test_that("gtrack.array.import skips and reports unknown chromosomes, and fails 
     expect_error(gtrack.array.import("arr_none", "", none), "None of the chromosome names")
     expect_false(gtrack.exists("arr_none"))
 })
+
+test_that("gtrack.import_mappedseq and gtrack.array.import write the indexed format on an indexed database", {
+    import_test_db("indexed")
+
+    sam <- write_file("r1\t0\tchr1\t101\t60\t10M\t*\t0\t0\tAAAAAAAAAA\t*\nr2\t0\tchr2\t11\t60\t10M\t*\t0\t0\tAAAAAAAAAA\t*\n", ".sam")
+    gtrack.import_mappedseq("ms_indexed", "", sam, cols.order = NULL)
+    expect_equal(gtrack.info("ms_indexed")$format, "indexed")
+    expect_setequal(list.files(file.path(.misha$GWD, "ms_indexed.track")), c("track.dat", "track.idx"))
+    res <- gextract("ms_indexed", gintervals.all())
+    expect_equal(paste(res$chrom, res$start), c("chr1 100", "chr2 10"))
+
+    f <- write_file("chrom\tstart\tend\ta\tb\nchr1\t0\t10\t1\t2\nchrX\t20\t30\t3\t4\n", ".tsv")
+    gtrack.array.import("arr_indexed", "", f)
+    expect_equal(gtrack.info("arr_indexed")$format, "indexed")
+    expect_false(any(c("chr1", "chr2", "chrX", "chrM") %in% list.files(file.path(.misha$GWD, "arr_indexed.track"))))
+    res <- rbind(
+        gtrack.array.extract("arr_indexed", NULL, gintervals("chr1")),
+        gtrack.array.extract("arr_indexed", NULL, gintervals("chrX"))
+    )
+    expect_equal(paste(res$chrom, res$start), c("chr1 0", "chrX 20"))
+    expect_equal(res$a, c(1, 3))
+    expect_equal(res$b, c(2, 4))
+})

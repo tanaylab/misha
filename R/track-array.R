@@ -383,6 +383,11 @@ gtrack.array.import <- function(track = NULL, description = NULL, ...) {
             .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
             .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
             .gtrack.attr.set(trackstr, "description", description, TRUE)
+
+            # If database is indexed, automatically convert the track to indexed format
+            if (.gdb.is_indexed()) {
+                gtrack.convert_to_indexed(trackstr)
+            }
             success <- TRUE
         },
         finally = {
