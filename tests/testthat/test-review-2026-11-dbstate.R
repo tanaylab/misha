@@ -37,3 +37,19 @@ test_that("gintervals.save stores alias chromosome names under their canonical n
 
     expect_error(gintervals.save("al_bad", data.frame(chrom = "chrNOPE", start = 0, end = 5)), "chrNOPE")
 })
+
+test_that("a big set saved in indexed format from a character chrom column reads per chromosome", {
+    local_db_state()
+    review_db(withr::local_tempdir())
+    d <- data.frame(chrom = rep(c("chr1", "chr2", "chrX", "chrM"), each = 20), start = rep(seq(0, 1900, 100), 4), stringsAsFactors = FALSE)
+    d$end <- d$start + 50
+    withr::local_options(gmulticontig.indexed_format = TRUE, gmax.data.size = 30)
+    gintervals.save("ixc", d)
+    expect_true(file.exists(file.path(.misha$GROOT, "tracks", "ixc.interv", "intervals.idx")))
+
+    res <- gintervals.load("ixc", chrom = "chrX")
+    expect_equal(nrow(res), 20)
+    expect_equal(res$start, seq(0, 1900, 100))
+    withr::local_options(gmax.data.size = 1e8)
+    expect_true(is.factor(gintervals.load("ixc")$chrom))
+})

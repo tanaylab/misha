@@ -70,10 +70,12 @@
                             zeroline <<- res[0, ]
 
                             if (use_indexed_format) {
-                                # Write directly to indexed format
+                                # Write directly to indexed format, in the shape the per-chromosome
+                                # files have (.gintervals.save_file): the zeroline written below is
+                                # normalized, and a chromosome is read back against it
                                 write_result <- .gcall(
                                     "gbigintervs_indexed_write_chrom",
-                                    indexed_state$dat_path, res, .misha_env()
+                                    indexed_state$dat_path, .gintervals.normalize_for_save(res), .misha_env()
                                 )
                                 chrom_id <- chrom_to_id[as.character(chrom)]
                                 entries_acc[[i]] <<- data.frame(
@@ -119,10 +121,10 @@
                             zeroline <<- res[0, ]
 
                             if (use_indexed_format) {
-                                # Write directly to indexed format
+                                # Write directly to indexed format (normalized, as the 1D case)
                                 write_result <- .gcall(
                                     "gbigintervs_indexed_write_chrom",
-                                    indexed_state$dat_path, res, .misha_env()
+                                    indexed_state$dat_path, .gintervals.normalize_for_save(res), .misha_env()
                                 )
                                 chrom_id1 <- chrom_to_id[as.character(chrom1)]
                                 chrom_id2 <- chrom_to_id[as.character(chrom2)]
