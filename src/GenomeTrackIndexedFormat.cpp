@@ -196,14 +196,25 @@ SEXP gtrack_convert_to_indexed_format(SEXP _track, SEXP _remove_old, SEXP _envir
             throw;
         }
 
-        // Flush and sync both files
-        fflush(dat_fp);
-        fflush(idx_fp);
-        fsync(fileno(dat_fp));
-        fsync(fileno(idx_fp));
+        // Check the writes and the size of track.dat while they are still in the temporary files: once
+        // they are renamed into place, the per-chromosome files are removed.
+        int dat_err = fclose_synced(dat_fp);
+        int idx_err = fclose_synced(idx_fp);
 
-        fclose(dat_fp);
-        fclose(idx_fp);
+        if (dat_err || idx_err) {
+            TGLError<GenomeTrack>("Failed to write %s: %s", (dat_err ? dat_path_tmp : idx_path_tmp).c_str(),
+                strerror(dat_err ? dat_err : idx_err));
+        }
+
+        struct stat dat_stat;
+        if (stat(dat_path_tmp.c_str(), &dat_stat) != 0) {
+            TGLError<GenomeTrack>("Failed to stat %s after conversion", dat_path_tmp.c_str());
+        }
+
+        if ((uint64_t)dat_stat.st_size != current_offset) {
+            TGLError<GenomeTrack>("track.dat size mismatch: expected %llu bytes, got %llu bytes",
+                (unsigned long long)current_offset, (unsigned long long)dat_stat.st_size);
+        }
 
         // Atomic rename: track.dat first, then track.idx
         if (rename(dat_path_tmp.c_str(), dat_path.c_str()) != 0) {
@@ -214,18 +225,6 @@ SEXP gtrack_convert_to_indexed_format(SEXP _track, SEXP _remove_old, SEXP _envir
         if (rename(idx_path_tmp.c_str(), idx_path.c_str()) != 0) {
             TGLError<GenomeTrack>("Failed to rename %s to %s: %s",
                 idx_path_tmp.c_str(), idx_path.c_str(), strerror(errno));
-        }
-
-        // Validate conversion before removing old files
-        // Check that track.dat has the expected size
-        struct stat dat_stat;
-        if (stat(dat_path.c_str(), &dat_stat) != 0) {
-            TGLError<GenomeTrack>("Failed to stat %s after conversion", dat_path.c_str());
-        }
-
-        if ((uint64_t)dat_stat.st_size != current_offset) {
-            TGLError<GenomeTrack>("track.dat size mismatch: expected %llu bytes, got %llu bytes",
-                (unsigned long long)current_offset, (unsigned long long)dat_stat.st_size);
         }
 
         // Remove old per-chromosome files if requested, also those that the packed ones hid
