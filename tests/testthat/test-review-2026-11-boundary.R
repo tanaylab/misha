@@ -364,3 +364,11 @@ test_that("multitasked spearman gcor with gmax.data.size = Inf or unset matches 
         expect_equal(unname(res), expected, tolerance = 1e-6)
     }
 })
+
+test_that("a global.percentile vtrack on a track with no values gives NaN", {
+    withr::defer(if (gtrack.exists("temp.review_pv_nan")) gtrack.rm("temp.review_pv_nan", force = TRUE))
+    gtrack.create_dense("temp.review_pv_nan", "", gintervals(1, 0, 1e5), NaN, 10000, NaN)
+    gvtrack.create("review_pv_nan", "temp.review_pv_nan", "global.percentile")
+    withr::defer(gvtrack.rm("review_pv_nan"))
+    expect_true(all(is.nan(gextract("review_pv_nan", gintervals(1, 0, 1e5), iterator = 10000)$review_pv_nan)))
+})
