@@ -30,7 +30,7 @@ public:
 	virtual double last_max_pos() const;
 	virtual double last_min_pos() const;
 
-	bool item_at(int chromid, int64_t coord, int64_t &start, int64_t &end) override {
+	virtual bool item_at(int chromid, int64_t coord, int64_t &start, int64_t &end) {
 		select_chrom(chromid);
 		return interval_at(m_chrom_begin, m_chrom_end, coord, start, end);
 	}
