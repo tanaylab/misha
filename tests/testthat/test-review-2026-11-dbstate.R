@@ -250,6 +250,8 @@ test_that("gdataset.save keeps the attributes of a small interval set", {
 
 test_that("gdb.convert_to_indexed converts a 1D set over a contig whose name has a dash as 1D", {
     local_db_state()
+    # a big set saved in per-chromosome files, to be converted
+    withr::local_options(list(gmulticontig.indexed_format = FALSE))
     db <- create_test_db(file.path(withr::local_tempdir(), "db"), data.frame(chrom = c("chr1", "HLA-A", "scaf-2"), size = c(10000, 5000, 5000)))
     suppressMessages(gsetroot(db))
     d <- data.frame(chrom = rep(c("chr1", "HLA-A", "scaf-2"), each = 5), start = rep(seq(0, 400, 100), 3))
