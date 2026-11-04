@@ -241,3 +241,59 @@ test_that("BED import skips and reports chromosomes missing from the database", 
     expect_error(suppressMessages(gtrack.import("bed_none", "", none, 0)), "None of the chromosome names")
     expect_false(gtrack.exists("bed_none"))
 })
+
+for (format in c("indexed", "per-chromosome")) {
+    test_that(sprintf("2D imports skip and report unknown chromosomes, and fail when nothing matches (%s)", format), {
+        import_test_db(format)
+        header <- "chrom1\tstart1\tend1\tchrom2\tstart2\tend2\tvalue\n"
+
+        f <- write_file(paste0(header, "1\t0\t10\tMT\t0\t10\t1\nchrBogus\t0\t10\tchr1\t0\t10\t2\nchr2\t0\t10\tX\t0\t10\t3\n"), ".tsv")
+        expect_message(gtrack.2d.import("rects_unknown", "", f), "skipped: chrBogus")
+        res <- gextract("rects_unknown", gintervals.2d.all())
+        expect_equal(paste(res$chrom1, res$chrom2), c("chr1 chrM", "chr2 chrX"))
+        expect_equal(res$rects_unknown, c(1, 3))
+
+        # the names of every reading process are reported
+        f2 <- write_file(paste0(header, "chr1\t20\t30\tchr2\t20\t30\t4\nchrUn_b\t0\t10\tchr1\t0\t10\t5\n"), ".tsv")
+        withr::with_options(list(gmultitasking = TRUE, gmax.processes = 2), {
+            expect_message(gtrack.2d.import("rects_two", "", c(f, f2)), "chrBogus, chrUn_b")
+        })
+        expect_equal(nrow(gextract("rects_two", gintervals.2d.all())), 3)
+
+        none <- write_file(paste0(header, "chrBogus\t0\t10\tchr1\t0\t10\t1\n"), ".tsv")
+        expect_error(gtrack.2d.import("rects_none", "", none), "None of the chromosome names")
+        expect_false(gtrack.exists("rects_none"))
+
+        empty <- write_file(header, ".tsv")
+        expect_error(gtrack.2d.import("rects_empty", "", empty), "No intervals were read")
+        expect_false(gtrack.exists("rects_empty"))
+
+        expect_message(gtrack.2d.import_contacts("contacts_unknown", "", f), "skipped: chrBogus")
+        expect_equal(nrow(gextract("contacts_unknown", gintervals.2d.all())), 4)
+        expect_error(gtrack.2d.import_contacts("contacts_none", "", none), "None of the chromosome names")
+        expect_error(gtrack.2d.import_contacts("contacts_empty", "", empty), "No contacts were read")
+        expect_false(any(gtrack.exists(c("contacts_none", "contacts_empty"))))
+
+        # an unknown chromosome in a fends file: its fends are skipped
+        fends <- write_file("fend\tchr\tcoord\n1\tchr1\t1000\n2\tchrUn_x\t5\n3\tchr2\t300\n", ".tsv")
+        contacts <- write_file("fend1\tfend2\tcount\n1\t3\t4\n1\t2\t7\n", ".tsv")
+        expect_message(gtrack.2d.import_contacts("fends_unknown", "", contacts, fends), "skipped: chrUn_x")
+        res <- gextract("fends_unknown", gintervals.2d.all())
+        expect_equal(paste(res$chrom1, res$start1, res$chrom2, res$start2), c("chr1 1000 chr2 300", "chr2 300 chr1 1000"))
+        expect_equal(res$fends_unknown, c(4, 4))
+    })
+}
+
+test_that("gtrack.array.import skips and reports unknown chromosomes, and fails when nothing matches", {
+    import_test_db("indexed")
+
+    f <- write_file("chrom\tstart\tend\ta\nchrBogus\t0\t10\t1\nchr1\t0\t10\t2\n", ".tsv")
+    expect_message(gtrack.array.import("arr_unknown", "", f), "skipped: chrBogus")
+    res <- gtrack.array.extract("arr_unknown", NULL, gintervals.all())
+    expect_equal(as.character(res$chrom), "chr1")
+    expect_equal(res$a, 2)
+
+    none <- write_file("chrom\tstart\tend\ta\nchrBogus\t0\t10\t1\n", ".tsv")
+    expect_error(gtrack.array.import("arr_none", "", none), "None of the chromosome names")
+    expect_false(gtrack.exists("arr_none"))
+})

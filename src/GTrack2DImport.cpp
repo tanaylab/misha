@@ -25,6 +25,10 @@
 using namespace std;
 using namespace rdb;
 
+// The checks of the 1D importers (GenomeTrackImportWig.cpp)
+void verify_chroms_matched(const GenomeChromKey &chromkey, const char *fname, const UnknownChroms &unknown, uint64_t num_matched, SEXP envir);
+void report_skipped_chroms(const char *fname, const UnknownChroms &unknown, uint64_t num_matched, SEXP envir);
+
 typedef pair<uint32_t, uint32_t> Chrom_pair;
 
 class BinIntervalsFiles : public unordered_map<Chrom_pair, BufferedFile *> {
@@ -173,6 +177,70 @@ vector<PairFiles> list_pair_files(const string &dirname)
 		pairs.push_back(pair_files);
 	}
 	return pairs;
+}
+
+static string unknown_chroms_file_name(const string &dirname, int kid)
+{
+	return dirname + "/.unknown_chroms." + to_string(kid);
+}
+
+void KidUnknownChroms::record(const string &chrom)
+{
+	if (seen.count(chrom) || (names.size() > (size_t)UnknownChroms::MAX_TRACKED && !UnknownChroms::is_primary_chrom_name(chrom)))
+		return;
+	seen.insert(chrom);
+	names.push_back(chrom);
+}
+
+void KidUnknownChroms::save(const string &dirname, int kid) const
+{
+	string filename = unknown_chroms_file_name(dirname, kid);
+	FILE *fp = fopen(filename.c_str(), "w");
+
+	if (!fp)
+		verror("Writing an intermediate file %s: %s\n", filename.c_str(), strerror(errno));
+	for (const string &name : names)
+		fprintf(fp, "%s\n", name.c_str());
+	bool failed = ferror(fp);
+
+	if (fclose(fp) || failed)
+		verror("Writing an intermediate file %s: %s\n", filename.c_str(), strerror(errno));
+}
+
+void load_unknown_chroms(const string &dirname, int num_kids, UnknownChroms &unknown)
+{
+	for (int kid = 0; kid < num_kids; ++kid) {
+		string filename = unknown_chroms_file_name(dirname, kid);
+		ifstream file(filename);
+		string name;
+
+		if (!file)
+			verror("Reading an intermediate file %s: %s\n", filename.c_str(), strerror(errno));
+		while (getline(file, name))
+			unknown.record(name);
+		if (file.bad())
+			verror("Reading an intermediate file %s: %s\n", filename.c_str(), strerror(errno));
+		file.close();
+		unlink(filename.c_str());
+	}
+}
+
+uint64_t pairs_num_chroms(const vector<PairFiles> &pairs)
+{
+	set<int> chromids;
+
+	for (const PairFiles &pair_files : pairs) {
+		chromids.insert(pair_files.chromid1);
+		chromids.insert(pair_files.chromid2);
+	}
+	return chromids.size();
+}
+
+string import_src_name(const vector<string> &files)
+{
+	if (files.size() == 1)
+		return files.front();
+	return files.front() + " and " + to_string(files.size() - 1) + " other file(s)";
 }
 
 vector<char> run_kids(IntervUtils &iu, int num_kids, const function<char(int)> &work, bool throttle)
@@ -397,6 +465,7 @@ static bool read_input_files(IntervUtils &iu, SEXP _files, const vector<int64_t>
 {
 	Progress_reporter progress;
 	BinIntervalsFiles bin_intervals_files;
+	KidUnknownChroms unknown;
 	bool are_all_points = true;
 	int64_t start1, start2, end1, end2;
 	float val;
@@ -439,11 +508,14 @@ static bool read_input_files(IntervUtils &iu, SEXP _files, const vector<int64_t>
 			if (fields.size() < GInterval2D::NUM_COLS + 1)
 				verror("File %s, line %ld: invalid format", infile.file_name().c_str(), lineno);
 
-			try {
-				chromid1 = iu.chrom2id(fields[GInterval2D::CHROM1]);
-				chromid2 = iu.chrom2id(fields[GInterval2D::CHROM2]);
-			} catch (TGLException &) {
-				// there might be unrecognized chromosomes, ignore them
+			// there might be unrecognized chromosomes: skip them, and report them once the track is written
+			chromid1 = iu.get_chromkey().find_chromid(fields[GInterval2D::CHROM1]);
+			chromid2 = iu.get_chromkey().find_chromid(fields[GInterval2D::CHROM2]);
+			if (chromid1 < 0 || chromid2 < 0) {
+				if (chromid1 < 0)
+					unknown.record(fields[GInterval2D::CHROM1]);
+				if (chromid2 < 0)
+					unknown.record(fields[GInterval2D::CHROM2]);
 				continue;
 			}
 
@@ -503,6 +575,7 @@ static bool read_input_files(IntervUtils &iu, SEXP _files, const vector<int64_t>
 		if (ifile->second->close())
 			verror("Writing an intermediate file %s: %s\n", ifile->second->file_name().c_str(), strerror(errno));
 	}
+	unknown.save(dirname, kid);
 
 	return are_all_points;
 }
@@ -602,7 +675,10 @@ SEXP gtrack_2d_import(SEXP _track, SEXP _files, SEXP _envir)
 {
 	try {
 		string dirname;
+		string srcname;
 		vector<PairFiles> pairs;
+		UnknownChroms unknown;
+		uint64_t num_matched = 0;
 		bool are_all_points = true;
 
 		// Each stage has its own RdbInitializer: the multitasking state (shared memory, kid bookkeeping)
@@ -633,6 +709,7 @@ SEXP gtrack_2d_import(SEXP _track, SEXP _files, SEXP _envir)
 			REprintf("Reading input file(s)...\n");
 
 			vector<int64_t> sizes;
+			vector<string> fnames;
 			for (int ifile = 0; ifile < Rf_length(_files); ++ifile) {
 				const char *fname = CHAR(STRING_ELT(_files, ifile));
 				struct stat st;
@@ -640,7 +717,9 @@ SEXP gtrack_2d_import(SEXP _track, SEXP _files, SEXP _envir)
 				if (stat(fname, &st))
 					verror("Accessing file %s: %s", fname, strerror(errno));
 				sizes.push_back(st.st_size);
+				fnames.push_back(fname);
 			}
+			srcname = import_src_name(fnames);
 
 			// STEP 1: Read the input files and split them into binary files each holding the intervals of specific chromosomes pair.
 			vector<int> bounds = split_files(sizes, import_num_kids(iu, sizes.size()));
@@ -651,7 +730,12 @@ SEXP gtrack_2d_import(SEXP _track, SEXP _files, SEXP _envir)
 			for (char kid_all_points : kids_all_points)
 				are_all_points &= (bool)kid_all_points;
 
+			load_unknown_chroms(dirname, bounds.size() - 1, unknown);
 			pairs = list_pair_files(dirname);
+			num_matched = pairs_num_chroms(pairs);
+			verify_chroms_matched(iu.get_chromkey(), srcname.c_str(), unknown, num_matched, _envir);
+			if (pairs.empty())
+				verror("No intervals were read from %s: a 2D track needs at least one", srcname.c_str());
 			check_interrupt();
 		}
 
@@ -709,6 +793,8 @@ SEXP gtrack_2d_import(SEXP _track, SEXP _files, SEXP _envir)
 			build_pairs(iu, pairs, mem, num_kids, [&](const PairFiles &pair_files) {
 					write_pair(iu, dirname, pair_files, are_all_points);
 				});
+
+			report_skipped_chroms(srcname.c_str(), unknown, num_matched, _envir);
 		}
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());

@@ -3,8 +3,11 @@
 
 #include <cstdint>
 #include <functional>
+#include <set>
 #include <string>
 #include <vector>
+
+#include "UnknownChroms.h"
 
 // Shared by gtrack_2d_import and gtrack_import_contacts. Both run in three stages:
 //   1. read the input files and split the records into intermediate binary files, one per
@@ -39,6 +42,28 @@ std::string pair_file_name(const std::string &dirname, int chromid1, int chromid
 
 // Collects the intermediate files that stage 1 left in dirname, ordered by chromosome pair
 std::vector<PairFiles> list_pair_files(const std::string &dirname);
+
+// The chromosome names that a kid of stage 1 could not resolve. A kid hands them to the parent in a file
+// (save), and the parent merges the files of all the kids into one UnknownChroms (load_unknown_chroms) to
+// report them as the 1D importers do. Kept in order of appearance: the distinct names up to one more than
+// UnknownChroms tracks, so that the merged UnknownChroms knows when names were left out, and every name
+// that looks like a primary chromosome.
+struct KidUnknownChroms {
+	std::set<std::string>    seen;
+	std::vector<std::string> names;
+
+	void record(const std::string &chrom);
+	void save(const std::string &dirname, int kid) const;
+};
+
+// Merges the names that the kids of stage 1 saved into unknown, and removes their files
+void load_unknown_chroms(const std::string &dirname, int num_kids, UnknownChroms &unknown);
+
+// Number of distinct chromosomes in the chromosome pairs
+uint64_t pairs_num_chroms(const std::vector<PairFiles> &pairs);
+
+// What the messages about unknown chromosomes call the input files: the file, or the first one and a count
+std::string import_src_name(const std::vector<std::string> &files);
 
 // Runs work(kid) for each kid - in forked kids when num_kids > 1, in this process otherwise -
 // and returns the byte each work() returned. With throttle, a kid is suspended while the kids together

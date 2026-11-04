@@ -21,6 +21,10 @@
 using namespace std;
 using namespace rdb;
 
+// The checks of the 1D importers (GenomeTrackImportWig.cpp)
+void verify_chroms_matched(const GenomeChromKey &chromkey, const char *fname, const UnknownChroms &unknown, uint64_t num_matched, SEXP envir);
+void report_skipped_chroms(const char *fname, const UnknownChroms &unknown, uint64_t num_matched, SEXP envir);
+
 typedef pair<uint32_t, uint32_t> Chrom_pair;
 
 class Contact_chrom_files : public unordered_map<Chrom_pair, BufferedFile *> {
@@ -140,7 +144,7 @@ static vector<int64_t> get_files_sizes(SEXP _files)
 	return sizes;
 }
 
-static void process_contacts_as_intervals(IntervUtils &iu, SEXP _files, const string &dirname)
+static void process_contacts_as_intervals(IntervUtils &iu, SEXP _files, const string &dirname, UnknownChroms &unknown)
 {
 	REprintf("Reading input file(s)...\n");
 
@@ -153,6 +157,7 @@ static void process_contacts_as_intervals(IntervUtils &iu, SEXP _files, const st
 	run_kids(iu, bounds.size() - 1, [&](int kid) {
 		Progress_reporter progress;
 		Contact_chrom_files contact_chrom_files;
+		KidUnknownChroms kid_unknown;
 		int64_t start1, start2, end1, end2;
 		float val;
 
@@ -194,11 +199,14 @@ static void process_contacts_as_intervals(IntervUtils &iu, SEXP _files, const st
 				if (fields.size() < GInterval2D::NUM_COLS + 1)
 					verror("File %s, line %ld: invalid format", infile.file_name().c_str(), lineno);
 
-				try {
-					chromid1 = iu.chrom2id(fields[GInterval2D::CHROM1]);
-					chromid2 = iu.chrom2id(fields[GInterval2D::CHROM2]);
-				} catch (TGLException &) {
-					// there might be unrecognized chromosomes, ignore them
+				// there might be unrecognized chromosomes: skip them, and report them once the track is written
+				chromid1 = iu.get_chromkey().find_chromid(fields[GInterval2D::CHROM1]);
+				chromid2 = iu.get_chromkey().find_chromid(fields[GInterval2D::CHROM2]);
+				if (chromid1 < 0 || chromid2 < 0) {
+					if (chromid1 < 0)
+						kid_unknown.record(fields[GInterval2D::CHROM1]);
+					if (chromid2 < 0)
+						kid_unknown.record(fields[GInterval2D::CHROM2]);
 					continue;
 				}
 
@@ -260,11 +268,16 @@ static void process_contacts_as_intervals(IntervUtils &iu, SEXP _files, const st
 		}
 		progress.report_last();
 		contact_chrom_files.close();
+		kid_unknown.save(dirname, kid);
 		return (char)0;
 	});
+
+	load_unknown_chroms(dirname, bounds.size() - 1, unknown);
 }
 
-static void process_contacts_as_fends(IntervUtils &iu, SEXP _contacts, SEXP _fends, const string &dirname)
+// unknown receives the chromosome names of the fends file that the database does not have; the contacts
+// of their fends are skipped
+static void process_contacts_as_fends(IntervUtils &iu, SEXP _contacts, SEXP _fends, const string &dirname, UnknownChroms &unknown)
 {
 	enum { COL_FEND, COL_CHR, COL_COORD, NUM_FENDS_COLS };
 	const char *FENDS_COLS[] = { "fend", "chr", "coord" };
@@ -323,16 +336,18 @@ static void process_contacts_as_fends(IntervUtils &iu, SEXP _contacts, SEXP _fen
 			coords.resize(fendid + 1);
 			defined.resize(fendid + 1);
 		}
-		defined[fendid] = true;
 
 		// Use chromosome name as-is (no forced chr prefix)
-		chromids[fendid] = iu.get_chromkey().chrom2id(chr_str);
+		chromids[fendid] = iu.get_chromkey().find_chromid(chr_str);
+		defined[fendid] = chromids[fendid] >= 0;
 
 		coord = strtoll(coord_str, &endptr, 10);
 		if (*endptr)
 			verror("Error reading fragment ends file %s, line %ld: invalid %s", fends_fname, lineno, FENDS_COLS[COL_COORD]);
 
-		if (coord < 0 || coord >= (int64_t)iu.get_chromkey().get_chrom_size(chromids[fendid]))
+		if (!defined[fendid])
+			unknown.record(chr_str);
+		else if (coord < 0 || coord >= (int64_t)iu.get_chromkey().get_chrom_size(chromids[fendid]))
 			verror("Error reading fragment ends file %s, line %ld: %s is out of range", fends_fname, lineno, FENDS_COLS[COL_COORD]);
 
 		coords[fendid] = coord;
@@ -582,7 +597,10 @@ SEXP gtrack_import_contacts(SEXP _track, SEXP _contacts, SEXP _fends, SEXP _allo
 {
 	try {
 		string dirname;
+		string srcname;
 		vector<PairFiles> pairs;
+		UnknownChroms unknown;
+		uint64_t num_matched = 0;
 
 		// Each stage has its own RdbInitializer: the multitasking state (shared memory, kid bookkeeping)
 		// is set up once per RdbInitializer, so the kids of each stage need a fresh one. A new RdbInitializer
@@ -616,12 +634,24 @@ SEXP gtrack_import_contacts(SEXP _track, SEXP _contacts, SEXP _fends, SEXP _allo
 			// Step 1 runs in parallel over the input files, steps 2 and 3 over the chromosome pairs (see GTrack2DImport.h).
 
 			// STAGE 1: Read the contacts and split them into binary files each holding the contacts of specific pair of chromosomes.
-			if (Rf_isNull(_fends))
-				process_contacts_as_intervals(iu, _contacts, dirname);
-			else
-				process_contacts_as_fends(iu, _contacts, _fends, dirname);
+			vector<string> fnames;
+
+			for (int ifile = 0; ifile < Rf_length(_contacts); ++ifile)
+				fnames.push_back(CHAR(STRING_ELT(_contacts, ifile)));
+
+			if (Rf_isNull(_fends)) {
+				srcname = import_src_name(fnames);
+				process_contacts_as_intervals(iu, _contacts, dirname, unknown);
+			} else {
+				srcname = CHAR(STRING_ELT(_fends, 0));
+				process_contacts_as_fends(iu, _contacts, _fends, dirname, unknown);
+			}
 
 			pairs = list_pair_files(dirname);
+			num_matched = pairs_num_chroms(pairs);
+			verify_chroms_matched(iu.get_chromkey(), srcname.c_str(), unknown, num_matched, _envir);
+			if (pairs.empty())
+				verror("No contacts were read from %s: a 2D track needs at least one", import_src_name(fnames).c_str());
 			check_interrupt();
 		}
 
@@ -680,6 +710,8 @@ SEXP gtrack_import_contacts(SEXP _track, SEXP _contacts, SEXP _fends, SEXP _allo
 			build_pairs(iu, pairs, mem, num_kids, [&](const PairFiles &pair_files) {
 					write_pair(iu, dirname, pair_files, allow_duplicates);
 				});
+
+			report_skipped_chroms(srcname.c_str(), unknown, num_matched, _envir);
 		}
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());

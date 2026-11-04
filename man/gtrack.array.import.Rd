@@ -34,6 +34,11 @@ not in the other are added and the values for the missing columns are set to
 NaN. Intervals with all NaN values are not added. Partial overlaps between
 two intervals from different sources are forbidden.
 
+Chromosome names in a file are matched as in \code{\link{gtrack.import}}:
+through the chromosome alias chain, with the lines of other chromosomes
+skipped and their names reported. A file that names chromosomes and matches
+none of them is an error.
+
 'description' is added as a track attribute.
 }
 \examples{
