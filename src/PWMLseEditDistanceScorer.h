@@ -128,13 +128,6 @@ private:
      */
     float encode_position(size_t index, size_t target_length, size_t motif_length, int direction) const;
 
-    /**
-     * Compute per-window PWM score for a given sequence and direction
-     * @param seq The full sequence
-     * @param reverse Whether to reverse-complement
-     * @return PWM score for this window
-     */
-    float compute_window_score(const char* window_start, bool reverse) const;
 
     struct LseResult {
         float min_edits = std::numeric_limits<float>::quiet_NaN();

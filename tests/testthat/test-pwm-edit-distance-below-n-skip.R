@@ -12,6 +12,11 @@
 # N window is also not a sound bound.) The fix gates the skip to
 # !is_below() && max_indels == 0.
 #
+# Since then a window holding N is no candidate at all, in either direction and
+# with or without max_edits, as in the pwm vtrack: an all-N region has no window
+# and gives NA. What these tests still guard is that the max_edits path and the
+# unbounded path agree on it.
+#
 # This needs sequence containing real N bases, so we build a tiny genome whose
 # .seq is all N (misha .seq files are raw bytes, position == coordinate).
 
@@ -64,13 +69,10 @@ test_that("pwm.edit_distance below: N-heavy window already below threshold retur
     )
     res_maxedits <- gextract("edist_n_maxedits", test_intervals, iterator = test_intervals)
 
-    # The N window is already below the threshold -> 0 edits. Pre-fix the window
-    # was skipped (n_count=4 > max_edits=1) and the result was NA.
-    expect_false(is.na(res_maxedits$edist_n_maxedits[1]))
-    expect_equal(res_maxedits$edist_n_maxedits[1], 0, tolerance = 1e-6)
+    # Every window holds an N, so there is no candidate window: NA
+    expect_true(is.na(res_maxedits$edist_n_maxedits[1]))
 
-    # Cross-check: with no max_edits the skip never fires (m_max_edits = -1), so
-    # this path was always correct. The max_edits path must now agree with it.
+    # Cross-check: the unbounded path answers the same.
     gvtrack.create("edist_n_nomax", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,

@@ -497,3 +497,125 @@ test_that("gseq.pwm leaves out windows holding N by default, as the pwm vtracks 
         tolerance = 1e-5
     )
 })
+
+# Fewest substitutions that bring one window's score to the threshold (NA when none do), from the
+# per-column gains: the largest gains first, which is exact for a position weight matrix.
+vt_ref_window_edits <- function(w, lp, thresh, above) {
+    cols <- match(w, c("A", "C", "G", "T"))
+    cur <- lp[cbind(seq_along(cols), cols)]
+    score <- sum(cur)
+    gains <- sort(if (above) apply(lp, 1, max) - cur else cur - apply(lp, 1, min), decreasing = TRUE)
+    need <- if (above) thresh - score else score - thresh
+    if (need <= 0) {
+        return(0)
+    }
+    k <- which(cumsum(gains) >= need - 1e-9)
+    if (length(k) == 0) NA else min(k)
+}
+
+test_that("edit distances never use a window holding N or another non-ACGT base", {
+    local_db_state()
+    s <- vt_n_db()
+    withr::defer(gvtrack.clear())
+    pssm <- vt_fix_pssm()
+    lp <- log(pssm)
+    L <- nrow(pssm)
+    windows_of <- function(st) lapply(st + 0:9, function(a) s[a + seq_len(L)])
+    acgt <- function(w) all(w %in% c("A", "C", "G", "T"))
+
+    for (st in c(92, 97, 195)) {
+        iv <- gintervals("chr1", st, st + 10)
+        ws <- windows_of(st)
+        ok <- vapply(ws, acgt, logical(1))
+        scores <- vapply(ws, function(w) if (acgt(w)) sum(lp[cbind(1:L, match(w, c("A", "C", "G", "T")))]) else -Inf, numeric(1))
+        for (dirn in c("above", "below")) {
+            thresh <- if (dirn == "above") max(scores) + 1.5 else max(scores[ok]) - 1.5
+            ref <- vapply(seq_along(ws), function(k) if (ok[k]) vt_ref_window_edits(ws[[k]], lp, thresh, dirn == "above") else NA_real_, numeric(1))
+            for (f in c("pwm.edit_distance", "pwm.edit_distance.pos", "pwm.max.edit_distance")) {
+                gvtrack.create("ed", NULL, f, pssm = pssm, prior = 0, bidirect = FALSE, score.thresh = thresh, direction = dirn)
+                got <- gextract("ed", iv, iterator = iv)$ed
+                expected <- switch(f,
+                    pwm.edit_distance = if (all(is.na(ref))) NA else min(ref, na.rm = TRUE),
+                    pwm.edit_distance.pos = if (all(is.na(ref))) NA else which.min(ref),
+                    pwm.max.edit_distance = ref[which.max(scores)]
+                )
+                if (is.na(expected)) {
+                    expect_true(is.na(got), info = paste(st, dirn, f))
+                } else {
+                    expect_equal(got, expected, info = paste(st, dirn, f))
+                }
+            }
+            # the string version agrees
+            if (!all(is.na(ref)) && dirn == "above") {
+                e <- gseq.pwm_edits(gseq.extract(gintervals("chr1", st, st + 10 + L - 1)), pssm,
+                    score.thresh = thresh, bidirect = FALSE, prior = 0, extend = FALSE
+                )
+                expect_equal(e$n_edits[1], min(ref, na.rm = TRUE), info = paste(st, "gseq.pwm_edits"))
+            }
+        }
+    }
+
+    # an interval whose every window holds an N: no candidate window, NA for the whole family
+    iv <- gintervals("chr1", 302, 312)
+    fns <- c("pwm.edit_distance", "pwm.edit_distance.pos", "pwm.max.edit_distance", "pwm.n_mutations",
+             "pwm.edit_distance.lse", "pwm.edit_distance.lse.pos")
+    for (f in fns) {
+        for (dirn in c("above", "below")) {
+            gvtrack.create("ed", NULL, f, pssm = pssm, score.thresh = -5, direction = dirn)
+            expect_true(is.na(gextract("ed", iv, iterator = iv)$ed), info = paste(f, dirn))
+        }
+    }
+})
+
+test_that("pwm.edit_distance.lse leaves out windows holding N (brute force)", {
+    local_db_state()
+    s <- vt_n_db()
+    withr::defer(gvtrack.clear())
+    pssm <- vt_fix_pssm()
+    lp <- log(pssm)
+    L <- nrow(pssm)
+    len <- 8
+    st <- 89 # windows 89..96: the N run at 100..105 (0-based) cuts the last two
+    iv <- gintervals("chr1", st, st + len)
+    bases <- s[st + seq_len(len + L - 1)]
+    editable <- which(bases %in% c("A", "C", "G", "T"))
+    combined <- function(b) {
+        vt_lse(c(vt_ref_window_scores(b, lp, 0:(len - 1), 1), vt_ref_window_scores(b, lp, 0:(len - 1), -1)))
+    }
+    gvtrack.create("e_pwm", NULL, "pwm", pssm = pssm, prior = 0)
+    F0 <- combined(bases)
+    expect_true(is.finite(F0))
+    expect_equal(gextract("e_pwm", iv, iterator = iv)$e_pwm, F0, tolerance = 1e-4)
+    alt <- function(b) setdiff(c("A", "C", "G", "T"), b)
+    one <- unlist(lapply(editable, function(q) vapply(alt(bases[q]), function(y) {
+        b <- bases
+        b[q] <- y
+        combined(b)
+    }, numeric(1))))
+    pairs <- t(combn(editable, 2))
+    two <- unlist(lapply(seq_len(nrow(pairs)), function(k) {
+        g <- expand.grid(y1 = alt(bases[pairs[k, 1]]), y2 = alt(bases[pairs[k, 2]]), stringsAsFactors = FALSE)
+        mapply(function(y1, y2) {
+            b <- bases
+            b[pairs[k, 1]] <- y1
+            b[pairs[k, 2]] <- y2
+            combined(b)
+        }, g$y1, g$y2)
+    }))
+    vals <- sort(unique(round(c(F0, one, two), 6)))
+    gaps <- which(diff(vals) > 1e-3)
+    pick <- gaps[unique(round(seq(1, length(gaps), length.out = 10)))]
+    for (thresh in (vals[pick] + vals[pick + 1]) / 2) {
+        for (dirn in c("above", "below")) {
+            hit <- function(x) if (dirn == "above") any(x >= thresh) else any(x <= thresh)
+            expected <- if (hit(F0)) 0 else if (hit(one)) 1 else if (hit(two)) 2 else NA
+            gvtrack.create("e_ed", NULL, "pwm.edit_distance.lse", pssm = pssm, prior = 0, score.thresh = thresh, max_edits = 2, direction = dirn)
+            got <- gextract("e_ed", iv, iterator = iv)$e_ed
+            if (is.na(expected)) {
+                expect_true(is.na(got), info = paste(thresh, dirn))
+            } else {
+                expect_equal(got, expected, info = paste(thresh, dirn))
+            }
+        }
+    }
+})

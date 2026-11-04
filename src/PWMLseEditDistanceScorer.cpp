@@ -154,34 +154,6 @@ float PWMLseEditDistanceScorer::encode_position(size_t index,
     return pos;
 }
 
-float PWMLseEditDistanceScorer::compute_window_score(const char* window_start, bool reverse) const
-{
-    const int L = m_pssm.length();
-    float logp = 0.0f;
-
-    for (int i = 0; i < L; i++) {
-        int seq_idx = reverse ? (L - 1 - i) : i;
-        char base = window_start[seq_idx];
-        if (reverse) {
-            base = complement_base(base);
-        }
-
-        int bidx = base_to_index(base);
-        if (bidx == 4) {
-            // Unknown base: use mean log-probability
-            float sum = 0.0f;
-            for (int b = 0; b < 4; b++) {
-                sum += m_pssm[i].get_log_prob_from_code(b);
-            }
-            logp += sum / 4.0f;
-        } else {
-            logp += m_pssm[i].get_log_prob_from_code(bidx);
-        }
-    }
-
-    return logp;
-}
-
 void PWMLseEditDistanceScorer::init_partition(const std::vector<int>& seq_bases,
                                                int N, int L,
                                                std::vector<double>& S_p,
@@ -192,12 +164,18 @@ void PWMLseEditDistanceScorer::init_partition(const std::vector<int>& seq_bases,
     S_p.resize(W);
     A_p.resize(W);
 
-    // Compute per-window scores
+    // Compute per-window scores. A window holding a non-ACGT base is not scored, as in the pwm vtrack: its
+    // weight is 0 and stays 0 under any edit, since every edit multiplies it.
     for (int w = 0; w < W; w++) {
         const int p = w % N;
         double score = 0.0;
-        for (int i = 0; i < L; i++)
+        for (int i = 0; i < L; i++) {
+            if (seq_bases[p + i] == 4) {
+                score = -std::numeric_limits<double>::infinity();
+                break;
+            }
             score += win_score(w, p + i, seq_bases[p + i], N, L);
+        }
         S_p[w] = score;
     }
 
@@ -205,6 +183,14 @@ void PWMLseEditDistanceScorer::init_partition(const std::vector<int>& seq_bases,
     m = -std::numeric_limits<double>::infinity();
     for (int w = 0; w < W; w++) {
         if (S_p[w] > m) m = S_p[w];
+    }
+
+    // No scorable window: F = -inf, and the caller reports NaN
+    if (!std::isfinite(m)) {
+        std::fill(A_p.begin(), A_p.end(), 0.0);
+        Z = 0.0;
+        F = m;
+        return;
     }
 
     // Compute shifted weights and partition function
@@ -765,6 +751,11 @@ PWMLseEditDistanceScorer::compute_lse_edit_distance(const std::string& seq,
     std::vector<double> S_p, A_p;
     double Z, m, F;
     init_partition(seq_bases, N, L, S_p, A_p, Z, m, F);
+
+    // No window without a non-ACGT base: nothing to edit towards or away from the threshold
+    if (!std::isfinite(F)) {
+        return result;
+    }
 
     // score.min/score.max filter: if current LSE score is out of range, skip
     if (!std::isnan(m_score_min) && F < static_cast<double>(m_score_min)) {
