@@ -1,3 +1,31 @@
+# misha 5.15.0
+
+This release fixes defects found in a review of 5.14.4. Several change results, marked **Behavior fix**; recompute anything that depends on them.
+
+* **Behavior fix:** `gsynth.train()` trained on only part of the data when the scope start was not a multiple of the iterator bin size. Retrain models built from such scopes.
+
+* **Behavior fix:** `gintervals.liftover()` and `gtrack.liftover()` use the source strand of a chain: a `gintervals.as_chain()` row with `strandsrc = -1`, or a chain file whose reference strand is "-", lifted in the wrong orientation. `gintervals.load_chain()` reports such blocks with the strands combined in `strand`, and `strandsrc` is always 1.
+
+* **Behavior fix:** `gintervals.as_chain()` treats strand 0 as forward (it was lifted as minus) and applies `min_score`, which it ignored.
+
+* **Behavior fix:** `gintervals.neighbors(use_intervals1_strand = TRUE)` and `gintervals.neighbors.upstream()`/`.downstream()` read a factor strand column by its labels; every interval used to count as "+".
+
+* **Behavior fix:** `gintervals.annotate()` returned the query's own columns as the annotation or distance when column names were shared, and `max_dist` blanked the wrong column. With `keep_order = FALSE`, `tie_method` stopped with an error.
+
+* **Behavior fix:** `giterator.intervals(interval_relative = TRUE)` gives the input row in `intervalID`; it gave the row's position in sorted order.
+
+* **Behavior fix:** `gsummary()`, `gintervals.summary()`, `gbins.summary()` and the array `stddev` slice function compute the standard deviation accurately; it could be badly wrong (0, NA or off by orders of magnitude) when values were large relative to their spread. `gbins.summary()` and `gintervals.summary()` with `intervals.set.out` keep values in double precision instead of float.
+
+* `gintervals.random(filter =)` samples uniformly: it skipped the last `size` positions before each filter and gaps shorter than `2 * size`.
+
+* Subsetting a `gintervals.to_mat()` matrix by row names no longer turns its intervals into NA.
+
+* `gintervals.force_range()` keeps intervals whose chromosome is an alias (e.g. "1" for chr1).
+
+* `gintervals.neighbors(intervals.set.out =)` saves the same column names as the in-memory result.
+
+* The docs of `gquantiles()`, `gintervals.quantiles()` and `gbins.quantiles()` say that values are kept with float precision (about 7 significant digits).
+
 # misha 5.14.4
 
 * 2D tracks written by a misha built with clang (the usual compiler on macOS) no longer carry uninitialized bytes in the padding of their quad-tree nodes, so the same input gives the same file. Values read from these tracks were never affected.
