@@ -226,3 +226,18 @@ test_that("multitask range splitting does not cut an iterator bin in two", {
     iv <- gintervals("chr1", s, s + 7)
     expect_equal(gsummary("test.fixedbin", iv, iterator = 10)[["Total intervals"]], 80002)
 })
+
+test_that("gtrack.array.extract reads each chromosome's own values after a one-interval chromosome", {
+    f <- tempfile(fileext = ".tsv")
+    on.exit(unlink(f), add = TRUE)
+    write.table(data.frame(chrom = c("chr1", "chr2"), start = c(0, 20), end = c(10, 30), a = c(1, 3), b = c(2, 4)),
+        f,
+        sep = "\t", quote = FALSE, row.names = FALSE
+    )
+    nm <- paste0("test.arr_ext_", sample(1:1e9, 1))
+    withr::defer(gtrack.rm(nm, force = TRUE))
+    suppressMessages(gtrack.array.import(nm, "", f))
+    r <- gtrack.array.extract(nm, NULL, gintervals(c("chr1", "chr2"), 0, 100))
+    expect_equal(r$a, c(1, 3))
+    expect_equal(r$b, c(2, 4))
+})

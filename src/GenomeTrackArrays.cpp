@@ -35,6 +35,9 @@ void GenomeTrackArrays::init_read(const char *filename, int chromid)
 	m_is_writing = false;
 	m_intervals.clear();
 	m_vals_pos.clear();
+	// read_array_vals() caches by the interval's index within the chromosome: index 0 of the next
+	// chromosome is a different record
+	m_last_array_vals_idx = (uint64_t)-1;
 
 	if (!m_master_obj) {
 		// Check for indexed format FIRST. get_track_index() hits the process-
