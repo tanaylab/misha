@@ -627,8 +627,7 @@ test_that("intra-domain contacts show enrichment vs far-cis", {
 
     expect_regression(
         list(intra = intra, far_cis = far_cis),
-        # _v2: band-intersected rectangles became minimal (values unchanged)
-        "intra_vs_far_cis.hic.1_v2"
+        "intra_vs_far_cis.hic.1"
     )
 
     # Basic structure checks
