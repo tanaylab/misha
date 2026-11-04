@@ -631,12 +631,17 @@ void *RdbInitializer::allocate_res(uint64_t res_num_records)
 
 	SemLocker sl(s_shm_sem);
 	s_shm->kid_res_offset[s_kid_index] = s_shm->res_offset;
-	s_shm->res_offset += s_res_const_size + res_num_records * s_res_var_size;
 
-	if (s_shm->res_offset > s_max_res_size) 
+	// Checked before it is added: with a very large limit the size could wrap around
+	uint64_t res_size;
+	if (__builtin_mul_overflow(res_num_records, s_res_var_size, &res_size) ||
+		__builtin_add_overflow(res_size, s_res_const_size, &res_size) ||
+		res_size > s_max_res_size - min(s_shm->res_offset, s_max_res_size))
 		verror("Result size exceeded the maximal allowed.\n"
 				"Try to bound the scope of the function.\n"
-				"Note: the maximum data size is controlled via gmax.data.size option (see options, getOptions).");
+				"Note: the maximum data size is controlled via gmax.data.size option (see options, getOptions);\n"
+				"when it sets no limit, the result must fit into half the RAM, at most gmax.mem.usage.");
+	s_shm->res_offset += res_size;
 
 	return &s_shm->res + s_shm->kid_res_offset[s_kid_index];
 }

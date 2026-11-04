@@ -216,7 +216,7 @@ uint64_t pair_mem(uint64_t num_records, uint64_t bytes_per_record)
 
 int64_t pair_num_subtrees(const IntervUtils &iu, int64_t num_records)
 {
-	// gmax.data.size below 1 reads as 0
+	// get_max_data_size() is between 1 and 2^53 (no limit); the min() and max() only guard the cast
 	int64_t num_subtrees = max(num_records / max((int64_t)min(iu.get_max_data_size(), (uint64_t)INT64_MAX), (int64_t)1), (int64_t)1);
 
 	return (int64_t)1 << (2 * (int)(log2(num_subtrees) / 2));  // round the number of subtrees to the lowest power of 4

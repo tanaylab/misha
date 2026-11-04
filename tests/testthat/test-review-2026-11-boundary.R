@@ -325,7 +325,7 @@ test_that("with gmax.data.size = Inf or unset, multitasked calls map a RAM-sized
     # a result that does not fit into the arena (here bounded by gmax.mem.usage, in KB) is an
     # error; gextract still falls back to a serial run
     withr::local_options(gmax.data.size = Inf, gmax.mem.usage = 10)
-    expect_error(glookup(1:2, "test.fixedbin", c(0, 0.15, 1), intervals = s), "Result size exceeded")
+    expect_error(glookup(1:2, "test.fixedbin", c(0, 0.15, 1), intervals = s), "Result size exceeded(.|\n)*gmax.mem.usage")
     expect_equal(nrow(gextract("test.fixedbin", s)), nrow(expected[[4]]))
 })
 

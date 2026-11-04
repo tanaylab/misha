@@ -584,6 +584,9 @@ SEXP gquantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 					// calculate the percentiles
 					if (calc_medians(sp, percentiles, medians, 0))
 						add_pending_diagnostic(iu.get_env(), "warning",
+								iu.is_data_size_unlimited() ?
+								"The data was sampled to fit the limit and the resulted quantiles are hence approximate.\n"
+								"(gmax.data.size sets no limit, so the samples were bounded by half the RAM, at most gmax.mem.usage)" :
 								"The data was sampled to fit the limit and the resulted quantiles are hence approximate.\n"
 								"(The limit can be controlled by gmax.data.size limit)");
 				}
