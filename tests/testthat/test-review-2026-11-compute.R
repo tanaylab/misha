@@ -241,3 +241,22 @@ test_that("gtrack.array.extract reads each chromosome's own values after a one-i
     expect_equal(r$a, c(1, 3))
     expect_equal(r$b, c(2, 4))
 })
+
+test_that("lse on an array track counts each value once, with and without a filter", {
+    f <- tempfile(fileext = ".tsv")
+    on.exit(unlink(f), add = TRUE)
+    write.table(data.frame(chrom = "chr1", start = c(10, 100, 200, 300), end = c(60, 120, 220, 320), a = c(4, 1, 7, 2)),
+        f,
+        sep = "\t", quote = FALSE, row.names = FALSE
+    )
+    nm <- paste0("test.arr_lse_", sample(1:1e9, 1))
+    withr::defer(gtrack.rm(nm, force = TRUE))
+    suppressMessages(gtrack.array.import(nm, "", f))
+    withr::defer(remove_all_vtracks())
+    gvtrack.create("arr_lse", nm, "lse")
+    q <- gintervals("chr1", 0, 1000)
+    expect_equal(gextract("arr_lse", q, iterator = q)$arr_lse, log(sum(exp(c(4, 1, 7, 2)))), tolerance = 1e-6)
+    # [10,60) is split by the filter and read once; [200,220) lies inside [190,230) and is masked
+    gvtrack.filter("arr_lse", gintervals("chr1", c(20, 190, 500), c(30, 230, 600)))
+    expect_equal(gextract("arr_lse", q, iterator = q)$arr_lse, log(sum(exp(c(4, 1, 2)))), tolerance = 1e-6)
+})
