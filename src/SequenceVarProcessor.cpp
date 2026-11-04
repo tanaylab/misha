@@ -794,12 +794,7 @@ void SequenceVarProcessor::process_individual_sequence_vars(
 				continue;
 			}
 
-			if (unmasked_parts.size() == 1) {
-				ivar->var[idx] = evaluate_interval(unmasked_parts[0]);
-				continue;
-			}
-
-			// Multiple unmasked parts - score each and aggregate
+			// Every part goes through the aggregation, a single one too: it offsets *.pos results to seq_interval
 			EditDistAggMode mode = get_agg_mode(ivar->val_func);
 			vector<EditDistPartResult> part_results;
 			part_results.reserve(unmasked_parts.size());
@@ -843,12 +838,7 @@ void SequenceVarProcessor::process_individual_sequence_vars(
 				continue;
 			}
 
-			if (unmasked_parts.size() == 1) {
-				ivar->var[idx] = evaluate_interval(unmasked_parts[0]);
-				continue;
-			}
-
-			// Multiple unmasked parts - score each and aggregate
+			// Every part goes through the aggregation, a single one too: it offsets *.pos results to seq_interval
 			EditDistAggMode mode = get_agg_mode(ivar->val_func);
 			vector<EditDistPartResult> part_results;
 			part_results.reserve(unmasked_parts.size());

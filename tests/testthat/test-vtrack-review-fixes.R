@@ -61,6 +61,31 @@ test_that("value-based vtracks read only the query's chromosome", {
     expect_equal(r$v_ex, c(1, 0, 1))
 })
 
+test_that("edit distance positions are offset when a filter leaves one part that does not start the interval", {
+    local_db_state()
+    vt_fix_db()
+    pssm <- vt_fix_pssm()
+    gvtrack.create("pm", NULL, "pwm.max", pssm = pssm)
+    gvtrack.create("p", NULL, "pwm", pssm = pssm)
+    withr::defer(gvtrack.clear())
+    part <- gintervals("chr1", 110, 140)
+    whole <- gintervals("chr1", 100, 140)
+    scores <- gextract(c("pm", "p"), part, iterator = part)
+    # thresholds half a unit above the current score, so that at least one edit is needed
+    thresh <- c(pwm.edit_distance.pos = scores$pm + 0.5, pwm.edit_distance.lse.pos = scores$p + 0.5)
+
+    for (f in names(thresh)) {
+        gvtrack.create("ed", NULL, f, pssm = pssm, score.thresh = thresh[[f]])
+        unfiltered <- gextract("ed", part, iterator = part)$ed
+        expect_false(is.na(unfiltered), info = f)
+        gvtrack.filter("ed", gintervals("chr1", 100, 110))
+        filtered <- gextract("ed", whole, iterator = whole)$ed
+        expect_equal(abs(filtered), abs(unfiltered) + 10, info = f)
+        expect_equal(sign(filtered), sign(unfiltered), info = f)
+        gvtrack.rm("ed")
+    }
+})
+
 test_that("gtrack.array.extract reads columns given in any order", {
     asc <- gtrack.array.extract("test.array", c("col1", "col5"), gintervals(c(1, 2)))
     desc <- gtrack.array.extract("test.array", c("col5", "col1"), gintervals(c(1, 2)))
