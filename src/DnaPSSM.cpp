@@ -458,14 +458,13 @@ void DnaPSSM::integrate_like_seg(const char *min_i, const char *max_i, float &en
 				logp = R_NegInf;
 				break;
 			}
-			if(DnaLookupTables::NEUTRAL_CHAR[(unsigned char)*j]) {
-				logp += p->get_avg_log_prob();
-			} else {
-				int code = DnaLookupTables::BASE_ENCODE[(unsigned char)*j];
-				if(code >= 0) {
-					logp += p->get_log_prob_from_code(code);
-				}
+			// N and any other non-ACGT character exclude the window, as in calc_like()
+			int code = DnaLookupTables::BASE_ENCODE[(unsigned char)*j];
+			if(code < 0) {
+				logp = R_NegInf;
+				break;
 			}
+			logp += p->get_log_prob_from_code(code);
 			j++;
 		}
    		log_sum_log(energy, logp);
@@ -480,14 +479,13 @@ void DnaPSSM::integrate_like_seg(const char *min_i, const char *max_i, float &en
 					logp = R_NegInf;
 					break;
 				}
-				if(DnaLookupTables::NEUTRAL_CHAR[(unsigned char)*j]) {
-					logp += p->get_avg_log_prob();
-				} else {
-					int code = DnaLookupTables::COMPLEMENT_ENCODE[(unsigned char)*j];
-					if(code >= 0) {
-						logp += p->get_log_prob_from_code(code);
-					}
+				// N and any other non-ACGT character exclude the window, as in calc_like()
+				int code = DnaLookupTables::COMPLEMENT_ENCODE[(unsigned char)*j];
+				if(code < 0) {
+					logp = R_NegInf;
+					break;
 				}
+				logp += p->get_log_prob_from_code(code);
 				j++;
 			}
        		log_sum_log(energy, logp);

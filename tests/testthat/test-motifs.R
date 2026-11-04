@@ -3,6 +3,10 @@ create_isolated_test_db()
 test_that("gtrack.create_pwm_energy works", {
     tmptrack <- paste0("test.tmptrack_", sample(1:1e9, 1))
     allgenome <- .misha$ALLGENOME
+    # The snapshot predates the rule that a window holding N (or any non-ACGT base) is not scored,
+    # so it is compared only on bins none of whose windows (motif 0 is 33 bp) reach such a base
+    chroms <- unique(as.character(allgenome[[1]]$chrom))
+    seqs <- vapply(chroms, function(cc) toupper(gseq.extract(gintervals(cc, 0, 1000040))), character(1))
     .misha$ALLGENOME[[1]]$end <- 1000000
     .misha$ALLGENOME[[2]]$end1 <- 1000000
     .misha$ALLGENOME[[2]]$end2 <- 1000000
@@ -11,7 +15,16 @@ test_that("gtrack.create_pwm_energy works", {
     gtrack.create_pwm_energy(tmptrack, "", "misha_motifs", 0, 0.02, iterator = 50)
     r <- gextract(tmptrack, .misha$ALLGENOME, colnames = "test.tmptrack")
     .misha$ALLGENOME <- allgenome
-    expect_regression(r, "gtrack.create_pwm_energy")
+    old <- readr::read_rds("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/gtrack.create_pwm_energy.rds")
+    r <- r[order(as.character(r$chrom), r$start), ]
+    old <- old[order(as.character(old$chrom), old$start), ]
+    expect_equal(r$start, old$start)
+    acgt_only <- !mapply(
+        function(cc, s, e) grepl("[^ACGT]", substr(seqs[[cc]], s + 1, e + 33)),
+        as.character(r$chrom), r$start, r$end
+    )
+    expect_gt(sum(acgt_only), 300000)
+    expect_equal(r$test.tmptrack[acgt_only], old$test.tmptrack[acgt_only], tolerance = 1e-5)
 })
 
 test_that("gtrack.create_pwm_energy multitasking matches sequential on an indexed database", {

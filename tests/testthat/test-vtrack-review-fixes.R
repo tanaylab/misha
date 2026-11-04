@@ -557,8 +557,10 @@ test_that("edit distances never use a window holding N or another non-ACGT base"
 
     # an interval whose every window holds an N: no candidate window, NA for the whole family
     iv <- gintervals("chr1", 302, 312)
-    fns <- c("pwm.edit_distance", "pwm.edit_distance.pos", "pwm.max.edit_distance", "pwm.n_mutations",
-             "pwm.edit_distance.lse", "pwm.edit_distance.lse.pos")
+    fns <- c(
+        "pwm.edit_distance", "pwm.edit_distance.pos", "pwm.max.edit_distance", "pwm.n_mutations",
+        "pwm.edit_distance.lse", "pwm.edit_distance.lse.pos"
+    )
     for (f in fns) {
         for (dirn in c("above", "below")) {
             gvtrack.create("ed", NULL, f, pssm = pssm, score.thresh = -5, direction = dirn)
@@ -587,11 +589,13 @@ test_that("pwm.edit_distance.lse leaves out windows holding N (brute force)", {
     expect_true(is.finite(F0))
     expect_equal(gextract("e_pwm", iv, iterator = iv)$e_pwm, F0, tolerance = 1e-4)
     alt <- function(b) setdiff(c("A", "C", "G", "T"), b)
-    one <- unlist(lapply(editable, function(q) vapply(alt(bases[q]), function(y) {
-        b <- bases
-        b[q] <- y
-        combined(b)
-    }, numeric(1))))
+    one <- unlist(lapply(editable, function(q) {
+        vapply(alt(bases[q]), function(y) {
+            b <- bases
+            b[q] <- y
+            combined(b)
+        }, numeric(1))
+    }))
     pairs <- t(combn(editable, 2))
     two <- unlist(lapply(seq_len(nrow(pairs)), function(k) {
         g <- expand.grid(y1 = alt(bases[pairs[k, 1]]), y2 = alt(bases[pairs[k, 2]]), stringsAsFactors = FALSE)
@@ -618,4 +622,34 @@ test_that("pwm.edit_distance.lse leaves out windows holding N (brute force)", {
             }
         }
     }
+})
+
+test_that("gtrack.create_pwm_energy leaves out windows holding N; an interval with none scorable is NaN", {
+    local_db_state()
+    s <- vt_n_db()
+    pssm <- vt_fix_pssm()
+    lp <- log(pssm)
+    L <- nrow(pssm)
+    dir.create(file.path(.misha$GROOT, "pssms"), showWarnings = FALSE)
+    writeLines("0 x 0", file.path(.misha$GROOT, "pssms", "tset.key"))
+    writeLines(
+        sprintf("0\t%d\t%.10f\t%.10f\t%.10f\t%.10f", 0:(L - 1), pssm[, 1], pssm[, 2], pssm[, 3], pssm[, 4]),
+        file.path(.misha$GROOT, "pssms", "tset.data")
+    )
+    gtrack.create_pwm_energy("en", "x", "tset", 0, 0, iterator = 10)
+    withr::defer(gtrack.rm("en", force = TRUE))
+    r <- gextract("en", gintervals("chr1", 60, 340))
+    for (k in seq_len(nrow(r))) {
+        # windows anchored at start..end of the bin (the sequence read is [start, end + L))
+        anchors <- r$start[k]:r$end[k]
+        anchors <- anchors[anchors + L <= 400]
+        expected <- vt_lse(vt_ref_window_scores(s, lp, anchors, 1))
+        # a track stores -Inf as NaN
+        if (expected == -Inf) {
+            expect_true(is.na(r$en[k]), info = paste(r$start[k]))
+        } else {
+            expect_equal(r$en[k], expected, tolerance = 1e-4, info = paste(r$start[k]))
+        }
+    }
+    expect_true(any(is.na(r$en)))
 })

@@ -119,6 +119,13 @@ gtrack.create <- function(track = NULL, description = NULL, expr = NULL, iterato
 #' The type of the created track is determined by the type of the iterator.
 #' 'description' is added as a track attribute.
 #'
+#' Each value is the log-sum-exp of the PSSM log-likelihoods of the windows
+#' starting in the iterator interval. A window holding \code{N} or any other
+#' character that is not A, C, G or T is not scored, as in the \code{pwm}
+#' virtual track. An interval none of whose windows can be scored gets \code{NaN}:
+#' the \code{pwm} virtual track returns \code{-Inf} for it, and a track stores an
+#' infinite value as \code{NaN}.
+#'
 #' @param track track name
 #' @param description a character string description
 #' @param pssmset name of PSSM set: 'pssmset.key' and 'pssmset.data' must be
