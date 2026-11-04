@@ -46,7 +46,7 @@ combinations:
 
 \emph{func = "min", params = NULL} \cr Minimum of columns' values.
 
-\emph{func = "stdev", params = NULL} \cr Unbiased standard deviation of
+\emph{func = "stddev", params = NULL} \cr Unbiased standard deviation of
 columns' values.
 
 \emph{func = "sum", params = NULL} \cr Sum of columns' values.
