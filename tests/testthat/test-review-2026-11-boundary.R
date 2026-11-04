@@ -393,3 +393,15 @@ test_that("a pv table with some NaN breaks is rejected; only the no-values table
     withr::defer(gvtrack.rm("review_pv_bad"))
     expect_error(gextract("review_pv_bad", gintervals(1, 0, 1e5), iterator = 10000), "Breaks contain NA")
 })
+
+test_that("a numeric chrom of -0 is chromosome 0, as as.character(-0) is \"0\"", {
+    local_db_state()
+    withr::with_tempdir({
+        create_test_db("db0", chrom_sizes = data.frame(chrom = c("chr0", "chr1"), size = c(1000, 1000)))
+        gdb.init("db0")
+        for (ch in list(0, -0, c(0, -0), c(-0, 0))) {
+            res <- gintervals.canonic(data.frame(chrom = ch, start = c(0, 100)[seq_along(ch)], end = c(10, 110)[seq_along(ch)]))
+            expect_equal(as.character(res$chrom), rep("chr0", length(ch)), info = deparse(ch))
+        }
+    })
+})

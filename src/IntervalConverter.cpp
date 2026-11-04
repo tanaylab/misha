@@ -46,7 +46,7 @@ const char *chrom_name(SEXP chroms, SEXP chrom_levels, unsigned i, char *buf, si
 	double v = num_elt(chroms, i);
 	if (!std::isfinite(v) || v != std::floor(v) || std::fabs(v) > 1e15)
 		verror("%sInvalid format of interval at index %d", error_msg_prefix, i + 1);
-	snprintf(buf, bufsize, "%.0f", v);
+	snprintf(buf, bufsize, "%.0f", v == 0 ? 0.0 : v);  // -0 is "0", as as.character(-0) is
 	return buf;
 }
 
