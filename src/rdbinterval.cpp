@@ -888,8 +888,11 @@ bool IntervUtils::distribute_task(uint64_t res_const_size,    // data size in by
 		// than RAM and swap. Map one sized from RAM instead. The pages are only committed as the
 		// kids write results, and a result that really exceeds this arena fails in allocate_res()
 		// with the usual "Result size exceeded".
+		// Only when the limit sized the arena: a caller that sized it from its own estimate
+		// (gextract, gscreen) backs off the estimate first and then runs serially.
 		uint64_t ram_shm_size = get_ram_shm_size();
-		if (max_res_size <= ram_shm_size || !strstr(e.msg(), "Failed to allocate shared memory"))
+		if (max_records_limit != get_max_data_size() || max_res_size <= ram_shm_size ||
+			!strstr(e.msg(), "Failed to allocate shared memory"))
 			throw;
 		rdb::prepare4multitasking(res_const_size, res_record_size, ram_shm_size, get_max_mem_usage(), m_num_planned_kids);
 	}
