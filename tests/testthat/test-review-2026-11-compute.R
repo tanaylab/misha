@@ -209,3 +209,12 @@ test_that("neighbors among tied intervals do not depend on the input order of th
     presorted <- gintervals.neighbors(i1, i2[order(i2$start, i2$id), ], maxneighbors = 1, mindist = 0)
     expect_equal(unsorted$id, presorted$id)
 })
+
+test_that("gseq.pwm_edits reports tied edits in motif order", {
+    pssm <- matrix(c(0.7, 0.1, 0.1, 0.1), 20, 4, byrow = TRUE, dimnames = list(NULL, c("A", "C", "G", "T")))
+    thr <- 20 * log(0.1) + 5 * (log(0.7) - log(0.1)) - 0.01
+    r <- gseq.pwm_edits(strrep("C", 20), pssm, score.thresh = thr, bidirect = FALSE, prior = 0)
+    expect_equal(r$motif_col, 1:5)
+    r <- gseq.pwm_edits(strrep("C", 20), pssm, score.thresh = thr, bidirect = FALSE, prior = 0, max_indels = 1)
+    expect_equal(r$motif_col, 1:5)
+})
