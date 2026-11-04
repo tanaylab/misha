@@ -261,6 +261,13 @@ the direction:
 Then, across all windows in the iterator interval, the minimum is reported (the position
 where it is easiest to create or disrupt a match).
 
+The LSE variants (\code{pwm.edit_distance.lse}, \code{pwm.edit_distance.lse.pos}) score the whole
+interval rather than one window. With \code{bidirect = TRUE} their target is the strand-combined
+log-sum-exp, the value the \code{pwm} virtual track returns, and each substitution changes both
+strands at once, so the two strands are searched together in either direction.
+\code{pwm.edit_distance.lse.pos} is then signed by the strand whose windows the reported edit
+changes more.
+
 \strong{Parameters:}
 \itemize{
   \item \code{score.thresh}: The target PWM log-likelihood score that the edit distance

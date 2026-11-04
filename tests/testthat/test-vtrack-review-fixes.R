@@ -355,3 +355,72 @@ test_that("pwm vtracks never score a window holding N or another non-ACGT base, 
         expect_equal(r$n_sp[k], vt_lse(both + spat_w), tolerance = 1e-4, info = paste(ivs$start[k]))
     }
 })
+
+test_that("pwm.edit_distance.lse with bidirect = TRUE answers for the strand-combined LSE (brute force)", {
+    local_db_state()
+    vt_fix_db()
+    withr::defer(gvtrack.clear())
+    pssm <- vt_fix_pssm()
+    lp <- log(pssm)
+    L <- nrow(pssm)
+    len <- 8
+    iv <- gintervals("chr1", 3100, 3100 + len)
+    bases <- strsplit(toupper(gseq.extract(gintervals("chr1", 3100, 3100 + len + L - 1))), "")[[1]]
+    R <- length(bases)
+    combined <- function(b) {
+        vt_lse(c(vt_ref_window_scores(b, lp, 0:(len - 1), 1), vt_ref_window_scores(b, lp, 0:(len - 1), -1)))
+    }
+    gvtrack.create("e_pwm", NULL, "pwm", pssm = pssm, prior = 0)
+    F0 <- combined(bases)
+    expect_equal(gextract("e_pwm", iv, iterator = iv)$e_pwm, F0, tolerance = 1e-4)
+
+    # every sequence one and two substitutions away, with the edited positions
+    alt <- function(b) setdiff(c("A", "C", "G", "T"), b)
+    one <- do.call(rbind, lapply(seq_len(R), function(q) {
+        data.frame(q = q, F = vapply(alt(bases[q]), function(y) {
+            b <- bases
+            b[q] <- y
+            combined(b)
+        }, numeric(1)))
+    }))
+    pairs <- t(combn(R, 2))
+    two <- unlist(lapply(seq_len(nrow(pairs)), function(k) {
+        q1 <- pairs[k, 1]
+        q2 <- pairs[k, 2]
+        g <- expand.grid(y1 = alt(bases[q1]), y2 = alt(bases[q2]), stringsAsFactors = FALSE)
+        mapply(function(y1, y2) {
+            b <- bases
+            b[q1] <- y1
+            b[q2] <- y2
+            combined(b)
+        }, g$y1, g$y2)
+    }))
+    reach <- function(thresh, above) {
+        hit <- function(x) if (above) any(x >= thresh) else any(x <= thresh)
+        if (hit(F0)) 0 else if (hit(one$F)) 1 else if (hit(two)) 2 else NA
+    }
+    # thresholds in the gaps between reachable scores, away from any tie
+    vals <- sort(unique(round(c(F0, one$F, two), 6)))
+    gaps <- which(diff(vals) > 1e-3)
+    pick <- gaps[unique(round(seq(1, length(gaps), length.out = 12)))]
+    thresholds <- (vals[pick] + vals[pick + 1]) / 2
+
+    for (thresh in thresholds) {
+        for (dirn in c("above", "below")) {
+            gvtrack.create("e_ed", NULL, "pwm.edit_distance.lse", pssm = pssm, prior = 0, score.thresh = thresh, max_edits = 2, direction = dirn)
+            gvtrack.create("e_pos", NULL, "pwm.edit_distance.lse.pos", pssm = pssm, prior = 0, score.thresh = thresh, max_edits = 2, direction = dirn)
+            r <- gextract(c("e_ed", "e_pos"), iv, iterator = iv)
+            expected <- reach(thresh, dirn == "above")
+            if (is.na(expected)) {
+                expect_true(is.na(r$e_ed), info = paste(thresh, dirn))
+            } else {
+                expect_equal(r$e_ed, expected, info = paste(thresh, dirn))
+            }
+            if (identical(expected, 1)) {
+                # the reported position is one where a single substitution reaches the threshold
+                at <- one$F[one$q == abs(r$e_pos)]
+                expect_true(if (dirn == "above") any(at >= thresh) else any(at <= thresh), info = paste(thresh, dirn))
+            }
+        }
+    }
+})
