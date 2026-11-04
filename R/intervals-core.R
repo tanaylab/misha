@@ -304,10 +304,17 @@ gintervals.2d.all <- function() {
         }
 
         intervals <- get("ALLGENOME", envir = .misha)[[1]]
-        intervals2d <- .gintervals.2d.deferred_scope(intervals)
+        if (is.null(getOption("gmulticontig.2d.mode"))) {
+            warning(sprintf(
+                "The database has more than getOption(\"gmulticontig.2d.threshold\") (%d) contigs: gintervals.2d.all() returns the cis chromosome pairs only. Set options(gmulticontig.2d.mode = \"full\") for all chromosome pairs.",
+                getOption("gmulticontig.2d.threshold", 100)
+            ), call. = FALSE)
+        }
+        intervals2d <- .generate_2d_on_demand(intervals, mode)
 
-        # Cache if requested
-        if (getOption("gmulticontig.2d.cache", FALSE)) {
+        # Cache if requested (built in a mode that was asked for: the cis pairs of the default mode
+        # are not the whole-genome scope)
+        if (getOption("gmulticontig.2d.cache", FALSE) && !is.null(getOption("gmulticontig.2d.mode"))) {
             allgenome <- get("ALLGENOME", envir = .misha)
             allgenome[[2]] <- intervals2d
             assign("ALLGENOME", allgenome, envir = .misha)

@@ -647,11 +647,16 @@ rescue_ALLGENOME <- function(intervals, intervals_name) {
         # When users pass ALLGENOME directly (the default in many APIs), the 2D
         # component might be a deferred placeholder. Expand it here so C++
         # interval conversions always see a proper data frame.
-        intervals[[2]] <- if (identical(intervals, get("ALLGENOME", envir = .misha))) {
-            gintervals.2d.all()
-        } else {
-            .gintervals.2d.deferred_scope(intervals[[1]])
-        }
+        # (a scope, so built in options(gmulticontig.2d.mode), and refused for a 2D computation
+        # without it: .gintervals.2d.deferred_scope)
+        intervals[[2]] <- .gintervals.2d.deferred_scope(intervals[[1]])
     }
     return(intervals)
+}
+
+# The whole-genome scope (.misha$ALLGENOME) for a computation: its 2D part, deferred above
+# gmulticontig.2d.threshold contigs, built in options(gmulticontig.2d.mode) when that is set
+# (rescue_ALLGENOME)
+.gallgenome <- function() {
+    rescue_ALLGENOME(get("ALLGENOME", envir = .misha), "the whole-genome scope")
 }

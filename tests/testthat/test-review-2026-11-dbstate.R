@@ -456,7 +456,6 @@ test_that("2D computations over the deferred whole-genome 2D scope stop and name
         withr::local_options(list(gmultitasking = mt))
         # gquantiles gave the median of the cis value only (10)
         expect_error(gquantiles("mr", 0.5), msg, fixed = TRUE)
-        expect_error(gextract("mr", gintervals.2d.all()), msg, fixed = TRUE)
         expect_error(gextract("mr", .misha$ALLGENOME), msg, fixed = TRUE)
         expect_error(gsummary("mr"), msg, fixed = TRUE)
         expect_error(gscreen("mr > 0"), msg, fixed = TRUE)
@@ -471,14 +470,33 @@ test_that("2D computations over the deferred whole-genome 2D scope stop and name
         expect_equal(nrow(gextract("t1d", .misha$ALLGENOME)), 3)
     }
 
-    # gintervals.2d.all() itself still gives the cis pairs
-    expect_equal(nrow(gintervals.2d.all()), 4)
+    # gintervals.2d.all() itself gives the cis pairs, with a warning; what is made from them works
+    expect_warning(all2d <- gintervals.2d.all(), msg, fixed = TRUE)
+    expect_equal(nrow(all2d), 4)
+    expect_null(attr(all2d, "deferred"))
+    expect_warning(expect_equal(gextract("mr", gintervals.2d.all())$mr, 10), msg, fixed = TRUE)
+    some <- suppressWarnings(head(gintervals.2d.all(), 2))
+    expect_equal(nrow(gintervals.intersect(some, some)), 2)
+    gintervals.save("some2d", some)
+    expect_equal(nrow(gintervals.load("some2d")), 2)
+    gtrack.2d.create("some_track", "", some, c(1, 2))
+    expect_equal(gextract("some_track", some)$some_track, c(1, 2))
+
+    # in a mode that was set, the whole-genome scope is built in it, everywhere
     withr::with_options(list(gmulticontig.2d.mode = "full"), {
-        expect_equal(nrow(suppressWarnings(gextract("mr", gintervals.2d.all()))), 4)
-        expect_equal(unname(suppressWarnings(gquantiles("mr", 0.5))), median(c(10, 20, 30, 40)))
+        suppressWarnings({
+            expect_equal(nrow(gextract("mr", gintervals.2d.all())), 4)
+            expect_equal(unname(gquantiles("mr", 0.5)), median(c(10, 20, 30, 40)))
+            expect_equal(gsummary("mr")[["Sum"]], 100)
+            expect_equal(nrow(gscreen("mr > 0")), 4)
+            expect_equal(sum(gdist("mr", c(0, 100))), 4)
+            expect_equal(nrow(gextract("mr", .misha$ALLGENOME)), 4)
+            expect_no_error(gcis_decay("mr", c(0, 1000), gintervals.all(), gintervals.all()))
+        })
     })
     withr::with_options(list(gmulticontig.2d.mode = "diagonal"), {
         expect_equal(gextract("mr", gintervals.2d.all())$mr, 10)
+        expect_equal(gsummary("mr")[["Sum"]], 10)
     })
 })
 

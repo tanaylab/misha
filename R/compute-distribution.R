@@ -80,7 +80,7 @@ gcis_decay <- function(expr = NULL, breaks = NULL, src = NULL, domain = NULL, in
     intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
 
     if (is.null(intervals)) {
-        intervals <- get("ALLGENOME", envir = .misha)
+        intervals <- .gallgenome()
     }
 
     exprstr <- do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame())
@@ -166,9 +166,9 @@ gdist <- function(..., intervals = NULL, include.lowest = FALSE, iterator = NULL
                 deparse(args[[length(args)]])
             ), call. = FALSE)
         }
-        intervals <- eval.parent(args[[length(args)]])
+        intervals <- rescue_ALLGENOME(eval.parent(args[[length(args)]]), "intervals")
     } else if (is.null(intervals)) {
-        intervals <- get("ALLGENOME", envir = .misha)
+        intervals <- .gallgenome()
     }
 
     exprs <- c()
