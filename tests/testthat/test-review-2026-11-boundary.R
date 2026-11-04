@@ -288,3 +288,8 @@ test_that("options(gmax.data.size = Inf) is no limit for gbins.quantiles, gtrack
     itr <- giterator.cartesian_grid(intervs, c(-100, 100))
     expect_equal(nrow(giterator.intervals(intervals = gintervals.2d(1), iterator = itr)), 4)
 })
+
+test_that("options(gmax.data.size = NA) is an error, logical or double", {
+    withr::local_options(gmax.data.size = NA)
+    expect_error(gquantiles("test.fixedbin", 0.5, scope), "gmax.data.size")
+})

@@ -106,6 +106,10 @@ uint64_t ConfigurationManager::get_max_data_size() const
 	if (!m_max_data_size) {
 		SEXP r_max_data_size = Rf_GetOption1(Rf_install("gmax.data.size"));
 
+		// options(gmax.data.size = NA) gives a logical NA, which is as invalid as NA_real_
+		if (Rf_isLogical(r_max_data_size) && Rf_length(r_max_data_size) >= 1 && LOGICAL(r_max_data_size)[0] == NA_LOGICAL)
+			verror("options(gmax.data.size) must be a number, not NA");
+
 		if (is_num_vector(r_max_data_size) && Rf_length(r_max_data_size) >= 1) {
 			double size = num_elt(r_max_data_size, 0);
 
