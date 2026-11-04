@@ -160,3 +160,22 @@ test_that("gtrack.create_dense does not slow down when a long interval spans man
     # (about 50x on 5.15.1)
     expect_lt(elapsed(with_long), 10 * max(elapsed(short), 0.005))
 })
+
+test_that("gtrack.import_mappedseq resolves chromosome aliases", {
+    import_test_db("indexed")
+
+    sam <- write_file(paste0(
+        "@HD\tVN:1.6\n",
+        "r1\t0\t1\t101\t60\t10M\t*\t0\t0\tAAAAAAAAAA\t*\n",
+        "r2\t0\tMT\t11\t60\t10M\t*\t0\t0\tAAAAAAAAAA\t*\n",
+        "r3\t0\tchr1\t501\t60\t10M\t*\t0\t0\tAAAAAAAAAA\t*\n",
+        "r4\t0\tchrBogus\t1\t60\t10M\t*\t0\t0\tAAAAAAAAAA\t*\n"
+    ), ".sam")
+    stats <- gtrack.import_mappedseq("ms_alias", "", sam, cols.order = NULL)
+    expect_equal(stats[[1]][["total.mapped"]], 3)
+    expect_equal(stats[[1]][["total.unmapped"]], 1)
+    res <- gextract("ms_alias", gintervals.all())
+    expect_equal(as.character(res$chrom), c("chr1", "chr1", "chrM"))
+    expect_equal(res$start, c(100, 500, 10))
+    expect_equal(res$ms_alias, c(1, 1, 1))
+})
