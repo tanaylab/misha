@@ -39,8 +39,20 @@ void ValueVarProcessor::process_single_value_var(
 	if (var.filter) {
 		std::vector<GInterval> eval_intervals;
 		var.filter->subtract(eval_interval, eval_intervals);
-		// Each value is counted once even when the filter splits its interval
-		eval_intervals = var.track->parts_reading_items_once(eval_intervals);
+		// The counting reductions read each value once even when the filter splits its interval;
+		// the other functions (min, max, positions, ...) read the parts as they are
+		switch (var.val_func) {
+			case TrackExpressionVars::Value_var::SUM:
+			case TrackExpressionVars::Value_var::SIZE:
+			case TrackExpressionVars::Value_var::LSE:
+			case TrackExpressionVars::Value_var::AVG:
+			case TrackExpressionVars::Value_var::STDDEV:
+			case TrackExpressionVars::Value_var::QUANTILE:
+				eval_intervals = var.track->parts_reading_items_once(eval_intervals);
+				break;
+			default:
+				break;
+		}
 
 		if (eval_intervals.empty()) {
 			var.var[idx] = numeric_limits<double>::quiet_NaN();
@@ -51,7 +63,8 @@ void ValueVarProcessor::process_single_value_var(
 		// This matches the pattern used for track variables with filters
 		struct FilteredValueAggregate {
 			double total_sum = 0;
-			double total_sum_sq = 0;
+			double sd_mean = 0;   // running mean and sum of squared deviations (Chan et al. merge)
+			double sd_m2 = 0;
 			int64_t total_size = 0;
 			double min_val = numeric_limits<double>::quiet_NaN();
 			double max_val = numeric_limits<double>::quiet_NaN();
@@ -89,18 +102,21 @@ void ValueVarProcessor::process_single_value_var(
 				double part_nearest = track.last_nearest();
 				double part_exists = track.last_exists();
 
+				if (part_size > 0) {
+					const double prev_n = total_size;
+					const double part_m2 = part_size > 1 && !std::isnan(part_stddev) ? part_stddev * part_stddev * (part_size - 1) : 0;
+					const double delta = part_avg - sd_mean;
+					const double n = prev_n + part_size;
+					sd_mean += delta * part_size / n;
+					sd_m2 += part_m2 + delta * delta * prev_n * part_size / n;
+				}
+
 				total_sum += part_sum;
 				total_size += static_cast<int64_t>(part_size);
 
 				double part_lse = track.last_lse();
 				if (!std::isnan(part_lse))
 					lse_accumulate(lse_val, part_lse);
-
-				if (part_size > 1 && !std::isnan(part_stddev)) {
-					double var_term = part_stddev * part_stddev * (part_size - 1);
-					total_sum_sq += var_term + part_avg * part_avg * part_size;
-				} else
-					total_sum_sq += part_avg * part_avg * part_size;
 
 				if (!std::isnan(part_min)) {
 					if (std::isnan(min_val) || part_min < min_val) {
@@ -152,11 +168,9 @@ void ValueVarProcessor::process_single_value_var(
 					var.var[idx] = agg.total_size > 0 ? agg.total_sum / agg.total_size : numeric_limits<double>::quiet_NaN();
 					break;
 				case TrackExpressionVars::Value_var::STDDEV:
-					if (agg.total_size > 1) {
-						double mean = agg.total_sum / agg.total_size;
-						double variance = agg.total_sum_sq / (agg.total_size - 1) - mean * mean * ((double)agg.total_size / (agg.total_size - 1));
-						var.var[idx] = sqrt(std::max(0.0, variance));
-					} else
+					if (agg.total_size > 1)
+						var.var[idx] = sqrt(agg.sd_m2 / (agg.total_size - 1));
+					else
 						var.var[idx] = numeric_limits<double>::quiet_NaN();
 					break;
 				case TrackExpressionVars::Value_var::SUM:
