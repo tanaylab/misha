@@ -213,3 +213,104 @@ test_that("gbins.summary and gintervals.summary(intervals.set.out) keep double p
     cols <- c("Min", "Max", "Sum", "Mean", "Std dev")
     expect_equal(as.matrix(saved[, cols]), as.matrix(in_memory[, cols]), tolerance = 1e-14)
 })
+
+test_that("liftover orientation combines the target and source strands", {
+    q <- data.frame(chrom = "chrS", start = 900, end = 910)
+    mk <- function(strand, strandsrc) {
+        gintervals.as_chain(data.frame(
+            chrom = "chr1", start = 5000, end = 5100, strand = strand,
+            chromsrc = "chrS", startsrc = 900, endsrc = 1000, strandsrc = strandsrc, chain_id = 1L, score = 1
+        ))
+    }
+    lifted <- function(chain) {
+        r <- gintervals.liftover(q, chain)
+        c(r$start, r$end)
+    }
+    expect_equal(lifted(mk(1, 1)), c(5000, 5010))
+    expect_equal(lifted(mk(-1, -1)), c(5000, 5010))
+    expect_equal(lifted(mk(1, -1)), c(5090, 5100))
+    expect_equal(lifted(mk(-1, 1)), c(5090, 5100))
+
+    # chain files: the same alignment with the reversed strand on either side
+    chr1_size <- gintervals.all()$end[as.character(gintervals.all()$chrom) == "chr1"]
+    chain_file <- function(tstrand, tstart, qstrand, qstart) {
+        f <- tempfile(fileext = ".chain")
+        writeLines(c(sprintf(
+            "chain 1 chrS 1000 %s %d %d chr1 %d %s %d %d 1",
+            tstrand, tstart, tstart + 100, chr1_size, qstrand, qstart, qstart + 100
+        ), "100", ""), f)
+        f
+    }
+    ref_minus <- chain_file("-", 0, "+", 5000) # source chrS:900-1000 reversed against chr1:5000-5100
+    query_minus <- chain_file("+", 900, "-", chr1_size - 5100) # the same alignment, written the usual way
+    both_minus <- chain_file("-", 0, "-", chr1_size - 5100) # same direction
+    on.exit(unlink(c(ref_minus, query_minus, both_minus)), add = TRUE)
+    expect_equal(lifted(query_minus), c(5090, 5100))
+    expect_equal(lifted(ref_minus), c(5090, 5100))
+    expect_equal(lifted(both_minus), c(5000, 5010))
+
+    loaded <- gintervals.load_chain(ref_minus)
+    expect_equal(loaded$strand, -1)
+    expect_equal(loaded$strandsrc, 1)
+    expect_equal(
+        loaded[, c("start", "end", "startsrc", "endsrc", "strand", "strandsrc")],
+        gintervals.load_chain(query_minus)[, c("start", "end", "startsrc", "endsrc", "strand", "strandsrc")]
+    )
+})
+
+test_that("gtrack.liftover follows the combined strand orientation", {
+    # source genome: one 1000 bp contig chrS with a sparse track at 900-910
+    src_root <- tempfile("src_db")
+    on.exit(unlink(src_root, recursive = TRUE), add = TRUE)
+    create_test_db(src_root, data.frame(chrom = "chrS", size = 1000))
+    tgt_root <- get("GROOT", envir = .misha)
+    withr::defer(gsetroot(tgt_root))
+    gsetroot(src_root)
+    gtrack.create_sparse("src_sp", "", gintervals("chrS", 900, 910), 7)
+    gsetroot(tgt_root)
+
+    chr1_size <- gintervals.all()$end[as.character(gintervals.all()$chrom) == "chr1"]
+    chain_file <- function(tstrand, tstart, qstrand, qstart) {
+        f <- tempfile(fileext = ".chain")
+        writeLines(c(sprintf(
+            "chain 1 chrS 1000 %s %d %d chr1 %d %s %d %d 1",
+            tstrand, tstart, tstart + 100, chr1_size, qstrand, qstart, qstart + 100
+        ), "100", ""), f)
+        f
+    }
+    for (case in list(
+        list(f = chain_file("-", 0, "+", 5000), start = 5090),
+        list(f = chain_file("+", 900, "-", chr1_size - 5100), start = 5090),
+        list(f = chain_file("-", 0, "-", chr1_size - 5100), start = 5000)
+    )) {
+        nm <- paste0("test.lifted_", sample(1:1e9, 1))
+        gtrack.liftover(nm, "", file.path(src_root, "tracks", "src_sp.track"), case$f)
+        r <- gextract(nm, gintervals("chr1", 4000, 6000))
+        gtrack.rm(nm, force = TRUE)
+        unlink(case$f)
+        expect_equal(c(r$start, r$end, r[[nm]]), c(case$start, case$start + 10, 7))
+    }
+})
+
+test_that("array slice stddev is accurate at a large offset", {
+    # offsets representable in float at 1e8 (spacing 8)
+    vals <- 1e8 + c(0, 8, 16, 24, 40)
+    f <- tempfile()
+    on.exit(unlink(f), add = TRUE)
+    write.table(data.frame(chrom = "chr1", start = 100, end = 200, a = vals[1], b = vals[2], c = vals[3], d = vals[4], e = vals[5]),
+        f,
+        sep = "\t", quote = FALSE, row.names = FALSE
+    )
+    nm <- paste0("test.arr_sd_", sample(1:1e9, 1))
+    withr::defer(gtrack.rm(nm, force = TRUE))
+    suppressMessages(gtrack.array.import(nm, "", f))
+
+    withr::defer(remove_all_vtracks())
+    gvtrack.create("arr_sd_all", nm)
+    gvtrack.array.slice("arr_sd_all", NULL, "stddev")
+    gvtrack.create("arr_sd_slice", nm)
+    gvtrack.array.slice("arr_sd_slice", c("a", "b", "c", "d", "e"), "stddev")
+    r <- gextract(c("arr_sd_all", "arr_sd_slice"), gintervals("chr1", 100, 200))
+    expect_equal(r$arr_sd_all, sd(vals), tolerance = 1e-6)
+    expect_equal(r$arr_sd_slice, sd(vals), tolerance = 1e-6)
+})
