@@ -610,9 +610,9 @@ test_that("gintervals.load_chain handles reverse strands correctly", {
 
     chain <- gintervals.load_chain(chain_file)
 
-    # Check strand format: target forward (+1), source reverse (-1)
-    expect_equal(as.numeric(chain$strand), 1)
-    expect_equal(as.numeric(chain$strandsrc), -1)
+    # The strands are combined: target reversed relative to the source (-1), source forward (+1)
+    expect_equal(as.numeric(chain$strand), -1)
+    expect_equal(as.numeric(chain$strandsrc), 1)
 })
 
 test_that("gintervals.load_chain handles mixed strand chains", {

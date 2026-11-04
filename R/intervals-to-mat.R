@@ -147,6 +147,14 @@ gintervals.to_mat <- function(df, id_col = NULL, value_cols = NULL, labels = TRU
     i_missing <- missing(i)
     j_missing <- missing(j)
 
+    # The intervals have their own row names (1..n), so select their rows by
+    # position: resolve i (which may be matrix row names) against the matrix.
+    if (!i_missing) {
+        rows <- seq_len(nrow(bare))
+        names(rows) <- rownames(bare)
+        rows <- unname(rows[i])
+    }
+
     # Always subset with drop=FALSE to preserve matrix dims.  We apply the
     # caller's `drop` ourselves at the end, but only along the row axis and
     # only when the caller actually supplied `i`.  Column-only subsets never
@@ -159,12 +167,12 @@ gintervals.to_mat <- function(df, id_col = NULL, value_cols = NULL, labels = TRU
         row_selected <- FALSE
     } else if (j_missing) {
         out <- bare[i, , drop = FALSE]
-        intervals <- intervals[i, , drop = FALSE]
+        intervals <- intervals[rows, , drop = FALSE]
         rownames(intervals) <- NULL
         row_selected <- TRUE
     } else {
         out <- bare[i, j, drop = FALSE]
-        intervals <- intervals[i, , drop = FALSE]
+        intervals <- intervals[rows, , drop = FALSE]
         rownames(intervals) <- NULL
         row_selected <- TRUE
     }

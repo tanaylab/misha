@@ -129,6 +129,7 @@ gintervals.liftover <- function(intervals = NULL,
             }
             src_overlap_policy <- chain_src_policy
             tgt_overlap_policy <- chain_tgt_policy
+            min_score <- attr(chain.intervs, "min_score")
         } else {
             # Chain doesn't have attributes (e.g., manually created) - validate and use user-specified policies
             if (!src_overlap_policy %in% c("error", "keep", "discard")) {
@@ -143,6 +144,12 @@ gintervals.liftover <- function(intervals = NULL,
             if (tgt_overlap_policy == "auto") {
                 tgt_overlap_policy <- "auto_score"
             }
+        }
+
+        # A chain file is filtered by min_score when it is loaded; a pre-loaded chain
+        # (e.g. from gintervals.as_chain) is filtered here
+        if (!is.null(min_score)) {
+            chain.intervs <- chain.intervs[which(chain.intervs$score >= min_score), , drop = FALSE]
         }
     }
 
@@ -295,6 +302,9 @@ gintervals.load <- function(intervals.set = NULL, chrom = NULL, chrom1 = NULL, c
 #' @param file name of chain file
 #' @param src_groot optional path to source genome database for validating source chromosomes and coordinates. If provided, the function temporarily switches to this database to verify that all source chromosomes exist and coordinates are within bounds, then restores the original database.
 #' @return A data frame representing assembly conversion table with columns: chrom, start, end, strand, chromsrc, startsrc, endsrc, strandsrc, chain_id, score.
+#' Coordinates on both genomes are on the forward strand. 'strand' is the orientation of the
+#' target relative to the source (1: same direction, -1: reversed), and 'strandsrc' is always 1:
+#' a chain block whose reference strand is "-" in the file is reported with the strands combined.
 #' @seealso \code{\link{gintervals.liftover}}, \code{\link{gtrack.liftover}}
 #' @keywords ~intervals ~liftover ~chain
 #' @examples
@@ -377,7 +387,10 @@ gintervals.load_chain <- function(file = NULL, src_overlap_policy = "error", tgt
 #' score columns.
 #'
 #' @param intervals a data frame with chain columns: chrom, start, end, strand,
-#'   chromsrc, startsrc, endsrc, strandsrc, chain_id, score
+#'   chromsrc, startsrc, endsrc, strandsrc, chain_id, score. Coordinates are on the
+#'   forward strand of each genome. Strands are 1 (forward) or -1 (reverse); a strand
+#'   of 0 is treated as forward. Liftover uses only the relative orientation: a block
+#'   is reversed when exactly one of 'strand' and 'strandsrc' is -1.
 #' @param src_overlap_policy source overlap policy: "error", "keep", or "discard"
 #' @param tgt_overlap_policy target overlap policy: "error", "auto", "auto_first",
 #'   "auto_longer", "auto_score", "discard", "keep", or "agg"
@@ -397,11 +410,11 @@ gintervals.load_chain <- function(file = NULL, src_overlap_policy = "error", tgt
 #'     chrom = "chr1",
 #'     start = 1000,
 #'     end = 2000,
-#'     strand = 0,
+#'     strand = 1,
 #'     chromsrc = "chr1",
 #'     startsrc = 5000,
 #'     endsrc = 6000,
-#'     strandsrc = 0,
+#'     strandsrc = 1,
 #'     chain_id = 1L,
 #'     score = 1000.0
 #' )

@@ -39,6 +39,9 @@ Calculates quantiles of a track expression for intervals.
 This function calculates quantiles of 'expr' for each interval in
 'intervals'.
 
+Values are kept with float precision (about 7 significant digits), so the
+quantiles of values with more significant digits are rounded.
+
 If 'intervals.set.out' is not 'NULL' the result is saved as an intervals
 set. Use this parameter if the result size exceeds the limits of the
 physical memory.

@@ -69,7 +69,8 @@ SEXP giterator_intervals(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEX
 
 				for (; !iterator.isend(); iterator.next()) {
 					res_intervs.push_back(iterator.last_interval());
-					interval_ids.push_back(iterator.get_cur_src_interval_idx() + 1);  // 1-based for R
+					// src_intervals is sorted; udata holds the interval's row in the input. 1-based for R
+					interval_ids.push_back((intptr_t)src_intervals[iterator.get_cur_src_interval_idx()].udata + 1);
 					iu.verify_max_data_size(res_intervs.size(), "Result");
 				}
 

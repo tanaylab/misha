@@ -73,7 +73,31 @@ int get_strand_value(const SEXP intervals_df, int64_t row_index, bool has_strand
         return 1;  // Default if out of bounds
     }
     
-    if (Rf_isInteger(strand_col)) {
+    const char *strand_str = NULL;
+    if (Rf_isFactor(strand_col)) {
+        // A factor is an integer vector of level codes: read the level, not the code
+        int code = INTEGER(strand_col)[row_index];
+        SEXP levels = Rf_getAttrib(strand_col, R_LevelsSymbol);
+        if (code != NA_INTEGER && code >= 1 && code <= Rf_length(levels))
+            strand_str = CHAR(STRING_ELT(levels, code - 1));
+    } else if (Rf_isString(strand_col)) {
+        strand_str = CHAR(STRING_ELT(strand_col, row_index));
+    }
+
+    if (Rf_isFactor(strand_col) || Rf_isString(strand_col)) {
+        // Handle character or factor strand column (e.g., "+", "-")
+        if (strand_str != NULL) {
+            if (strcmp(strand_str, "+") == 0 || strcmp(strand_str, "1") == 0) {
+                return 1;
+            } else if (strcmp(strand_str, "-") == 0 || strcmp(strand_str, "-1") == 0) {
+                return -1;
+            } else {
+                return 1;  // Default to + strand
+            }
+        } else {
+            return 1;  // Default if NA
+        }
+    } else if (Rf_isInteger(strand_col)) {
         int val = INTEGER(strand_col)[row_index];
         if (val != -1 && val != 1) {
             rdb::verror("Invalid strand value %d at row %lld. Strand must be -1 or 1.", val, (long long)row_index + 1);
@@ -85,20 +109,6 @@ int get_strand_value(const SEXP intervals_df, int64_t row_index, bool has_strand
             rdb::verror("Invalid strand value %d at row %lld. Strand must be -1 or 1.", val, (long long)row_index + 1);
         }
         return val;
-    } else if (Rf_isString(strand_col)) {
-        // Handle character strand column (e.g., "+", "-")
-        const char* strand_str = CHAR(STRING_ELT(strand_col, row_index));
-        if (strand_str != NULL) {
-            if (strcmp(strand_str, "+") == 0 || strcmp(strand_str, "1") == 0) {
-                return 1;
-            } else if (strcmp(strand_str, "-") == 0 || strcmp(strand_str, "-1") == 0) {
-                return -1;
-            } else {
-                return 1;  // Default to + strand
-            }
-        } else {
-            return 1;  // Default if NULL string
-        }
     } else if (Rf_isLogical(strand_col)) {
         // Handle logical strand column
         int logical_val = LOGICAL(strand_col)[row_index];

@@ -120,7 +120,7 @@ extern "C" {
     extern SEXP C_gextract_variants(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_potts_score_codes_cmp(SEXP, SEXP);
     extern SEXP C_gseq_kmer(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
-    extern SEXP C_gsynth_train(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP C_gsynth_train(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gsynth_sample(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gsynth_replace_kmer(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gsynth_score(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP,
@@ -248,7 +248,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"C_gextract_variants", (DL_FUNC)&C_gextract_variants, 7},
     {"C_potts_score_codes_cmp", (DL_FUNC)&C_potts_score_codes_cmp, 2},
     {"C_gseq_kmer", (DL_FUNC)&C_gseq_kmer, 9},
-    {"C_gsynth_train", (DL_FUNC)&C_gsynth_train, 14},
+    {"C_gsynth_train", (DL_FUNC)&C_gsynth_train, 15},
     {"C_gsynth_sample", (DL_FUNC)&C_gsynth_sample, 14},
     {"C_gsynth_replace_kmer", (DL_FUNC)&C_gsynth_replace_kmer, 6},
     {"C_gsynth_score", (DL_FUNC)&C_gsynth_score, 14},

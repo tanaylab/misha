@@ -228,10 +228,12 @@ SEXP gchain2interv(SEXP _chainfile, SEXP _src_overlap_policy, SEXP _tgt_overlap_
 					chrom[TGT],
 					strand[TGT] ? iu.get_chromkey().get_chrom_size(chrom[TGT]) - start[TGT] - size : start[TGT],
 					strand[TGT] ? iu.get_chromkey().get_chrom_size(chrom[TGT]) - start[TGT] : start[TGT] + size,
-					strand[TGT],
+					// Liftover reads only this strand, as the orientation of the target relative to
+					// the source (both sides' coordinates are forward-strand): fold the source strand in
+					strand[TGT] ^ strand[SRC],
 					chrom[SRC],
 					strand[SRC] ? chrom_sizes[chrom[SRC]] - start[SRC] - size : start[SRC],
-					strand[SRC]));
+					0));
 				chain_intervs.back().score = chain_score;
 				chain_intervs.back().chain_id = current_chain_id;
 

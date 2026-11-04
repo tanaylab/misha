@@ -9,6 +9,9 @@
 #' corresponding bin determined by 'breaks'. The quantiles of 'expr' are
 #' calculated then separately for each bin.
 #'
+#' Values are kept with float precision (about 7 significant digits), so the
+#' quantiles of values with more significant digits are rounded.
+#'
 #' The bins can be multi-dimensional depending on the number of
 #' 'bin_expr'-'breaks' pairs.
 #'

@@ -720,7 +720,8 @@ test_that("vtrack.tracktype_test.array_slice_col13568_stddev", {
     gvtrack.create("v1", "test.array")
     gvtrack.array.slice("v1", c("col1", "col3", "col5", "col6", "col8"), "stddev")
     r <- gextract("v1", gintervals(c(1, 2)))
-    expect_regression(r, "vtrack.tracktype_test.array_slice_col13568_stddev_regression")
+    # _v2: the first snapshot was taken with a stddev formula that cancelled at large values
+    expect_regression(r, "vtrack.tracktype_test.array_slice_col13568_stddev_regression_v2")
 })
 
 # Test for track type test.array with columns slice and sum parameter

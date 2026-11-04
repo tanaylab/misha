@@ -429,22 +429,24 @@ float GenomeTrackArrays::get_sliced_val(uint64_t idx)
 			}
 		case S_STDDEV:
 			{ 
-				// we are calaculating unbiased standard deviation:
-				// sqrt(sum((x-mean)^2) / (N-1)) = sqrt(sum(x^2)/(N-1) - N*(mean^2)/(N-1))
+				// unbiased standard deviation, sqrt(sum((x-mean)^2) / (N-1)), from sums shifted by the
+				// first value: sum(x^2) - N*mean^2 cancels when the variance is small relative to mean^2
 				if (m_array_vals.size() <= 1) 
 					return numeric_limits<float>::quiet_NaN();
 
-				long double mean_square_sum = 0;
-				double sum = 0;
+				double shift = m_array_vals.front().val;
+				double shifted_sum = 0;
+				double shifted_sq_sum = 0;
 
 				for (ArrayVals::const_iterator iarray_val = m_array_vals.begin(); iarray_val != m_array_vals.end(); ++iarray_val) {
-					sum += iarray_val->val;
-					mean_square_sum += iarray_val->val * iarray_val->val;
+					double d = iarray_val->val - shift;
+					shifted_sum += d;
+					shifted_sq_sum += d * d;
 				}
 
 				double N = m_array_vals.size();
-				double avg = sum / N;
-				return sqrt(mean_square_sum / (N - 1) - (avg * avg) * (N / (N - 1)));
+				double sq_dev_sum = shifted_sq_sum - shifted_sum * shifted_sum / N;
+				return sqrt(max(sq_dev_sum, 0.) / (N - 1));
 			}
 		case S_SUM:
 			{
@@ -509,18 +511,22 @@ float GenomeTrackArrays::get_sliced_val(uint64_t idx)
 		}
 	case S_STDDEV:
 		{ 
-			// we are calaculating unbiased standard deviation:
-			// sqrt(sum((x-mean)^2) / (N-1)) = sqrt(sum(x^2)/(N-1) - N*(mean^2)/(N-1))
-			double mean_square_sum = 0;
-			double sum = 0;
+			// unbiased standard deviation, sqrt(sum((x-mean)^2) / (N-1)), from sums shifted by the
+			// first value: sum(x^2) - N*mean^2 cancels when the variance is small relative to mean^2
+			double shift = 0;
+			double shifted_sum = 0;
+			double shifted_sq_sum = 0;
 			double N = 0;
 
 			for (uint64_t islice = 0; islice < m_slice.size(); ++islice) {
 				float v = get_array_val(islice);
 				if (!std::isnan(v)) {
+					if (!N)
+						shift = v;
 					++N;
-					sum += v;
-					mean_square_sum += v * v;
+					double d = v - shift;
+					shifted_sum += d;
+					shifted_sq_sum += d * d;
 				}
 				if (m_array_hints[islice] >= m_array_vals.size())
 					break;
@@ -529,8 +535,8 @@ float GenomeTrackArrays::get_sliced_val(uint64_t idx)
 			if (N <= 1) 
 				return numeric_limits<float>::quiet_NaN();
 
-			double avg = sum / N;
-			return sqrt(mean_square_sum / (N - 1) - (avg * avg) * (N / (N - 1)));
+			double sq_dev_sum = shifted_sq_sum - shifted_sum * shifted_sum / N;
+			return sqrt(max(sq_dev_sum, 0.) / (N - 1));
 		}
 	case S_SUM:
 		{

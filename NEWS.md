@@ -14,6 +14,22 @@ This release fixes defects found in a review of 5.14.4. Several change results, 
 
 * **Behavior fix:** `*.pos` functions of sparse, value-based and array tracks clip to the start of the iterator interval, as dense tracks do, so `*.pos.relative` is never negative.
 
+* **Behavior fix:** `gsynth.train()` trained on only part of the data when the scope start was not a multiple of the iterator bin size. Retrain models built from such scopes.
+
+* **Behavior fix:** `gintervals.liftover()` and `gtrack.liftover()` use the source strand of a chain: a `gintervals.as_chain()` row with `strandsrc = -1`, or a chain file whose reference strand is "-", lifted in the wrong orientation. `gintervals.load_chain()` reports such blocks with the strands combined in `strand`, and `strandsrc` is always 1.
+
+* **Behavior fix:** `gintervals.as_chain()` treats strand 0 as forward (it was lifted as minus). `min_score` of a pre-loaded chain (from `gintervals.as_chain()` or passed with it) is now applied by `gintervals.liftover()` and `gtrack.liftover()`, which ignored it; a chain row with an NA score is dropped.
+
+* **Behavior fix:** `gintervals.neighbors(use_intervals1_strand = TRUE)` and `gintervals.neighbors.upstream()`/`.downstream()` read a factor strand column by its labels; every interval used to count as "+".
+
+* **Behavior fix:** `gintervals.annotate()` returned the query's own columns as the annotation or distance when column names were shared, and `max_dist` blanked the wrong column. With `keep_order = FALSE`, `tie_method` stopped with an error, and with stranded annotations it could put a farther neighbor first.
+
+* **Behavior fix:** `giterator.intervals(interval_relative = TRUE)` gives the input row in `intervalID`; it gave the row's position in sorted order.
+
+* **Behavior fix:** `gsummary()`, `gintervals.summary()`, `gbins.summary()` and the array `stddev` slice function compute the standard deviation accurately; it could be badly wrong (0, NA or off by orders of magnitude) when values were large relative to their spread. `gbins.summary()` and `gintervals.summary()` with `intervals.set.out` keep values in double precision instead of float.
+
+* **Behavior fix:** `gintervals.random()` samples every valid start with the same chance. Without a filter, chromosomes were weighted by length rather than by number of starts, which oversampled short ones; the last start of a chromosome was never drawn; and with a filter it skipped the last `size` positions before each filter, gaps shorter than `2 * size`, and chromosomes with a single valid start.
+
 * Dense tracks: `exists`, `size` and the `*.pos` functions no longer report a value for a NaN bin when the iterator interval lies inside one bin.
 
 * Value-based virtual tracks (a data frame as source) give correct results when the data covers more than one chromosome; overlapping intervals could return NaN and `nearest` a value from another chromosome.
@@ -21,6 +37,14 @@ This release fixes defects found in a review of 5.14.4. Several change results, 
 * `pwm.edit_distance.pos` and `pwm.edit_distance.lse.pos` with a filter report positions relative to the iterator interval when the filter leaves one unmasked part.
 
 * `gtrack.array.extract()` returns correct values when slice columns are given in descending order, and `min.pos.abs`/`min.pos.relative` work on array tracks.
+
+* Subsetting a `gintervals.to_mat()` matrix by row names no longer turns its intervals into NA.
+
+* `gintervals.force_range()` keeps intervals whose chromosome is an alias (e.g. "1" for chr1).
+
+* `gintervals.neighbors(intervals.set.out =)` saves the same column names as the in-memory result.
+
+* The docs of `gquantiles()`, `gintervals.quantiles()` and `gbins.quantiles()` say that values are kept with float precision (about 7 significant digits).
 
 # misha 5.14.4
 

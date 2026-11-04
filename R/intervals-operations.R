@@ -569,23 +569,50 @@ gintervals.force_range <- function(intervals = NULL, intervals.set.out = NULL) {
 
     intervals.set.out <- do.call(.gexpr2str, list(substitute(intervals.set.out)), envir = parent.frame())
 
+    # Hoist the chromosome-end lookup out of the per-chromosome FUN. Computing
+    # it once as a named vector turns the per-call match() over the full
+    # ALLGENOME frame (O(num_chroms) each, called 2-4x per chromosome) into an
+    # O(1) named lookup. On genomes with ~1M scaffolds the old per-call match()
+    # was effectively O(M^2).
+    all_chrom_ends <- gintervals.all()
+    chrom_ends <- setNames(all_chrom_ends$end, all_chrom_ends$chrom)
+
+    # Canonical chromosome name, or NA for a chromosome the genome lacks (such
+    # intervals lie outside the genome and are dropped). Aliases (e.g. "1" for
+    # "chr1") are resolved like everywhere else.
+    canonical_chroms <- function(chroms) {
+        chroms <- as.character(chroms)
+        uniq <- unique(chroms)
+        canon <- uniq
+        unknown <- !(uniq %in% names(chrom_ends))
+        canon[unknown] <- vapply(uniq[unknown], function(chrom) {
+            tryCatch(as.character(.gchroms(chrom)), error = function(e) NA_character_)
+        }, character(1))
+        canon[match(chroms, uniq)]
+    }
+
+    clip_to_range <- function(intervals) {
+        chrom_cols <- if (.gintervals.is1d(intervals)) "chrom" else c("chrom1", "chrom2")
+        keep <- rep(TRUE, nrow(intervals))
+        for (chrom_col in chrom_cols) {
+            suffix <- sub("chrom", "", chrom_col)
+            start_col <- paste0("start", suffix)
+            end_col <- paste0("end", suffix)
+            chroms <- canonical_chroms(intervals[[chrom_col]])
+            if (any(!is.na(chroms) & chroms != as.character(intervals[[chrom_col]]))) {
+                intervals[[chrom_col]] <- chroms
+            }
+            intervals[[start_col]] <- pmax(intervals[[start_col]], 0)
+            intervals[[end_col]] <- pmin(intervals[[end_col]], chrom_ends[chroms])
+            keep <- keep & !is.na(intervals[[end_col]]) & intervals[[start_col]] < intervals[[end_col]]
+        }
+        intervals[keep, ]
+    }
+
     # Fast path: for plain data frames, process all at once (vectorized)
     # This avoids per-chromosome iteration which is O(n*m) for n rows and m chromosomes
     if (is.data.frame(intervals) && is.null(intervals.set.out)) {
-        all_intervs <- gintervals.all()
-        chrom_ends <- setNames(all_intervs$end, all_intervs$chrom)
-
-        if (.gintervals.is1d(intervals)) {
-            intervals$start <- pmax(intervals$start, 0)
-            intervals$end <- pmin(intervals$end, chrom_ends[as.character(intervals$chrom)])
-            intervals <- intervals[!is.na(intervals$end) & intervals$start < intervals$end, ]
-        } else {
-            intervals$start1 <- pmax(intervals$start1, 0)
-            intervals$end1 <- pmin(intervals$end1, chrom_ends[as.character(intervals$chrom1)])
-            intervals$start2 <- pmax(intervals$start2, 0)
-            intervals$end2 <- pmin(intervals$end2, chrom_ends[as.character(intervals$chrom2)])
-            intervals <- intervals[!is.na(intervals$end1) & !is.na(intervals$end2) & intervals$start1 < intervals$end1 & intervals$start2 < intervals$end2, ]
-        }
+        intervals <- clip_to_range(intervals)
 
         .gverify_max_data_size(nrow(intervals), arguments = "intervals.set.out")
 
@@ -600,26 +627,8 @@ gintervals.force_range <- function(intervals = NULL, intervals.set.out = NULL) {
     # Original path: for bigsets or when intervals.set.out is specified
     res <- NULL
     res_nrows <- 0L
-    # Hoist the chromosome-end lookup out of the per-chromosome FUN. Computing
-    # it once as a named vector turns the per-call match() over the full
-    # ALLGENOME frame (O(num_chroms) each, called 2-4x per chromosome) into an
-    # O(1) named lookup - the same trick the fast path above uses. On genomes
-    # with ~1M scaffolds the old per-call match() was effectively O(M^2).
-    all_chrom_ends <- gintervals.all()
-    chrom_ends <- setNames(all_chrom_ends$end, all_chrom_ends$chrom)
     FUN <- function(intervals, intervals.set.out, envir) {
-        intervals <- intervals[[1]]
-        if (.gintervals.is1d(intervals)) {
-            intervals$start <- pmax(intervals$start, 0)
-            intervals$end <- pmin(intervals$end, chrom_ends[as.character(intervals$chrom)])
-            intervals <- intervals[!is.na(intervals$end) & intervals$start < intervals$end, ]
-        } else {
-            intervals$start1 <- pmax(intervals$start1, 0)
-            intervals$end1 <- pmin(intervals$end1, chrom_ends[as.character(intervals$chrom1)])
-            intervals$start2 <- pmax(intervals$start2, 0)
-            intervals$end2 <- pmin(intervals$end2, chrom_ends[as.character(intervals$chrom2)])
-            intervals <- intervals[!is.na(intervals$end1) & !is.na(intervals$end2) & intervals$start1 < intervals$end1 & intervals$start2 < intervals$end2, ]
-        }
+        intervals <- clip_to_range(intervals[[1]])
         if (is.null(intervals.set.out)) {
             envir$res[[length(envir$res) + 1L]] <- intervals
             envir$res_nrows <- envir$res_nrows + nrow(intervals)

@@ -136,10 +136,8 @@ gintervals.annotate <- function(intervals,
     intervals <- .gintervals.load_ext(intervals)
     annotation_intervals <- .gintervals.load_ext(annotation_intervals)
 
-    # Store original order
-    if (keep_order) {
-        intervals$.orig_order <- seq_len(nrow(intervals))
-    }
+    # Original row order: used to group ties and, with keep_order, to restore the order
+    intervals$.orig_order <- seq_len(nrow(intervals))
 
     # Determine annotation columns if not specified
     if (is.null(annotation_columns)) {
@@ -206,129 +204,63 @@ gintervals.annotate <- function(intervals,
         if (!is.null(dist_column)) {
             result[[dist_column]] <- rep(NA_real_, n)
         }
+        result$.orig_order <- NULL
         return(result)
     }
 
+    # The neighbors result is the query columns, then the annotation columns, then
+    # the distance. Split it by position: shared column names get suffixes there,
+    # and a name-based lookup would pick the query's column instead of the neighbor's.
+    n1 <- ncol(intervals)
+    n2 <- ncol(annotation_intervals)
+    query_part <- neighbors_result[, seq_len(n1), drop = FALSE]
+    colnames(query_part) <- colnames(intervals)
+    ann_part <- neighbors_result[, n1 + seq_len(n2), drop = FALSE]
+    colnames(ann_part) <- colnames(annotation_intervals)
+    dist <- neighbors_result[[n1 + n2 + 1L]]
+
     # Apply tie-breaking if needed
     if (tie_method != "first" && maxneighbors > 1) {
-        # Group by original interval and sort within each group
-        if (tie_method == "min.start") {
-            # Determine which columns represent the neighbor coordinates
-            neighbor_start_col <- if ("start1" %in% colnames(neighbors_result)) "start1" else "start"
-            neighbors_result <- neighbors_result[order(
-                neighbors_result$.orig_order,
-                neighbors_result$dist,
-                neighbors_result[[neighbor_start_col]]
-            ), ]
-        } else if (tie_method == "min.end") {
-            neighbor_end_col <- if ("end1" %in% colnames(neighbors_result)) "end1" else "end"
-            neighbors_result <- neighbors_result[order(
-                neighbors_result$.orig_order,
-                neighbors_result$dist,
-                neighbors_result[[neighbor_end_col]]
-            ), ]
-        }
+        tie_col <- if (tie_method == "min.start") ann_part$start else ann_part$end
+        # dist is signed when the annotations have a strand; ties are by absolute distance
+        ord <- order(query_part$.orig_order, abs(dist), tie_col)
+        query_part <- query_part[ord, , drop = FALSE]
+        ann_part <- ann_part[ord, , drop = FALSE]
+        dist <- dist[ord]
     }
 
-    # Apply distance threshold
+    # Annotation values are replaced by na_value when no neighbor was found
+    # (na.if.notfound gives an NA distance) or the neighbor is beyond max_dist
+    to_fill <- is.na(dist)
     if (is.finite(max_dist)) {
-        beyond_threshold <- !is.na(neighbors_result$dist) & abs(neighbors_result$dist) > max_dist
+        to_fill <- to_fill | abs(dist) > max_dist
+    }
 
-        # Set annotation columns to na_value for rows beyond threshold
-        for (i in seq_along(annotation_columns)) {
-            col_name <- annotation_columns[i]
-            if (col_name %in% colnames(neighbors_result)) {
-                if (is.list(na_value) && column_names[i] %in% names(na_value)) {
-                    neighbors_result[beyond_threshold, col_name] <- na_value[[column_names[i]]]
-                } else {
-                    neighbors_result[beyond_threshold, col_name] <- na_value
-                }
+    annotations <- ann_part[, annotation_columns, drop = FALSE]
+    colnames(annotations) <- column_names
+    if (any(to_fill)) {
+        for (i in seq_along(column_names)) {
+            if (is.list(na_value) && column_names[i] %in% names(na_value)) {
+                annotations[to_fill, i] <- na_value[[column_names[i]]]
+            } else {
+                annotations[to_fill, i] <- na_value
             }
         }
     }
 
-    # Query intervals with no neighbor in range (na.if.notfound gave them NA dist
-    # and NA annotation columns) must also be filled with na_value. The whole-empty
-    # case is handled above; this covers the per-row case when other queries matched.
-    not_found <- is.na(neighbors_result$dist)
-    if (any(not_found)) {
-        for (i in seq_along(annotation_columns)) {
-            col_name <- annotation_columns[i]
-            if (col_name %in% colnames(neighbors_result)) {
-                if (is.list(na_value) && column_names[i] %in% names(na_value)) {
-                    neighbors_result[not_found, col_name] <- na_value[[column_names[i]]]
-                } else {
-                    neighbors_result[not_found, col_name] <- na_value
-                }
-            }
-        }
-    }
-
-    # Select and rename annotation columns
-    result_cols <- c(colnames(intervals))
+    # Assemble: query columns (minus those overwritten), annotations, distance
+    replaced <- c(column_names, dist_column)
+    result <- cbind(query_part[, setdiff(colnames(query_part), replaced), drop = FALSE], annotations)
     if (!is.null(dist_column)) {
-        result_cols <- c(result_cols, dist_column)
+        result[[dist_column]] <- dist
     }
-
-    # Handle multiple neighbors
-    # Select and rename columns
-    neighbors_clean <- neighbors_result
-
-    # If overwriting, drop conflicting base columns first so annotated columns can replace them
-    if (overwrite) {
-        base_cols <- colnames(intervals)
-        conflicts <- intersect(base_cols, column_names)
-        if (length(conflicts) > 0) {
-            neighbors_clean <- neighbors_clean[, setdiff(colnames(neighbors_clean), conflicts), drop = FALSE]
-        }
-    }
-
-    # Determine which neighbor columns to take (handle duplicate names like remark/remark1)
-    selected_neighbor_cols <- annotation_columns
-    for (i in seq_along(annotation_columns)) {
-        base_name <- annotation_columns[i]
-        dup_name <- paste0(base_name, "1")
-        if (!(base_name %in% colnames(neighbors_clean)) && dup_name %in% colnames(neighbors_clean)) {
-            selected_neighbor_cols[i] <- dup_name
-        }
-    }
-
-    # Rename chosen neighbor columns to desired output names
-    for (i in seq_along(annotation_columns)) {
-        from_name <- selected_neighbor_cols[i]
-        to_name <- column_names[i]
-        if (from_name %in% colnames(neighbors_clean) && to_name != from_name) {
-            colnames(neighbors_clean)[colnames(neighbors_clean) == from_name] <- to_name
-        }
-    }
-
-    # Rename distance column
-    if (!is.null(dist_column) && dist_column != "dist") {
-        colnames(neighbors_clean)[colnames(neighbors_clean) == "dist"] <- dist_column
-    } else if (is.null(dist_column)) {
-        # Remove distance column
-        neighbors_clean$dist <- NULL
-    }
-
-    # Select final columns
-    base_cols <- colnames(intervals)
-    if (overwrite) {
-        # Drop originals that should be replaced by annotations
-        base_cols <- setdiff(base_cols, column_names)
-    }
-    keep_cols <- c(base_cols, column_names)
-    if (!is.null(dist_column)) {
-        keep_cols <- c(keep_cols, dist_column)
-    }
-
-    result <- neighbors_clean[, intersect(keep_cols, colnames(neighbors_clean)), drop = FALSE]
-    result <- repair_names(result)
+    rownames(result) <- NULL
 
     # Restore original order if requested
-    if (keep_order && ".orig_order" %in% colnames(result)) {
+    if (keep_order) {
         result <- result[order(result$.orig_order), ]
-        result$.orig_order <- NULL
     }
+    result$.orig_order <- NULL
 
     # Handle intervals.set.out via helper
     return(.gintervals.save_set_or_return(result, intervals.set.out))

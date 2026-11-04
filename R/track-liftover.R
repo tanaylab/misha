@@ -171,6 +171,7 @@ gtrack.liftover <- function(track = NULL,
             }
             src_overlap_policy <- chain_src_policy
             tgt_overlap_policy <- chain_tgt_policy
+            min_score <- attr(chain.intervs, "min_score")
         } else {
             # Chain doesn't have attributes (e.g., manually created) - validate and use user-specified policies
             if (!src_overlap_policy %in% c("error", "keep", "discard")) {
@@ -185,6 +186,12 @@ gtrack.liftover <- function(track = NULL,
             if (tgt_overlap_policy == "auto") {
                 tgt_overlap_policy <- "auto_score"
             }
+        }
+
+        # A chain file is filtered by min_score when it is loaded; a pre-loaded chain
+        # (e.g. from gintervals.as_chain) is filtered here
+        if (!is.null(min_score)) {
+            chain.intervs <- chain.intervs[which(chain.intervs$score >= min_score), , drop = FALSE]
         }
     }
 
