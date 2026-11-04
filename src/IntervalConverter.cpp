@@ -23,13 +23,27 @@ IntervalConverter::IntervalConverter(rdb::IntervUtils &iu) :
 {
 }
 
+// The 2D part of the whole-genome scope of a genome above gmulticontig.2d.threshold contigs: a
+// placeholder with attribute "deferred" (.create_deferred_2d), no intervals. (Read from the attribute
+// list, not with Rf_getAttrib/Rf_install, which may allocate.)
+static bool is_deferred_2d(SEXP rintervals)
+{
+	for (SEXP attr = ATTRIB(rintervals); attr != R_NilValue; attr = CDR(attr)) {
+		if (TAG(attr) != R_NilValue && !strcmp(CHAR(PRINTNAME(TAG(attr))), "deferred"))
+			return true;
+	}
+	return false;
+}
+
 unsigned IntervalConverter::get_rintervs_type_mask(SEXP rintervals, const char *error_msg_prefix) const
 {
 	if (!Rf_isVector(rintervals))
 		verror("%sInvalid format of intervals argument", error_msg_prefix);
 
 	if (Rf_length(rintervals) == 2) {
-		if (get_rintervs_type_mask(VECTOR_ELT(rintervals, 0), error_msg_prefix) != rdb::IntervUtils::INTERVS1D || get_rintervs_type_mask(VECTOR_ELT(rintervals, 1), error_msg_prefix) != rdb::IntervUtils::INTERVS2D)
+		// (a deferred 2D part is converted as no intervals: convert_rintervs)
+		if (get_rintervs_type_mask(VECTOR_ELT(rintervals, 0), error_msg_prefix) != rdb::IntervUtils::INTERVS1D ||
+			(!is_deferred_2d(VECTOR_ELT(rintervals, 1)) && get_rintervs_type_mask(VECTOR_ELT(rintervals, 1), error_msg_prefix) != rdb::IntervUtils::INTERVS2D))
 			verror("%sInvalid format of intervals argument", error_msg_prefix);
 		return rdb::IntervUtils::INTERVS1D | rdb::IntervUtils::INTERVS2D;
 	}
@@ -259,6 +273,10 @@ SEXP IntervalConverter::convert_rintervs(SEXP rintervals, GIntervals *intervals,
 
 	SEXP _rintervals = rintervals;
 
+	// the placeholder of the whole-genome 2D scope given alone (.misha$ALLGENOME[[2]]): as above, below
+	if (Rf_isVector(rintervals) && Rf_length(rintervals) == 0 && is_deferred_2d(rintervals))
+		verror("%s%s", error_msg_prefix, rdb::DEFERRED_2D_SCOPE_MSG);
+
 	// Handle empty intervals - determine type based on what the caller expects
 	// For empty intervals, the caller's GIntervals/GIntervals2D objects are already
 	// default-constructed as empty, so we just need to return the appropriate type mask
@@ -385,6 +403,18 @@ SEXP IntervalConverter::convert_rintervs(SEXP rintervals, GIntervals *intervals,
 
 	if (intervs_type_mask == (rdb::IntervUtils::INTERVS1D | rdb::IntervUtils::INTERVS2D))
 		rintervals = VECTOR_ELT(_rintervals, 1);
+
+	// the whole-genome 2D scope of a genome above gmulticontig.2d.threshold contigs (the placeholder, or
+	// the cis pairs gintervals.2d.all() gives by default): converted as no 2D intervals, and a 2D
+	// computation over it stops (TrackExprScanner::check) instead of missing the trans pairs
+	if ((intervs_type_mask & rdb::IntervUtils::INTERVS2D) && is_deferred_2d(rintervals)) {
+		// given alone, it is what is asked for; in the whole-genome scope (1D and 2D) only a 2D
+		// computation over it stops
+		if (intervs_type_mask == rdb::IntervUtils::INTERVS2D)
+			verror("%s%s", error_msg_prefix, rdb::DEFERRED_2D_SCOPE_MSG);
+		m_iu.set_deferred_2d_scope();
+		return _rintervals;
+	}
 
 	if ((intervs_type_mask & rdb::IntervUtils::INTERVS2D) && intervals2d) {
 		SEXP chroms1 = VECTOR_ELT(rintervals, GInterval2D::CHROM1);

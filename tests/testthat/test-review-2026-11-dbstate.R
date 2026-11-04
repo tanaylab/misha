@@ -433,3 +433,45 @@ test_that("a forced re-conversion of an indexed set refuses to drop what is only
     expect_error(gintervals.2d.convert_to_indexed("u2d", force = TRUE), "Nothing was changed")
     expect_equal(nrow(gintervals.load("u2d")), 20)
 })
+
+test_that("2D computations over the deferred whole-genome 2D scope stop and name gmulticontig.2d.mode", {
+    local_db_state()
+    withr::local_options(list(gmulticontig.2d.threshold = 2, gmulticontig.2d.mode = NULL))
+    review_db(withr::local_tempdir())
+    r <- data.frame(
+        chrom1 = c("chr1", "chr1", "chr2", "chrX"), start1 = c(0, 0, 0, 0), end1 = c(100, 100, 100, 100),
+        chrom2 = c("chr1", "chr2", "chrX", "chrM"), start2 = c(200, 0, 0, 0), end2 = c(300, 100, 100, 100)
+    )
+    gtrack.2d.create("mr", "", r, c(10, 20, 30, 40))
+    gtrack.create_sparse("t1d", "", gintervals(c("chr1", "chr2", "chrX"), 0, 100), c(1, 2, 3))
+    msg <- 'options(gmulticontig.2d.mode = "full")'
+
+    for (mt in c(TRUE, FALSE)) {
+        withr::local_options(list(gmultitasking = mt))
+        # gquantiles gave the median of the cis value only (10)
+        expect_error(gquantiles("mr", 0.5), msg, fixed = TRUE)
+        expect_error(gextract("mr", gintervals.2d.all()), msg, fixed = TRUE)
+        expect_error(gextract("mr", .misha$ALLGENOME), msg, fixed = TRUE)
+        expect_error(gsummary("mr"), msg, fixed = TRUE)
+        expect_error(gscreen("mr > 0"), msg, fixed = TRUE)
+        expect_error(gdist("mr", c(0, 100)), msg, fixed = TRUE)
+
+        # 1D computations over the whole-genome scope are not affected (gsummary, gscreen and gdist
+        # failed on the placeholder)
+        expect_equal(gsummary("t1d")[["Sum"]], 6)
+        expect_equal(nrow(gscreen("t1d > 0")), 3)
+        expect_equal(sum(gdist("t1d", c(0, 2, 4))), 3)
+        expect_equal(unname(gquantiles("t1d", 0.5)), 2)
+        expect_equal(nrow(gextract("t1d", .misha$ALLGENOME)), 3)
+    }
+
+    # gintervals.2d.all() itself still gives the cis pairs
+    expect_equal(nrow(gintervals.2d.all()), 4)
+    withr::with_options(list(gmulticontig.2d.mode = "full"), {
+        expect_equal(nrow(suppressWarnings(gextract("mr", gintervals.2d.all()))), 4)
+        expect_equal(unname(suppressWarnings(gquantiles("mr", 0.5))), median(c(10, 20, 30, 40)))
+    })
+    withr::with_options(list(gmulticontig.2d.mode = "diagonal"), {
+        expect_equal(gextract("mr", gintervals.2d.all())$mr, 10)
+    })
+})

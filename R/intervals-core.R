@@ -304,7 +304,7 @@ gintervals.2d.all <- function() {
         }
 
         intervals <- get("ALLGENOME", envir = .misha)[[1]]
-        intervals2d <- .generate_2d_on_demand(intervals, mode)
+        intervals2d <- .gintervals.2d.deferred_scope(intervals)
 
         # Cache if requested
         if (getOption("gmulticontig.2d.cache", FALSE)) {

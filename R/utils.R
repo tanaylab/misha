@@ -650,8 +650,7 @@ rescue_ALLGENOME <- function(intervals, intervals_name) {
         intervals[[2]] <- if (identical(intervals, get("ALLGENOME", envir = .misha))) {
             gintervals.2d.all()
         } else {
-            mode <- getOption("gmulticontig.2d.mode", "diagonal")
-            .generate_2d_on_demand(intervals[[1]], mode)
+            .gintervals.2d.deferred_scope(intervals[[1]])
         }
     }
     return(intervals)

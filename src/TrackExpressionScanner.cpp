@@ -213,6 +213,10 @@ void TrackExprScanner::check(const vector<string> &track_exprs, GIntervalsFetche
 	// initiate the expression iterator
 	delete m_expr_itr;
 	m_expr_itr = create_expr_iterator(iterator_policy, m_expr_vars, m_track_exprs, scope1d, scope2d, m_1d.intervals, m_2d.intervals, m_band);
+	// a 2D computation over the whole-genome scope of a genome above gmulticontig.2d.threshold
+	// contigs, which holds no 2D intervals (IntervUtils::set_deferred_2d_scope): it would return nothing
+	if (!m_expr_itr->is_1d() && m_iu.deferred_2d_scope())
+		verror("%s", DEFERRED_2D_SCOPE_MSG);
 	m_expr_vars.init(*m_expr_itr);
 
 	for (unsigned iexpr = 0; iexpr < m_track_exprs.size(); ++iexpr) {
@@ -486,6 +490,10 @@ void TrackExprScanner::verify_2d_iter(GIntervalsFetcher1D *scope1d, GIntervalsFe
 {
 	if (!scope2d)
 		verror("The function does not support 2D iterators");
+
+	// (as in check(), which also covers the 2D iterators made without this check)
+	if (m_iu.deferred_2d_scope())
+		verror("%s", DEFERRED_2D_SCOPE_MSG);
 
 	if (scope1d && scope2d && scope1d->size() && !scope2d->size())
 		verror("2D iterator is used along with 1D intervals");

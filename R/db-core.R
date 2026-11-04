@@ -634,6 +634,19 @@
     intervals2d
 }
 
+# The whole-genome 2D intervals of a genome above gmulticontig.2d.threshold contigs, built on demand
+# from its 1D intervals in options(gmulticontig.2d.mode). Without the option set they are the cis
+# pairs only, marked "deferred" as the placeholder is: the C++ converter does not take them as a
+# scope, and a 2D computation over them stops (it would miss the trans pairs) and names the option.
+.gintervals.2d.deferred_scope <- function(intervals) {
+    mode <- getOption("gmulticontig.2d.mode")
+    intervals2d <- .generate_2d_on_demand(intervals, if (is.null(mode)) "diagonal" else mode)
+    if (is.null(mode)) {
+        attr(intervals2d, "deferred") <- TRUE
+    }
+    intervals2d
+}
+
 # Helper function to create deferred 2D placeholder
 .create_deferred_2d <- function(n_contigs) {
     intervals2d <- list() # Use empty list instead of NULL so we can set attributes
