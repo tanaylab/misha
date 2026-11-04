@@ -403,3 +403,33 @@ test_that("a write leaves a .db.cache that another session marked dirty dirty, a
     expect_false(file.exists(dirty))
     expect_true("t5" %in% read_cache(db)[[1]])
 })
+
+test_that("a forced re-conversion of an indexed set refuses to drop what is only in its index", {
+    local_db_state()
+    db <- review_db(withr::local_tempdir())
+    d <- data.frame(chrom = rep(c("chr1", "chr2", "chrX", "chrM"), each = 20), start = rep(seq(0, 1900, 100), 4))
+    d$end <- d$start + 50
+    withr::with_options(list(gmax.data.size = 50), gintervals.save("u3", d))
+    gintervals.convert_to_indexed("u3", remove.old = TRUE)
+    dir <- file.path(db, "tracks", "u3.interv")
+    before <- tools::md5sum(file.path(dir, c("intervals.dat", "intervals.idx")))
+
+    expect_error(gintervals.convert_to_indexed("u3", force = TRUE), "Nothing was changed")
+    expect_equal(tools::md5sum(file.path(dir, c("intervals.dat", "intervals.idx"))), before)
+    expect_equal(nrow(gintervals.load("u3")), 80)
+
+    # one chromosome updated since (its own file), the others only in the index
+    withr::with_options(list(gmax.data.size = 50), gintervals.update("u3", gintervals("chrX", c(0, 500), c(10, 510)), chrom = "chrX"))
+    expect_error(gintervals.convert_to_indexed("u3", force = TRUE), "chr1")
+    expect_equal(nrow(gintervals.load("u3")), 62)
+
+    # 2D
+    d2 <- data.frame(chrom1 = rep(c("chr1", "chr2"), each = 10), start1 = rep(seq(0, 900, 100), 2), chrom2 = rep(c("chr1", "chrX"), each = 10), start2 = 0)
+    d2$end1 <- d2$start1 + 50
+    d2$end2 <- d2$start2 + 50
+    d2 <- d2[, c("chrom1", "start1", "end1", "chrom2", "start2", "end2")]
+    withr::with_options(list(gmax.data.size = 15), gintervals.save("u2d", d2))
+    gintervals.2d.convert_to_indexed("u2d", remove.old = TRUE)
+    expect_error(gintervals.2d.convert_to_indexed("u2d", force = TRUE), "Nothing was changed")
+    expect_equal(nrow(gintervals.load("u2d")), 20)
+})
