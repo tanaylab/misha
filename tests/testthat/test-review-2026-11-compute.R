@@ -199,3 +199,13 @@ test_that("pwm.edit_distance handles motifs whose prefilter block would be too l
     q <- gintervals("chr1", c(100, 500), c(101, 501))
     expect_equal(gextract("ed32", q, iterator = q)$ed32, c(1, NaN))
 })
+
+test_that("neighbors among tied intervals do not depend on the input order of the ties", {
+    set.seed(5)
+    starts <- sample(seq(1000, 100000, by = 1000), 200, TRUE)
+    i2 <- data.frame(chrom = "chr1", start = starts, end = starts + 10, id = seq_along(starts))
+    i1 <- data.frame(chrom = "chr1", start = seq(1500, 100500, by = 1000), end = seq(1500, 100500, by = 1000) + 1)
+    unsorted <- gintervals.neighbors(i1, i2, maxneighbors = 1, mindist = 0)
+    presorted <- gintervals.neighbors(i1, i2[order(i2$start, i2$id), ], maxneighbors = 1, mindist = 0)
+    expect_equal(unsorted$id, presorted$id)
+})
