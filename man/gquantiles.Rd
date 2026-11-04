@@ -33,6 +33,9 @@ Calculates the quantiles of a track expression for the given percentiles.
 \details{
 This function calculates the quantiles for the given percentiles.
 
+Values are kept with float precision (about 7 significant digits), so the
+quantiles of values with more significant digits are rounded.
+
 If data size exceeds the limit (see: 'getOption(gmax.data.size)'), the data
 is randomly sampled to fit the limit. A warning message is generated. Call
 \code{set.seed()} before this function to make the sample reproducible.
