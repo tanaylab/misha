@@ -219,6 +219,8 @@ inline void GenomeTrackArrays::calc_vals(const GInterval &interval)
 
 	for (vector<GenomeTrackArrays *>::iterator itrack = m_dependent_objs.begin(); itrack != m_dependent_objs.end(); ++itrack) {
 		(*itrack)->m_last_sum = (float)(*itrack)->m_sum_accum;
+		(*itrack)->m_last_size = (*itrack)->m_num_vs;
+		(*itrack)->m_last_exists = (*itrack)->m_num_vs > 0;
 		if ((*itrack)->m_num_vs > 0)
 			(*itrack)->m_last_avg = (*itrack)->m_last_nearest = (float)((*itrack)->m_sum_accum / (*itrack)->m_num_vs);
 		else {

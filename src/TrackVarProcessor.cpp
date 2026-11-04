@@ -430,27 +430,27 @@ double TrackVarProcessor::aggregate_min_pos_rel_with_filter(GenomeTrack1D &track
 
 double TrackVarProcessor::aggregate_stddev_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts)
 {
-	long double total_weight = 0;
-	long double total_weighted_sum = 0;
-	long double M2 = 0;  // For variance calculation
+	// Sample standard deviation of the values the parts hold, each value once: the parts' counts, means and
+	// sums of squared deviations are merged pairwise (Chan et al.). A part with one value has no deviation of
+	// its own but still moves the mean.
+	double n = 0, mean = 0, m2 = 0;
 
-	for (const auto& part : parts) {
+	for (const auto &part : track.parts_reading_items_once(parts)) {
 		track.read_interval(part);
-		double part_avg = track.last_avg();
-		double part_stddev = track.last_stddev();
-		double part_len = part.end - part.start;
-
-		if (!std::isnan(part_avg) && !std::isnan(part_stddev)) {
-			// Welford online algorithm for combining variances
-			double delta = part_avg - (total_weight > 0 ? total_weighted_sum / total_weight : 0);
-			double old_weight = total_weight;
-			total_weight += part_len;
-			total_weighted_sum += part_avg * part_len;
-			M2 += part_stddev * part_stddev * part_len + old_weight * part_len / total_weight * delta * delta;
-		}
+		const double part_n = track.last_size();
+		if (!(part_n > 0))
+			continue;
+		const double part_mean = track.last_avg();
+		const double part_sd = track.last_stddev();
+		const double part_m2 = part_n > 1 ? part_sd * part_sd * (part_n - 1) : 0;
+		const double delta = part_mean - mean;
+		const double total = n + part_n;
+		mean += delta * part_n / total;
+		m2 += part_m2 + delta * delta * n * part_n / total;
+		n = total;
 	}
 
-	return (total_weight > 0) ? std::sqrt(M2 / total_weight) : numeric_limits<double>::quiet_NaN();
+	return n > 1 ? std::sqrt(m2 / (n - 1)) : numeric_limits<double>::quiet_NaN();
 }
 
 double TrackVarProcessor::aggregate_quantile_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts, double percentile,

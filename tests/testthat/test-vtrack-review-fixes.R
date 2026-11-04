@@ -170,3 +170,30 @@ test_that("min.pos on an array track reports the position of the minimum", {
     expect_equal(r$a_minr, 20)
     expect_equal(r$a_maxp, 0)
 })
+
+test_that("stddev with a filter is the sample sd of the unmasked values, each counted once", {
+    local_db_state()
+    vt_fix_db()
+    starts <- seq(0, 950, 50)
+    gtrack.create_dense("dn2", "x", gintervals("chr1", starts, starts + 50), as.numeric(1:20), 50, NaN)
+    gtrack.create_sparse("sp2", "x", gintervals("chr1", c(10, 100, 200, 300), c(60, 120, 220, 320)), c(4, 1, 7, 2))
+    withr::defer({
+        gtrack.rm("dn2", force = TRUE)
+        gtrack.rm("sp2", force = TRUE)
+    })
+    withr::defer(gvtrack.clear())
+    # [20,30) splits bin 1 (and the first sparse interval); [500,600) removes bins 11 and 12; [190,230) removes 7
+    mask <- gintervals("chr1", c(20, 190, 500), c(30, 230, 600))
+    gvtrack.create("d_sd", "dn2", "stddev", filter = mask)
+    gvtrack.create("d_avg", "dn2", "avg", filter = mask)
+    gvtrack.create("s_sd", "sp2", "stddev", filter = mask)
+    vv <- data.frame(chrom = "chr1", start = c(10, 100, 200, 300), end = c(60, 120, 220, 320), score = c(4, 1, 7, 2))
+    gvtrack.create("v_sd", vv, "stddev", filter = mask)
+    iv <- gintervals("chr1", 0, 1000)
+
+    expected_dense <- sd(c(1:10, 13:20))
+    expect_equal(gextract("d_sd", iv, iterator = iv)$d_sd, expected_dense, tolerance = 1e-5)
+    expect_equal(gextract(c("d_sd", "d_avg"), iv, iterator = iv)$d_sd, expected_dense, tolerance = 1e-5)
+    expect_equal(gextract("s_sd", iv, iterator = iv)$s_sd, sd(c(4, 1, 2)), tolerance = 1e-5)
+    expect_equal(gextract("v_sd", iv, iterator = iv)$v_sd, sd(c(4, 1, 2)), tolerance = 1e-5)
+})

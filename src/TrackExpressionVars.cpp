@@ -1655,6 +1655,11 @@ void TrackExpressionVars::register_track_functions()
 			break;
 		case Track_var::STDDEV:
 			track1d->register_function(GenomeTrack1D::STDDEV);
+			// with a filter the parts' results are merged through their counts and means
+			if (ivar->filter) {
+				track1d->register_function(GenomeTrack1D::AVG);
+				track1d->register_function(GenomeTrack1D::SIZE);
+			}
 			break;
 		case Track_var::SUM:
 			track1d->register_function(GenomeTrack1D::SUM);
