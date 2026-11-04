@@ -134,7 +134,7 @@
   },
   "GenomeTrackFixedBin.h": {
     "identical": false,
-    "misha": "83f0f72f7642fb21",
+    "misha": "deb1bea6f04d213a",
     "needs_port": true,
     "pymisha": "92dbe81aa88dc406"
   },
@@ -145,7 +145,7 @@
   },
   "GenomeTrackSparse.h": {
     "identical": false,
-    "misha": "858a9d152c640e86",
+    "misha": "5b731189abcc2b31",
     "needs_port": true,
     "pymisha": "11a999628ae7c941"
   },

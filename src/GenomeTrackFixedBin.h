@@ -57,7 +57,7 @@ public:
 
 	unsigned get_bin_size() const { return m_bin_size; }
 
-	virtual bool item_at(int, int64_t coord, int64_t &start, int64_t &end) {
+	bool item_at(int, int64_t coord, int64_t &start, int64_t &end) override {
 		if (!m_bin_size)
 			return false;
 		start = coord - coord % m_bin_size;

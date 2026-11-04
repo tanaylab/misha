@@ -47,7 +47,7 @@ public:
 
 	const GIntervals &get_intervals();
 
-	virtual bool item_at(int, int64_t coord, int64_t &start, int64_t &end) {
+	bool item_at(int, int64_t coord, int64_t &start, int64_t &end) override {
 		const GIntervals &intervs = get_intervals();
 		return interval_at(intervs.begin(), intervs.end(), coord, start, end);
 	}
