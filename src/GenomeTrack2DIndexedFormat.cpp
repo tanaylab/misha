@@ -134,20 +134,21 @@ SEXP gtrack2d_convert_to_indexed(SEXP _track, SEXP _remove_old, SEXP _envir) {
                     // Check which per-pair files exist
                     bool have_pair_files = false;
                     string missing_pair_file;
+                    // the files the packing below finds, also those named by aliases (e.g. "2-X" for chr2-chrX)
+                    const GenomeTrack::ChromFiles pair_files(chromkey, track_dir, true);
                     for (const auto &entry : old_idx->entries()) {
-                        string pair_file = GenomeTrack::get_2d_filename(chromkey, entry.chrom1_id, entry.chrom2_id);
-                        struct stat pst;
-                        if (stat((track_dir + "/" + pair_file).c_str(), &pst) == 0)
+                        if (pair_files.exists(entry.chrom1_id, entry.chrom2_id))
                             have_pair_files = true;
                         else if (missing_pair_file.empty())
-                            missing_pair_file = pair_file;
+                            missing_pair_file = GenomeTrack::get_2d_filename(chromkey, entry.chrom1_id, entry.chrom2_id);
                     }
 
                     // Only some of the pairs have a file: packing them would replace track.dat, and lose the data of
                     // the other pairs. Refuse before anything is changed.
                     if (have_pair_files && !missing_pair_file.empty())
                         extract_error = "Track " + track + " is indexed and has per-pair files for only some of its chromosome pairs (" +
-                            missing_pair_file + " is one that is missing): converting it would lose the data of the pairs without a file";
+                            missing_pair_file + " is one that is missing): converting it would lose the data of the pairs without a file. "
+                            "Remove the per-pair files and run it again to extract all the pairs from track.dat.";
 
                     if (!have_pair_files) {
                         // Extract per-pair data from track.dat back to per-pair files

@@ -424,3 +424,21 @@ test_that("a forced 2D re-conversion refuses when only some pairs have a per-pai
     expect_true(file.exists(file.path(dir, pair_files[2])))
     expect_equal(gextract("partial", gintervals.2d.all())$partial, c(1, 2))
 })
+
+test_that("a forced 2D re-conversion finds per-pair files named by aliases, and says how to recover when it refuses", {
+    import_test_db("indexed")
+
+    gtrack.2d.create("aliased", "", gintervals.2d(c("chr1", "chr2"), 0, 100, c("chr1", "chrX"), 0, 100), c(1, 2))
+    gtrack.2d.convert_to_indexed("aliased", remove.old = FALSE, force = TRUE)
+    dir <- file.path(.misha$GWD, "aliased.track")
+    file.rename(file.path(dir, "chr2-chrX"), file.path(dir, "2-X"))
+    gtrack.2d.convert_to_indexed("aliased", remove.old = TRUE, force = TRUE)
+    expect_equal(gextract("aliased", gintervals.2d.all())$aliased, c(1, 2))
+
+    gtrack.2d.convert_to_indexed("aliased", remove.old = FALSE, force = TRUE)
+    unlink(file.path(dir, "chr1-chr1"))
+    expect_error(
+        gtrack.2d.convert_to_indexed("aliased", remove.old = TRUE, force = TRUE),
+        "Remove the per-pair files and run it again"
+    )
+})
