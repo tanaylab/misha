@@ -322,6 +322,13 @@ DiagonalBand IntervUtils::convert_band(SEXP rband)
 	if ((!Rf_isReal(rband) && !Rf_isInteger(rband)) || Rf_length(rband) != 2)
 		verror("Invalid format of band argument");
 
+	// Converting NA, an infinite value or one beyond int64 is undefined; 1e18 is past any genome
+	for (int i = 0; i < 2; ++i) {
+		double v = Rf_isReal(rband) ? REAL(rband)[i] : (INTEGER(rband)[i] == NA_INTEGER ? NA_REAL : INTEGER(rband)[i]);
+		if (!std::isfinite(v) || std::fabs(v) > 1e18)
+			verror("Invalid band argument: band distances must be finite numbers between -1e18 and 1e18");
+	}
+
 	int64_t d1 = Rf_isReal(rband) ? (int64_t)(REAL(rband)[0] > 0 ? REAL(rband)[0] + 0.5 : REAL(rband)[0] - 0.5) : INTEGER(rband)[0];
 	int64_t d2 = Rf_isReal(rband) ? (int64_t)(REAL(rband)[1] > 0 ? REAL(rband)[1] + 0.5 : REAL(rband)[1] - 0.5) : INTEGER(rband)[1];
 

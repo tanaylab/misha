@@ -257,3 +257,12 @@ test_that("lse on an array track counts each value once, with and without a filt
     gvtrack.filter("arr_lse", gintervals("chr1", c(20, 190, 500), c(30, 230, 600)))
     expect_equal(gextract("arr_lse", q, iterator = q)$arr_lse, log(sum(exp(c(4, 1, 2)))), tolerance = 1e-6)
 })
+
+test_that("band distances must be finite and within range", {
+    sq <- gintervals.2d("chr1", 0, 100, "chr1", 0, 100)
+    for (band in list(c(0, 1e19), c(NA, 0), c(-Inf, 0), c(0, NaN), c(NA_integer_, 0L))) {
+        expect_error(gintervals.2d.band_intersect(sq, band = band), "finite numbers", info = paste(band, collapse = ","))
+    }
+    r <- gintervals.2d.band_intersect(sq, band = c(-1e18, 1e18))
+    expect_equal(c(r$start1, r$end1, r$start2, r$end2), c(0, 100, 0, 100))
+})
