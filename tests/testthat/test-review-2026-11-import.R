@@ -320,3 +320,15 @@ test_that("gtrack.import_mappedseq and gtrack.array.import write the indexed for
     expect_equal(res$a, c(1, 3))
     expect_equal(res$b, c(2, 4))
 })
+
+test_that("gtrack.export_bedgraph writes each base once when the intervals overlap", {
+    import_test_db("indexed")
+
+    gtrack.create_dense("bins", "", data.frame(chrom = "chr1", start = seq(0, 90, 10), end = seq(10, 100, 10)), 1:10, 10)
+    out <- tempfile(fileext = ".bedgraph")
+    gtrack.export_bedgraph("bins", out, intervals = gintervals("chr1", c(0, 30), c(50, 80)))
+    res <- read.table(out, skip = 1, col.names = c("chrom", "start", "end", "value"))
+    expect_equal(res$start, seq(0, 70, 10))
+    expect_equal(res$end, seq(10, 80, 10))
+    expect_equal(res$value, 1:8)
+})

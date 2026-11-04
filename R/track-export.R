@@ -98,9 +98,12 @@ gtrack.export_bedgraph <- function(track, file, intervals = NULL, iterator = NUL
         name <- track
     }
 
-    # Set up intervals
+    # Set up intervals. Overlapping intervals would extract the same bins twice, and bedGraph (and
+    # bedGraphToBigWig) does not allow overlapping records.
     if (is.null(intervals)) {
         intervals <- .misha$ALLGENOME
+    } else {
+        intervals <- gintervals.canonic(intervals, unify_touching_intervals = FALSE)
     }
 
     # Extract data using gextract
