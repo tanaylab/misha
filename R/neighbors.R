@@ -179,6 +179,9 @@ gintervals.neighbors <- function(intervals1 = NULL, intervals2 = NULL, maxneighb
             intervals1 <- .gnormalize_chrom_names(intervals1)
             intervals2 <- .gnormalize_chrom_names(intervals2)
             chrom_res <- .gcall("gfind_neighbors", intervals1, intervals2, maxneighbors, mindist, maxdist, mindist1, maxdist1, mindist2, maxdist2, na.if.notfound, FALSE, use_intervals1_strand, .misha_env())
+            if (!is.null(chrom_res)) {
+                chrom_res <- repair_names(chrom_res) # also for the copy saved to intervals.set.out
+            }
             if (!is.null(chrom_res) && is.null(intervals.set.out)) {
                 envir$res[[length(envir$res) + 1L]] <- chrom_res
                 envir$res_nrows <- envir$res_nrows + nrow(chrom_res)
