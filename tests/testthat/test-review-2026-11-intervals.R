@@ -160,3 +160,56 @@ test_that("gintervals.random(filter =) can start anywhere in a gap between filte
     res <- gintervals.random(100, 3000, dist_from_edge = 0, chromosomes = "chr1", filter = filter)
     expect_equal(sort(unique(res$start)), 2000:2050)
 })
+
+test_that("summary Std dev is accurate for values with a large offset", {
+    scope <- gintervals(c("chr1", "chr2"), 0, 200000)
+    expr <- "test.fixedbin + 1e8"
+    vals <- gextract(expr, scope, iterator = "test.fixedbin", colnames = "v")$v
+    vals <- vals[!is.na(vals)]
+
+    withr::local_options(gmultitasking = FALSE)
+    single <- gsummary(expr, scope, iterator = "test.fixedbin")
+    expect_equal(unname(single["Std dev"]), sd(vals), tolerance = 1e-9)
+    expect_equal(unname(single["Sum"]), sum(vals), tolerance = 1e-12)
+
+    # whole genome, so that the multitask run forks kids and merges their summaries
+    all_vals <- gextract(expr, gintervals.all(), iterator = 1000, colnames = "v")$v
+    all_vals <- all_vals[!is.na(all_vals)]
+    single_all <- gsummary(expr, gintervals.all(), iterator = 1000)
+    withr::with_options(list(gmultitasking = TRUE, gmax.processes = 4, gmin.scope4process = 1), {
+        multi <- gsummary(expr, gintervals.all(), iterator = 1000)
+    })
+    expect_equal(unname(single_all["Std dev"]), sd(all_vals), tolerance = 1e-9)
+    expect_equal(unname(multi["Std dev"]), sd(all_vals), tolerance = 1e-9)
+    expect_equal(multi[c("Total intervals", "NaN intervals", "Min", "Max")], single_all[c("Total intervals", "NaN intervals", "Min", "Max")])
+    expect_equal(unname(multi["Sum"]), unname(single_all["Sum"]), tolerance = 1e-12)
+
+    per_interval <- gintervals.summary(expr, scope, iterator = "test.fixedbin")
+    per_vals <- gextract(expr, scope, iterator = "test.fixedbin", colnames = "v")
+    expected_sd <- tapply(per_vals$v, per_vals$intervalID, sd, na.rm = TRUE)
+    expect_equal(per_interval[["Std dev"]], unname(as.numeric(expected_sd)), tolerance = 1e-9)
+})
+
+test_that("gbins.summary and gintervals.summary(intervals.set.out) keep double precision", {
+    scope <- gintervals("chr1", c(0, 100000), c(100000, 200000))
+    expr <- "test.fixedbin + 100000.123"
+    vals <- gextract(expr, scope, iterator = "test.fixedbin", colnames = "v")
+    rng <- range(vals$v, na.rm = TRUE)
+
+    bins <- gbins.summary("test.fixedbin", c(rng[1] - 100001, rng[2]), expr = expr, intervals = scope, iterator = "test.fixedbin")
+    expect_equal(as.numeric(bins[1, c("Min", "Max")]), rng, tolerance = 1e-14)
+    expect_equal(as.numeric(bins[1, "Sum"]), sum(vals$v, na.rm = TRUE), tolerance = 1e-12)
+
+    in_memory <- gintervals.summary(expr, scope, iterator = "test.fixedbin")
+    expect_equal(in_memory$Min, as.numeric(tapply(vals$v, vals$intervalID, min, na.rm = TRUE)), tolerance = 1e-14)
+
+    nm <- paste0("test.isum_", sample(1:1e9, 1))
+    on.exit(gintervals.rm(nm, force = TRUE), add = TRUE)
+    withr::with_options(list(gbig.intervals.size = 1), {
+        gintervals.summary(expr, scope, iterator = "test.fixedbin", intervals.set.out = nm)
+    })
+    expect_true(.gintervals.is_bigset(nm))
+    saved <- gintervals.load(nm)
+    cols <- c("Min", "Max", "Sum", "Mean", "Std dev")
+    expect_equal(as.matrix(saved[, cols]), as.matrix(in_memory[, cols]), tolerance = 1e-14)
+})
