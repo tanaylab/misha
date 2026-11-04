@@ -1619,9 +1619,12 @@ void TrackExpressionVars::register_track_functions()
 		switch (ivar->val_func) {
 		case Track_var::REG:
 		case Track_var::PV:
-			if (track1d)
+			if (track1d) {
 				track1d->register_function(GenomeTrack1D::AVG);
-			else
+				// with a filter the parts' means are merged through their value counts
+				if (ivar->filter)
+					track1d->register_function(GenomeTrack1D::SIZE);
+			} else
 				track2d->register_function(GenomeTrack2D::AVG);
 			break;
 		case Track_var::REG_MIN:

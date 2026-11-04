@@ -424,3 +424,29 @@ test_that("pwm.edit_distance.lse with bidirect = TRUE answers for the strand-com
         }
     }
 })
+
+test_that("avg with a filter is the mean of the unmasked values, each counted once", {
+    local_db_state()
+    vt_fix_db()
+    starts <- seq(0, 950, 50)
+    gtrack.create_dense("dn4", "x", gintervals("chr1", starts, starts + 50), as.numeric(1:20), 50, NaN)
+    gtrack.create_sparse("sp4", "x", gintervals("chr1", c(10, 100, 200, 300), c(60, 120, 220, 320)), c(4, 1, 7, 2))
+    f <- withr::local_tempfile(fileext = ".tsv")
+    writeLines(c("chrom\tstart\tend\ta", "chr1\t10\t60\t4", "chr1\t100\t120\t1", "chr1\t200\t220\t7", "chr1\t300\t320\t2"), f)
+    suppressMessages(gtrack.array.import("arr4", "x", f))
+    withr::defer({
+        gtrack.rm("dn4", force = TRUE)
+        gtrack.rm("sp4", force = TRUE)
+        gtrack.rm("arr4", force = TRUE)
+    })
+    withr::defer(gvtrack.clear())
+    # [20,30) splits bin 1 and the first interval; [190,230) removes the value 7; [500,600) removes bins 11, 12
+    mask <- gintervals("chr1", c(20, 190, 500), c(30, 230, 600))
+    gvtrack.create("d_avg", "dn4", "avg", filter = mask)
+    gvtrack.create("s_avg", "sp4", "avg", filter = mask)
+    gvtrack.create("a_avg", "arr4", "avg", filter = mask)
+    iv <- gintervals("chr1", 0, 1000)
+    expect_equal(gextract("d_avg", iv, iterator = iv)$d_avg, mean(c(1:10, 13:20)), tolerance = 1e-6)
+    expect_equal(gextract("s_avg", iv, iterator = iv)$s_avg, mean(c(4, 1, 2)), tolerance = 1e-6)
+    expect_equal(gextract("a_avg", iv, iterator = iv)$a_avg, mean(c(4, 1, 2)), tolerance = 1e-6)
+})

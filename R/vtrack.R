@@ -1846,7 +1846,7 @@ gvtrack.array.slice <- function(vtrack = NULL, slice = NULL, func = "avg", param
 #'
 #' \strong{Semantics by function type:}
 #' \itemize{
-#'   \item \strong{Aggregations over values:} a bin or interval of the source that overlaps an unmasked region counts once, even when the mask splits it. \code{sum}, \code{size}, \code{lse}, \code{min}, \code{max}, \code{quantile} and \code{stddev} (the sample standard deviation) reduce over those values. \code{avg} of a track is the mean of each unmasked region weighted by the region's length; \code{avg} of a value-based virtual track is the mean of the values.
+#'   \item \strong{Aggregations over values:} a bin or interval of the source that overlaps an unmasked region counts once, even when the mask splits it. \code{avg}, \code{sum}, \code{size}, \code{lse}, \code{min}, \code{max}, \code{quantile} and \code{stddev} (the sample standard deviation) reduce over those values, for a track as for a value-based virtual track.
 #'   \item \strong{coverage:} Returns (covered length in unmasked region) / (total unmasked length)
 #'   \item \strong{distance/distance.center:} Unaffected by mask (pure geometry)
 #'   \item \strong{PWM/kmer/potts:} Masked bases act as hard boundaries; matches cannot span masked regions.

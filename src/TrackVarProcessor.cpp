@@ -283,20 +283,19 @@ void TrackVarProcessor::process_single_track_var_2d(
 // Filter aggregation helper methods
 double TrackVarProcessor::aggregate_avg_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts)
 {
-	long double total_weight = 0;
-	long double total_weighted_sum = 0;
+	// Mean of the values the parts hold, each value once: the parts' means weighted by their value counts
+	double n = 0, sum = 0;
 
-	for (const auto& part : parts) {
+	for (const auto &part : track.parts_reading_items_once(parts)) {
 		track.read_interval(part);
-		double part_avg = track.last_avg();
-		if (!std::isnan(part_avg)) {
-			double part_len = part.end - part.start;
-			total_weighted_sum += part_avg * part_len;
-			total_weight += part_len;
-		}
+		const double part_n = track.last_size();
+		if (!(part_n > 0))
+			continue;
+		sum += (double)track.last_avg() * part_n;
+		n += part_n;
 	}
 
-	return (total_weight > 0) ? (total_weighted_sum / total_weight) : numeric_limits<double>::quiet_NaN();
+	return n > 0 ? sum / n : numeric_limits<double>::quiet_NaN();
 }
 
 double TrackVarProcessor::aggregate_sum_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts)
