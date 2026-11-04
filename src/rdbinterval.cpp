@@ -261,7 +261,11 @@ const GIntervals2D &IntervUtils::get_all_genome_intervs_cached2d() const
 		}
 	}
 	auto built = std::make_shared<GIntervals2D>();
-	convert_rintervs(rallgenome, NULL, built.get());
+	// above gmulticontig.2d.threshold contigs .misha$ALLGENOME[[2]] is a placeholder with no intervals
+	// (.create_deferred_2d): no 2D intervals here, as before, without the converter's check, which is
+	// for a scope that a user gives (DEFERRED_2D_SCOPE_MSG)
+	if (Rf_length(rallgenome))
+		convert_rintervs(rallgenome, NULL, built.get());
 	built->sort();
 	std::lock_guard<std::mutex> lock(s_all_genome_intervs_mutex);
 	if (s_cached_all_genome_intervs2d && s_cached_rallgenome2d == rallgenome) {

@@ -478,6 +478,29 @@ test_that("2D computations over the deferred whole-genome 2D scope stop and name
     })
 })
 
+test_that("1D track creation works on a database above gmulticontig.2d.threshold, in every 2D mode", {
+    local_db_state()
+    withr::local_options(list(gmulticontig.2d.threshold = 2))
+    td <- withr::local_tempdir()
+    review_db(td)
+    bg <- file.path(td, "a.bedgraph")
+    writeLines(c("chr1\t0\t100\t1", "chr2\t0\t100\t2"), bg)
+    for (mode in list(NULL, "full", "diagonal")) {
+        withr::local_options(list(gmulticontig.2d.mode = mode))
+        tag <- if (is.null(mode)) "unset" else mode
+        sp <- paste0("sp_", tag)
+        gtrack.create_sparse(sp, "", gintervals(c("chr1", "chr2"), 0, 100), c(1, 2))
+        gtrack.create(paste0("cr_", tag), "", sp, iterator = 50)
+        expect_equal(gextract(paste0("cr_", tag), gintervals("chr2", 0, 50))[[paste0("cr_", tag)]], 2)
+        gtrack.lookup(paste0("lk_", tag), "", c(10, 20), sp, c(0, 1.5, 3))
+        expect_equal(gextract(paste0("lk_", tag), gintervals("chr2", 0, 50), iterator = 50)[[paste0("lk_", tag)]], 20)
+        gtrack.smooth(paste0("sm_", tag), "", paste0("cr_", tag), 100, alg = "MEAN")
+        expect_true(gtrack.exists(paste0("sm_", tag)))
+        suppressMessages(gtrack.import(paste0("im_", tag), "", bg, 0))
+        expect_equal(gextract(paste0("im_", tag), gintervals.all())[[paste0("im_", tag)]], c(1, 2))
+    }
+})
+
 test_that("tracks and interval sets another session re-created with another layout are read right", {
     skip_on_os("windows")
     local_db_state()
