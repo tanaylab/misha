@@ -127,3 +127,18 @@ test_that("gintervals.2d.intersect gives every pairwise intersection over many r
     expect_equal(nrow(r), nrow(exp_df))
     expect_equal(key(r), key(exp_df))
 })
+
+test_that("sequence and value-based vtracks under a 2D iterator need a dimension projection", {
+    withr::defer(remove_all_vtracks())
+    pssm <- matrix(c(0.7, 0.1, 0.1, 0.1), 4, 4, byrow = TRUE, dimnames = list(NULL, c("A", "C", "G", "T")))
+    it2d <- gintervals.2d("chr1", 100, 200, "chr2", 10, 60)
+    gvtrack.create("pwm2d", NULL, "pwm.max", pssm = pssm)
+    expect_error(gextract("pwm2d", it2d, iterator = it2d), "without explicit dimension projection")
+    gvtrack.create("kmer2d", NULL, "kmer.count", kmer = "ACG")
+    expect_error(gextract("kmer2d", it2d, iterator = it2d), "without explicit dimension projection")
+    gvtrack.create("val2d", src = data.frame(chrom = "chr1", start = 0, end = 300, score = 5), func = "avg")
+    expect_error(gextract("val2d", it2d, iterator = it2d), "without explicit dimension projection")
+
+    gvtrack.iterator("val2d", dim = 1)
+    expect_equal(gextract("val2d", it2d, iterator = it2d)$val2d, 5)
+})
