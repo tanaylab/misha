@@ -188,7 +188,8 @@ bool Wig::read_record(Rec &rec, int64_t &lineno)
 		if (fields.empty())
 			break;
 
-		if (fields[0] == "track" || (fields[0].size() && fields[0][0] == '#'))
+		// UCSC header lines
+		if (fields[0] == "track" || fields[0] == "browser" || (fields[0].size() && fields[0][0] == '#'))
 			continue;
 
 		if (fields[0] == "variableStep") {

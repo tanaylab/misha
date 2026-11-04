@@ -201,3 +201,19 @@ test_that("a WIG / bedGraph block that resumes after an unknown chromosome is an
     expect_equal(as.character(res$chrom), c("chr1", "chr2"))
     expect_equal(res$skip_bg, c(1, 3))
 })
+
+test_that("bedGraph and WIG import skip UCSC browser lines", {
+    import_test_db("indexed")
+
+    bg <- write_file("browser position chr1:1-100\nbrowser hide all\ntrack type=bedGraph\nchr1\t0\t10\t1\nchr1\t20\t30\t2\n", ".bedgraph")
+    gtrack.import("browser_bg", "", bg, 0)
+    res <- gextract("browser_bg", gintervals.all())
+    expect_equal(res$start, c(0, 20))
+    expect_equal(res$browser_bg, c(1, 2))
+
+    wig <- write_file("browser position chr1:1-100\ntrack type=wiggle_0\nfixedStep chrom=chr1 start=1 step=10 span=10\n4\n5\n", ".wig")
+    gtrack.import("browser_wig", "", wig, 0)
+    res <- gextract("browser_wig", gintervals.all())
+    expect_equal(res$start, c(0, 10))
+    expect_equal(res$browser_wig, c(4, 5))
+})
