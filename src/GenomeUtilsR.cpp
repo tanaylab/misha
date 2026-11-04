@@ -100,6 +100,7 @@ struct ValidSegment {
     int64_t start;
     int64_t end;
     int64_t length;
+    int64_t num_starts;  // number of start positions sampled from: [start, start + num_starts)
     double cum_prob;
 };
 
@@ -230,16 +231,19 @@ SEXP C_grandom_genome(SEXP _size, SEXP _n, SEXP _dist_from_edge, SEXP _chrom_df,
                     result = chrom_interval;
                 }
 
-                // Add valid segments
+                // Add valid segments. Each segment is a range of valid start positions
+                // (valid_end and the filters were already shifted by size), so any
+                // non-empty one can be used, and its length is the number of starts.
                 for (size_t i = 0; i < result.size(); i++) {
                     int64_t seg_len = result[i].end - result[i].start;
-                    if (seg_len >= size) {
+                    if (seg_len > 0) {
                         ValidSegment seg;
                         seg.chromid = chromid;
                         seg.chrom_name = chrom_id_to_name[chromid];
                         seg.start = result[i].start;
                         seg.end = result[i].end;
                         seg.length = seg_len;
+                        seg.num_starts = seg_len;
                         valid_segments.push_back(seg);
                     }
                 }
@@ -291,6 +295,7 @@ SEXP C_grandom_genome(SEXP _size, SEXP _n, SEXP _dist_from_edge, SEXP _chrom_df,
                 seg.start = seg_start;
                 seg.end = seg_end;
                 seg.length = seg_len;
+                seg.num_starts = seg_len - size;
                 valid_segments.push_back(seg);
             }
 
@@ -341,8 +346,7 @@ SEXP C_grandom_genome(SEXP _size, SEXP _n, SEXP _dist_from_edge, SEXP _chrom_df,
             const ValidSegment &seg = valid_segments[seg_idx];
 
             // Generate random position within segment
-            int64_t valid_range = seg.length - size;
-            int64_t start = seg.start + (int64_t)(unif_rand() * valid_range);
+            int64_t start = seg.start + (int64_t)(unif_rand() * seg.num_starts);
             int64_t end = start + size;
 
             // Store in output vectors
