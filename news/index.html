@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">misha</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.14.4</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.15.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -36,9 +36,23 @@
   <main id="main" class="col-md-9"><div class="page-header">
 
       <h1>Changelog</h1>
-      <small>Source: <a href="https://github.com/tanaylab/misha/blob/v5.14.4/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
+      <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="5.15.0" id="misha-5150">misha 5.15.0<a class="anchor" aria-label="anchor" href="#misha-5150"></a></h2>
+<p>This release fixes defects found in a review of 5.14.4. Several change results, marked <strong>Behavior fix</strong>; recompute anything that depends on them.</p>
+<ul><li><p><strong>Behavior fix:</strong> PWM scoring never uses a window that holds N or another non-ACGT base, in every function: the PWM virtual tracks (<code>pwm.max.pos</code> and spatially weighted <code>pwm</code>/<code>pwm.max</code> used to charge N the column mean and score IUPAC codes as perfect matches), <code><a href="../reference/gseq.pwm.html">gseq.pwm()</a></code>, the edit distance functions (<code>pwm.edit_distance*</code>, <code>pwm.max.edit_distance</code>, <code>pwm.n_mutations</code>, <code><a href="../reference/gseq.pwm_edits.html">gseq.pwm_edits()</a></code>) and <code><a href="../reference/gtrack.create_pwm_energy.html">gtrack.create_pwm_energy()</a></code>. <code><a href="../reference/gseq.pwm.html">gseq.pwm()</a></code> now defaults to <code>neutral_chars = character(0)</code>; pass <code>neutral_chars = c("N", "n", "*")</code> for the old scores. An interval with no scorable window gives NA (<code>gseq.pwm(mode = "pos")</code> used to return 1), and a <code><a href="../reference/gtrack.create_pwm_energy.html">gtrack.create_pwm_energy()</a></code> bin with none is NaN.</p></li>
+<li><p><strong>Behavior fix:</strong> <code><a href="../reference/gtrack.create_pwm_energy.html">gtrack.create_pwm_energy()</a></code> scores the windows that start in each bin, as the <code>pwm</code> virtual track does; it also scored the window starting at the bin’s end.</p></li>
+<li><p><strong>Behavior fix:</strong> with <code>bidirect = FALSE, strand = -1</code>, <code>spat_factor</code>/<code>spat_bin</code> and <code>spat_min</code>/<code>spat_max</code> count from the interval’s 5’ start, as with <code>strand = 1</code> and in <code><a href="../reference/gseq.pwm.html">gseq.pwm()</a></code>.</p></li>
+<li><p><strong>Behavior fix:</strong> <code>pwm.edit_distance.lse</code> and <code>pwm.edit_distance.lse.pos</code> with <code>bidirect = TRUE</code> target the strand-combined score that the <code>pwm</code> virtual track returns; each substitution changes both strands.</p></li>
+<li><p><strong>Behavior fix:</strong> virtual tracks with a filter count each value once, even when the filter splits its bin or interval. This changes <code>sum</code>, <code>size</code>, <code>lse</code> and <code>quantile</code>. <code>avg</code> is now the mean of the unmasked values (it was length-weighted by unmasked part), <code>stddev</code> is their sample standard deviation (it could be NaN or drop parts), and a value-based <code>quantile</code> uses every unmasked part, not just the first.</p></li>
+<li><p><strong>Behavior fix:</strong> <code>*.pos</code> functions of sparse, value-based and array tracks clip to the start of the iterator interval, as dense tracks do, so <code>*.pos.relative</code> is never negative.</p></li>
+<li><p>Dense tracks: <code>exists</code>, <code>size</code> and the <code>*.pos</code> functions no longer report a value for a NaN bin when the iterator interval lies inside one bin.</p></li>
+<li><p>Value-based virtual tracks (a data frame as source) give correct results when the data covers more than one chromosome; overlapping intervals could return NaN and <code>nearest</code> a value from another chromosome.</p></li>
+<li><p><code>pwm.edit_distance.pos</code> and <code>pwm.edit_distance.lse.pos</code> with a filter report positions relative to the iterator interval when the filter leaves one unmasked part.</p></li>
+<li><p><code><a href="../reference/gtrack.array.extract.html">gtrack.array.extract()</a></code> returns correct values when slice columns are given in descending order, and <code>min.pos.abs</code>/<code>min.pos.relative</code> work on array tracks.</p></li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="5.14.4" id="misha-5144">misha 5.14.4<a class="anchor" aria-label="anchor" href="#misha-5144"></a></h2>
 <ul><li>2D tracks written by a misha built with clang (the usual compiler on macOS) no longer carry uninitialized bytes in the padding of their quad-tree nodes, so the same input gives the same file. Values read from these tracks were never affected.</li>

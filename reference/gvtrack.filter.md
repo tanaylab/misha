@@ -57,8 +57,11 @@ order is:
 
 **Semantics by function type:**
 
-- **Aggregations (avg/sum/min/max/stddev/quantile):** Length-weighted
-  over unmasked regions
+- **Aggregations over values:** a bin or interval of the source that
+  overlaps an unmasked region counts once, even when the mask splits it.
+  `avg`, `sum`, `size`, `lse`, `min`, `max`, `quantile` and `stddev`
+  (the sample standard deviation) reduce over those values, for a track
+  as for a value-based virtual track.
 
 - **coverage:** Returns (covered length in unmasked region) / (total
   unmasked length)
@@ -124,7 +127,7 @@ gvtrack.info("vtrack1")
 #> [1] "avg"
 #> 
 #> $filter
-#> [1] "filter__tmp_Rtmp84NB1S_trackdb_test_tracks_2_7d54e8370e6eb979"
+#> [1] "filter__tmp_RtmpTPFzzL_trackdb_test_tracks_2_7d54e8370e6eb979"
 #> 
 #> $filter_stats
 #> $filter_stats$num_chroms

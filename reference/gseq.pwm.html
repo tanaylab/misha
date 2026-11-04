@@ -13,7 +13,7 @@ All reported positions are on the full input sequence."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">misha</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.14.4</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.15.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -42,7 +42,7 @@ All reported positions are on the full input sequence."></head><body>
   <main id="main" class="col-md-9"><div class="page-header">
 
       <h1>Score DNA sequences with a PWM over a region of interest</h1>
-      <small class="dont-index">Source: <a href="https://github.com/tanaylab/misha/blob/v5.14.4/R/sequence.R" class="external-link"><code>R/sequence.R</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/tanaylab/misha/blob/master/R/sequence.R" class="external-link"><code>R/sequence.R</code></a></small>
       <div class="d-none name"><code>gseq.pwm.Rd</code></div>
     </div>
 
@@ -72,7 +72,7 @@ All reported positions are on the full input sequence.</p>
 <span>  return_strand <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  skip_gaps <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  gap_chars <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"-"</span>, <span class="st">"."</span><span class="op">)</span>,</span>
-<span>  neutral_chars <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"N"</span>, <span class="st">"n"</span>, <span class="st">"*"</span><span class="op">)</span>,</span>
+<span>  neutral_chars <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">character</a></span><span class="op">(</span><span class="fl">0</span><span class="op">)</span>,</span>
 <span>  neutral_chars_policy <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"average"</span>, <span class="st">"log_quarter"</span>, <span class="st">"na"</span><span class="op">)</span>,</span>
 <span>  prior <span class="op">=</span> <span class="fl">0.01</span></span>
 <span><span class="op">)</span></span></code></pre></div>
@@ -158,15 +158,17 @@ scanning. Windows are w consecutive non-gap bases (default: TRUE)</p></dd>
 
 
 <dt id="arg-neutral-chars">neutral_chars<a class="anchor" aria-label="anchor" href="#arg-neutral-chars"></a></dt>
-<dd><p>character vector; bases treated as unknown and scored with the average
-log probability per position (default: c("N", "n", "*"))</p></dd>
+<dd><p>character vector; characters to score as unknown bases, by
+<code>neutral_chars_policy</code>, instead of leaving their windows out. Default: none, so a
+window holding <code>N</code> or any other non-ACGT character is not scored, as in the PWM
+virtual tracks. Pass e.g. <code>c("N", "n", "*")</code> to score them.</p></dd>
 
 
 <dt id="arg-neutral-chars-policy">neutral_chars_policy<a class="anchor" aria-label="anchor" href="#arg-neutral-chars-policy"></a></dt>
-<dd><p>character string; how to treat neutral characters. One of
-<code>"average"</code> (default; use the column's mean log-probability), <code>"log_quarter"</code>
-(always use <code>log(1/4)</code>), or <code>"na"</code> (return NA when a neutral character is
-encountered in the scanning window).</p></dd>
+<dd><p>character string; how to score the characters listed in
+<code>neutral_chars</code>. One of <code>"average"</code> (the column's mean log-probability),
+<code>"log_quarter"</code> (always <code>log(1/4)</code>), or <code>"na"</code> (return NA when one is in the
+scanning window). Has no effect when <code>neutral_chars</code> is empty.</p></dd>
 
 
 <dt id="arg-prior">prior<a class="anchor" aria-label="anchor" href="#arg-prior"></a></dt>
@@ -190,10 +192,13 @@ The <code>extend</code> parameter controls whether motif matches can extend beyo
 Windows are defined as w consecutive non-gap bases. All positions (<code>pos</code>) are reported
 as 1-based indices on the original full sequence (including gaps). <code>start_pos</code> and
 <code>end_pos</code> are interpreted as physical coordinates on the full sequence.</p>
-<p>Neutral characters (<code>neutral_chars</code>, default <code>c("N", "n", "*")</code>) are treated as
-unknown bases in both orientations. Each neutral contributes the mean log-probability of the
-corresponding PSSM column, yielding identical penalties on forward and reverse strands without
-hard-coded background scores.</p>
+<p>By default a window holding <code>N</code> or any other character that is not A, C, G or T (in
+either case) is not scored on either strand: it is left out, exactly as the <code>pwm</code>,
+<code>pwm.max</code>, <code>pwm.max.pos</code> and <code>pwm.count</code> virtual tracks leave it out, and a
+sequence with no scorable window gives <code>-Inf</code> for <code>"lse"</code> and <code>"max"</code>,
+<code>NA</code> for <code>"pos"</code> and <code>0</code> for <code>"count"</code>. Characters listed in
+<code>neutral_chars</code> are instead scored as unknown bases, the same on both strands, as
+<code>neutral_chars_policy</code> says.</p>
 <p>Under <code>bidirect = TRUE</code> the forward and reverse-complement matches are
 two readings of the same window, and every mode but <code>"pos"</code> combines
 them at each window by log-sum-exp, after any spatial weights are applied:
@@ -201,7 +206,8 @@ them at each window by log-sum-exp, after any spatial weights are applied:
 takes the largest of them, and <code>"count"</code> thresholds each one once, so a
 window is at most a single hit however well its reverse complement matches it.
 That is the same union the <code>pwm</code>, <code>pwm.max</code> and <code>pwm.count</code>
-virtual tracks take, and over the same windows <code>gseq.pwm()</code> agrees with
+virtual tracks take, and over the same windows, with the default <code>neutral_chars</code>, on a
+sequence read from the genome (which holds no gap characters), <code>gseq.pwm()</code> agrees with
 them to the precision the two share - the virtual tracks accumulate in single
 precision and <code>gseq.pwm()</code> in double, so expect agreement to about
 <code>1e-5</code> relative, not to the last bit. <code>mode = "pos"</code> instead takes

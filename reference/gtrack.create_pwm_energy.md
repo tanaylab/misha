@@ -55,6 +55,13 @@ are determined by 'pssmset' key and data files ('pssmset.key' and
 directory. The type of the created track is determined by the type of
 the iterator. 'description' is added as a track attribute.
 
+Each value is the log-sum-exp of the PSSM log-likelihoods of the windows
+starting in the iterator interval. A window holding `N` or any other
+character that is not A, C, G or T is not scored, as in the `pwm`
+virtual track. An interval none of whose windows can be scored gets
+`NaN`: the `pwm` virtual track returns `-Inf` for it, and a track stores
+an infinite value as `NaN`.
+
 ## See also
 
 [`gtrack.create`](https://tanaylab.github.io/misha/reference/gtrack.create.md),
@@ -77,15 +84,15 @@ gtrack.create_pwm_energy("pwm_energy_track", "Test track", "pssm",
 )
 gextract("pwm_energy_track", gintervals(1, 0, 1000))
 #>    chrom start  end pwm_energy_track intervalID
-#> 1   chr1     0  100        -53.42195          1
-#> 2   chr1   100  200        -52.64308          1
-#> 3   chr1   200  300        -52.11026          1
-#> 4   chr1   300  400        -51.71758          1
-#> 5   chr1   400  500        -49.75199          1
+#> 1   chr1     0  100        -53.42797          1
+#> 2   chr1   100  200        -52.64314          1
+#> 3   chr1   200  300        -52.11054          1
+#> 4   chr1   300  400        -51.71944          1
+#> 5   chr1   400  500        -49.75200          1
 #> 6   chr1   500  600        -44.75133          1
-#> 7   chr1   600  700        -49.11913          1
-#> 8   chr1   700  800        -48.81431          1
-#> 9   chr1   800  900        -48.35187          1
-#> 10  chr1   900 1000        -49.70630          1
+#> 7   chr1   600  700        -49.12024          1
+#> 8   chr1   700  800        -48.81432          1
+#> 9   chr1   800  900        -48.37580          1
+#> 10  chr1   900 1000        -49.70645          1
 # }
 ```

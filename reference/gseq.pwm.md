@@ -25,7 +25,7 @@ gseq.pwm(
   return_strand = FALSE,
   skip_gaps = TRUE,
   gap_chars = c("-", "."),
-  neutral_chars = c("N", "n", "*"),
+  neutral_chars = character(0),
   neutral_chars_policy = c("average", "log_quarter", "na"),
   prior = 0.01
 )
@@ -115,15 +115,19 @@ gseq.pwm(
 
 - neutral_chars:
 
-  character vector; bases treated as unknown and scored with the average
-  log probability per position (default: c("N", "n", "\*"))
+  character vector; characters to score as unknown bases, by
+  `neutral_chars_policy`, instead of leaving their windows out. Default:
+  none, so a window holding `N` or any other non-ACGT character is not
+  scored, as in the PWM virtual tracks. Pass e.g. `c("N", "n", "*")` to
+  score them.
 
 - neutral_chars_policy:
 
-  character string; how to treat neutral characters. One of `"average"`
-  (default; use the column's mean log-probability), `"log_quarter"`
-  (always use `log(1/4)`), or `"na"` (return NA when a neutral character
-  is encountered in the scanning window).
+  character string; how to score the characters listed in
+  `neutral_chars`. One of `"average"` (the column's mean
+  log-probability), `"log_quarter"` (always `log(1/4)`), or `"na"`
+  (return NA when one is in the scanning window). Has no effect when
+  `neutral_chars` is empty.
 
 - prior:
 
@@ -154,11 +158,13 @@ positions (`pos`) are reported as 1-based indices on the original full
 sequence (including gaps). `start_pos` and `end_pos` are interpreted as
 physical coordinates on the full sequence.
 
-Neutral characters (`neutral_chars`, default `c("N", "n", "*")`) are
-treated as unknown bases in both orientations. Each neutral contributes
-the mean log-probability of the corresponding PSSM column, yielding
-identical penalties on forward and reverse strands without hard-coded
-background scores.
+By default a window holding `N` or any other character that is not A, C,
+G or T (in either case) is not scored on either strand: it is left out,
+exactly as the `pwm`, `pwm.max`, `pwm.max.pos` and `pwm.count` virtual
+tracks leave it out, and a sequence with no scorable window gives `-Inf`
+for `"lse"` and `"max"`, `NA` for `"pos"` and `0` for `"count"`.
+Characters listed in `neutral_chars` are instead scored as unknown
+bases, the same on both strands, as `neutral_chars_policy` says.
 
 Under `bidirect = TRUE` the forward and reverse-complement matches are
 two readings of the same window, and every mode but `"pos"` combines
@@ -167,18 +173,19 @@ applied: `"lse"` then log-sum-exps those unions across the windows,
 `"max"` takes the largest of them, and `"count"` thresholds each one
 once, so a window is at most a single hit however well its reverse
 complement matches it. That is the same union the `pwm`, `pwm.max` and
-`pwm.count` virtual tracks take, and over the same windows `gseq.pwm()`
-agrees with them to the precision the two share - the virtual tracks
-accumulate in single precision and `gseq.pwm()` in double, so expect
-agreement to about `1e-5` relative, not to the last bit. `mode = "pos"`
-instead takes the better of the two strands, because it has to name
-one - what the `pwm.max.pos` virtual track does - so `"max"` and `"pos"`
-can select different windows, and the value from `"max"` is not
-necessarily the score at the position from `"pos"`. The asymmetry is the
-`pwm` family's own (`pwm.max` combines the strands, `pwm.max.pos` does
-not) and is mirrored here rather than fixed on one side. With
-`bidirect = FALSE` only the strand named by `strand` is read and there
-is nothing to combine.
+`pwm.count` virtual tracks take, and over the same windows, with the
+default `neutral_chars`, on a sequence read from the genome (which holds
+no gap characters), `gseq.pwm()` agrees with them to the precision the
+two share - the virtual tracks accumulate in single precision and
+`gseq.pwm()` in double, so expect agreement to about `1e-5` relative,
+not to the last bit. `mode = "pos"` instead takes the better of the two
+strands, because it has to name one - what the `pwm.max.pos` virtual
+track does - so `"max"` and `"pos"` can select different windows, and
+the value from `"max"` is not necessarily the score at the position from
+`"pos"`. The asymmetry is the `pwm` family's own (`pwm.max` combines the
+strands, `pwm.max.pos` does not) and is mirrored here rather than fixed
+on one side. With `bidirect = FALSE` only the strand named by `strand`
+is read and there is nothing to combine.
 
 ## See also
 
