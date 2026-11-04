@@ -263,3 +263,81 @@ test_that("gdb.convert_to_indexed converts a 1D set over a contig whose name has
     expect_equal(nrow(gintervals.load("dash", chrom = "HLA-A")), 5)
     expect_equal(nrow(gintervals.load("dash")), 15)
 })
+
+# gtrack.copy(overwrite = TRUE) SIGKILLed in a forked child, as an OOM kill or a job limit: no R
+# handler runs. Whatever point it dies at, the real name holds the old or the new track complete, or
+# the old one is in a directory no later cleanup removes.
+copy_killed_at <- function(kill_at) {
+    td <- withr::local_tempdir(.local_envir = parent.frame())
+    db <- review_db(td)
+    gtrack.create_sparse("orig", "", gintervals("chr1", 0, 10), 42)
+    gtrack.create_sparse("src", "", gintervals("chr1", 100, 110), 7)
+    tracks <- file.path(db, "tracks")
+    orig_bytes <- readBin(file.path(tracks, "orig.track", "track.dat"), "raw", 1e6)
+
+    job <- parallel::mcparallel({
+        rename <- base::file.rename
+        unlockBinding("file.rename", .BaseNamespaceEnv)
+        assign("file.rename", function(from, to) {
+            # the first rename out of the real name (the track set aside), or into it (the copy put in place)
+            if ((kill_at == "aside" && basename(from[1]) == "orig.track") ||
+                (kill_at == "swap" && basename(to[1]) == "orig.track")) {
+                res <- rename(from, to)
+                tools::pskill(Sys.getpid(), tools::SIGKILL)
+            }
+            rename(from, to)
+        }, envir = .BaseNamespaceEnv)
+        if (kill_at == "copy") {
+            copy <- base::file.copy
+            unlockBinding("file.copy", .BaseNamespaceEnv)
+            assign("file.copy", function(...) {
+                res <- copy(...)
+                tools::pskill(Sys.getpid(), tools::SIGKILL)
+                res
+            }, envir = .BaseNamespaceEnv)
+        }
+        gtrack.copy("src", "orig", overwrite = TRUE)
+    })
+    expect_warning(parallel::mccollect(job), "did not deliver a result")
+
+    # a later write in the directory sweeps what the dead process left
+    suppressMessages(gsetroot(db))
+    gtrack.create_sparse("another", "", gintervals("chr1", 0, 10), 1)
+    leftovers <- setdiff(list.files(tracks, all.files = TRUE, no.. = TRUE), c("orig.track", "src.track", "another.track"))
+    list(db = db, tracks = tracks, leftovers = leftovers, orig_bytes = orig_bytes)
+}
+
+test_that("gtrack.copy(overwrite = TRUE) killed during the copy leaves the old track in place", {
+    skip_on_cran()
+    skip_on_os("windows")
+    local_db_state()
+    st <- copy_killed_at("copy")
+    expect_equal(gextract("orig", gintervals("chr1", 0, 200))$orig, 42)
+    expect_length(st$leftovers, 0)
+})
+
+test_that("gtrack.copy(overwrite = TRUE) killed between its renames keeps the old track where no cleanup removes it", {
+    skip_on_cran()
+    skip_on_os("windows")
+    local_db_state()
+    st <- copy_killed_at("aside")
+    expect_false(dir.exists(file.path(st$tracks, "orig.track")))
+    expect_length(st$leftovers, 1)
+    kept <- file.path(st$tracks, st$leftovers)
+    expect_equal(readBin(file.path(kept, "track.dat"), "raw", 1e6), st$orig_bytes)
+    # put back by hand, it is the track as it was
+    file.rename(kept, file.path(st$tracks, "orig.track"))
+    suppressMessages(gdb.reload())
+    expect_equal(gextract("orig", gintervals("chr1", 0, 200))$orig, 42)
+})
+
+test_that("gtrack.copy(overwrite = TRUE) killed once the copy is in place leaves the new track", {
+    skip_on_cran()
+    skip_on_os("windows")
+    local_db_state()
+    st <- copy_killed_at("swap")
+    suppressMessages(gdb.reload())
+    res <- gextract("orig", gintervals("chr1", 0, 200))
+    expect_equal(res$start, 100)
+    expect_equal(res$orig, 7)
+})

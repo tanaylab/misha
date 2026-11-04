@@ -721,17 +721,42 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
     if (!dir.exists(dest_parent)) {
         .gwith_umask(dir.create(dest_parent, recursive = TRUE, showWarnings = FALSE))
     }
+    # Leftovers of writers that died before they could clean up (.gdb.trash_sweep_old), as the creators do
+    try(.gdb.trash_sweep_old(dest_parent), silent = TRUE)
+
+    # The copy is made in a hidden staging directory and moved under the real name only once it is
+    # complete, so that a copy killed at any point (SIGKILL, OOM: no handler runs) leaves at the real
+    # name either the track that was there or the complete copy. A staging directory left by a killed
+    # copy is removed by the next writer in the directory (.gdb.trash_sweep_old).
+    stage_dir <- file.path(dest_parent, .gdb.staging_name(basename(dest_dir)))
+    on.exit(
+        if (dir.exists(stage_dir)) {
+            .gdb.trash(stage_dir)
+        },
+        add = TRUE
+    )
+    # A 2D track converted to indexed is converted by its name (gtrack.2d.convert_to_indexed), so
+    # once in place
+    convert_2d <- is_2d && dest_indexed && !src_indexed
+    .gtrack.copy.pipeline(
+        src_dir, stage_dir, src_chroms, dest_chroms,
+        src_indexed, dest_indexed, info$type, destname, dest_db
+    )
+    .gdb.fsync(stage_dir, recursive = TRUE)
+
     aside <- NULL
+    success <- FALSE
     if (dir.exists(dest_dir)) {
-        # The existing track is set aside (hidden, as a staging directory) until the copy has
-        # succeeded, and comes back if any step of it fails (bypassing gtrack.rm, which insists the
-        # database is loaded)
-        aside_path <- file.path(dest_parent, .gdb.staging_name(basename(dest_dir)))
+        # The existing track is set aside until the copy is in place and has succeeded, and comes
+        # back if any step fails (bypassing gtrack.rm, which insists the database is loaded). Its name
+        # is a hidden one no cleanup removes (not a staging or trash name): if the copy is killed
+        # between the two renames, it is the only copy of the track, kept there.
+        aside_path <- tempfile(".", dest_parent)
         tracks_before <- get("GTRACKS", envir = .misha)
         track_db_before <- get("GTRACK_DATASET", envir = .misha)
         # registered before the rename, so that an interrupt right after it still brings the track back
         on.exit(
-            if (!is.null(aside) && dir.exists(aside)) {
+            if (!success && !is.null(aside) && dir.exists(aside)) {
                 # the failed copy is moved away first (it may not be removable at once, e.g. read-only
                 # files kept by copy.mode), then the existing track comes back, with the session's
                 # track list as it was
@@ -763,14 +788,6 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
                 dest_dir
             ), call. = FALSE)
         }
-        # dated now: another host's sweep of staging directories goes by their age (setting the time needs
-        # to own the directory; an entry created and removed in it needs only write access)
-        if (!isTRUE(Sys.setFileTime(aside, Sys.time()))) {
-            touch <- file.path(aside, ".misha.touch")
-            if (file.create(touch, showWarnings = FALSE)) {
-                unlink(touch)
-            }
-        }
         .gdb.invalidate_dir_cache(dest_dir)
         # the session's track list is updated only for a loaded destination (.gdb.rm_track writes it
         # into the database's .db.cache); an unloaded one is rescanned when loaded
@@ -781,42 +798,48 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
         }
     }
 
-    # Register destination first so convert-to-indexed (called inside pipeline)
-    # can find it in GTRACKS. .gdb.add_track only registers if the trackdir
-    # already exists, so create it now -- .gtrack.copy.raw_dir tolerates a
-    # pre-existing empty dest_dir.
-    if (!.gwith_umask(dir.create(dest_dir, showWarnings = FALSE)) && !dir.exists(dest_dir)) {
-        stop(sprintf("Failed to create %s", dest_dir), call. = FALSE)
+    # (a name taken meanwhile by another writer is not replaced: a directory with files in it cannot be
+    # renamed over)
+    if (!suppressWarnings(file.rename(stage_dir, dest_dir))) {
+        stop(sprintf("Failed to rename %s -> %s", stage_dir, dest_dir), call. = FALSE)
     }
-    if (dest_db_loaded) {
-        .gdb.add_track(destname, dest_db)
-    } else {
-        # Cross-db copy to an unloaded path: skip in-memory registration to
-        # avoid state leakage; mark the dest db's cache dirty so a later
-        # gsetroot/gdataset.load will pick up the new track on rescan.
-        .gdb.cache_mark_dirty(dest_db)
-    }
+    .gdb.fsync(dest_parent)
+    .gdb.invalidate_dir_cache(dest_dir)
     tryCatch(
-        .gtrack.copy.pipeline(
-            src_dir, dest_dir, src_chroms, dest_chroms,
-            src_indexed, dest_indexed, info$type, destname, dest_db
-        ),
-        error = function(e) {
-            # Roll back the registration if the pipeline failed; the dest dir may
-            # still exist but is in an inconsistent state -- best-effort cleanup.
-            # Order matters: .gdb.rm_track only updates caches when the trackdir
-            # is gone, so unlink first.
-            unlink(dest_dir, recursive = TRUE)
+        {
             if (dest_db_loaded) {
-                .gdb.rm_track(destname, db = dest_db)
+                .gdb.add_track(destname, dest_db)
+            } else {
+                # Cross-db copy to an unloaded path: skip in-memory registration to
+                # avoid state leakage; mark the dest db's cache dirty so a later
+                # gsetroot/gdataset.load will pick up the new track on rescan.
+                .gdb.cache_mark_dirty(dest_db)
+            }
+            if (convert_2d) {
+                .with_db_context(dest_db, function() {
+                    gtrack.2d.convert_to_indexed(destname, remove.old = TRUE)
+                })
+            }
+        },
+        error = function(e) {
+            # a copy that was not there before goes (a track set aside comes back on exit, above)
+            if (is.null(aside)) {
+                .gdb.trash(dest_dir)
+                if (dest_db_loaded) {
+                    .gdb.rm_track(destname, db = dest_db)
+                }
             }
             stop(e)
         }
     )
+    success <- TRUE
     if (!is.null(aside)) {
-        # cleared first: an interrupt from here on must not bring the old track back over the copy
-        old <- aside
-        aside <- NULL
+        # no longer needed: given a staging name first, so that the sweep of staging directories removes
+        # it if the trash fails
+        old <- file.path(dest_parent, .gdb.staging_name(basename(dest_dir)))
+        if (!suppressWarnings(file.rename(aside, old))) {
+            old <- aside
+        }
         .gdb.trash(old)
     }
     destname
@@ -839,13 +862,9 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
     # 2D track: at this point we know either format or chrom order differs.
     # .gtrack.copy.one already stopped for differing chrom orders and for the format changes not
     # supported (indexed into per-chromosome, or into a database that is not the active one).
+    # (converted to indexed by the caller, once in place: .gtrack.copy.one)
     if (track_type %in% c("rectangles", "points")) {
         .gtrack.copy.raw_dir(src_dir, dest_dir)
-        if (dest_indexed && !src_indexed) {
-            .with_db_context(dest_db, function() {
-                gtrack.2d.convert_to_indexed(destname, remove.old = TRUE)
-            })
-        }
         return(invisible())
     }
 
