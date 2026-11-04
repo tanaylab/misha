@@ -50,6 +50,74 @@ them.
   tracks clip to the start of the iterator interval, as dense tracks do,
   so `*.pos.relative` is never negative.
 
+- **Behavior fix:**
+  [`gsynth.train()`](https://tanaylab.github.io/misha/reference/gsynth.train.md)
+  trained on only part of the data when the scope start was not a
+  multiple of the iterator bin size. Retrain models built from such
+  scopes.
+
+- **Behavior fix:**
+  [`gintervals.liftover()`](https://tanaylab.github.io/misha/reference/gintervals.liftover.md)
+  and
+  [`gtrack.liftover()`](https://tanaylab.github.io/misha/reference/gtrack.liftover.md)
+  use the source strand of a chain: a
+  [`gintervals.as_chain()`](https://tanaylab.github.io/misha/reference/gintervals.as_chain.md)
+  row with `strandsrc = -1`, or a chain file whose reference strand is
+  “-”, lifted in the wrong orientation.
+  [`gintervals.load_chain()`](https://tanaylab.github.io/misha/reference/gintervals.load_chain.md)
+  reports such blocks with the strands combined in `strand`, and
+  `strandsrc` is always 1.
+
+- **Behavior fix:**
+  [`gintervals.as_chain()`](https://tanaylab.github.io/misha/reference/gintervals.as_chain.md)
+  treats strand 0 as forward (it was lifted as minus). `min_score` of a
+  pre-loaded chain (from
+  [`gintervals.as_chain()`](https://tanaylab.github.io/misha/reference/gintervals.as_chain.md)
+  or passed with it) is now applied by
+  [`gintervals.liftover()`](https://tanaylab.github.io/misha/reference/gintervals.liftover.md)
+  and
+  [`gtrack.liftover()`](https://tanaylab.github.io/misha/reference/gtrack.liftover.md),
+  which ignored it; a chain row with an NA score is dropped.
+
+- **Behavior fix:** `gintervals.neighbors(use_intervals1_strand = TRUE)`
+  and
+  [`gintervals.neighbors.upstream()`](https://tanaylab.github.io/misha/reference/directional-neighbors.md)/`.downstream()`
+  read a factor strand column by its labels; every interval used to
+  count as “+”.
+
+- **Behavior fix:**
+  [`gintervals.annotate()`](https://tanaylab.github.io/misha/reference/gintervals.annotate.md)
+  returned the query’s own columns as the annotation or distance when
+  column names were shared, and `max_dist` blanked the wrong column.
+  With `keep_order = FALSE`, `tie_method` stopped with an error, and
+  with stranded annotations it could put a farther neighbor first.
+
+- **Behavior fix:** `giterator.intervals(interval_relative = TRUE)`
+  gives the input row in `intervalID`; it gave the row’s position in
+  sorted order.
+
+- **Behavior fix:**
+  [`gsummary()`](https://tanaylab.github.io/misha/reference/gsummary.md),
+  [`gintervals.summary()`](https://tanaylab.github.io/misha/reference/gintervals.summary.md),
+  [`gbins.summary()`](https://tanaylab.github.io/misha/reference/gbins.summary.md)
+  and the array `stddev` slice function compute the standard deviation
+  accurately; it could be badly wrong (0, NA or off by orders of
+  magnitude) when values were large relative to their spread.
+  [`gbins.summary()`](https://tanaylab.github.io/misha/reference/gbins.summary.md)
+  and
+  [`gintervals.summary()`](https://tanaylab.github.io/misha/reference/gintervals.summary.md)
+  with `intervals.set.out` keep values in double precision instead of
+  float.
+
+- **Behavior fix:**
+  [`gintervals.random()`](https://tanaylab.github.io/misha/reference/gintervals.random.md)
+  samples every valid start with the same chance. Without a filter,
+  chromosomes were weighted by length rather than by number of starts,
+  which oversampled short ones; the last start of a chromosome was never
+  drawn; and with a filter it skipped the last `size` positions before
+  each filter, gaps shorter than `2 * size`, and chromosomes with a
+  single valid start.
+
 - Dense tracks: `exists`, `size` and the `*.pos` functions no longer
   report a value for a NaN bin when the iterator interval lies inside
   one bin.
@@ -66,6 +134,24 @@ them.
 - [`gtrack.array.extract()`](https://tanaylab.github.io/misha/reference/gtrack.array.extract.md)
   returns correct values when slice columns are given in descending
   order, and `min.pos.abs`/`min.pos.relative` work on array tracks.
+
+- Subsetting a
+  [`gintervals.to_mat()`](https://tanaylab.github.io/misha/reference/gintervals.to_mat.md)
+  matrix by row names no longer turns its intervals into NA.
+
+- [`gintervals.force_range()`](https://tanaylab.github.io/misha/reference/gintervals.force_range.md)
+  keeps intervals whose chromosome is an alias (e.g. “1” for chr1).
+
+- `gintervals.neighbors(intervals.set.out =)` saves the same column
+  names as the in-memory result.
+
+- The docs of
+  [`gquantiles()`](https://tanaylab.github.io/misha/reference/gquantiles.md),
+  [`gintervals.quantiles()`](https://tanaylab.github.io/misha/reference/gintervals.quantiles.md)
+  and
+  [`gbins.quantiles()`](https://tanaylab.github.io/misha/reference/gbins.quantiles.md)
+  say that values are kept with float precision (about 7 significant
+  digits).
 
 ## misha 5.14.4
 

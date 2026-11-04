@@ -62,7 +62,11 @@ gintervals.load_chain(
 
 A data frame representing assembly conversion table with columns: chrom,
 start, end, strand, chromsrc, startsrc, endsrc, strandsrc, chain_id,
-score.
+score. Coordinates on both genomes are on the forward strand. 'strand'
+is the orientation of the target relative to the source (1: same
+direction, -1: reversed), and 'strandsrc' is always 1: a chain block
+whose reference strand is "-" in the file is reported with the strands
+combined.
 
 ## Details
 

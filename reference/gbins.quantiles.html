@@ -104,6 +104,8 @@ and bin.</p>
 interval the value of 'bin_expr' is calculated and assigned to the
 corresponding bin determined by 'breaks'. The quantiles of 'expr' are
 calculated then separately for each bin.</p>
+<p>Values are kept with float precision (about 7 significant digits), so the
+quantiles of values with more significant digits are rounded.</p>
 <p>The bins can be multi-dimensional depending on the number of
 'bin_expr'-'breaks' pairs.</p>
 <p>The range of bins is determined by 'breaks' argument. For example:

@@ -19,7 +19,11 @@ gintervals.as_chain(
 - intervals:
 
   a data frame with chain columns: chrom, start, end, strand, chromsrc,
-  startsrc, endsrc, strandsrc, chain_id, score
+  startsrc, endsrc, strandsrc, chain_id, score. Coordinates are on the
+  forward strand of each genome. Strands are 1 (forward) or -1
+  (reverse); a strand of 0 is treated as forward. Liftover uses only the
+  relative orientation: a block is reversed when exactly one of 'strand'
+  and 'strandsrc' is -1.
 
 - src_overlap_policy:
 
@@ -62,11 +66,11 @@ chain_data <- data.frame(
     chrom = "chr1",
     start = 1000,
     end = 2000,
-    strand = 0,
+    strand = 1,
     chromsrc = "chr1",
     startsrc = 5000,
     endsrc = 6000,
-    strandsrc = 0,
+    strandsrc = 1,
     chain_id = 1L,
     score = 1000.0
 )

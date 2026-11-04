@@ -95,6 +95,8 @@ columns representing quantiles for each percentile.</p>
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
     <p>This function calculates quantiles of 'expr' for each interval in
 'intervals'.</p>
+<p>Values are kept with float precision (about 7 significant digits), so the
+quantiles of values with more significant digits are rounded.</p>
 <p>If 'intervals.set.out' is not 'NULL' the result is saved as an intervals
 set. Use this parameter if the result size exceeds the limits of the
 physical memory.</p>

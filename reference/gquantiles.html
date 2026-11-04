@@ -87,6 +87,8 @@ implicitly based on track expression.</p></dd>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
     <p>This function calculates the quantiles for the given percentiles.</p>
+<p>Values are kept with float precision (about 7 significant digits), so the
+quantiles of values with more significant digits are rounded.</p>
 <p>If data size exceeds the limit (see: 'getOption(gmax.data.size)'), the data
 is randomly sampled to fit the limit. A warning message is generated. Call
 <code><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed()</a></code> before this function to make the sample reproducible.</p>

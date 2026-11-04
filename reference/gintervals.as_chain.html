@@ -63,7 +63,10 @@ and adding chain attributes.</p>
 
 <dl><dt id="arg-intervals">intervals<a class="anchor" aria-label="anchor" href="#arg-intervals"></a></dt>
 <dd><p>a data frame with chain columns: chrom, start, end, strand,
-chromsrc, startsrc, endsrc, strandsrc, chain_id, score</p></dd>
+chromsrc, startsrc, endsrc, strandsrc, chain_id, score. Coordinates are on the
+forward strand of each genome. Strands are 1 (forward) or -1 (reverse); a strand
+of 0 is treated as forward. Liftover uses only the relative orientation: a block
+is reversed when exactly one of 'strand' and 'strandsrc' is -1.</p></dd>
 
 
 <dt id="arg-src-overlap-policy">src_overlap_policy<a class="anchor" aria-label="anchor" href="#arg-src-overlap-policy"></a></dt>
@@ -106,11 +109,11 @@ score columns.</p>
 <span class="r-in"><span>    chrom <span class="op">=</span> <span class="st">"chr1"</span>,</span></span>
 <span class="r-in"><span>    start <span class="op">=</span> <span class="fl">1000</span>,</span></span>
 <span class="r-in"><span>    end <span class="op">=</span> <span class="fl">2000</span>,</span></span>
-<span class="r-in"><span>    strand <span class="op">=</span> <span class="fl">0</span>,</span></span>
+<span class="r-in"><span>    strand <span class="op">=</span> <span class="fl">1</span>,</span></span>
 <span class="r-in"><span>    chromsrc <span class="op">=</span> <span class="st">"chr1"</span>,</span></span>
 <span class="r-in"><span>    startsrc <span class="op">=</span> <span class="fl">5000</span>,</span></span>
 <span class="r-in"><span>    endsrc <span class="op">=</span> <span class="fl">6000</span>,</span></span>
-<span class="r-in"><span>    strandsrc <span class="op">=</span> <span class="fl">0</span>,</span></span>
+<span class="r-in"><span>    strandsrc <span class="op">=</span> <span class="fl">1</span>,</span></span>
 <span class="r-in"><span>    chain_id <span class="op">=</span> <span class="fl">1L</span>,</span></span>
 <span class="r-in"><span>    score <span class="op">=</span> <span class="fl">1000.0</span></span></span>
 <span class="r-in"><span><span class="op">)</span></span></span>
