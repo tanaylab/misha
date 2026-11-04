@@ -126,6 +126,20 @@ test_that("a chrom column that is not character or factor is rejected without le
     expect_identical(.glifetime_counters(), c(ref_count = 0L, protect_count = 0L))
 })
 
+test_that("a multitasked misha call inside a multitasked gintervals.mapply FUN runs serially", {
+    withr::local_options(gmultitasking = TRUE, gmax.processes = 4, gmin.scope4process = 100)
+    inner <- gintervals(c(1, 2), 0, 1e6)
+    expected <- unname(quantile(gextract("test.fixedbin", inner, iterator = 50)$test.fixedbin, 0.5, na.rm = TRUE, type = 1))
+    iv <- giterator.intervals(intervals = gintervals(1, 0, 360000), iterator = 10000)
+    res <- gintervals.mapply(
+        function(x) gquantiles("test.fixedbin", 0.5, inner, iterator = 50)[[1]],
+        "test.fixedbin",
+        intervals = iv, iterator = 50
+    )
+    expect_equal(nrow(res), 36)
+    expect_equal(res$value, rep(expected, 36), tolerance = 1e-6)
+})
+
 test_that("gintervals.load_chain accepts an integer min_score", {
     local_db_state()
     setup_db(list(">chr1\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n"))

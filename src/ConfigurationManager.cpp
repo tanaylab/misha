@@ -12,11 +12,20 @@ using namespace rdb;
 
 bool ConfigurationManager::get_multitasking() const
 {
+	// A call nested in another misha call (made by R code that the outer call runs, such as
+	// the FUN of gintervals.mapply) does not multitask: the shared memory, semaphores and kid
+	// slots belong to the outermost call, and a nested prepare4multitasking() would reuse them.
+	if (RdbInitializer::get_ref_count() > 1)
+		return false;
+
 	if (m_multitasking < 0) {
 		SEXP r_multitasking = Rf_GetOption1(Rf_install("gmultitasking"));
 
-		if (Rf_isLogical(r_multitasking))
+		if (Rf_isLogical(r_multitasking) && Rf_length(r_multitasking) >= 1) {
+			if (LOGICAL(r_multitasking)[0] == NA_LOGICAL)
+				verror("options(gmultitasking) must be TRUE or FALSE, not NA");
 			m_multitasking = (int)LOGICAL(r_multitasking)[0];
+		}
 		else
 			m_multitasking = false;
 	}
