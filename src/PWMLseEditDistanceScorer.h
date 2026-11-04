@@ -128,13 +128,6 @@ private:
      */
     float encode_position(size_t index, size_t target_length, size_t motif_length, int direction) const;
 
-    /**
-     * Compute per-window PWM score for a given sequence and direction
-     * @param seq The full sequence
-     * @param reverse Whether to reverse-complement
-     * @return PWM score for this window
-     */
-    float compute_window_score(const char* window_start, bool reverse) const;
 
     struct LseResult {
         float min_edits = std::numeric_limits<float>::quiet_NaN();
@@ -152,7 +145,29 @@ private:
      */
     LseResult compute_lse_edit_distance(const std::string& seq,
                                          size_t interval_length,
-                                         bool reverse);
+                                         bool reverse,
+                                         bool joint = false);
+
+    // Windows of one search: forward windows w = p for each start p, and, in a joint search (bidirect), the
+    // reverse-strand windows w = N + p of the same starts, read on the same forward sequence, so that one
+    // substitution changes both strands and F is the strand-combined LSE the pwm vtrack returns.
+    int m_ndirs = 1;
+
+    // m_logp[i * 5 + b]: log-probability of base b (0-3) in motif column i; b = 4 is an unknown base (the
+    // column mean, as single precision computed it before)
+    std::vector<double> m_logp;
+
+    // Score of window w at sequence position q holding base b
+    inline double win_score(int w, int q, int b, int N, int L) const {
+        if (w < N)
+            return m_logp[(q - w) * 5 + b];
+        return m_logp[(L - 1 - (q - (w - N))) * 5 + (b == 4 ? 4 : 3 - b)];
+    }
+
+    // Reported position of an edit at q to base y. direction is the pass (1 or -1) of a one-strand search;
+    // 0 marks a joint search, where the edit moves both strands and is signed by the one it moves more.
+    float edit_position(int q, int y, const std::vector<int>& seq_bases, const std::vector<double>& A_p,
+                        int N, int L, int direction) const;
 
     /**
      * Initialize per-start scores and partition function

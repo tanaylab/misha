@@ -479,15 +479,13 @@ test_that("gseq.pwm accepts data frame PSSM inputs", {
     )
 
 
-    # Neutral character handling
+    # Neutral character handling: by default a window with N is left out (as in the pwm vtracks);
+    # listing N as neutral scores it with the column mean instead
     neutral_seq <- "ANNT"
     default_neutral <- gseq.pwm(neutral_seq, pssm, mode = "max", prior = 0)
     no_neutral <- gseq.pwm(neutral_seq, pssm, mode = "max", prior = 0, neutral_chars = character())
-    expect_true(default_neutral > no_neutral)
-    expect_equal(
-        default_neutral,
-        gseq.pwm(neutral_seq, pssm, mode = "max", prior = 0, neutral_chars = c("N", "n", "*"))
-    )
+    expect_equal(default_neutral, no_neutral)
+    expect_true(gseq.pwm(neutral_seq, pssm, mode = "max", prior = 0, neutral_chars = c("N", "n", "*")) > default_neutral)
 
     df_modes <- list(
         lse = gseq.pwm(seqs, as.data.frame(pssm), mode = "lse", prior = 0),

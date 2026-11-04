@@ -11,7 +11,8 @@ test_that("gtrack.create_pwm_energy works", {
     gtrack.create_pwm_energy(tmptrack, "", "misha_motifs", 0, 0.02, iterator = 50)
     r <- gextract(tmptrack, .misha$ALLGENOME, colnames = "test.tmptrack")
     .misha$ALLGENOME <- allgenome
-    expect_regression(r, "gtrack.create_pwm_energy")
+    # _v2: since 5.15.0 a window holding N (or another non-ACGT base) is not scored
+    expect_regression(r, "gtrack.create_pwm_energy_v2")
 })
 
 test_that("gtrack.create_pwm_energy multitasking matches sequential on an indexed database", {

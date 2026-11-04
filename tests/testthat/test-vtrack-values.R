@@ -397,7 +397,9 @@ test_that("value-based vtrack relative positions stay iterator-relative under fi
     iter_int <- gintervals("chr1", 50, 200)
     res <- gextract("test.filter.pos.vt", intervals = iter_int, iterator = iter_int, colnames = "value")
 
-    expect_equal(res$value, 50)
+    # The unmasked part is [120, 200): the value's first unmasked base is 120, reported relative to the
+    # iterator start (50), as a dense track reports it
+    expect_equal(res$value, 70)
 
     gvtrack.rm("test.filter.pos.vt")
 })

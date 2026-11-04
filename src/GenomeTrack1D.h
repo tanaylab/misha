@@ -8,8 +8,10 @@
 #ifndef GENOMETRACK1D_H_
 #define GENOMETRACK1D_H_
 
+#include <algorithm>
 #include <cstdint>
 #include <limits>
+#include <vector>
 #include "GenomeTrack.h"
 #include "GInterval.h"
 #include "StreamPercentiler.h"
@@ -77,6 +79,13 @@ public:
 	// Access to stream percentiler for combining quantiles across intervals
 	const StreamPercentiler<float>& get_percentiler() const { return m_sp; }
 
+	// The track item (dense bin, or sparse, array or in-memory interval) that holds coord on chromid, if any
+	virtual bool item_at(int chromid, int64_t coord, int64_t &start, int64_t &end) { return false; }
+
+	// The filter's unmasked parts (sorted, disjoint), each with the item it shares with the part before it cut off,
+	// so that reading the parts one by one reads an item that the filter splits only once.
+	std::vector<GInterval> parts_reading_items_once(const std::vector<GInterval> &parts);
+
 	const string &file_name() const { return m_bfile.file_name(); }
 
 protected:
@@ -110,10 +119,42 @@ protected:
 		m_last_first_pos = numeric_limits<double>::quiet_NaN();
 		m_last_last_pos = numeric_limits<double>::quiet_NaN();
 	}
+
+	// item_at over intervals sorted by start that do not overlap each other
+	static bool interval_at(std::vector<GInterval>::const_iterator begin, std::vector<GInterval>::const_iterator end,
+	                        int64_t coord, int64_t &start, int64_t &finish);
 };
 
 
 //--------------------------------------------- IMPLEMENTATION -----------------------------------------------------------
+
+inline std::vector<GInterval> GenomeTrack1D::parts_reading_items_once(const std::vector<GInterval> &parts)
+{
+	std::vector<GInterval> res;
+	res.reserve(parts.size());
+	for (size_t i = 0; i < parts.size(); ++i) {
+		GInterval part = parts[i];
+		int64_t item_start, item_end;
+		// An item holding this part's start that begins before the previous part ends overlaps that part as well
+		// and was read with it (or, if that part was cut away entirely, with the part before it).
+		if (i && item_at(part.chromid, part.start, item_start, item_end) && item_start < parts[i - 1].end)
+			part.start = item_end;
+		if (part.start < part.end)
+			res.push_back(part);
+	}
+	return res;
+}
+
+inline bool GenomeTrack1D::interval_at(std::vector<GInterval>::const_iterator begin, std::vector<GInterval>::const_iterator end,
+                                       int64_t coord, int64_t &start, int64_t &finish)
+{
+	auto it = std::upper_bound(begin, end, coord, [](int64_t c, const GInterval &interv) { return c < interv.start; });
+	if (it == begin || (--it)->end <= coord)
+		return false;
+	start = it->start;
+	finish = it->end;
+	return true;
+}
 
 inline void GenomeTrack1D::register_quantile(uint64_t rnd_sampling_buf_size, uint64_t lowest_vals_buf_size, uint64_t highest_vals_buf_size)
 {

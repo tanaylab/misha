@@ -40,6 +40,13 @@ determined by 'pssmset' key and data files ('pssmset.key' and
 'pssmset.data'). These two files must be located in 'GROOT/pssms' directory.
 The type of the created track is determined by the type of the iterator.
 'description' is added as a track attribute.
+
+Each value is the log-sum-exp of the PSSM log-likelihoods of the windows
+starting in the iterator interval. A window holding \code{N} or any other
+character that is not A, C, G or T is not scored, as in the \code{pwm}
+virtual track. An interval none of whose windows can be scored gets \code{NaN}:
+the \code{pwm} virtual track returns \code{-Inf} for it, and a track stores an
+infinite value as \code{NaN}.
 }
 \examples{
 \donttest{

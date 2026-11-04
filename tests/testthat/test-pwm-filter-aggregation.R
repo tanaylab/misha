@@ -325,8 +325,9 @@ test_that("a filtered pwm.count separates 'counted nothing' from 'nothing to cou
             info = paste("no anchor in any part", fn)
         )
 
-        # An N part is scorable and merely hopeless - a PSSM charges an N the
-        # mean of its column - so this is a real count of zero and must stay 0.
+        # An N part holds anchors, none of them scorable (a window with an N is
+        # not scored), so the count is a real 0; pwm and pwm.max are -Inf, and
+        # pwm.max.pos has no window to name.
         remove_all_vtracks()
         gvtrack.create("t", NULL, fn, params = list(
             pssm = pssm, bidirect = FALSE, strand = 1,
@@ -336,8 +337,10 @@ test_that("a filtered pwm.count separates 'counted nothing' from 'nothing to cou
         got <- gextract("t", gap, iterator = gap)$t
         if (fn == "pwm.count") {
             expect_equal(got, 0, info = paste("assembly gap", fn))
+        } else if (fn == "pwm.max.pos") {
+            expect_true(is.na(got), info = paste("assembly gap", fn))
         } else {
-            expect_false(is.na(got), info = paste("assembly gap", fn))
+            expect_equal(got, -Inf, info = paste("assembly gap", fn))
         }
     }
 })

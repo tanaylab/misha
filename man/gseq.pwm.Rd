@@ -21,7 +21,7 @@ gseq.pwm(
   return_strand = FALSE,
   skip_gaps = TRUE,
   gap_chars = c("-", "."),
-  neutral_chars = c("N", "n", "*"),
+  neutral_chars = character(0),
   neutral_chars_policy = c("average", "log_quarter", "na"),
   prior = 0.01
 )
@@ -70,13 +70,15 @@ scanning. Windows are w consecutive non-gap bases (default: TRUE)}
 
 \item{gap_chars}{character vector; which characters count as gaps (default: c("-", "."))}
 
-\item{neutral_chars}{character vector; bases treated as unknown and scored with the average
-log probability per position (default: c("N", "n", "*"))}
+\item{neutral_chars}{character vector; characters to score as unknown bases, by
+\code{neutral_chars_policy}, instead of leaving their windows out. Default: none, so a
+window holding \code{N} or any other non-ACGT character is not scored, as in the PWM
+virtual tracks. Pass e.g. \code{c("N", "n", "*")} to score them.}
 
-\item{neutral_chars_policy}{character string; how to treat neutral characters. One of
-\code{"average"} (default; use the column's mean log-probability), \code{"log_quarter"}
-(always use \code{log(1/4)}), or \code{"na"} (return NA when a neutral character is
-encountered in the scanning window).}
+\item{neutral_chars_policy}{character string; how to score the characters listed in
+\code{neutral_chars}. One of \code{"average"} (the column's mean log-probability),
+\code{"log_quarter"} (always \code{log(1/4)}), or \code{"na"} (return NA when one is in the
+scanning window). Has no effect when \code{neutral_chars} is empty.}
 
 \item{prior}{numeric; pseudocount added to frequencies (default: 0.01). Set to 0 for no pseudocounts.}
 }
@@ -104,10 +106,13 @@ Windows are defined as w consecutive non-gap bases. All positions (\code{pos}) a
 as 1-based indices on the original full sequence (including gaps). \code{start_pos} and
 \code{end_pos} are interpreted as physical coordinates on the full sequence.
 
-Neutral characters (\code{neutral_chars}, default \code{c("N", "n", "*")}) are treated as
-unknown bases in both orientations. Each neutral contributes the mean log-probability of the
-corresponding PSSM column, yielding identical penalties on forward and reverse strands without
-hard-coded background scores.
+By default a window holding \code{N} or any other character that is not A, C, G or T (in
+either case) is not scored on either strand: it is left out, exactly as the \code{pwm},
+\code{pwm.max}, \code{pwm.max.pos} and \code{pwm.count} virtual tracks leave it out, and a
+sequence with no scorable window gives \code{-Inf} for \code{"lse"} and \code{"max"},
+\code{NA} for \code{"pos"} and \code{0} for \code{"count"}. Characters listed in
+\code{neutral_chars} are instead scored as unknown bases, the same on both strands, as
+\code{neutral_chars_policy} says.
 
 Under \code{bidirect = TRUE} the forward and reverse-complement matches are
 two readings of the same window, and every mode but \code{"pos"} combines
@@ -116,7 +121,8 @@ them at each window by log-sum-exp, after any spatial weights are applied:
 takes the largest of them, and \code{"count"} thresholds each one once, so a
 window is at most a single hit however well its reverse complement matches it.
 That is the same union the \code{pwm}, \code{pwm.max} and \code{pwm.count}
-virtual tracks take, and over the same windows \code{gseq.pwm()} agrees with
+virtual tracks take, and over the same windows, with the default \code{neutral_chars}, on a
+sequence read from the genome (which holds no gap characters), \code{gseq.pwm()} agrees with
 them to the precision the two share - the virtual tracks accumulate in single
 precision and \code{gseq.pwm()} in double, so expect agreement to about
 \code{1e-5} relative, not to the last bit. \code{mode = "pos"} instead takes
