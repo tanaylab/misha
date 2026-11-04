@@ -13,8 +13,10 @@ gintervals.as_chain(
 }
 \arguments{
 \item{intervals}{a data frame with chain columns: chrom, start, end, strand,
-chromsrc, startsrc, endsrc, strandsrc, chain_id, score. Strands are 1 (forward)
-or -1 (reverse); a strand of 0 is treated as forward.}
+chromsrc, startsrc, endsrc, strandsrc, chain_id, score. Coordinates are on the
+forward strand of each genome. Strands are 1 (forward) or -1 (reverse); a strand
+of 0 is treated as forward. Liftover uses only the relative orientation: a block
+is reversed when exactly one of 'strand' and 'strandsrc' is -1.}
 
 \item{src_overlap_policy}{source overlap policy: "error", "keep", or "discard"}
 

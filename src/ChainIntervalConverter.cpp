@@ -76,7 +76,9 @@ void ChainIntervalConverter::convert_rchain_intervs(SEXP rchain, rdb::ChainInter
 		int tgt_strand = (tgt_strand_val == -1) ? 1 : 0;
 		int src_strand = (src_strand_val == -1) ? 1 : 0;
 
-		ChainInterval interval(intervs[i].chromid, intervs[i].start, intervs[i].end, tgt_strand, src_chromid, src_start, src_strand);
+		// Liftover reads only the target strand, as the orientation of the target relative to the
+		// source; coordinates on both sides are forward-strand. Fold the source strand into it.
+		ChainInterval interval(intervs[i].chromid, intervs[i].start, intervs[i].end, tgt_strand ^ src_strand, src_chromid, src_start, 0);
 
 		// Read chain_id and score from R object if available
 		if (Rf_isReal(chain_ids))
