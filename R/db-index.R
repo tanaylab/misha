@@ -892,8 +892,19 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
 
         idx_path_1d <- file.path(intervset_path, "intervals.idx")
         idx_path_2d <- file.path(intervset_path, "intervals2d.idx")
-        pair_files <- list.files(intervset_path, pattern = "-")
-        has_2d <- length(pair_files) > 0
+        # 1D or 2D as the set's .meta says (chrom1 in its stats: .gintervals.big.is2d); a contig name may
+        # have a "-", as a chromosome pair's file has. By the files only without a readable .meta.
+        read_meta <- function(path) {
+            f <- file(path, "rb")
+            on.exit(close(f))
+            unserialize(f)
+        }
+        meta <- tryCatch(read_meta(file.path(intervset_path, ".meta")), error = function(e) NULL, warning = function(w) NULL)
+        has_2d <- if (!is.null(meta$stats)) {
+            "chrom1" %in% colnames(meta$stats)
+        } else {
+            length(list.files(intervset_path, pattern = "-")) > 0
+        }
 
         if (has_2d) {
             if (file.exists(idx_path_2d)) {

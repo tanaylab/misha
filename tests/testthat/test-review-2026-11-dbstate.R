@@ -247,3 +247,19 @@ test_that("gdataset.save keeps the attributes of a small interval set", {
     gdataset.load(file.path(td, "DS"))
     expect_equal(gintervals.attr.get("ii", "who"), "DA")
 })
+
+test_that("gdb.convert_to_indexed converts a 1D set over a contig whose name has a dash as 1D", {
+    local_db_state()
+    db <- create_test_db(file.path(withr::local_tempdir(), "db"), data.frame(chrom = c("chr1", "HLA-A", "scaf-2"), size = c(10000, 5000, 5000)))
+    suppressMessages(gsetroot(db))
+    d <- data.frame(chrom = rep(c("chr1", "HLA-A", "scaf-2"), each = 5), start = rep(seq(0, 400, 100), 3))
+    d$end <- d$start + 50
+    withr::with_options(list(gmax.data.size = 4), gintervals.save("dash", d))
+    expect_true(file.exists(file.path(db, "tracks", "dash.interv", "HLA-A")))
+
+    expect_no_warning(suppressMessages(gdb.convert_to_indexed(convert_intervals = TRUE, force = TRUE, remove_old_files = TRUE)))
+    expect_true(file.exists(file.path(db, "tracks", "dash.interv", "intervals.idx")))
+    suppressMessages(gsetroot(db))
+    expect_equal(nrow(gintervals.load("dash", chrom = "HLA-A")), 5)
+    expect_equal(nrow(gintervals.load("dash")), 15)
+})
