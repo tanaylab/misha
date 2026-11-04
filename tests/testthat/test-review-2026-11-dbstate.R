@@ -174,3 +174,23 @@ test_that("ggenome.implant from a donor database leaves the session as it was", 
     expect_equal(.misha$GROOT, work)
     expect_equal(gdataset.ls(), datasets)
 })
+
+test_that("a failed creation over the name of a dataset track leaves that track readable", {
+    local_db_state()
+    td <- withr::local_tempdir()
+    ds <- review_db(td, "ds")
+    gtrack.create_sparse("dtrack", "", gintervals("chr1", 0, 10), 5)
+    work <- review_db(td, "work")
+    gdataset.load(ds)
+
+    expect_error(gtrack.create("dtrack", "", "no_such_track + 1"))
+    expect_equal(gtrack.dataset("dtrack"), ds)
+    expect_equal(gextract("dtrack", gintervals("chr1", 0, 10))$dtrack, 5)
+    expect_false(dir.exists(file.path(work, "tracks", "dtrack.track")))
+
+    # a successful one writes into the working database, which then wins
+    gtrack.create_sparse("dtrack", "", gintervals("chr1", 0, 10), 7)
+    expect_equal(gtrack.dataset("dtrack"), work)
+    expect_equal(gextract("dtrack", gintervals("chr1", 0, 10))$dtrack, 7)
+    expect_equal(sum(gtrack.ls() == "dtrack"), 1)
+})

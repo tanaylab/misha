@@ -428,8 +428,20 @@ gdb.reload <- function(rescan = TRUE) {
             stop(sprintf("Track %s already exists", track), call. = FALSE)
         }
 
+        # The name is taken off the dataset for the creation to write into the working database
+        # (.track_dir()); a successful one maps it there (.gdb.add_track()). If the creation fails, the
+        # dataset's track is mapped back when the creating function exits.
         track_db <- track_db[names(track_db) != track]
         assign("GTRACK_DATASET", track_db, envir = .misha)
+        restore <- function() {
+            track_db <- get("GTRACK_DATASET", envir = .misha)
+            if (!is.null(track_db) && !(track %in% names(track_db)) && track %in% get("GTRACKS", envir = .misha)) {
+                track_db[[track]] <- existing_db
+                assign("GTRACK_DATASET", track_db, envir = .misha)
+            }
+        }
+        # (the function itself in the call, not a name looked up in the caller's frame)
+        do.call(on.exit, list(as.call(list(restore)), add = TRUE), envir = parent.frame())
     }
 
     # In a subdirectory (gdir.cd()), a track of an indexed working database is written in the session's

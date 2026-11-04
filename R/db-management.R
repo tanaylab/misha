@@ -269,7 +269,8 @@
     trackdir <- .track_dir(track, db)
 
     if (file.exists(trackdir)) {
-        tracks <- sort(c(get("GTRACKS", envir = .misha), track))
+        # (the name may be listed already: a track of a dataset that this one now shadows)
+        tracks <- sort(unique(c(get("GTRACKS", envir = .misha), track)))
         intervals <- sort(get("GINTERVS", envir = .misha))
 
         res <- intersect(tracks, intervals)
@@ -410,7 +411,7 @@
     fname <- sprintf("%s.interv", paste(get("GWD", envir = .misha), gsub("\\.", "/", intervals.set), sep = "/"))
     if (file.exists(fname)) {
         tracks <- get("GTRACKS", envir = .misha)
-        intervals <- sort(c(get("GINTERVS", envir = .misha), intervals.set))
+        intervals <- sort(unique(c(get("GINTERVS", envir = .misha), intervals.set)))
 
         res <- intersect(tracks, intervals)
         if (length(res) > 0) {
