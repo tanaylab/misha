@@ -210,6 +210,7 @@ private:
     
     // Utilities
     inline float get_spatial_log_factor(size_t pos_index) const;
+    inline size_t spat_pos(size_t i) const;
 
     // Core members
     DnaPSSM m_pssm;
@@ -218,6 +219,12 @@ private:
 
     // See get_last_max_score(). Reset at the top of every score_interval().
     double m_last_max_score = -std::numeric_limits<double>::infinity();
+
+    // spat_min/spat_max as given: offsets of the first and last anchor from the interval start, in forward
+    // order. On the minus strand the target is reverse-complemented, and score_interval() sets m_pssm's range
+    // to the same anchors in target indices.
+    int m_fwd_min_range = 0;
+    int m_fwd_max_range = DnaPSSM::NO_RANGE_CAP;
 
     // Spatial weighting
     bool m_use_spat = false;

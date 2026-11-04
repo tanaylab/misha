@@ -135,6 +135,8 @@ PWMScorer::PWMScorer(const DnaPSSM& pssm, const std::string& genome_root, bool e
                      const std::vector<float>& spat_factor, int spat_bin_size, float score_thresh)
     : GenomeSeqScorer(genome_root, extend, strand), m_pssm(pssm), m_mode(mode), m_score_thresh(score_thresh)
 {
+    m_fwd_min_range = m_pssm.get_min_range();
+    m_fwd_max_range = m_pssm.get_max_range();
     if (!spat_factor.empty()) {
         m_use_spat = true;
         m_spat_bin_size = std::max(1, spat_bin_size);
@@ -152,6 +154,8 @@ PWMScorer::PWMScorer(const DnaPSSM& pssm, GenomeSeqFetch* shared_seqfetch, bool 
                      const std::vector<float>& spat_factor, int spat_bin_size, float score_thresh)
     : GenomeSeqScorer(shared_seqfetch, extend, strand), m_pssm(pssm), m_mode(mode), m_score_thresh(score_thresh)
 {
+    m_fwd_min_range = m_pssm.get_min_range();
+    m_fwd_max_range = m_pssm.get_max_range();
     if (!spat_factor.empty()) {
         m_use_spat = true;
         m_spat_bin_size = std::max(1, spat_bin_size);
@@ -185,6 +189,16 @@ inline float PWMScorer::get_spatial_log_factor(size_t pos_index) const
         bin = m_spat_log_factors.size() - 1;
     }
     return m_spat_log_factors[bin];
+}
+
+// Spatial position of the anchor at target index i: its offset from the first anchor of the scan range in
+// forward (genomic) order, so spatial bins count from the interval's 5' start on either strand. On the minus
+// strand the target is reverse-complemented and that anchor sits at the range's last target index.
+inline size_t PWMScorer::spat_pos(size_t i) const
+{
+    if (m_strand == -1)
+        return size_t(m_pssm.get_max_range()) - i;
+    return i - size_t(std::max(0, m_pssm.get_min_range()));
 }
 
 // Compute position result with strand and direction adjustments
@@ -277,7 +291,7 @@ double PWMScorer::count_motif_hits_with_spatial(const std::string& target, size_
     // Per-position union (LSE) across permitted strands, with spatial offset.
     // Bins count from the window start, as in the other spatial paths.
     for (size_t i = lo; i <= max_pos; ++i) {
-        float spat_log = get_spatial_log_factor(i - lo);
+        float spat_log = get_spatial_log_factor(spat_pos(i));
         float comb = -std::numeric_limits<float>::infinity();
         bool have = false;
         if (scan_fwd) {
@@ -313,15 +327,8 @@ double PWMScorer::get_max_likelihood_pos_with_spatial(const std::string& target,
     bool check_forward = m_pssm.is_bidirect() || (m_strand != -1);
     bool check_reverse = m_pssm.is_bidirect() || (m_strand != 1);
 
-    int pos = 0;
     for (size_t i = min_i_idx; i <= max_i_idx; ++i) {
-        int spat_bin = int(pos / m_spat_bin_size);
-        if (spat_bin >= (int)m_spat_log_factors.size()) {
-            spat_bin = m_spat_log_factors.size() - 1;
-        }
-        pos++;
-
-        float spat_log = m_spat_log_factors[spat_bin];
+        float spat_log = get_spatial_log_factor(spat_pos(i));
 
         // Forward strand. Must go through the *_original helpers: when m_strand == -1
         // the target is already reverse-complemented, so calc_like() on it would score
@@ -398,15 +405,21 @@ double PWMScorer::score_with_spatial(const std::string& target, int64_t motif_le
         return std::numeric_limits<float>::quiet_NaN();
     }
 
-    if (m_mode == TOTAL_LIKELIHOOD) {
-        float energy;
-        m_pssm.integrate_energy_logspat(target, energy, m_spat_log_factors, m_spat_bin_size);
-        return energy;
-    }
-
-    if (m_mode == MAX_LIKELIHOOD) {
-        float energy;
-        m_pssm.integrate_energy_max_logspat(target, energy, m_spat_log_factors, m_spat_bin_size);
+    if (m_mode == TOTAL_LIKELIHOOD || m_mode == MAX_LIKELIHOOD) {
+        // Per anchor: the strand union (or the selected strand) plus its spatial weight; then log-sum-exp
+        // (pwm) or maximum (pwm.max) over the anchors of the scan range.
+        float energy = -std::numeric_limits<float>::infinity();
+        if (target.length() < size_t(motif_length))
+            return energy;
+        const size_t lo = std::max(0, m_pssm.get_min_range());
+        const size_t hi = m_pssm.max_offset(target.length());
+        for (size_t i = lo; i <= hi; ++i) {
+            const float v = pos_value_with_spat(m_pssm, target, i, m_strand, get_spatial_log_factor(spat_pos(i)));
+            if (m_mode == TOTAL_LIKELIHOOD)
+                log_sum_log(energy, v);
+            else if (v > energy)
+                energy = v;
+        }
         return energy;
     }
 
@@ -1016,6 +1029,20 @@ double PWMScorer::score_interval(const GInterval& interval, const GenomeChromKey
         const size_t motif_len = m_pssm.size();
 
         if (tlen >= motif_len) {
+            // On the minus strand the target is reverse-complemented: put the spat_min/spat_max range, which
+            // counts from the interval start, onto the target indices of the same anchors.
+            if (m_strand == -1) {
+                const int64_t last = int64_t(tlen) - int64_t(motif_len);
+                const int64_t fmin = std::max(0, m_fwd_min_range);
+                const int64_t fmax = std::min<int64_t>(m_fwd_max_range, last);
+                if (fmin > fmax) {
+                    m_slide.valid = false;
+                    m_spat_slide.valid = false;
+                    return std::numeric_limits<float>::quiet_NaN();
+                }
+                m_pssm.set_range(int(last - fmax), int(last - fmin));
+            }
+
             // Calculate allowed start range
             size_t i_min = std::max(0, m_pssm.get_min_range());
             size_t i_max = m_pssm.max_offset(tlen);
@@ -1659,8 +1686,9 @@ bool PWMScorer::can_use_spatial_sliding(const GInterval& orig, const GInterval& 
         return false;
     }
 
-    // Minus strand now supported with reverse sliding direction
-    // (no restriction needed)
+    // Not on the minus strand: its target is reverse-complemented, and the cache's bins run in target order,
+    // while spatial bins count from the interval's 5' start (spat_pos()). score_with_spatial() handles it.
+    if (m_strand == -1) return false;
 
     // MAX modes now correctly use LSE for bidirectional motifs
     // (no restriction needed)

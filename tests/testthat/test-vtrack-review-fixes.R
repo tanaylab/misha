@@ -260,6 +260,40 @@ vt_lse <- function(x) {
     m + log(sum(exp(x - m)))
 }
 
+test_that("pwm vtracks with bidirect = FALSE and strand = -1 count spatial bins and spat_min/spat_max from the 5' start", {
+    local_db_state()
+    vt_fix_db()
+    withr::defer(gvtrack.clear())
+    pssm <- vt_fix_pssm()
+    lp <- log(pssm)
+    L <- nrow(pssm)
+    bases <- strsplit(toupper(gseq.extract(gintervals("chr1", 3000, 3300))), "")[[1]]
+
+    # windows of 60 bp stepping by 3, so the sliding paths run too
+    starts <- 3100 + seq(0, 57, 3)
+    ivs <- gintervals("chr1", starts, starts + 60)
+    spat <- c(1, 50, 3)
+    gvtrack.create("m_pwm", NULL, "pwm", pssm = pssm, prior = 0, bidirect = FALSE, strand = -1, spat_factor = spat, spat_bin = 25L)
+    gvtrack.create("m_max", NULL, "pwm.max", pssm = pssm, prior = 0, bidirect = FALSE, strand = -1, spat_factor = spat, spat_bin = 25L)
+    gvtrack.create("m_pos", NULL, "pwm.max.pos", pssm = pssm, prior = 0, bidirect = FALSE, strand = -1, spat_factor = spat, spat_bin = 25L)
+    gvtrack.create("m_rpos", NULL, "pwm.max.pos", pssm = pssm, prior = 0, bidirect = FALSE, strand = -1, spat_min = 1, spat_max = 20)
+    gvtrack.create("m_rmax", NULL, "pwm.max", pssm = pssm, prior = 0, bidirect = FALSE, strand = -1, spat_min = 1, spat_max = 20)
+    r <- gextract(c("m_pwm", "m_max", "m_pos", "m_rpos", "m_rmax"), ivs, iterator = ivs)
+    r <- r[order(r$intervalID), ]
+
+    for (k in seq_along(starts)) {
+        anchors <- 0:59
+        sc <- vt_ref_window_scores(bases, lp, starts[k] - 3000 + anchors, -1)
+        w <- sc + log(spat[pmin(anchors %/% 25 + 1, length(spat))])
+        expect_equal(r$m_pwm[k], vt_lse(w), tolerance = 1e-4)
+        expect_equal(r$m_max[k], max(w), tolerance = 1e-4)
+        expect_equal(r$m_pos[k], which.max(w))
+        in_range <- anchors <= 20 - L
+        expect_equal(r$m_rmax[k], max(sc[in_range]), tolerance = 1e-4)
+        expect_equal(r$m_rpos[k], which.max(sc[in_range]))
+    }
+})
+
 test_that("pwm vtracks never score a window holding N or another non-ACGT base, on any path", {
     local_db_state()
     set.seed(5)
