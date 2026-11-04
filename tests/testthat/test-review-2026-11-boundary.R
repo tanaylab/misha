@@ -235,3 +235,13 @@ test_that("logical flags are TRUE or FALSE, not NA", {
     withr::defer(if (gtrack.exists("temp.review_smooth_na")) gtrack.rm("temp.review_smooth_na", force = TRUE))
     expect_error(gtrack.smooth("temp.review_smooth_na", "", "test.fixedbin", 1000, smooth_nans = NA), "nans")
 })
+
+test_that("computing a track's percentiles for a global.percentile vtrack keeps options(gmultitasking)", {
+    withr::defer(if (gtrack.exists("temp.review_pv")) gtrack.rm("temp.review_pv", force = TRUE))
+    gtrack.create_dense("temp.review_pv", "", gintervals(1, 0, 1e5), 1, 10000, 0)
+    gvtrack.create("review_pv", "temp.review_pv", "global.percentile")
+    withr::defer(gvtrack.rm("review_pv"))
+    withr::local_options(gmultitasking = TRUE)
+    gextract("review_pv", gintervals(1, 0, 1e5))
+    expect_true(getOption("gmultitasking"))
+})
