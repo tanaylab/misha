@@ -38,7 +38,7 @@ public:
     		return 1;
     	Rectangle shrinked_rect(rectangle);
     	band.shrink2intersected(shrinked_rect);
-    	return band.intersected_area(rectangle) / (double)rectangle.area();
+    	return band.intersected_area(shrinked_rect) / (double)rectangle.area();
     }
 };
 
