@@ -98,6 +98,8 @@ public:
 	void get_sliced_vals(GIntervals::const_iterator iinterval, vector<float> &vals, unsigned numcols);
 
 protected:
+	void init_read_once(const char *filename, int chromid);
+
 	static const int RECORD_SIZE;
 
 	GenomeTrackArrays          *m_master_obj;

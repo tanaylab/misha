@@ -93,14 +93,25 @@ void GenomeTrack::clear_index_cache() {
 }
 
 bool GenomeTrack::drop_stale_index(const std::string &track_dir) {
+	std::string cached;
+	{
+		std::lock_guard<std::mutex> lock(s_cache_mutex);
+		if (s_index_cache.find(track_dir) == s_index_cache.end())
+			return false;
+		auto it = s_index_stamp.find(track_dir);
+		if (it != s_index_stamp.end())
+			cached = it->second;
+	}
+	// the file is read without holding the lock
+	if (!cached.empty() && index_file_stamp(track_dir + "/track.idx") == cached)
+		return false;
 	std::lock_guard<std::mutex> lock(s_cache_mutex);
-	if (s_index_cache.find(track_dir) == s_index_cache.end())
-		return false;
 	auto it = s_index_stamp.find(track_dir);
-	if (it != s_index_stamp.end() && index_file_stamp(track_dir + "/track.idx") == it->second)
-		return false;
-	s_index_cache.erase(track_dir);
-	s_index_stamp.erase(track_dir);
+	// dropped unless another thread reloaded it meanwhile (then it is current already)
+	if (s_index_cache.find(track_dir) != s_index_cache.end() && (it == s_index_stamp.end() ? cached.empty() : it->second == cached)) {
+		s_index_cache.erase(track_dir);
+		s_index_stamp.erase(track_dir);
+	}
 	return true;
 }
 

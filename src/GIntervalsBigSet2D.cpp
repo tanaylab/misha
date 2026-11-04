@@ -76,14 +76,25 @@ void GIntervalsBigSet2D::clear_index_cache() {
 }
 
 bool GIntervalsBigSet2D::drop_stale_index(const std::string &intervset_dir) {
+	std::string cached;
+	{
+		std::lock_guard<std::mutex> lock(s_cache_mutex);
+		if (s_index_cache.find(intervset_dir) == s_index_cache.end())
+			return false;
+		auto it = s_index_stamp.find(intervset_dir);
+		if (it != s_index_stamp.end())
+			cached = it->second;
+	}
+	// the file is read without holding the lock
+	if (!cached.empty() && index_file_stamp(intervset_dir + "/intervals2d.idx") == cached)
+		return false;
 	std::lock_guard<std::mutex> lock(s_cache_mutex);
-	if (s_index_cache.find(intervset_dir) == s_index_cache.end())
-		return false;
 	auto it = s_index_stamp.find(intervset_dir);
-	if (it != s_index_stamp.end() && index_file_stamp(intervset_dir + "/intervals2d.idx") == it->second)
-		return false;
-	s_index_cache.erase(intervset_dir);
-	s_index_stamp.erase(intervset_dir);
+	// dropped unless another thread reloaded it meanwhile (then it is current already)
+	if (s_index_cache.find(intervset_dir) != s_index_cache.end() && (it == s_index_stamp.end() ? cached.empty() : it->second == cached)) {
+		s_index_cache.erase(intervset_dir);
+		s_index_stamp.erase(intervset_dir);
+	}
 	return true;
 }
 
