@@ -105,11 +105,13 @@ uint64_t ConfigurationManager::get_max_data_size() const
 			double size = num_elt(r_max_data_size, 0);
 
 			// Casting NA, Inf, a negative value or one of 2^64 or more to uint64_t is undefined.
-			// Inf and any value a uint64_t cannot hold mean no limit. A value below 1 counts as 1,
+			// Inf and any value a uint64_t cannot hold mean no limit. A value in [0, 1) counts as 1,
 			// as in gtrack.liftover: 0 could not be told apart from "not read yet" above, and a
 			// quantile sampling buffer of size 0 crashed R.
 			if (std::isnan(size))
 				verror("options(gmax.data.size) must be a number, not NA");
+			if (size < 0)
+				verror("options(gmax.data.size) must not be negative (got %g)", size);
 			if (size >= (double)misha::config::UNLIMITED)
 				m_max_data_size = misha::config::UNLIMITED;
 			else
