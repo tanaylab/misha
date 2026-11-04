@@ -73,7 +73,7 @@ test_that("gtrack.2d.import_contacts reads a fends file not sorted by fend id", 
     expect_equal(got, expected)
 
     neg <- write_file("fend\tchr\tcoord\n-1\tchr1\t1000\n2\tchr1\t2000\n", ".tsv")
-    expect_error(gtrack.2d.import_contacts("neg_fend", "", contacts, neg), "fend is out of range")
+    expect_error(gtrack.2d.import_contacts("neg_fend", "", contacts, neg), "fend -1 is out of range")
     expect_false(gtrack.exists("neg_fend"))
 })
 
@@ -260,7 +260,7 @@ for (format in c("indexed", "per-chromosome")) {
         })
         expect_equal(nrow(gextract("rects_two", gintervals.2d.all())), 3)
 
-        none <- write_file(paste0(header, "chrBogus\t0\t10\tchr1\t0\t10\t1\n"), ".tsv")
+        none <- write_file(paste0(header, "chrBogus\t0\t10\tchrUn_q\t0\t10\t1\n"), ".tsv")
         expect_error(gtrack.2d.import("rects_none", "", none), "None of the chromosome names")
         expect_false(gtrack.exists("rects_none"))
 
@@ -331,4 +331,34 @@ test_that("gtrack.export_bedgraph writes each base once when the intervals overl
     expect_equal(res$start, seq(0, 70, 10))
     expect_equal(res$end, seq(10, 80, 10))
     expect_equal(res$value, 1:8)
+})
+
+test_that("gtrack.2d.import_contacts rejects fend ids too large to index and fend ids listed twice", {
+    import_test_db("indexed")
+    contacts <- write_file("fend1\tfend2\tcount\n1\t2\t3\n", ".tsv")
+
+    for (id in c("9223372036854775807", "99999999999999999999")) {
+        fends <- write_file(sprintf("fend\tchr\tcoord\n%s\tchr1\t100\n2\tchr1\t200\n", id), ".tsv")
+        expect_error(gtrack.2d.import_contacts("big_fend", "", contacts, fends), "fend .* is out of range")
+        expect_false(gtrack.exists("big_fend"))
+    }
+
+    dup <- write_file("fend\tchr\tcoord\n1\tchr1\t100\n2\tchr1\t200\n1\tchr2\t300\n", ".tsv")
+    expect_error(gtrack.2d.import_contacts("dup_fend", "", contacts, dup), "line 4: fend 1 appears more than once")
+    expect_false(gtrack.exists("dup_fend"))
+})
+
+test_that("2D imports say so when chromosome names matched but no record has both chromosomes in the database", {
+    import_test_db("indexed")
+
+    f <- write_file("chrom1\tstart1\tend1\tchrom2\tstart2\tend2\tvalue\nchrBogus\t0\t10\tchr1\t0\t10\t1\n", ".tsv")
+    expect_error(gtrack.2d.import("one_sided", "", f), "No interval of .* has both of its chromosomes in the genome database")
+    expect_error(gtrack.2d.import_contacts("one_sided", "", f), "No contact of .* has both of its chromosomes in the genome database")
+    expect_false(gtrack.exists("one_sided"))
+
+    # fends on known chromosomes, but no contact between two listed fends
+    fends <- write_file("fend\tchr\tcoord\n1\tchr1\t100\n2\tchrUn_x\t5\n", ".tsv")
+    contacts <- write_file("fend1\tfend2\tcount\n1\t2\t3\n1\t7\t1\n", ".tsv")
+    expect_error(suppressMessages(gtrack.2d.import_contacts("one_sided", "", contacts, fends)), "No contact of .* could be placed")
+    expect_false(gtrack.exists("one_sided"))
 })

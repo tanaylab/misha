@@ -10,6 +10,7 @@
 #include <fstream>
 #include <map>
 #include <numeric>
+#include <sstream>
 #include <unordered_map>
 
 #include "ConfigurationDefaults.h"
@@ -184,7 +185,7 @@ static string unknown_chroms_file_name(const string &dirname, int kid)
 	return dirname + "/.unknown_chroms." + to_string(kid);
 }
 
-void KidUnknownChroms::record(const string &chrom)
+void KidChroms::record(const string &chrom)
 {
 	if (seen.count(chrom) || (names.size() > (size_t)UnknownChroms::MAX_TRACKED && !UnknownChroms::is_primary_chrom_name(chrom)))
 		return;
@@ -192,13 +193,19 @@ void KidUnknownChroms::record(const string &chrom)
 	names.push_back(chrom);
 }
 
-void KidUnknownChroms::save(const string &dirname, int kid) const
+// The file holds a line of the matched chromosome ids, then a line per unresolved name
+void KidChroms::save(const string &dirname, int kid) const
 {
 	string filename = unknown_chroms_file_name(dirname, kid);
 	FILE *fp = fopen(filename.c_str(), "w");
 
 	if (!fp)
 		verror("Writing an intermediate file %s: %s\n", filename.c_str(), strerror(errno));
+	for (size_t chromid = 0; chromid < matched.size(); ++chromid) {
+		if (matched[chromid])
+			fprintf(fp, "%zu ", chromid);
+	}
+	fprintf(fp, "\n");
 	for (const string &name : names)
 		fprintf(fp, "%s\n", name.c_str());
 	bool failed = ferror(fp);
@@ -207,15 +214,18 @@ void KidUnknownChroms::save(const string &dirname, int kid) const
 		verror("Writing an intermediate file %s: %s\n", filename.c_str(), strerror(errno));
 }
 
-void load_unknown_chroms(const string &dirname, int num_kids, UnknownChroms &unknown)
+void load_kid_chroms(const string &dirname, int num_kids, set<int> &matched, UnknownChroms &unknown)
 {
 	for (int kid = 0; kid < num_kids; ++kid) {
 		string filename = unknown_chroms_file_name(dirname, kid);
 		ifstream file(filename);
 		string name;
 
-		if (!file)
+		if (!file || !getline(file, name))
 			verror("Reading an intermediate file %s: %s\n", filename.c_str(), strerror(errno));
+		istringstream ids(name);
+		for (int chromid; ids >> chromid; )
+			matched.insert(chromid);
 		while (getline(file, name))
 			unknown.record(name);
 		if (file.bad())
@@ -223,17 +233,6 @@ void load_unknown_chroms(const string &dirname, int num_kids, UnknownChroms &unk
 		file.close();
 		unlink(filename.c_str());
 	}
-}
-
-uint64_t pairs_num_chroms(const vector<PairFiles> &pairs)
-{
-	set<int> chromids;
-
-	for (const PairFiles &pair_files : pairs) {
-		chromids.insert(pair_files.chromid1);
-		chromids.insert(pair_files.chromid2);
-	}
-	return chromids.size();
 }
 
 string import_src_name(const vector<string> &files)
@@ -465,7 +464,7 @@ static bool read_input_files(IntervUtils &iu, SEXP _files, const vector<int64_t>
 {
 	Progress_reporter progress;
 	BinIntervalsFiles bin_intervals_files;
-	KidUnknownChroms unknown;
+	KidChroms chroms;
 	bool are_all_points = true;
 	int64_t start1, start2, end1, end2;
 	float val;
@@ -511,13 +510,10 @@ static bool read_input_files(IntervUtils &iu, SEXP _files, const vector<int64_t>
 			// there might be unrecognized chromosomes: skip them, and report them once the track is written
 			chromid1 = iu.get_chromkey().find_chromid(fields[GInterval2D::CHROM1]);
 			chromid2 = iu.get_chromkey().find_chromid(fields[GInterval2D::CHROM2]);
-			if (chromid1 < 0 || chromid2 < 0) {
-				if (chromid1 < 0)
-					unknown.record(fields[GInterval2D::CHROM1]);
-				if (chromid2 < 0)
-					unknown.record(fields[GInterval2D::CHROM2]);
+			chroms.note(chromid1, fields[GInterval2D::CHROM1]);
+			chroms.note(chromid2, fields[GInterval2D::CHROM2]);
+			if (chromid1 < 0 || chromid2 < 0)
 				continue;
-			}
 
 			start1 = strtoll(fields[GInterval2D::START1].c_str(), &endptr, 10);
 			if (*endptr || start1 < 0)
@@ -575,7 +571,7 @@ static bool read_input_files(IntervUtils &iu, SEXP _files, const vector<int64_t>
 		if (ifile->second->close())
 			verror("Writing an intermediate file %s: %s\n", ifile->second->file_name().c_str(), strerror(errno));
 	}
-	unknown.save(dirname, kid);
+	chroms.save(dirname, kid);
 
 	return are_all_points;
 }
@@ -730,12 +726,17 @@ SEXP gtrack_2d_import(SEXP _track, SEXP _files, SEXP _envir)
 			for (char kid_all_points : kids_all_points)
 				are_all_points &= (bool)kid_all_points;
 
-			load_unknown_chroms(dirname, bounds.size() - 1, unknown);
+			set<int> matched;
+			load_kid_chroms(dirname, bounds.size() - 1, matched, unknown);
 			pairs = list_pair_files(dirname);
-			num_matched = pairs_num_chroms(pairs);
+			num_matched = matched.size();
 			verify_chroms_matched(iu.get_chromkey(), srcname.c_str(), unknown, num_matched, _envir);
-			if (pairs.empty())
+			if (pairs.empty()) {
+				if (num_matched)
+					verror("No interval of %s has both of its chromosomes in the genome database, so nothing is left to import: a 2D track needs at least one interval",
+						   srcname.c_str());
 				verror("No intervals were read from %s: a 2D track needs at least one", srcname.c_str());
+			}
 			check_interrupt();
 		}
 
@@ -800,6 +801,8 @@ SEXP gtrack_2d_import(SEXP _track, SEXP _files, SEXP _envir)
 		rerror("%s", e.msg());
 	} catch (const bad_alloc &e) {
 		rerror("Out of memory");
+	} catch (const std::exception &e) {
+		rerror("%s", e.what());
 	}
 
 	return R_NilValue;
