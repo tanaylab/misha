@@ -988,6 +988,16 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
             stop(sprintf("Failed to copy %s into %s", item, dest_dir), call. = FALSE)
         }
     }
+    # file.copy() does not report an error that shows only when the copy is closed (a full disk):
+    # every file of the copy has the size of its source
+    src_files <- list.files(src_dir, all.files = TRUE, no.. = TRUE, recursive = TRUE)
+    differ <- src_files[file.size(file.path(src_dir, src_files)) != file.size(file.path(dest_dir, src_files)) |
+        is.na(file.size(file.path(dest_dir, src_files)))]
+    if (length(differ)) {
+        unlink(dest_dir, recursive = TRUE)
+        .gdb.invalidate_dir_cache(dest_dir)
+        stop(sprintf("Failed to copy %s into %s: the copy of %s is incomplete", src_dir, dest_dir, differ[1]), call. = FALSE)
+    }
     # dest_dir's layout is whatever we just copied in; a cache entry left
     # over from a previous track at this path would misroute reads.
     .gdb.invalidate_dir_cache(dest_dir)

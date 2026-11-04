@@ -645,3 +645,24 @@ test_that("a failed gtrack.copy(overwrite = TRUE) keeps what another session put
     expect_error(suppressWarnings(gtrack.copy("src", "orig", overwrite = TRUE)), "Failed to rename")
     expect_equal(readBin(file.path(tracks, "orig.track", "track.dat"), "raw", 1e6), other_bytes)
 })
+
+test_that("gtrack.copy stops on a short copy instead of committing it", {
+    local_db_state()
+    db <- review_db(withr::local_tempdir())
+    tracks <- file.path(db, "tracks")
+    gtrack.create_sparse("orig", "", gintervals("chr1", 0, 10), 42)
+    gtrack.create_sparse("src", "", gintervals(c("chr1", "chr2"), 100, 110), c(7, 8))
+    before <- readBin(file.path(tracks, "orig.track", "track.dat"), "raw", 1e6)
+
+    # file.copy() succeeds, but the data reached the disk short (as a close error it does not report)
+    copy <- mock_base("file.copy", function(from, to, ...) {
+        res <- copy(from, to, ...)
+        if (basename(from[1]) == "track.dat") {
+            dest <- file.path(to, "track.dat")
+            writeBin(readBin(dest, "raw", 8), dest)
+        }
+        res
+    })
+    expect_error(gtrack.copy("src", "orig", overwrite = TRUE), "incomplete")
+    expect_equal(readBin(file.path(tracks, "orig.track", "track.dat"), "raw", 1e6), before)
+})
