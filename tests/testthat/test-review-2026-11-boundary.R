@@ -37,6 +37,63 @@ test_that("an integer or logical NA is stored and looked up as NaN", {
     expect_equal(gextract("temp.review_na_lookup", scope)$temp.review_na_lookup, expected)
 })
 
+test_that("integer arguments are accepted wherever a number is expected", {
+    vals <- gextract("test.fixedbin", scope)$test.fixedbin
+
+    # breaks
+    ivals <- round(vals * 10)
+    expr <- "round(test.fixedbin * 10)"
+    expect_equal(glookup(1:7, expr, 0:7, intervals = scope)$value, (1:7)[lookup_bin(ivals, 0:7)])
+    # gpartition: runs of 50 bp bins that fall in the same bin of (0, 1], ..., (6, 7]
+    bin <- findInterval(ivals, 0:7, left.open = TRUE)
+    bin[bin < 1 | bin > 7] <- NA
+    runs <- rle(bin)
+    ends <- cumsum(runs$lengths) * 50
+    keep <- !is.na(runs$values)
+    part <- gpartition(expr, 0:7, scope)
+    expect_equal(part$start, (ends - runs$lengths * 50)[keep])
+    expect_equal(part$end, ends[keep])
+    expect_equal(part$bin, runs$values[keep])
+
+    # percentiles
+    expect_equal(unname(gquantiles("test.fixedbin", 1L, scope)), max(vals, na.rm = TRUE), tolerance = 1e-6)
+    expect_equal(unname(unlist(gintervals.quantiles("test.fixedbin", 1L, scope)[, "1"])), max(vals, na.rm = TRUE), tolerance = 1e-6)
+
+    # distances
+    a <- data.frame(chrom = "chr1", start = c(100, 5000), end = c(200, 5100))
+    b <- data.frame(chrom = "chr1", start = c(1000, 5300), end = c(1100, 5400))
+    expect_equal(gintervals.neighbors(a, b, 1L, -1000L, 1000L)$dist, c(800, 200))
+    expect_equal(gintervals.neighbors(a, b, mindist = 0L, maxdist = 500L)$dist, 200)
+
+    # a FUN that returns an integer, and an expression that does
+    expect_equal(
+        gintervals.mapply(function(x) sum(x > 0.1, na.rm = TRUE), "test.fixedbin", intervals = scope)$value,
+        sum(vals > 0.1, na.rm = TRUE)
+    )
+    expect_equal(gextract("as.integer(test.fixedbin * 10)", scope)[[4]], as.numeric(as.integer(vals * 10)))
+    expect_equal(gextract("ifelse(test.fixedbin > 0.1, 1L, NA_integer_)", scope)[[4]], ifelse(vals > 0.1, 1, NaN))
+
+    # window sizes and thresholds: the same result as the double form
+    big <- gintervals(1, 0, 1e6)
+    expect_equal(gsegment("test.fixedbin", 10000L, 0.0001, intervals = big), gsegment("test.fixedbin", 10000, 0.0001, intervals = big))
+    expect_equal(
+        gwilcox("test.fixedbin", 100000L, 1000L, maxpval = 0.01, intervals = big),
+        gwilcox("test.fixedbin", 100000, 1000, maxpval = 0.01, intervals = big)
+    )
+    domain <- gintervals(1, 800000 * (0:5), 800000 * (0:5) + 400000)
+    src <- gextract("test.sparse", gintervals(1))
+    expect_equal(gcis_decay("test.rects", (0:20) * 1000L, src, domain), gcis_decay("test.rects", (0:20) * 1000, src, domain))
+
+    withr::defer({
+        for (tr in c("temp.review_smooth_i", "temp.review_smooth_d")) {
+            if (gtrack.exists(tr)) gtrack.rm(tr, force = TRUE)
+        }
+    })
+    gtrack.smooth("temp.review_smooth_i", "", "test.fixedbin", 1000L, weight_thr = 0L, alg = "MEAN")
+    gtrack.smooth("temp.review_smooth_d", "", "test.fixedbin", 1000, weight_thr = 0, alg = "MEAN")
+    expect_equal(gextract("temp.review_smooth_i", scope)[[4]], gextract("temp.review_smooth_d", scope)[[4]])
+})
+
 test_that("a chrom column that is not character or factor is rejected without leaving misha's state behind", {
     bad <- list(
         data.frame(chrom = 1L, start = 0, end = 100),
@@ -51,4 +108,14 @@ test_that("a chrom column that is not character or factor is rejected without le
     iv2$chrom2 <- 1L
     expect_error(gextract("test.rects", iv2), "Invalid format of intervals")
     expect_identical(.glifetime_counters(), c(ref_count = 0L, protect_count = 0L))
+})
+
+test_that("gintervals.load_chain accepts an integer min_score", {
+    local_db_state()
+    setup_db(list(">chr1\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n"))
+    chain_file <- new_chain_file()
+    cat("chain 5000 source1 100 + 10 30 chr1 60 + 10 30 1\n20\n\n", file = chain_file)
+    cat("chain 3000 source1 100 + 35 55 chr1 60 + 40 60 2\n20\n\n", file = chain_file, append = TRUE)
+    chain <- gintervals.load_chain(chain_file, min_score = 4000L)
+    expect_equal(chain$score, 5000)
 })

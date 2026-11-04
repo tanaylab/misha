@@ -595,7 +595,7 @@ SEXP gtrack_liftover(SEXP _track,
 
 		// Validate min_score (optional, currently unused)
 		if (!Rf_isNull(_min_score)) {
-			if (!Rf_isReal(_min_score) || Rf_length(_min_score) != 1)
+			if (!is_num_vector(_min_score) || Rf_length(_min_score) != 1)
 				verror("min_score must be a single numeric value");
 		}
 

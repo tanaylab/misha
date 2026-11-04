@@ -62,10 +62,10 @@ SEXP C_gsegment(SEXP _expr, SEXP _intervals, SEXP _minsegment, SEXP _maxz, SEXP 
 		if (!Rf_isString(_expr) || Rf_length(_expr) != 1)
 			verror("Track expression argument is not a string");
 
-		if (!Rf_isReal(_minsegment) || Rf_length(_minsegment) != 1)
+		if (!is_num_vector(_minsegment) || Rf_length(_minsegment) != 1)
 			verror("Min segment argument is not numeric");
 
-		if (!Rf_isReal(_maxz) || Rf_length(_maxz) != 1)
+		if (!is_num_vector(_maxz) || Rf_length(_maxz) != 1)
 			verror("Max Z-score argument is not numeric");
 
 		if (!Rf_isLogical(_one_tailed) || Rf_length(_one_tailed) != 1)
@@ -80,8 +80,8 @@ SEXP C_gsegment(SEXP _expr, SEXP _intervals, SEXP _minsegment, SEXP _maxz, SEXP 
 		intervals->sort();
 		intervals->unify_overlaps();
 
-		double minsegment = *REAL(_minsegment);
-		double maxz = *REAL(_maxz);
+		double minsegment = num_elt(_minsegment, 0);
+		double maxz = num_elt(_maxz, 0);
 		bool one_tailed = *LOGICAL(_one_tailed) == 1;
 
 		if (minsegment < 0)

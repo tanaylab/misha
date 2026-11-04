@@ -154,11 +154,11 @@ SEXP gbintransform(SEXP _intervals, SEXP _track_exprs, SEXP _breaks, SEXP _inclu
 		for (unsigned i = 0; i < numexpr; ++i) {
 			SEXP breaks = VECTOR_ELT(_breaks, i);
 
-			if (!Rf_isReal(breaks))
-				verror("Breaks[%d] is not numeric", i);
+			if (!is_num_vector(breaks))
+				verror("breaks[%d] is not numeric", i + 1);
 
 			bin_finders.push_back(BinFinder());
-			bin_finders.back().init(REAL(breaks), Rf_length(breaks), include_lowest);
+			bin_finders.back().init(num_vector(breaks), include_lowest);
 
 			totalbins *= bin_finders.back().get_numbins();
 			track_mult[i] = !i ? 1 : track_mult[i - 1] * bin_finders[i - 1].get_numbins();
@@ -513,11 +513,11 @@ SEXP gtrack_bintransform(SEXP _track, SEXP _track_exprs, SEXP _breaks, SEXP _inc
 		for (unsigned i = 0; i < numexpr; ++i) {
 			SEXP breaks = VECTOR_ELT(_breaks, i);
 
-			if (!Rf_isReal(breaks))
-				verror("Breaks[%d] is not numeric", i);
+			if (!is_num_vector(breaks))
+				verror("breaks[%d] is not numeric", i + 1);
 
 			bin_finders.push_back(BinFinder());
-			bin_finders.back().init(REAL(breaks), Rf_length(breaks), include_lowest);
+			bin_finders.back().init(num_vector(breaks), include_lowest);
 
 			totalbins *= bin_finders.back().get_numbins();
 			track_mult[i] = !i ? 1 : track_mult[i - 1] * bin_finders[i - 1].get_numbins();

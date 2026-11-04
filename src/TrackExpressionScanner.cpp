@@ -409,6 +409,15 @@ bool TrackExprScanner::eval_next()
                 if (Rf_length(m_eval_bufs[iexpr]) != (int)m_eval_buf_limit)
                     verror("Evaluation of expression \"%s\" produces a vector of size %d while expecting size %d",
                             m_track_exprs[iexpr].c_str(), Rf_length(m_eval_bufs[iexpr]), m_eval_buf_limit);
+                if (Rf_isInteger(m_eval_bufs[iexpr])) {
+                    // An integer result ("as.integer(dense)", a count) is read as doubles,
+                    // NA as NaN, as as.numeric() would.
+                    SEXP dbl = rprotect_ptr(RSaneAllocVector(REALSXP, m_eval_buf_limit));
+                    for (unsigned i = 0; i < m_eval_buf_limit; ++i)
+                        REAL(dbl)[i] = num_elt(m_eval_bufs[iexpr], i);
+                    runprotect(m_eval_bufs[iexpr]);
+                    m_eval_bufs[iexpr] = dbl;
+                }
                 if (Rf_isReal(m_eval_bufs[iexpr]))
                     m_eval_doubles[iexpr] = REAL(m_eval_bufs[iexpr]);
                 else if (Rf_isLogical(m_eval_bufs[iexpr]))
