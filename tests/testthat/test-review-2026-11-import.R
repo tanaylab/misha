@@ -49,3 +49,30 @@ for (format in c("indexed", "per-chromosome")) {
         expect_equal(res$b, c(2, 4))
     })
 }
+
+test_that("gtrack.2d.import_contacts reads a fends file not sorted by fend id", {
+    import_test_db("indexed")
+
+    fends <- write_file("fend\tchr\tcoord\n10\tchr1\t1000\n5\tchr1\t2000\n7\tchr2\t300\n", ".tsv")
+    contacts <- write_file("fend1\tfend2\tcount\n10\t5\t3\n10\t7\t4\n5\t7\t1\n", ".tsv")
+    gtrack.2d.import_contacts("unsorted_fends", "", contacts, fends)
+    res <- gextract("unsorted_fends", gintervals.2d.all())
+    got <- data.frame(
+        chrom1 = as.character(res$chrom1), start1 = res$start1, chrom2 = as.character(res$chrom2),
+        start2 = res$start2, value = res$unsorted_fends
+    )
+    expected <- data.frame(
+        chrom1 = c("chr1", "chr1", "chr1", "chr1", "chr2", "chr2"),
+        start1 = c(1000, 1000, 2000, 2000, 300, 300),
+        chrom2 = c("chr1", "chr2", "chr1", "chr2", "chr1", "chr1"),
+        start2 = c(2000, 300, 1000, 300, 1000, 2000),
+        value = c(3, 4, 3, 1, 4, 1)
+    )
+    got <- got[do.call(order, got), ]
+    rownames(got) <- NULL
+    expect_equal(got, expected)
+
+    neg <- write_file("fend\tchr\tcoord\n-1\tchr1\t1000\n2\tchr1\t2000\n", ".tsv")
+    expect_error(gtrack.2d.import_contacts("neg_fend", "", contacts, neg), "fend is out of range")
+    expect_false(gtrack.exists("neg_fend"))
+})

@@ -314,9 +314,15 @@ static void process_contacts_as_fends(IntervUtils &iu, SEXP _contacts, SEXP _fen
 		if (*endptr)
 			verror("Error reading fragment ends file %s, line %ld: invalid %s", fends_fname, lineno, FENDS_COLS[COL_FEND]);
 
-		chromids.resize(fendid + 1);
-		coords.resize(fendid + 1);
-		defined.resize(fendid + 1);
+		if (fendid < 0)
+			verror("Error reading fragment ends file %s, line %ld: %s is out of range", fends_fname, lineno, FENDS_COLS[COL_FEND]);
+
+		// grow only: the ids need not be sorted, and shrinking would drop the fends read so far
+		if ((uint64_t)fendid >= defined.size()) {
+			chromids.resize(fendid + 1);
+			coords.resize(fendid + 1);
+			defined.resize(fendid + 1);
+		}
 		defined[fendid] = true;
 
 		// Use chromosome name as-is (no forced chr prefix)
