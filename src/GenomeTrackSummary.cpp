@@ -25,38 +25,61 @@ struct IntervalSummary {
 	double total;
 	double minval;
 	double maxval;
-	double mean_square_sum;
+	// For the standard deviation: sums of (x - shift) and (x - shift)^2, shifted by the
+	// first value. Unshifted, sum(x^2) - N*mean^2 cancels catastrophically when the
+	// variance is small relative to mean^2 (offset 1e8 gave 3.16 instead of 1.07).
+	double shift;
+	double shifted_sum;
+	double shifted_sq_sum;
 
 	double get_mean() const { return total / num_non_nan_bins; }
 
-	double get_stdev() const {
-		double mean = get_mean();
-		// we are calaculating unbiased standard deviation:
-		// sqrt(sum((x-mean)^2) / (N-1)) = sqrt(sum(x^2)/(N-1) - N*(mean^2)/(N-1))
-		// Clamp tiny negatives from catastrophic cancellation (the two
-		// terms are close when variance is small relative to mean^2).
-		double var = mean_square_sum / (num_non_nan_bins - 1) - (mean * mean) * (num_non_nan_bins / (num_non_nan_bins - 1));
-		return var > 0 ? sqrt(var) : 0;
+	// sum((x - mean)^2)
+	double get_sq_dev_sum() const {
+		double sq_dev_sum = shifted_sq_sum - shifted_sum * shifted_sum / num_non_nan_bins;
+		return sq_dev_sum > 0 ? sq_dev_sum : 0;
 	}
+
+	// unbiased standard deviation: sqrt(sum((x-mean)^2) / (N-1))
+	double get_stdev() const { return sqrt(get_sq_dev_sum() / (num_non_nan_bins - 1)); }
 
 	void update(double v) {
 		++num_bins;
 		if (!std::isnan(v)) {
+			if (!num_non_nan_bins)
+				shift = v;
 			num_non_nan_bins++;
 			total += v;
 			minval = min(minval, v);
 			maxval = max(maxval, v);
-			mean_square_sum += v * v;
+			double d = v - shift;
+			shifted_sum += d;
+			shifted_sq_sum += d * d;
 		}
 	}
 
 	void merge(const IntervalSummary &obj) {
+		if (obj.num_non_nan_bins) {
+			if (!num_non_nan_bins) {
+				shift = obj.shift;
+				shifted_sum = obj.shifted_sum;
+				shifted_sq_sum = obj.shifted_sq_sum;
+			} else {
+				// Combine (mean, sum of squared deviations) pairwise (Chan et al.), then
+				// store the result relative to this summary's shift
+				double n1 = num_non_nan_bins, n2 = obj.num_non_nan_bins, n = n1 + n2;
+				// mean2 - mean1, without forming the means themselves (they may be large)
+				double delta = (obj.shift - shift) + (obj.shifted_sum / n2 - shifted_sum / n1);
+				double sq_dev_sum = get_sq_dev_sum() + obj.get_sq_dev_sum() + delta * delta * n1 * n2 / n;
+				shifted_sum = shifted_sum + obj.shifted_sum + n2 * (obj.shift - shift);
+				shifted_sq_sum = sq_dev_sum + shifted_sum * shifted_sum / n;
+			}
+		}
 		num_bins += obj.num_bins;
 		num_non_nan_bins += obj.num_non_nan_bins;
 		total += obj.total;
 		minval = min(minval, obj.minval);
 		maxval = max(maxval, obj.maxval);
-		mean_square_sum += obj.mean_square_sum;
 	}
 
 	IntervalSummary() :
@@ -65,7 +88,9 @@ struct IntervalSummary {
 		total(0),
 		minval(numeric_limits<double>::max()),
 		maxval(-numeric_limits<double>::max()),
-		mean_square_sum(0) {}
+		shift(0),
+		shifted_sum(0),
+		shifted_sq_sum(0) {}
 };
 
 enum IntervalSummaryCols { TOTAL_BINS, TOTAL_NAN_BINS, MIN, MAX, SUM, MEAN, STDEV, NUM_COLS };
@@ -334,7 +359,7 @@ SEXP gintervals_summary(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP
 			}
 
 			while (!scanner.isend()) {
-				float val = scanner.last_real(0);
+				double val = scanner.last_real(0);
 
 				if (cur_interval_idx != scanner.last_scope_idx()) {
 					uint64_t size;
@@ -488,7 +513,7 @@ SEXP gbins_summary(SEXP _track_exprs, SEXP _breaks, SEXP _include_lowest, SEXP _
 		intervals2d->verify_no_overlaps(iu.get_chromkey());
 
 		for (scanner.begin(_track_exprs, intervals1d, intervals2d, _iterator_policy, _band); !scanner.isend(); scanner.next()) {
-			float val = scanner.last_real(0);
+			double val = scanner.last_real(0);
 			for (unsigned i = 1; i < numexpr; ++i)
 				vals[i - 1] = scanner.last_real(i);
 
