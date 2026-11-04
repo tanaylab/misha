@@ -102,3 +102,61 @@ test_that("gtrack.create_dense validates the intervals as gtrack.create_sparse d
     gtrack.create_dense("alias", "", data.frame(chrom = c("1", "MT"), start = c(0, 0), end = c(50, 100)), c(2, 5), 100)
     expect_equal(gextract("alias", gintervals(c("chr1", "chrM"), 0, 100))$alias, c(2, 5))
 })
+
+test_that("gtrack.create_dense counts the bases under overlapping intervals once for defval", {
+    import_test_db("indexed")
+
+    # two intervals over the same 50 bases of a 100 bp bin, the other 50 uncovered
+    ov <- data.frame(chrom = "chr1", start = c(0, 0), end = c(50, 50))
+    gtrack.create_dense("ov_mean", "", ov, c(1, 3), 100, defval = 0)
+    expect_equal(gextract("ov_mean", gintervals("chr1", 0, 100))$ov_mean, (50 * 1 + 50 * 3 + 50 * 0) / 150, tolerance = 1e-6)
+    gtrack.create_dense("ov_min", "", ov, c(1, 3), 100, defval = -1, func = "min")
+    expect_equal(gextract("ov_min", gintervals("chr1", 0, 100))$ov_min, -1)
+
+    # the same through a BED file
+    bed <- write_file("chr1\t0\t50\tp1\t1\nchr1\t0\t50\tp2\t3\n", ".bed")
+    suppressMessages(gtrack.import("ov_bed", "", bed, 100, defval = 0))
+    expect_equal(gextract("ov_bed", gintervals("chr1", 0, 100))$ov_bed, 4 / 3, tolerance = 1e-6)
+
+    # random overlapping intervals against a per-base computation
+    set.seed(17)
+    n <- 60
+    starts <- sample(0:9800, n, replace = TRUE)
+    ends <- pmin(starts + sample(1:500, n, replace = TRUE), 10000)
+    vals <- round(runif(n, 0, 10), 2)
+    defval <- 0.5
+    gtrack.create_dense("ov_rand", "", data.frame(chrom = "chr1", start = starts, end = ends), vals, 100, defval = defval)
+    bin_starts <- seq(0, 9900, by = 100)
+    expected <- vapply(bin_starts, function(bs) {
+        overlap <- pmax(0, pmin(ends, bs + 100) - pmax(starts, bs))
+        covered <- sum(vapply(bs:(bs + 99), function(x) any(starts <= x & ends > x), logical(1)))
+        (sum(vals * overlap) + defval * (100 - covered)) / (sum(overlap) + 100 - covered)
+    }, numeric(1))
+    expect_equal(gextract("ov_rand", gintervals("chr1", 0, 10000))$ov_rand, expected, tolerance = 1e-5)
+})
+
+test_that("gtrack.create_dense does not slow down when a long interval spans many short ones", {
+    local_db_state()
+    dir <- tempfile("import_review_big_")
+    dir.create(dir)
+    withr::defer(unlink(dir, recursive = TRUE))
+    fa <- file.path(dir, "chr1.fa")
+    cat(">chr1\n", strrep("A", 200000), "\n", sep = "", file = fa)
+    suppressMessages(gdb.create(groot = file.path(dir, "db"), fasta = fa, format = "indexed", verbose = FALSE))
+    suppressMessages(gdb.init(file.path(dir, "db")))
+
+    n <- 100000
+    short <- data.frame(chrom = "chr1", start = seq(0, by = 2, length.out = n), end = seq(1, by = 2, length.out = n))
+    with_long <- rbind(data.frame(chrom = "chr1", start = 0, end = 200000), short)
+    elapsed <- function(intervals) {
+        min(replicate(3, {
+            t <- system.time(gtrack.create_dense("timed", "", intervals, rep(1, nrow(intervals)), 10))[["elapsed"]]
+            gtrack.rm("timed", force = TRUE)
+            t
+        }))
+    }
+    elapsed(short)
+    # one more interval should cost about as much as one more interval, not a rescan per bin
+    # (about 50x on 5.15.1)
+    expect_lt(elapsed(with_long), 10 * max(elapsed(short), 0.005))
+})

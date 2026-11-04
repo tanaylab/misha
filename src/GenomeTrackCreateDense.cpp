@@ -114,8 +114,11 @@ SEXP gtrack_create_dense(SEXP _track, SEXP _data_frame, SEXP _binsize, SEXP _def
         Progress_reporter progress;
         progress.init(iu.get_chromkey().get_num_chroms(), 1);
 
-        // Initialize an index for data intervals
+        // The first interval that has not reached a bin yet
         size_t data_idx = 0;
+        // The intervals that overlap the current bin, in sorted order. An interval stays here for every bin it
+        // overlaps, so a long interval does not make the bins after it rescan the short intervals it spans.
+        vector<size_t> active;
 
         // Create track files for each chromosome
         for (int chromid = 0; chromid < (int)iu.get_chromkey().get_num_chroms(); ++chromid) {
@@ -137,6 +140,7 @@ SEXP gtrack_create_dense(SEXP _track, SEXP _data_frame, SEXP _binsize, SEXP _def
             while (data_idx < sorted_data.size() && sorted_data[data_idx].chromid < chromid) {
                 data_idx++;
             }
+            active.clear();
 
             AggregationState state;
 
@@ -145,45 +149,45 @@ SEXP gtrack_create_dense(SEXP _track, SEXP _data_frame, SEXP _binsize, SEXP _def
                 uint64_t end_coord = min(start_coord + (uint64_t)binsize, chromsize);
                 uint64_t bin_size_actual = end_coord - start_coord;
 
-                // Advance to the first interval that might overlap with the current bin
+                // Drop the intervals that ended before this bin, and add those that start in it
+                size_t num_active = 0;
+                for (size_t idx : active) {
+                    if ((uint64_t)sorted_data[idx].end > start_coord)
+                        active[num_active++] = idx;
+                }
+                active.resize(num_active);
                 while (data_idx < sorted_data.size() &&
                        sorted_data[data_idx].chromid == chromid &&
-                       (uint64_t)sorted_data[data_idx].end <= start_coord) {
-                    data_idx++;
+                       (uint64_t)sorted_data[data_idx].start < end_coord) {
+                    active.push_back(data_idx++);
                 }
 
                 state.reset();
+                // Bases of the bin under at least one interval with a value. Intervals may overlap, so this is
+                // the length of their union, not the sum of their overlaps.
                 uint64_t covered_bases = 0;
+                uint64_t covered_end = start_coord;
                 int64_t chain_id = 0;
 
-                // Process all intervals that overlap with the current bin
-                size_t cur_idx = data_idx;
-                while (cur_idx < sorted_data.size() &&
-                       sorted_data[cur_idx].chromid == chromid &&
-                       (uint64_t)sorted_data[cur_idx].start < end_coord) {
+                for (size_t idx : active) {
+                    uint64_t overlap_start = max(start_coord, (uint64_t)sorted_data[idx].start);
+                    uint64_t overlap_end = min(end_coord, (uint64_t)sorted_data[idx].end);
 
-                    uint64_t overlap_start = max(start_coord, (uint64_t)sorted_data[cur_idx].start);
-                    uint64_t overlap_end = min(end_coord, (uint64_t)sorted_data[cur_idx].end);
-
-                    // Intervals are sorted by START only; an earlier-starting
-                    // interval may have an end <= start_coord while later
-                    // intervals (still sorted by start) overlap. So we cannot
-                    // rely on data_idx to filter every non-overlapping
-                    // interval. Guard against the unsigned wrap that would
-                    // otherwise turn overlap_size into ~2^64.
-                    if (overlap_end > overlap_start && !std::isnan((double)sorted_values[cur_idx])) {
+                    if (!std::isnan((double)sorted_values[idx])) {
                         uint64_t overlap_size = overlap_end - overlap_start;
                         aggregation_state_add(state,
-                                              (double)sorted_values[cur_idx],
+                                              (double)sorted_values[idx],
                                               (double)overlap_size,
                                               (double)bin_size_actual,
                                               (int64_t)overlap_start,
                                               (int64_t)overlap_end,
                                               chain_id++);
-                        covered_bases += overlap_size;
+                        // overlap_start does not decrease along the sorted intervals
+                        if (overlap_end > covered_end) {
+                            covered_bases += overlap_end - max(overlap_start, covered_end);
+                            covered_end = overlap_end;
+                        }
                     }
-
-                    cur_idx++;
                 }
 
                 // Synthetic "uncovered" contribution if defvalue is set.
