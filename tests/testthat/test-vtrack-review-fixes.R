@@ -653,3 +653,34 @@ test_that("gtrack.create_pwm_energy leaves out windows holding N; an interval wi
     }
     expect_true(any(is.na(r$en)))
 })
+
+test_that("a filter that splits a dense bin counts it once when the track is read through a shared object", {
+    local_db_state()
+    vt_fix_db()
+    gtrack.create_dense(
+        "dn4", "x", gintervals(c("chr1", "chr1", "chr1", "chr2", "chr2", "chr2"), c(0, 50, 100, 0, 50, 100), c(50, 100, 150, 50, 100, 150)),
+        c(1, 2, 7, 4, 10, 6), 50, NaN
+    )
+    withr::defer(gtrack.rm("dn4", force = TRUE))
+    # an indexed track is read on later chromosomes through the object opened for the first
+    suppressMessages(gtrack.convert_to_indexed("dn4"))
+    mask <- gintervals(c("chr1", "chr2"), 20, 30)
+    for (f in c("sum", "size", "stddev")) {
+        gvtrack.create(paste0("d4_", f), "dn4", f, filter = mask)
+    }
+    withr::defer(gvtrack.clear())
+    iv <- gintervals(c("chr1", "chr2"), 0, 150)
+    v1 <- c(1, 2, 7)
+    v2 <- c(4, 10, 6)
+
+    check <- function(r) {
+        expect_equal(r$d4_sum, c(sum(v1), sum(v2)))
+        expect_equal(r$d4_size, c(3, 3))
+        expect_equal(r$d4_stddev, c(sd(v1), sd(v2)), tolerance = 1e-6)
+    }
+    check(gextract(c("d4_sum", "d4_size", "d4_stddev"), iv, iterator = iv))
+    check(gextract(c("dn4", "d4_sum", "d4_size", "d4_stddev"), iv, iterator = iv))
+    # with a shared backend every use of the track reads through one object
+    withr::local_options(gshared.track.backend = TRUE)
+    check(gextract(c("d4_sum", "d4_size", "d4_stddev"), iv, iterator = iv))
+})

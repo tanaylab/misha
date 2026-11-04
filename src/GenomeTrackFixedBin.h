@@ -57,7 +57,10 @@ public:
 
 	unsigned get_bin_size() const { return m_bin_size; }
 
-	bool item_at(int, int64_t coord, int64_t &start, int64_t &end) override {
+	bool item_at(int chromid, int64_t coord, int64_t &start, int64_t &end) override {
+		// a dependent object reads through its master and has no bin size of its own
+		if (m_master_obj)
+			return m_master_obj->item_at(chromid, coord, start, end);
 		if (!m_bin_size)
 			return false;
 		start = coord - coord % m_bin_size;
