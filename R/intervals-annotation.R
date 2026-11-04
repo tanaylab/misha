@@ -136,10 +136,8 @@ gintervals.annotate <- function(intervals,
     intervals <- .gintervals.load_ext(intervals)
     annotation_intervals <- .gintervals.load_ext(annotation_intervals)
 
-    # Store original order
-    if (keep_order) {
-        intervals$.orig_order <- seq_len(nrow(intervals))
-    }
+    # Original row order: used to group ties and, with keep_order, to restore the order
+    intervals$.orig_order <- seq_len(nrow(intervals))
 
     # Determine annotation columns if not specified
     if (is.null(annotation_columns)) {
@@ -206,6 +204,7 @@ gintervals.annotate <- function(intervals,
         if (!is.null(dist_column)) {
             result[[dist_column]] <- rep(NA_real_, n)
         }
+        result$.orig_order <- NULL
         return(result)
     }
 
@@ -257,10 +256,10 @@ gintervals.annotate <- function(intervals,
     rownames(result) <- NULL
 
     # Restore original order if requested
-    if (keep_order && ".orig_order" %in% colnames(result)) {
+    if (keep_order) {
         result <- result[order(result$.orig_order), ]
-        result$.orig_order <- NULL
     }
+    result$.orig_order <- NULL
 
     # Handle intervals.set.out via helper
     return(.gintervals.save_set_or_return(result, intervals.set.out))

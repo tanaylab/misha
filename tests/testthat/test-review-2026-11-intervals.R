@@ -57,6 +57,11 @@ test_that("gintervals.annotate tie_method orders neighbors that share a distance
     ann <- data.frame(chrom = "chr1", start = c(1200, 800), end = c(1300, 900), label = c("right", "left"))
     res <- gintervals.annotate(q, ann, annotation_columns = "label", maxneighbors = 2, tie_method = "min.start")
     expect_equal(res$label, c("left", "right"))
+
+    # also without keep_order (it errored), and no internal column leaks out
+    res <- gintervals.annotate(q, ann, annotation_columns = "label", maxneighbors = 2, tie_method = "min.start", keep_order = FALSE)
+    expect_equal(res$label, c("left", "right"))
+    expect_false(".orig_order" %in% names(res))
 })
 
 test_that("giterator.intervals(interval_relative = TRUE) intervalID is the input row", {
