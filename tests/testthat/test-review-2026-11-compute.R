@@ -175,3 +175,27 @@ test_that("pwm and pwm.max are NA at a chromosome end that holds no anchor", {
     gvtrack.create("pwm_end", NULL, "pwm.count", pssm = pssm, score.thresh = -100)
     expect_equal(gextract("pwm_end", iv, iterator = iv)$pwm_end, 0)
 })
+
+test_that("pwm.edit_distance handles motifs whose prefilter block would be too large", {
+    local_db_state()
+    withr::defer(remove_all_vtracks())
+    set.seed(4)
+    bases <- c("A", "C", "G", "T")
+    motif <- sample(bases, 32, TRUE)
+    seqv <- sample(bases, 1000, TRUE)
+    # the motif with one substitution at 100 and with two at 500 (0-based starts)
+    seqv[101:132] <- motif
+    seqv[110] <- setdiff(bases, motif[10])[1]
+    seqv[501:532] <- motif
+    seqv[c(505, 520)] <- c(setdiff(bases, motif[5])[1], setdiff(bases, motif[20])[1])
+    db <- make_seq_db(paste(seqv, collapse = ""))
+    suppressMessages(gsetroot(db))
+
+    pssm <- t(vapply(motif, function(b) ifelse(bases == b, 0.97, 0.01), numeric(4)))
+    colnames(pssm) <- bases
+    thr <- sum(log(apply(pssm, 1, max))) - 0.1
+    # 32 columns and max_edits = 1 make two prefilter blocks of 16 columns
+    gvtrack.create("ed32", NULL, "pwm.edit_distance", pssm = pssm, score.thresh = thr, max_edits = 1, bidirect = FALSE, prior = 0)
+    q <- gintervals("chr1", c(100, 500), c(101, 501))
+    expect_equal(gextract("ed32", q, iterator = q)$ed32, c(1, NaN))
+})
