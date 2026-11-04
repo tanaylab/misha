@@ -51,7 +51,7 @@ static double get_bin_tranformed_value(unsigned numexpr, bool force_binning, SEX
 		if ((int)index >= Rf_length(lookup_table))
 			verror("Internal error: index %d is out of range", index);
 
-		value = Rf_isReal(lookup_table) ? REAL(lookup_table)[index] : INTEGER(lookup_table)[index];
+		value = num_elt(lookup_table, index);
 	}
 
 	return value;

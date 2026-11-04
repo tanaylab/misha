@@ -113,10 +113,7 @@ SEXP gtrack_create_sparse(SEXP _track, SEXP _intervs, SEXP _values, SEXP _envir)
 				created_chromids.insert(cur_chromid);
 			}
 
-			if (Rf_isReal(_values))
-				gtrack.write_next_interval(*iinterv, REAL(_values)[iu.get_orig_interv_idx(*iinterv)]);
-			else
-				gtrack.write_next_interval(*iinterv, INTEGER(_values)[iu.get_orig_interv_idx(*iinterv)]);
+			gtrack.write_next_interval(*iinterv, num_elt(_values, iu.get_orig_interv_idx(*iinterv)));
 
 			progress.report(1);
 			check_interrupt();

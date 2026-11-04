@@ -11,6 +11,32 @@ lookup_bin <- function(vals, breaks) {
     pmin(pmax(findInterval(vals, breaks, left.open = TRUE), 1), length(breaks) - 1)
 }
 
+test_that("an integer or logical NA is stored and looked up as NaN", {
+    withr::defer({
+        for (tr in c("temp.review_na_sparse", "temp.review_na_2d", "temp.review_na_lookup")) {
+            if (gtrack.exists(tr)) gtrack.rm(tr, force = TRUE)
+        }
+    })
+
+    iv <- gintervals(c(1, 1, 2), c(10, 500, 100), c(20, 600, 300))
+    gtrack.create_sparse("temp.review_na_sparse", "", iv, c(1L, NA, 3L))
+    expect_equal(gextract("temp.review_na_sparse", iv)$temp.review_na_sparse, c(1, NaN, 3))
+
+    iv2 <- gintervals.2d(c(1, 2), 0, 1000, c(1, 2), 2000, 3000)
+    gtrack.2d.create("temp.review_na_2d", "", iv2, c(5L, NA))
+    expect_equal(gextract("temp.review_na_2d", iv2)$temp.review_na_2d, c(5, NaN))
+
+    vals <- gextract("test.fixedbin", scope)$test.fixedbin
+    breaks <- c(0, 0.1, 0.2, 1)
+    bin <- lookup_bin(vals, breaks)
+    expected <- c(1, NaN, 3)[bin]
+    expect_equal(glookup(c(1L, NA, 3L), "test.fixedbin", breaks, intervals = scope)$value, expected)
+    expect_equal(glookup(c(TRUE, NA, FALSE), "test.fixedbin", breaks, intervals = scope)$value, c(1, NaN, 0)[bin])
+
+    gtrack.lookup("temp.review_na_lookup", "", c(1L, NA, 3L), "test.fixedbin", breaks)
+    expect_equal(gextract("temp.review_na_lookup", scope)$temp.review_na_lookup, expected)
+})
+
 test_that("a chrom column that is not character or factor is rejected without leaving misha's state behind", {
     bad <- list(
         data.frame(chrom = 1L, start = 0, end = 100),

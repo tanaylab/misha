@@ -45,6 +45,7 @@ static inline MISHA_MAYBE_UNUSED int clock_gettime(int clk_id, struct timespec *
 #endif
 
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <vector>
 #include <pthread.h>
@@ -340,6 +341,30 @@ inline SEXP RSaneAllocMatrix(SEXPTYPE type, int nrow, int ncol)
 }
 
 SEXP get_rvector_col(SEXP v, const char *colname, const char *varname, bool error_if_missing);
+
+// True for an argument that holds numbers: a double or an integer vector (not a factor).
+// Read it with num_elt(), not REAL(): REAL() on an integer vector is an R error, i.e. a
+// longjmp (C3), and integer arguments (0:7, 500L, a count column) are common.
+inline bool is_num_vector(SEXP x) { return Rf_isReal(x) || Rf_isInteger(x); }
+
+// Element i of a double, integer or logical vector as a double. An integer or logical NA
+// is NaN, as as.numeric() makes it; INTEGER() alone reads it as -2147483648.
+inline double num_elt(SEXP x, R_xlen_t i)
+{
+	if (TYPEOF(x) == REALSXP)
+		return REAL(x)[i];
+	int v = INTEGER(x)[i];
+	return v == NA_INTEGER ? std::numeric_limits<double>::quiet_NaN() : (double)v;
+}
+
+// All the elements of a double, integer or logical vector, read with num_elt().
+inline std::vector<double> num_vector(SEXP x)
+{
+	std::vector<double> res(Rf_xlength(x));
+	for (R_xlen_t i = 0; i < (R_xlen_t)res.size(); ++i)
+		res[i] = num_elt(x, i);
+	return res;
+}
 
 // Backward-compatible shims for R < 4.5.0
 #if R_VERSION < R_Version(4, 5, 0)
