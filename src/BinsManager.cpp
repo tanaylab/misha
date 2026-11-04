@@ -26,14 +26,7 @@ BinsManager::BinsManager(SEXP _breaks, SEXP _include_lowest)
 
 		m_bin_finders.push_back(BinFinder());
 
-		if (Rf_isInteger(breaks)) {
-			vector<double> double_breaks(Rf_length(breaks));
-
-			for (int i = 0; i < Rf_length(breaks); i++)
-				double_breaks[i] = INTEGER(breaks)[i];
-			m_bin_finders.back().init(double_breaks, m_include_lowest);
-		} else
-			m_bin_finders.back().init(REAL(breaks), Rf_length(breaks), m_include_lowest);
+		m_bin_finders.back().init(num_vector(breaks), m_include_lowest);
 
 		m_totalbins *= m_bin_finders.back().get_numbins();
 		m_track_mult[i] = !i ? 1 : m_track_mult[i - 1] * m_bin_finders[i - 1].get_numbins();

@@ -293,3 +293,9 @@ test_that("options(gmax.data.size = NA) is an error, logical or double", {
     withr::local_options(gmax.data.size = NA)
     expect_error(gquantiles("test.fixedbin", 0.5, scope), "gmax.data.size")
 })
+
+test_that("NA breaks are rejected and integer NA breaks are not -2^31", {
+    expect_error(gdist("test.fixedbin", c(0, NA, 0.2, 1), intervals = scope), "NA")
+    expect_error(gdist("test.fixedbin", c(0L, NA, 2L), intervals = scope), "NA")
+    expect_error(gpartition("test.fixedbin", c(0, NaN, 1), scope), "NA")
+})
