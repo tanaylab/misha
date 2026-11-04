@@ -194,3 +194,42 @@ test_that("a failed creation over the name of a dataset track leaves that track 
     expect_equal(gextract("dtrack", gintervals("chr1", 0, 10))$dtrack, 7)
     expect_equal(sum(gtrack.ls() == "dtrack"), 1)
 })
+
+test_that("removing a working interval set shows the dataset's set of that name at once", {
+    local_db_state()
+    td <- withr::local_tempdir()
+    d1 <- review_db(td, "d1")
+    gintervals.save("shared", gintervals("chr1", 100, 200))
+    d2 <- review_db(td, "d2")
+    gintervals.save("shared", gintervals("chr1", 300, 400))
+    work <- review_db(td, "work")
+    gintervals.save("shared", gintervals("chr1", 500, 600))
+    gdataset.load(d1, force = TRUE)
+    gdataset.load(d2, force = TRUE)
+    expect_equal(gintervals.load("shared")$start, 500)
+
+    gintervals.rm("shared", force = TRUE)
+    # the dataset loaded last wins, as gdb.reload() has it
+    expect_true(gintervals.exists("shared"))
+    expect_equal(gintervals.load("shared")$start, 300)
+    suppressMessages(gdb.reload())
+    expect_equal(gintervals.load("shared")$start, 300)
+})
+
+test_that("removing a working track shows the track of the dataset loaded last", {
+    local_db_state()
+    td <- withr::local_tempdir()
+    d1 <- review_db(td, "d1")
+    gtrack.create_sparse("tt", "", gintervals("chr1", 0, 10), 1)
+    d2 <- review_db(td, "d2")
+    gtrack.create_sparse("tt", "", gintervals("chr1", 0, 10), 2)
+    work <- review_db(td, "work")
+    gtrack.create_sparse("tt", "", gintervals("chr1", 0, 10), 3)
+    gdataset.load(d1, force = TRUE)
+    gdataset.load(d2, force = TRUE)
+
+    gtrack.rm("tt", force = TRUE)
+    expect_equal(gextract("tt", gintervals("chr1", 0, 10))$tt, 2)
+    suppressMessages(gdb.reload())
+    expect_equal(gextract("tt", gintervals("chr1", 0, 10))$tt, 2)
+})
