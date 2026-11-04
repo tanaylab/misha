@@ -204,6 +204,22 @@ gdataset.load <- function(path, force = FALSE, verbose = FALSE) {
         stop(error_msg, call. = FALSE)
     }
 
+    # A name that would be a track in one loaded database and an interval set in another stops
+    # gdb.reload() below, with the session already changed; force does not resolve it. (In a
+    # subdirectory, gdir.cd(), the session lists names under GWD only, and the reload adds none.)
+    cross <- if (is.null(.gdb.gwd_db())) {
+        intersect(
+            union(get("GTRACKS", envir = .misha), dataset_tracks),
+            union(get("GINTERVS", envir = .misha), dataset_intervals)
+        )
+    }
+    if (length(cross) > 0) {
+        stop(sprintf(
+            "Cannot load dataset '%s': %s would be both a track and an interval set",
+            path, paste0("'", cross, "'", collapse = ", ")
+        ), call. = FALSE)
+    }
+
     # Load tracks and intervals using unified collision helper
     track_result <- .gdb.apply_collisions(dataset_tracks, gtrack_dataset, groot, path_norm)
     gtrack_dataset <- track_result$map

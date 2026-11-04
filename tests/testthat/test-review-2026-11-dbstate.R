@@ -127,3 +127,20 @@ test_that("gtrack.mv and gtrack.copy refuse the name of an interval set", {
     suppressMessages(gsetroot(db, rescan = TRUE))
     expect_true("t1" %in% gtrack.ls())
 })
+
+test_that("gdataset.load refuses a track that is an interval set elsewhere, leaving the session as it was", {
+    local_db_state()
+    td <- withr::local_tempdir()
+    ds <- review_db(td, "ds")
+    gtrack.create_sparse("x", "", gintervals("chr1", 0, 10), 1)
+    work <- review_db(td, "work")
+    gintervals.save("x", gintervals("chr1", 0, 100))
+    gtrack.create_sparse("mine", "", gintervals("chr1", 0, 10), 2)
+    datasets <- gdataset.ls()
+
+    expect_error(gdataset.load(ds), "'x' would be both a track and an interval set")
+    expect_equal(gtrack.ls(), "mine")
+    expect_equal(gintervals.ls(), "x")
+    expect_equal(gdataset.ls(), datasets)
+    expect_equal(gextract("mine", gintervals("chr1", 0, 10))$mine, 2)
+})
