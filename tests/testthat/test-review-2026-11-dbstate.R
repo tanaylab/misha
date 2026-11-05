@@ -396,17 +396,19 @@ test_that("a write leaves a .db.cache that another session marked dirty dirty, a
     dirty <- file.path(db, ".db.cache.dirty")
     writeLines("set by another session", dirty)
 
+    flags <- function() list.files(db, pattern = "^\\.db\\.cache\\.dirty", all.files = TRUE)
     gtrack.create_sparse("t5", "", gintervals("chr1", 0, 10), 5)
-    # marked again by this writer: whoever set the flag cannot clear it while t5 is missing too
-    expect_true(file.exists(dirty))
-    expect_false(identical(readLines(dirty), "set by another session"))
+    # a flag of this writer's own is added: whoever set the other cannot clear the cache while t5
+    # is missing too
+    expect_equal(readLines(dirty), "set by another session")
+    expect_length(flags(), 2)
     expect_false(.gdb.cache_clear_dirty(db, "set by another session"))
-    expect_true(file.exists(dirty))
     gintervals.rm("nothing_here", force = TRUE)
-    expect_true(file.exists(dirty))
+    expect_length(flags(), 3)
 
+    # a rescan removes the flags that were there when it started
     suppressMessages(gdb.reload())
-    expect_false(file.exists(dirty))
+    expect_length(flags(), 0)
     expect_true("t5" %in% read_cache(db)[[1]])
 })
 
@@ -709,4 +711,89 @@ test_that("an array track another session re-created with another layout is read
     res <- gtrack.array.extract("arr", c("a", "b"), gintervals.all())
     expect_equal(res$a, 1:4)
     expect_equal(res$b, 10 * (1:4))
+})
+
+test_that("an older rescan does not overwrite a newer cache", {
+    skip_on_os("windows")
+    local_db_state()
+    db <- review_db(withr::local_tempdir())
+    real_gcall <- misha:::.gcall
+    other <- FALSE
+    local_mocked_bindings(.gcall = function(...) {
+        res <- real_gcall(...)
+        # while this rescan is slow, another session rescans, writes, and creates a track (set before
+        # the fork: the other session's own rescan does not start one more)
+        if (identical(..1, "gfind_tracks_n_intervals") && !other) {
+            other <<- TRUE
+            in_other_session({
+                suppressMessages(gdb.reload())
+                gtrack.create_sparse("newtrack", "", gintervals("chr1", 0, 10), 1)
+            })
+        }
+        res
+    })
+    suppressMessages(gdb.reload())
+    expect_true("newtrack" %in% read_cache(db)[[1]] || .gdb.cache_is_dirty(db))
+})
+
+test_that("a mark made by another session while a writer merges is not lost", {
+    skip_on_os("windows")
+    local_db_state()
+    db <- review_db(withr::local_tempdir())
+    expect_false(.gdb.cache_is_dirty(db))
+    real_mark <- misha:::.gdb.cache_mark_dirty
+    other <- FALSE
+    local_mocked_bindings(.gdb.cache_mark_dirty = function(groot = NULL) {
+        # between this writer's look at the flag and its own mark, another session marks the cache
+        if (!other) {
+            other <<- TRUE
+            in_other_session(real_mark(groot))
+        }
+        real_mark(groot)
+    })
+    gtrack.create_sparse("t6", "", gintervals("chr1", 0, 10), 1)
+    expect_true(other)
+    expect_true(.gdb.cache_is_dirty(db))
+})
+
+test_that("an unbreakable stale lock or a root that cannot be written does not make a write hang", {
+    skip_on_os("windows")
+    skip_if(Sys.info()[["user"]] == "root")
+    local_db_state()
+    db <- review_db(withr::local_tempdir())
+    lock <- file.path(db, ".db.cache.lock")
+    writeLines("n0 1 dead", lock)
+    Sys.setFileTime(lock, Sys.time() - 60)
+    Sys.chmod(lock, "000")
+    withr::defer(Sys.chmod(lock, "644"))
+    # in a forked child, given 60 s (it hung, busy-waiting)
+    job <- parallel::mcparallel(withr::with_options(list(gmultitasking = FALSE), {
+        gtrack.create_sparse("t7", "", gintervals("chr1", 0, 10), 1)
+        TRUE
+    }))
+    res <- parallel::mccollect(job, wait = FALSE, timeout = 60)
+    if (is.null(res)) {
+        tools::pskill(job$pid, tools::SIGKILL)
+        parallel::mccollect(job)
+    }
+    expect_true(isTRUE(res[[1]]))
+    expect_true(.gdb.cache_is_dirty(db))
+
+    # a root that cannot be written (tracks/ can): no lock, no flag, no warning
+    Sys.chmod(lock, "644")
+    unlink(lock)
+    unlink(list.files(db, pattern = "^\\.db\\.cache\\.dirty", all.files = TRUE, full.names = TRUE))
+    Sys.chmod(db, "555")
+    withr::defer(Sys.chmod(db, "755"))
+    expect_no_warning(gtrack.create_sparse("t8", "", gintervals("chr1", 0, 10), 1))
+    expect_true(dir.exists(file.path(db, "tracks", "t8.track")))
+})
+
+test_that("a rescan interrupted while it holds the lock does not leave it", {
+    local_db_state()
+    db <- review_db(withr::local_tempdir())
+    real_mark <- misha:::.gdb.cache_mark_dirty
+    local_mocked_bindings(.gdb.cache_mark_dirty = function(groot = NULL) stop("interrupted here"))
+    expect_error(suppressMessages(gdb.reload()), "interrupted here")
+    expect_false(file.exists(file.path(db, ".db.cache.lock")))
 })
