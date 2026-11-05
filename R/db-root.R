@@ -331,6 +331,24 @@ gdb.unload <- function() {
     invisible(NULL)
 }
 
+# The session as it is now (its database, datasets, working directory, virtual tracks), for a
+# function that loads another database to read from it. The returned function puts it back, once;
+# later calls do nothing.
+.gdb.session_restorer <- function() {
+    saved <- as.list(.misha, all.names = TRUE)
+    function() {
+        if (is.null(saved)) {
+            return(invisible())
+        }
+        rm(list = ls(.misha, all.names = TRUE), envir = .misha)
+        list2env(saved, envir = .misha)
+        saved <<- NULL
+        # the other database's directories were cached under their own paths
+        .gdb.clear_all_dir_caches()
+        invisible()
+    }
+}
+
 #' Create a linked database with symlinks to a parent database
 #'
 #' Creates a new database directory structure with symbolic links to the

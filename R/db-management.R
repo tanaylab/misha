@@ -211,6 +211,13 @@
 }
 
 .gdb.resolve_track_db <- function(track) {
+    .gdb.resolve_resource_db(track, ".track")
+}
+
+# The database a track (extension ".track") or an interval set (".interv") of this name is read
+# from, by what is on disk: the working database, else the dataset loaded last that has it (the
+# precedence of gdb.reload()); NULL if none
+.gdb.resolve_resource_db <- function(name, extension) {
     groot <- get("GROOT", envir = .misha)
     gdatasets <- get("GDATASETS", envir = .misha)
     if (is.null(gdatasets)) gdatasets <- character(0)
@@ -220,9 +227,11 @@
         return(NULL)
     }
 
-    # Working db first (wins), then datasets in load order
-    db <- .gdb.find_resource_dbs(track, ".track", groots)[1]
-    if (is.na(db)) NULL else db
+    dbs <- .gdb.find_resource_dbs(name, extension, groots)
+    if (is.na(dbs[1])) {
+        return(NULL)
+    }
+    if (groot %in% dbs) groot else dbs[length(dbs)]
 }
 
 .gdb.ensure_dataset_maps <- function() {
@@ -269,7 +278,8 @@
     trackdir <- .track_dir(track, db)
 
     if (file.exists(trackdir)) {
-        tracks <- sort(c(get("GTRACKS", envir = .misha), track))
+        # (the name may be listed already: a track of a dataset that this one now shadows)
+        tracks <- sort(unique(c(get("GTRACKS", envir = .misha), track)))
         intervals <- sort(get("GINTERVS", envir = .misha))
 
         res <- intersect(tracks, intervals)
@@ -312,7 +322,7 @@
         track_db[[track]] <- db
         assign("GTRACK_DATASET", track_db, envir = .misha)
 
-        .gdb.cache_update_lists(db)
+        .gdb.cache_update_lists(db, track, "tracks", add = TRUE)
     }
 }
 
@@ -397,10 +407,8 @@
         assign("GTRACKS", tracks, envir = .misha)
         assign("GTRACK_DATASET", track_db, envir = .misha)
 
-        .gdb.cache_update_lists(db)
-        if (!is.null(new_db) && new_db != db) {
-            .gdb.cache_update_lists(new_db)
-        }
+        # (the database the name falls back to, new_db, lists it already)
+        .gdb.cache_update_lists(db, track, "tracks", add = FALSE)
     }
 }
 
@@ -410,7 +418,7 @@
     fname <- sprintf("%s.interv", paste(get("GWD", envir = .misha), gsub("\\.", "/", intervals.set), sep = "/"))
     if (file.exists(fname)) {
         tracks <- get("GTRACKS", envir = .misha)
-        intervals <- sort(c(get("GINTERVS", envir = .misha), intervals.set))
+        intervals <- sort(unique(c(get("GINTERVS", envir = .misha), intervals.set)))
 
         res <- intersect(tracks, intervals)
         if (length(res) > 0) {
@@ -444,7 +452,7 @@
         intervals_db[[intervals.set]] <- db
         assign("GINTERVALS_DATASET", intervals_db, envir = .misha)
 
-        .gdb.cache_update_lists(db)
+        .gdb.cache_update_lists(db, intervals.set, "intervals", add = TRUE)
     }
 }
 
@@ -471,16 +479,28 @@
             }
         }
 
+        # a copy it hid (in a loaded dataset) is the one read now, as for tracks (.gdb.rm_track)
+        new_db <- .gdb.resolve_resource_db(intervals.set, ".interv")
         intervals <- get("GINTERVS", envir = .misha)
-        intervals <- intervals[intervals != intervals.set]
-        assign("GINTERVS", intervals, envir = .misha)
-
         intervals_db <- get("GINTERVALS_DATASET", envir = .misha)
-        if (!is.null(intervals_db) && intervals.set %in% names(intervals_db)) {
-            intervals_db <- intervals_db[names(intervals_db) != intervals.set]
-            assign("GINTERVALS_DATASET", intervals_db, envir = .misha)
+        if (is.null(new_db)) {
+            intervals <- intervals[intervals != intervals.set]
+            if (!is.null(intervals_db) && intervals.set %in% names(intervals_db)) {
+                intervals_db <- intervals_db[names(intervals_db) != intervals.set]
+            }
+        } else {
+            if (!(intervals.set %in% intervals)) {
+                intervals <- sort(c(intervals, intervals.set))
+            }
+            if (is.null(intervals_db)) {
+                .gdb.ensure_dataset_maps()
+                intervals_db <- get("GINTERVALS_DATASET", envir = .misha)
+            }
+            intervals_db[[intervals.set]] <- new_db
         }
+        assign("GINTERVS", intervals, envir = .misha)
+        assign("GINTERVALS_DATASET", intervals_db, envir = .misha)
 
-        .gdb.cache_update_lists(db)
+        .gdb.cache_update_lists(db, intervals.set, "intervals", add = FALSE)
     }
 }

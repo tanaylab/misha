@@ -113,13 +113,14 @@
   },
   "GenomeTrack.cpp": {
     "identical": false,
-    "misha": "77d78c0c0ff630a5",
+    "misha": "cfecc116d98319dc",
     "needs_port": true,
     "pymisha": "15e38dbba77e4ad3"
   },
   "GenomeTrack.h": {
     "identical": false,
-    "misha": "0e3f940afc1a7d12",
+    "misha": "af14f0eed35935b1",
+    "needs_port": true,
     "pymisha": "a8e5738f466751b8"
   },
   "GenomeTrack1D.h": {
@@ -129,22 +130,26 @@
   },
   "GenomeTrackFixedBin.cpp": {
     "identical": false,
-    "misha": "2e332c2c6cecbbe1",
+    "misha": "62510bb6f0c343ae",
+    "needs_port": true,
     "pymisha": "aba9ae27f2b29412"
   },
   "GenomeTrackFixedBin.h": {
     "identical": false,
-    "misha": "6066c3b187715dde",
+    "misha": "3e097713ebd2c88e",
+    "needs_port": true,
     "pymisha": "cf36c1e7950d9f71"
   },
   "GenomeTrackSparse.cpp": {
     "identical": false,
-    "misha": "3844e0562b784467",
+    "misha": "f0dd6ddb5006a5f7",
+    "needs_port": true,
     "pymisha": "c47d360e15f67d43"
   },
   "GenomeTrackSparse.h": {
     "identical": false,
-    "misha": "858a9d152c640e86",
+    "misha": "4538748a926714ab",
+    "needs_port": true,
     "pymisha": "84e5c39f3f19e2bd"
   },
   "GenomeUtils.cpp": {
@@ -350,12 +355,14 @@
   },
   "TrackIndex2D.cpp": {
     "identical": false,
-    "misha": "928a298ca7b9b90c",
+    "misha": "3a6d8f087f7e917d",
+    "needs_port": true,
     "pymisha": "135c387d6b445944"
   },
   "TrackIndex2D.h": {
     "identical": false,
-    "misha": "5c6d5a86bb4edeed",
+    "misha": "5c64ddc20bb37b10",
+    "needs_port": true,
     "pymisha": "0fca23ffb03970fd"
   },
   "UnknownChroms.h": {

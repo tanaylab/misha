@@ -24,6 +24,20 @@ IntervalConverter::IntervalConverter(rdb::IntervUtils &iu) :
 {
 }
 
+// The 2D part of the whole-genome scope of a genome above gmulticontig.2d.threshold contigs: a
+// placeholder with attribute "deferred" (.create_deferred_2d), no intervals. (ATTRIB is not part of
+// R's API, so look the attribute up by symbol; each symbol is installed once and never collected.)
+static bool has_attr(SEXP rintervals, SEXP sym)
+{
+	return Rf_getAttrib(rintervals, sym) != R_NilValue;
+}
+
+static bool is_deferred_2d(SEXP rintervals)
+{
+	static SEXP deferred_sym = Rf_install("deferred");
+	return has_attr(rintervals, deferred_sym);
+}
+
 // A chrom column the converter can read: character, a factor with character levels, or numbers
 // (1 for "1", resolved through the chromosome aliases to chr1, as gintervals(1, ...) does).
 bool is_chrom_col(SEXP col)
@@ -59,7 +73,9 @@ unsigned IntervalConverter::get_rintervs_type_mask(SEXP rintervals, const char *
 		verror("%sInvalid format of intervals argument", error_msg_prefix);
 
 	if (Rf_length(rintervals) == 2) {
-		if (get_rintervs_type_mask(VECTOR_ELT(rintervals, 0), error_msg_prefix) != rdb::IntervUtils::INTERVS1D || get_rintervs_type_mask(VECTOR_ELT(rintervals, 1), error_msg_prefix) != rdb::IntervUtils::INTERVS2D)
+		// (a deferred 2D part is converted as no intervals: convert_rintervs)
+		if (get_rintervs_type_mask(VECTOR_ELT(rintervals, 0), error_msg_prefix) != rdb::IntervUtils::INTERVS1D ||
+			(!is_deferred_2d(VECTOR_ELT(rintervals, 1)) && get_rintervs_type_mask(VECTOR_ELT(rintervals, 1), error_msg_prefix) != rdb::IntervUtils::INTERVS2D))
 			verror("%sInvalid format of intervals argument", error_msg_prefix);
 		return rdb::IntervUtils::INTERVS1D | rdb::IntervUtils::INTERVS2D;
 	}
@@ -297,6 +313,16 @@ SEXP IntervalConverter::convert_rintervs(SEXP rintervals, GIntervals *intervals,
 
 	SEXP _rintervals = rintervals;
 
+	// the placeholder of the whole-genome 2D scope given alone (.misha$ALLGENOME[[2]]): what is asked
+	// for is 2D, so built in options(gmulticontig.2d.mode), or an error without it
+	if (Rf_isVector(rintervals) && Rf_length(rintervals) == 0 && is_deferred_2d(rintervals)) {
+		if (!intervals2d || !m_iu.build_deferred_2d_scope(*intervals2d))
+			verror("%s%s", error_msg_prefix, rdb::DEFERRED_2D_SCOPE_MSG);
+		if (pintervs_type_mask)
+			*pintervs_type_mask = rdb::IntervUtils::INTERVS2D;
+		return _rintervals;
+	}
+
 	// Handle empty intervals - determine type based on what the caller expects
 	// For empty intervals, the caller's GIntervals/GIntervals2D objects are already
 	// default-constructed as empty, so we just need to return the appropriate type mask
@@ -438,6 +464,26 @@ SEXP IntervalConverter::convert_rintervs(SEXP rintervals, GIntervals *intervals,
 
 	if (intervs_type_mask == (rdb::IntervUtils::INTERVS1D | rdb::IntervUtils::INTERVS2D))
 		rintervals = VECTOR_ELT(_rintervals, 1);
+
+	// the 2D part of the whole-genome scope of a genome above gmulticontig.2d.threshold contigs, a
+	// placeholder (gsetroot()), is never taken as no intervals. Not asked for (1D intervals only): not
+	// used. Marked "lazy" (.gscope_lazy_2d: the scope of a track expression scanner): left to the
+	// scanner, which builds it for a 2D computation only (TrackExprScanner::build_deferred_2d_scope).
+	// Otherwise built now in options(gmulticontig.2d.mode), or an error without it.
+	if ((intervs_type_mask & rdb::IntervUtils::INTERVS2D) && is_deferred_2d(rintervals)) {
+		if (intervs_type_mask == rdb::IntervUtils::INTERVS2D)
+			verror("%s%s", error_msg_prefix, rdb::DEFERRED_2D_SCOPE_MSG);
+		if (!intervals2d)
+			return _rintervals;
+		static SEXP lazy_sym = Rf_install("lazy");
+		if (has_attr(rintervals, lazy_sym)) {
+			m_iu.set_deferred_2d_scope();
+			return _rintervals;
+		}
+		if (!m_iu.build_deferred_2d_scope(*intervals2d))
+			verror("%s%s", error_msg_prefix, rdb::DEFERRED_2D_SCOPE_MSG);
+		return _rintervals;
+	}
 
 	if ((intervs_type_mask & rdb::IntervUtils::INTERVS2D) && intervals2d) {
 		SEXP chroms1 = VECTOR_ELT(rintervals, GInterval2D::CHROM1);

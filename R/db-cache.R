@@ -108,20 +108,7 @@ gdb.reload <- function(rescan = TRUE) {
             }
 
             if (is.null(res)) {
-                res <- .gcall("gfind_tracks_n_intervals", tracks_dir, .misha_env())
-                if (!is.null(res)) {
-                    res[[1]] <- .gdb.normalize_cache_list(res[[1]])
-                    res[[2]] <- .gdb.normalize_cache_list(res[[2]])
-                }
-                try(
-                    {
-                        f <- .gwith_umask(file(db.filename, "wb"))
-                        serialize(res, f)
-                        close(f)
-                        .gdb.cache_clear_dirty(groot)
-                    },
-                    silent = TRUE
-                )
+                res <- .gdb.cache_rescan(groot)
             }
         })
 
@@ -163,25 +150,8 @@ gdb.reload <- function(rescan = TRUE) {
                 }
 
                 if (is.null(res)) {
-                    # Scan this database
-                    res <- .gcall("gfind_tracks_n_intervals", tracks_dir, .misha_env())
-
-                    # Normalize cached lists for faster subsequent loads
-                    if (!is.null(res)) {
-                        res[[1]] <- .gdb.normalize_cache_list(res[[1]])
-                        res[[2]] <- .gdb.normalize_cache_list(res[[2]])
-                    }
-
-                    # Write cache for this db
-                    try(
-                        {
-                            f <- .gwith_umask(file(db.filename, "wb"))
-                            serialize(res, f)
-                            close(f)
-                            .gdb.cache_clear_dirty(g)
-                        },
-                        silent = TRUE
-                    )
+                    # Scan this database, and write its cache
+                    res <- .gdb.cache_rescan(g)
                 } else {
                     # Ensure cached lists are sorted/unique; rewrite if needed
                     norm_tracks <- .gdb.normalize_cache_list(res[[1]])
@@ -428,8 +398,20 @@ gdb.reload <- function(rescan = TRUE) {
             stop(sprintf("Track %s already exists", track), call. = FALSE)
         }
 
+        # The name is taken off the dataset for the creation to write into the working database
+        # (.track_dir()); a successful one maps it there (.gdb.add_track()). If the creation fails, the
+        # dataset's track is mapped back when the creating function exits.
         track_db <- track_db[names(track_db) != track]
         assign("GTRACK_DATASET", track_db, envir = .misha)
+        restore <- function() {
+            track_db <- get("GTRACK_DATASET", envir = .misha)
+            if (!is.null(track_db) && !(track %in% names(track_db)) && track %in% get("GTRACKS", envir = .misha)) {
+                track_db[[track]] <- existing_db
+                assign("GTRACK_DATASET", track_db, envir = .misha)
+            }
+        }
+        # (the function itself in the call, not a name looked up in the caller's frame)
+        do.call(on.exit, list(as.call(list(restore)), add = TRUE), envir = parent.frame())
     }
 
     # In a subdirectory (gdir.cd()), a track of an indexed working database is written in the session's
@@ -493,30 +475,44 @@ gdb.reload <- function(rescan = TRUE) {
     file.path(groot, ".db.cache")
 }
 
-.gdb.cache_dirty_path <- function(groot = NULL) {
+# The dirty flags of a database's .db.cache: one file per mark, <groot>/.db.cache.dirty.<token>, so
+# that no mark overwrites another. A flag is removed only by the session that made it
+# (.gdb.cache_clear_dirty) or by a rescan that started after it existed (.gdb.cache_rescan), and the
+# cache is dirty while any exists. <groot>/.db.cache.dirty, the single flag of earlier versions, counts
+# as one too (and is removed the same way). No sweep of leftovers touches them: a flag left by a
+# killed session costs one rescan, which removes it.
+.gdb.cache_dirty_files <- function(groot = NULL) {
     cache_path <- .gdb.cache_path(groot)
     if (is.null(cache_path)) {
-        return(NULL)
+        return(character(0))
     }
-    paste0(cache_path, ".dirty")
+    list.files(dirname(cache_path), pattern = "^\\.db\\.cache\\.dirty(\\..+)?$", all.files = TRUE, full.names = TRUE, no.. = TRUE)
 }
 
 .gdb.cache_is_dirty <- function(groot = NULL) {
-    dirty_path <- .gdb.cache_dirty_path(groot)
-    !is.null(dirty_path) && file.exists(dirty_path)
+    length(.gdb.cache_dirty_files(groot)) > 0
 }
 
-.gdb.cache_mark_dirty <- function(groot = NULL) {
-    dirty_path <- .gdb.cache_dirty_path(groot)
-    if (is.null(dirty_path)) {
-        return(invisible(FALSE))
+# Marks the cache dirty with a flag file of this mark's own. Returns the mark's token, or NULL if
+# it was not made: quietly for a database root that cannot be written (nothing writes its cache
+# then either). With `legacy`, also <groot>/.db.cache.dirty (best effort), the flag that earlier
+# versions read, so that their sessions rescan too; it stays until a rescan that saw it at its start.
+# The marks a writer or a rescan makes only while it works, and removes when done, are made without
+# it (it would leave the cache dirty for every session after them).
+.gdb.cache_mark_dirty <- function(groot = NULL, legacy = TRUE) {
+    cache_path <- .gdb.cache_path(groot)
+    if (is.null(cache_path)) {
+        return(invisible(NULL))
     }
-    .gwith_umask(dir.create(dirname(dirty_path), recursive = TRUE, showWarnings = FALSE))
-
-    # Write timestamp to dirty file for debugging and to reduce race conditions
+    # (a root that cannot be written while tracks/ can: the cache there stays as it is, stale, so say so)
+    if (file.access(dirname(cache_path), 2) != 0) {
+        warning(sprintf("Failed to mark cache dirty: %s cannot be written", dirname(cache_path)), call. = FALSE)
+        return(invisible(NULL))
+    }
+    token <- paste(.gdb.host_tag(), Sys.getpid(), basename(tempfile("")), sep = "-")
     success <- tryCatch(
         {
-            .gwith_umask(writeLines(as.character(Sys.time()), dirty_path))
+            .gwith_umask(writeLines(format(Sys.time(), "%Y-%m-%d %H:%M:%OS6"), paste0(cache_path, ".dirty.", token)))
             TRUE
         },
         warning = function(w) {
@@ -528,20 +524,27 @@ gdb.reload <- function(rescan = TRUE) {
             FALSE
         }
     )
-    invisible(success)
+    # (it holds this mark's token: a rescan removes it only if no mark rewrote it since its start)
+    if (success && legacy) {
+        try(suppressWarnings(.gwith_umask(writeLines(token, paste0(cache_path, ".dirty")))), silent = TRUE)
+    }
+    invisible(if (success) token)
 }
 
-.gdb.cache_clear_dirty <- function(groot = NULL) {
-    dirty_path <- .gdb.cache_dirty_path(groot)
-    if (is.null(dirty_path)) {
+# Removes the dirty flag this session made with `token` (.gdb.cache_mark_dirty()); the others stay.
+# NULL removes nothing.
+.gdb.cache_clear_dirty <- function(groot = NULL, token = NULL) {
+    cache_path <- .gdb.cache_path(groot)
+    if (is.null(cache_path) || is.null(token)) {
         return(invisible(FALSE))
     }
-    if (file.exists(dirty_path)) {
-        result <- try(unlink(dirty_path), silent = TRUE)
-        if (inherits(result, "try-error") || (is.integer(result) && result != 0)) {
-            warning(sprintf("Failed to clear cache dirty flag at %s", dirty_path), call. = FALSE)
-            return(invisible(FALSE))
-        }
+    path <- paste0(cache_path, ".dirty.", token)
+    if (!file.exists(path)) {
+        return(invisible(FALSE))
+    }
+    if (unlink(path) != 0 || file.exists(path)) {
+        warning(sprintf("Failed to clear cache dirty flag at %s", path), call. = FALSE)
+        return(invisible(FALSE))
     }
     invisible(TRUE)
 }
@@ -557,63 +560,16 @@ gdb.reload <- function(rescan = TRUE) {
     sort(unique(x))
 }
 
-# Cache write uses atomic file rename to minimize corruption risk.
-# Concurrency note: Multiple processes writing to the same database may race,
-# but the dirty flag and atomic rename provide basic safety. In concurrent
-# scenarios, the last writer wins, which is acceptable since both should scan
-# the same filesystem state. For true multi-process safety, external locking
-# would be needed.
-.gdb.cache_write_lists <- function(tracks, intervals, groot = NULL) {
-    cache_path <- .gdb.cache_path(groot)
-    if (is.null(cache_path)) {
-        return(invisible(FALSE))
-    }
-
-    .gwith_umask(dir.create(dirname(cache_path), recursive = TRUE, showWarnings = FALSE))
-
-    tmp_path <- paste0(cache_path, ".tmp")
-    .gdb.cache_mark_dirty(groot)
-
-    success <- FALSE
-    error_msg <- NULL
-    tryCatch(
-        {
-            # The rename below carries this file's mode to cache_path, so the
-            # umask has to be right here, at the open.
-            con <- .gwith_umask(file(tmp_path, "wb"))
-            on.exit(close(con), add = TRUE)
-            serialize(list(tracks, intervals), con)
-            close(con)
-            on.exit(NULL, add = FALSE)
-
-            if (!suppressWarnings(file.rename(tmp_path, cache_path))) {
-                unlink(cache_path)
-                if (!suppressWarnings(file.rename(tmp_path, cache_path))) {
-                    stop("Failed to replace .db.cache file")
-                }
-            }
-            success <- TRUE
-        },
-        error = function(e) {
-            error_msg <<- e$message
-            success <<- FALSE
-        },
-        finally = {
-            if (file.exists(tmp_path)) {
-                try(unlink(tmp_path), silent = TRUE)
-            }
-        }
-    )
-
-    if (!success) {
-        warning(sprintf("Failed to write database cache: %s", error_msg), call. = FALSE)
-    } else {
-        .gdb.cache_clear_dirty(groot)
-    }
-    invisible(success)
-}
-
-.gdb.cache_update_lists <- function(groot = NULL) {
+# The cache is updated one name at a time: a write that created or removed a track (kind "tracks")
+# or an interval set ("intervals") reads the database's .db.cache as it is on disk, adds or removes
+# that one name, and writes it back (a temporary file renamed over it). The session's own lists
+# are not written: another session may have created or removed names since this one loaded them.
+# A cache that is dirty (marked by anyone: some change is missing from it), missing or unreadable
+# is left dirty for the next gsetroot()/gdb.reload() to rescan. Writers and rescans take the lock
+# of the cache around their read-merge-rename (.gdb.cache_lock), and each removes only its own flag
+# (.gdb.cache_dirty_files).
+.gdb.cache_update_lists <- function(groot = NULL, name = NULL, kind = c("tracks", "intervals"), add = TRUE) {
+    kind <- match.arg(kind)
     if (!exists("GROOT", envir = .misha, inherits = FALSE) ||
         !exists("GTRACKS", envir = .misha, inherits = FALSE) ||
         !exists("GINTERVS", envir = .misha, inherits = FALSE)) {
@@ -633,13 +589,12 @@ gdb.reload <- function(rescan = TRUE) {
     }
 
     # GTRACKS/GINTERVS may describe a *different* database than the one we are
-    # about to persist. gdb.reload() is the only thing that scans a database and
+    # about to write to. gdb.reload() is the only thing that scans a database and
     # it stamps GTRACKS_SRC with the groots it scanned; if GROOT moved on without
     # a completed reload - gsetroot() interrupted mid-reload, or a caller that
     # restores a memoized session snapshot (misha.ext::gset_genome) - the stamp
-    # no longer matches. Writing anyway would publish one database's inventory
-    # into another's .db.cache, where every other user then reads it. Mark dirty
-    # instead and let the next gsetroot()/gdb.reload() rescan from disk.
+    # no longer matches, and neither may the names. Mark dirty instead and let
+    # the next gsetroot()/gdb.reload() rescan from disk.
     src <- if (exists("GTRACKS_SRC", envir = .misha, inherits = FALSE)) {
         get("GTRACKS_SRC", envir = .misha)
     } else {
@@ -651,32 +606,238 @@ gdb.reload <- function(rescan = TRUE) {
     }
 
     # If the working directory is a subdirectory of the database (not a root
-    # "tracks" dir), GTRACKS holds only that subtree's tracks under subdir-relative
-    # names (see .gdb.reload, which scans only from GWD in that case). Persisting
-    # that partial, relative list to the cache would corrupt the next session's
-    # listing, so mark the cache dirty (forcing a rescan) instead of writing it.
+    # "tracks" dir), names are relative to it (see .gdb.reload, which scans only
+    # from GWD in that case), not to tracks/ as the cache's are; and a call that
+    # names no change cannot be merged. Mark the cache dirty (forcing a rescan).
     gwd <- get("GWD", envir = .misha)
-    if (!any(gwd == file.path(groots, "tracks"))) {
+    if (!any(gwd == file.path(groots, "tracks")) || is.null(name)) {
         .gdb.cache_mark_dirty(groot)
         return(invisible(FALSE))
     }
 
-    tracks <- get("GTRACKS", envir = .misha)
-    intervals <- get("GINTERVS", envir = .misha)
-
-    if (length(groots) > 1) {
-        track_db <- get("GTRACK_DATASET", envir = .misha)
-        if (!is.null(track_db) && length(tracks)) {
-            tracks <- tracks[!is.na(track_db[tracks]) & track_db[tracks] == groot]
-        }
-
-        intervals_db <- get("GINTERVALS_DATASET", envir = .misha)
-        if (!is.null(intervals_db) && length(intervals)) {
-            intervals <- intervals[!is.na(intervals_db[intervals]) & intervals_db[intervals] == groot]
-        }
+    cache_path <- .gdb.cache_path(groot)
+    if (is.null(cache_path)) {
+        return(invisible(FALSE))
     }
 
-    .gdb.cache_write_lists(tracks, intervals, groot)
+    # read, merged and written back under the lock (.gdb.cache_lock); without it, left dirty
+    lock <- .gdb.cache_lock(groot)
+    if (is.null(lock)) {
+        .gdb.cache_mark_dirty(groot)
+        return(invisible(FALSE))
+    }
+    # a lock broken meanwhile (held past the stale age) may have let another write in
+    on.exit(if (!.gdb.cache_unlock(groot, lock)) .gdb.cache_mark_dirty(groot), add = TRUE)
+
+    # A dirty cache misses some change: marked again, with a flag of this writer's own, which only a
+    # rescan that starts after it removes, as this name is missing too
+    if (.gdb.cache_is_dirty(groot)) {
+        .gdb.cache_mark_dirty(groot)
+        return(invisible(FALSE))
+    }
+
+    # dirty while it is rewritten: a session killed meanwhile leaves it for a rescan (of a version
+    # that reads these flags: the legacy one would outlive the write)
+    token <- .gdb.cache_mark_dirty(groot, legacy = FALSE)
+    if (is.null(token)) {
+        return(invisible(FALSE))
+    }
+    # a write that does not finish (the cache unreadable, the write failed) leaves a lasting mark,
+    # which older versions read too
+    success <- FALSE
+    on.exit(if (!success) .gdb.cache_mark_dirty(groot), add = TRUE)
+    read_cache <- function() {
+        f <- file(cache_path, "rb")
+        on.exit(close(f))
+        unserialize(f)
+    }
+    lists <- tryCatch(read_cache(), error = function(e) NULL, warning = function(w) NULL)
+    if (!is.list(lists) || length(lists) < 2) {
+        return(invisible(FALSE))
+    }
+    i <- if (kind == "tracks") 1L else 2L
+    names_now <- as.character(lists[[i]])
+    lists[[i]] <- if (add) .gdb.normalize_cache_list(c(names_now, name)) else setdiff(names_now, name)
+
+    success <- tryCatch(
+        .gdb.cache_write_file(cache_path, lists),
+        error = function(e) {
+            warning(sprintf("Failed to write database cache: %s", e$message), call. = FALSE)
+            FALSE
+        }
+    )
+    if (success) {
+        .gdb.cache_clear_dirty(groot, token)
+    }
+    invisible(success)
+}
+
+# Writes the lists of a .db.cache (a temporary file of this writer's renamed over it)
+.gdb.cache_write_file <- function(cache_path, lists) {
+    tmp_path <- paste0(cache_path, ".tmp.", Sys.getpid(), ".", basename(tempfile("")))
+    on.exit(if (file.exists(tmp_path)) try(unlink(tmp_path), silent = TRUE), add = TRUE)
+    # The rename below carries this file's mode to cache_path, so the umask has to be right here,
+    # at the open.
+    .gwith_umask(.gserialize_file(lists, tmp_path))
+    if (!suppressWarnings(file.rename(tmp_path, cache_path))) {
+        stop("Failed to replace .db.cache file", call. = FALSE)
+    }
+    TRUE
+}
+
+# The lock of a database's .db.cache: <groot>/.db.cache.lock, created exclusively (open mode "wx",
+# O_EXCL) and holding its holder's token. It is held only around a writer's read-merge-rename and a
+# rescan's marking and final write. A lock older than `stale` seconds belongs to a holder that was
+# killed, and is broken (.gdb.cache_break_lock). Returns the token, or NULL when the lock could not
+# be taken within `wait` seconds (or cannot be created at all: a read-only database).
+.gdb.cache_lock <- function(groot, wait = 5, stale = 30) {
+    cache_path <- .gdb.cache_path(groot)
+    if (is.null(cache_path)) {
+        return(NULL)
+    }
+    path <- paste0(cache_path, ".lock")
+    token <- paste(.gdb.host_tag(), Sys.getpid(), basename(tempfile("")))
+    deadline <- Sys.time() + wait
+    repeat {
+        con <- tryCatch(suppressWarnings(.gwith_umask(file(path, "wx"))), error = function(e) NULL)
+        if (!is.null(con)) {
+            written <- tryCatch(
+                {
+                    writeLines(token, con)
+                    TRUE
+                },
+                error = function(e) FALSE
+            )
+            closed <- tryCatch(
+                {
+                    close(con)
+                    TRUE
+                },
+                error = function(e) FALSE
+            )
+            if (written && closed) {
+                return(token)
+            }
+            unlink(path)
+            return(NULL)
+        }
+        if (!file.exists(path) && file.access(dirname(path), 2) != 0) {
+            return(NULL)
+        }
+        # a stale lock is broken and the lock taken again at once; on every other path (held, or a
+        # break that failed: an unreadable lock, a root that cannot be written) the deadline is
+        # checked and the next attempt waits
+        mtime <- file.info(path)$mtime
+        broken <- !is.na(mtime) && difftime(Sys.time(), mtime, units = "secs") > stale && .gdb.cache_break_lock(path)
+        if (Sys.time() > deadline) {
+            return(NULL)
+        }
+        if (!broken) {
+            Sys.sleep(stats::runif(1, 0.005, 0.03))
+        }
+    }
+}
+
+# Breaks a stale lock: it is renamed to a name of its own (of two breakers, one wins the rename),
+# then removed if it is still the lock that was judged stale. A fresh lock taken in between is put
+# back, or, if the name is taken again, removed: its holder then finds the lock not its own when it
+# unlocks, and marks the cache dirty (.gdb.cache_unlock).
+.gdb.cache_break_lock <- function(path) {
+    read_lock <- function(p) tryCatch(suppressWarnings(readLines(p, warn = FALSE)), error = function(e) NULL)
+    held <- read_lock(path)
+    if (is.null(held)) {
+        return(invisible(FALSE))
+    }
+    moved <- paste0(path, ".stale.", basename(tempfile("")))
+    if (!suppressWarnings(file.rename(path, moved))) {
+        return(invisible(FALSE))
+    }
+    if (!identical(read_lock(moved), held) && !file.exists(path) && suppressWarnings(file.rename(moved, path))) {
+        return(invisible(FALSE))
+    }
+    unlink(moved)
+    invisible(TRUE)
+}
+
+# Releases the lock if it is still this holder's (`token`). FALSE if it is not: it was broken
+# meanwhile, and another writer may have written the cache too.
+.gdb.cache_unlock <- function(groot, token) {
+    path <- paste0(.gdb.cache_path(groot), ".lock")
+    held <- tryCatch(suppressWarnings(readLines(path, warn = FALSE)), error = function(e) NULL)
+    if (!identical(held, token)) {
+        return(invisible(FALSE))
+    }
+    unlink(path)
+    invisible(TRUE)
+}
+
+# A rescan of a database's tracks and interval sets (gdb.reload, .gdb.scan_db_fast), written to its
+# .db.cache. Under the lock, before the scan, it notes the dirty flags there are (their changes were
+# made before the scan, which sees them) and adds a flag of its own, so that no writer merges into
+# the cache during the scan (.gdb.cache_update_lists leaves a dirty cache alone). Under the lock
+# again, it writes the scan only if its own flag is still there: a rescan that started after this one
+# removed it, and wrote a newer scan. Having written, it removes its own flag and the ones it noted;
+# a flag made during the scan stays. Nothing is written to a database that cannot be written.
+# Returns the scan.
+.gdb.cache_rescan <- function(groot) {
+    tracks_dir <- file.path(groot, "tracks")
+    cache_path <- .gdb.cache_path(groot)
+    writable <- file.access(groot, 2) == 0
+    lock <- NULL
+    # (an interrupt does not leave the lock behind for the stale age)
+    on.exit(if (!is.null(lock)) .gdb.cache_unlock(groot, lock), add = TRUE)
+    token <- NULL
+    seen <- character(0)
+    # the legacy flag (.db.cache.dirty) as it was at the start: rewritten since by a lasting mark
+    # (.gdb.cache_mark_dirty() puts the mark's token in it), it is kept. One that cannot be read (another
+    # user's) cannot be rewritten by this version either, and is removed as before.
+    legacy_path <- paste0(cache_path, ".dirty")
+    read_legacy <- function() tryCatch(suppressWarnings(readLines(legacy_path, warn = FALSE)), error = function(e) NULL)
+    legacy_seen <- NULL
+    if (writable) {
+        lock <- .gdb.cache_lock(groot)
+        seen <- .gdb.cache_dirty_files(groot)
+        if (legacy_path %in% seen) {
+            legacy_seen <- read_legacy()
+            if (is.null(legacy_seen)) {
+                legacy_seen <- NA
+            }
+        }
+        token <- .gdb.cache_mark_dirty(groot, legacy = FALSE)
+        if (!is.null(lock)) {
+            held <- .gdb.cache_unlock(groot, lock)
+            lock <- NULL
+            if (!held) {
+                .gdb.cache_mark_dirty(groot)
+            }
+        }
+    }
+    res <- .gcall("gfind_tracks_n_intervals", tracks_dir, .misha_env())
+    if (!is.null(res)) {
+        res[[1]] <- .gdb.normalize_cache_list(res[[1]])
+        res[[2]] <- .gdb.normalize_cache_list(res[[2]])
+    }
+    if (!is.null(token) && !is.null(res)) {
+        lock <- .gdb.cache_lock(groot)
+        if (!is.null(lock)) {
+            if (file.exists(paste0(cache_path, ".dirty.", token))) {
+                written <- tryCatch(.gdb.cache_write_file(cache_path, res), error = function(e) FALSE)
+                if (isTRUE(written)) {
+                    unlink(setdiff(seen, legacy_path))
+                    if (identical(legacy_seen, NA) || (!is.null(legacy_seen) && identical(read_legacy(), legacy_seen))) {
+                        unlink(legacy_path)
+                    }
+                    .gdb.cache_clear_dirty(groot, token)
+                }
+            }
+            held <- .gdb.cache_unlock(groot, lock)
+            lock <- NULL
+            if (!held) {
+                .gdb.cache_mark_dirty(groot)
+            }
+        }
+    }
+    res
 }
 
 #' Mark cached track list as dirty
@@ -690,7 +851,7 @@ gdb.reload <- function(rescan = TRUE) {
 #' @export gdb.mark_cache_dirty
 gdb.mark_cache_dirty <- function() {
     .gcheckroot()
-    invisible(.gdb.cache_mark_dirty())
+    invisible(!is.null(.gdb.cache_mark_dirty()))
 }
 
 # Names of files that live inside a track directory but are not per-chromosome

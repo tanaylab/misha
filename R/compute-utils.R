@@ -97,6 +97,8 @@ glookup <- function(lookup_table = NULL, ..., intervals = NULL, include.lowest =
     }
 
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
+    # (the deferred 2D part of the whole-genome scope: built for a 2D computation only)
+    intervals <- .gscope_lazy_2d(intervals)
     intervals.set.out <- do.call(.gexpr2str, list(substitute(intervals.set.out)), envir = parent.frame())
     if (!is.null(intervals.set.out)) {
         fullpath <- .gintervals.check_new_set(intervals.set.out)
@@ -176,6 +178,8 @@ gsample <- function(expr = NULL, n = NULL, intervals = NULL, iterator = NULL, ba
 
     exprstr <- do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame())
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
+    # (the deferred 2D part of the whole-genome scope: built for a 2D computation only)
+    intervals <- .gscope_lazy_2d(intervals)
 
     .gcall("C_gsample", exprstr, n, intervals, .iterator, band, .misha_env())
 }
@@ -228,6 +232,8 @@ gscreen <- function(expr = NULL, intervals = NULL, iterator = NULL, band = NULL,
 
     exprstr <- do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame())
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
+    # (the deferred 2D part of the whole-genome scope: built for a 2D computation only)
+    intervals <- .gscope_lazy_2d(intervals)
     intervals.set.out <- do.call(.gexpr2str, list(substitute(intervals.set.out)), envir = parent.frame())
 
     if (!is.null(intervals.set.out)) {

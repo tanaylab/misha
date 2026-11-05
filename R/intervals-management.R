@@ -381,9 +381,15 @@ gintervals.save <- function(intervals.set.out = NULL, intervals = NULL) {
     }
     .gcheckroot()
 
-    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+    intervals <- .gscope_expand_2d(rescue_ALLGENOME(intervals, as.character(substitute(intervals))))
 
     intervals.set.out <- do.call(.gexpr2str, list(substitute(intervals.set.out)), envir = parent.frame())
+
+    # aliases ("1", "MT") by their canonical names: the big-set path below takes each chromosome's
+    # rows by the canonical name, and would drop the others
+    if (is.data.frame(intervals)) {
+        intervals <- .gintervals.canonical_chroms(intervals)
+    }
 
     # Fast path: for plain data frames that don't need bigset format, save directly
     # This avoids per-chromosome iteration which is O(n*m) for n rows and m chromosomes
@@ -502,16 +508,26 @@ gintervals.update <- function(intervals.set = NULL, intervals = "", chrom = NULL
     if (is.na(match(intervals.set, get("GINTERVS", envir = .misha)))) {
         stop(sprintf("Intervals set %s does not exist", intervals.set), call. = FALSE)
     }
+    # written below under GWD, so only a set of the working database (as gintervals.attr.set())
+    .gintervals.attr_check_writable(intervals.set)
 
     path <- gsub(".", "/", intervals.set, fixed = TRUE)
     path <- paste(path, ".interv", sep = "")
     fullpath <- paste(get("GWD", envir = .misha), path, sep = "/")
 
     if (!is.null(intervals)) {
+        # a data frame in the shape the set is stored in (.gintervals.normalize_for_save), its aliases
+        # by their canonical names, which the chromosome's rows are taken by
+        if (is.data.frame(intervals)) {
+            intervals <- .gintervals.canonical_chroms(intervals)
+        }
         if (!is.null(chrom)) {
             intervals <- .gintervals.load_ext(intervals, chrom = chrom)
         } else {
             intervals <- .gintervals.load_ext(intervals, chrom1 = chrom1, chrom2 = chrom2)
+        }
+        if (is.data.frame(intervals)) {
+            intervals <- .gintervals.normalize_for_save(intervals)
         }
     }
 
@@ -626,7 +642,9 @@ gintervals.update <- function(intervals.set = NULL, intervals = "", chrom = NULL
 
     # small: load all, update in place (including delete), save back, convert to big if needed
     else {
-        tgt.intervals <- .gintervals.load_ext(intervals.set)
+        # as it is written back (.gintervals.save_file), so that a set saved before chrom was stored as
+        # a factor compares with a normalized data frame
+        tgt.intervals <- .gintervals.normalize_for_save(.gintervals.load_ext(intervals.set))
         is1d <- .gintervals.is1d(intervals.set)
 
         if (!is.null(intervals) && !identical(sapply(intervals, "class"), sapply(tgt.intervals, "class"))) {

@@ -56,6 +56,8 @@ public:
 protected:
 	static const int RECORD_SIZE;
 
+	void init_read_once(const char *filename, int chromid);
+
 	GIntervals    m_intervals;
 	vector<float> m_vals;
 	bool          m_loaded;

@@ -266,7 +266,6 @@ gdb.export_fasta <- function(file = NULL,
         old_groot <- get("GROOT", envir = .misha)
     }
 
-    switched_root <- FALSE
     if (is.null(groot)) {
         .gcheckroot()
     } else {
@@ -281,8 +280,10 @@ gdb.export_fasta <- function(file = NULL,
         }
 
         if (needs_switch) {
+            # put back as it was at the end, its datasets and working directory included
+            restore <- if (!is.null(old_groot) && old_groot != "") .gdb.session_restorer() else function() NULL
+            on.exit(restore(), add = TRUE)
             suppressMessages(gdb.init(groot))
-            switched_root <- TRUE
         }
     }
 
@@ -296,9 +297,6 @@ gdb.export_fasta <- function(file = NULL,
             }
             if (file.exists(temp_file)) {
                 unlink(temp_file)
-            }
-            if (switched_root && !is.null(old_groot) && old_groot != "") {
-                suppressMessages(gdb.init(old_groot))
             }
         },
         add = TRUE

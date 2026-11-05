@@ -231,6 +231,13 @@ private:
 
 //------------------------------------- IntervUtils -----------------------------------------------
 
+// The error of a 2D computation over the deferred whole-genome 2D scope (IntervUtils::set_deferred_2d_scope)
+static constexpr const char *DEFERRED_2D_SCOPE_MSG =
+	"The whole-genome 2D scope of a database with more than getOption(\"gmulticontig.2d.threshold\") contigs is not built "
+	"by default, and a 2D computation over it would miss the trans chromosome pairs. Set "
+	"options(gmulticontig.2d.mode = \"full\") for all chromosome pairs, options(gmulticontig.2d.mode = \"diagonal\") "
+	"for the cis pairs only, or give the 2D intervals explicitly.";
+
 class IntervUtils {
 public:
 	enum TrackType { TRACK1D, TRACK2D };
@@ -257,6 +264,18 @@ public:
 	GIntervalsFetcher1D *get_kid_intervals1d();
 
 	GIntervalsFetcher2D *get_kid_intervals2d();
+
+	// Set when the whole-genome scope of a genome above gmulticontig.2d.threshold contigs was taken,
+	// whose 2D part is a placeholder (gsetroot()): converted as no 2D intervals. A computation that
+	// iterates in 2D over it gets them built (build_deferred_2d_scope), or stops.
+	void set_deferred_2d_scope() const { m_deferred_2d_scope = true; }
+	void clear_deferred_2d_scope() const { m_deferred_2d_scope = false; }
+	bool deferred_2d_scope() const { return m_deferred_2d_scope; }
+
+	// The whole-genome 2D intervals, into `intervals`, built in options(gmulticontig.2d.mode)
+	// (.gintervals.2d.whole_genome); false, and nothing built, when the option is not set. Not in a
+	// multitasking child: the parent builds them before it divides the scope (prepare4multitasking).
+	bool build_deferred_2d_scope(GIntervals2D &intervals) const;
 
 	unsigned get_rintervs_type_mask(SEXP rintervals, const char *error_msg_prefix = "") const {
 		return m_interval_converter.get_rintervs_type_mask(rintervals, error_msg_prefix);
@@ -477,6 +496,7 @@ private:
 	IntervalValidator             m_validator;
 	ChainIntervalConverter         m_chain_converter;
 	IntervalConverter              m_interval_converter;
+	mutable bool                   m_deferred_2d_scope{false};
 	mutable map<string, GenomeTrack::ChromFiles> m_chrom_files;
 
 	SEXP get_rallgenome1d() const { return VECTOR_ELT(m_allgenome, 0); }

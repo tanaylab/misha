@@ -1,3 +1,6 @@
+#include <string>
+#include <unistd.h>
+#include <fcntl.h>
 #include <cstdint>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -10,7 +13,26 @@
 
 // Static members initialization
 std::map<std::string, std::shared_ptr<IntervalsIndex1D>> GIntervalsBigSet1D::s_index_cache;
+std::map<std::string, std::string> GIntervalsBigSet1D::s_index_stamp;
 std::mutex GIntervalsBigSet1D::s_cache_mutex;
+
+// The stamp of an index file: its size and its header, which holds the checksum of its entries (the
+// offsets and lengths read through it); "" if it cannot be read. One that another session wrote
+// since it was cached with another layout differs. (Not the file's inode and mtime: a file deleted
+// and written again within the same second can get the same ones.)
+static std::string index_file_stamp(const std::string &path)
+{
+	char header[64];
+	struct stat st;
+	int fd = open(path.c_str(), O_RDONLY);
+	if (fd < 0)
+		return std::string();
+	ssize_t n = fstat(fd, &st) ? -1 : read(fd, header, sizeof(header));
+	close(fd);
+	if (n < 0)
+		return std::string();
+	return std::to_string((long long)st.st_size) + ":" + std::string(header, n);
+}
 
 std::shared_ptr<IntervalsIndex1D> GIntervalsBigSet1D::get_intervals_index(const std::string &intervset_dir) {
 	std::lock_guard<std::mutex> lock(s_cache_mutex);
@@ -22,6 +44,8 @@ std::shared_ptr<IntervalsIndex1D> GIntervalsBigSet1D::get_intervals_index(const 
 	// Load index
 	auto idx = std::make_shared<IntervalsIndex1D>();
 	std::string idx_path = intervset_dir + "/intervals.idx";
+	// stamped before the load: a file replaced in between is seen as replaced
+	std::string stamp = index_file_stamp(idx_path);
 	if (!idx->load(idx_path)) {
 		// Index doesn't exist - return nullptr
 		return nullptr;
@@ -29,6 +53,8 @@ std::shared_ptr<IntervalsIndex1D> GIntervalsBigSet1D::get_intervals_index(const 
 
 	// Cache it
 	s_index_cache[intervset_dir] = idx;
+	if (!stamp.empty())
+		s_index_stamp[intervset_dir] = stamp;
 	return idx;
 }
 
@@ -39,11 +65,36 @@ std::string GIntervalsBigSet1D::get_intervset_dir(const std::string &intervset, 
 void GIntervalsBigSet1D::invalidate_index_cache(const std::string &intervset_dir) {
 	std::lock_guard<std::mutex> lock(s_cache_mutex);
 	s_index_cache.erase(intervset_dir);
+	s_index_stamp.erase(intervset_dir);
 }
 
 void GIntervalsBigSet1D::clear_index_cache() {
 	std::lock_guard<std::mutex> lock(s_cache_mutex);
 	s_index_cache.clear();
+	s_index_stamp.clear();
+}
+
+bool GIntervalsBigSet1D::drop_stale_index(const std::string &intervset_dir) {
+	std::string cached;
+	{
+		std::lock_guard<std::mutex> lock(s_cache_mutex);
+		if (s_index_cache.find(intervset_dir) == s_index_cache.end())
+			return false;
+		auto it = s_index_stamp.find(intervset_dir);
+		if (it != s_index_stamp.end())
+			cached = it->second;
+	}
+	// the file is read without holding the lock
+	if (!cached.empty() && index_file_stamp(intervset_dir + "/intervals.idx") == cached)
+		return false;
+	std::lock_guard<std::mutex> lock(s_cache_mutex);
+	auto it = s_index_stamp.find(intervset_dir);
+	// dropped unless another thread reloaded it meanwhile (then it is current already)
+	if (s_index_cache.find(intervset_dir) != s_index_cache.end() && (it == s_index_stamp.end() ? cached.empty() : it->second == cached)) {
+		s_index_cache.erase(intervset_dir);
+		s_index_stamp.erase(intervset_dir);
+	}
+	return true;
 }
 
 void GIntervalsBigSet1D::init(const char *intervset, SEXP meta, const IntervUtils &iu)
@@ -81,46 +132,73 @@ void GIntervalsBigSet1D::load_chrom(int chromid)
 				rintervals = rprotect_ptr(RSaneUnserialize(files.path(chromid).c_str()));
 			} else {
 				// INDEXED PATH: Use intervals.dat with index
-				string dat_path = intervset_dir + "/intervals.dat";
+				// An index that another session replaced since this process cached it would be read at
+				// the old offsets: checked when the data file is opened, and after a size or unserialize
+				// error the read is done once more, with the data file reopened (as
+				// GenomeTrackSparse::init_read)
+				auto read_indexed = [&]() -> SEXP {
+					string dat_path = intervset_dir + "/intervals.dat";
 
-				// Smart handle: open intervals.dat once, reuse across chromosomes
-				if (!m_dat_open || m_dat_path != dat_path) {
-					// Close previous file if open
-					if (m_dat_open && m_dat_fp) {
+					// Smart handle: open intervals.dat once, reuse across chromosomes
+					if (!m_dat_open || m_dat_path != dat_path) {
+						// Close previous file if open
+						if (m_dat_open && m_dat_fp) {
+							fclose(m_dat_fp);
+							m_dat_fp = nullptr;
+						}
+
+						// Open new file (and the cached index checked against its file: one stat, once per call)
+						drop_stale_index(intervset_dir);
+						m_dat_fp = fopen(dat_path.c_str(), "rb");
+						if (!m_dat_fp) {
+							verror("Cannot open indexed intervals file %s: %s",
+								   dat_path.c_str(), strerror(errno));
+						}
+						m_dat_open = true;
+						m_dat_path = dat_path;
+					}
+
+					// Get index and lookup entry
+					auto idx = get_intervals_index(intervset_dir);
+					if (!idx) {
+						verror("Intervals index not found for %s", m_intervset.c_str());
+					}
+
+					const IntervalsContigEntry* entry = idx->get_entry(chromid);
+					if (!entry || entry->length == 0) {
+						// Empty chromosome
+						return R_NilValue;
+					}
+
+					struct stat dat_st;
+					if (fstat(fileno(m_dat_fp), &dat_st) || entry->offset + entry->length > (uint64_t)dat_st.st_size)
+						verror("Index entry of %s extends past the end of %s", m_intervset.c_str(), dat_path.c_str());
+					// Seek to the chromosome's data in intervals.dat
+					if (fseek(m_dat_fp, entry->offset, SEEK_SET) != 0) {
+						verror("Failed to seek in %s: %s", dat_path.c_str(), strerror(errno));
+					}
+
+					// Read serialized R object from current position
+					return RSaneUnserialize(m_dat_fp);
+				};
+				SEXP res;
+				try {
+					res = read_indexed();
+				} catch (TGLException &) {
+					if (!drop_stale_index(intervset_dir) && !m_dat_open)
+						throw;
+					if (m_dat_fp)
 						fclose(m_dat_fp);
-						m_dat_fp = nullptr;
-					}
-
-					// Open new file
-					m_dat_fp = fopen(dat_path.c_str(), "rb");
-					if (!m_dat_fp) {
-						verror("Cannot open indexed intervals file %s: %s",
-							   dat_path.c_str(), strerror(errno));
-					}
-					m_dat_open = true;
-					m_dat_path = dat_path;
+					m_dat_fp = nullptr;
+					m_dat_open = false;
+					res = read_indexed();
 				}
-
-				// Get index and lookup entry
-				auto idx = get_intervals_index(intervset_dir);
-				if (!idx) {
-					verror("Intervals index not found for %s", m_intervset.c_str());
-				}
-
-				const IntervalsContigEntry* entry = idx->get_entry(chromid);
-				if (!entry || entry->length == 0) {
+				if (res == R_NilValue) {
 					// Empty chromosome
 					m_intervals.clear();
 					return;
 				}
-
-				// Seek to the chromosome's data in intervals.dat
-				if (fseek(m_dat_fp, entry->offset, SEEK_SET) != 0) {
-					verror("Failed to seek in %s: %s", dat_path.c_str(), strerror(errno));
-				}
-
-				// Read serialized R object from current position
-				rintervals = rprotect_ptr(RSaneUnserialize(m_dat_fp));
+				rintervals = rprotect_ptr(res);
 			}
 
 			// Convert R intervals to C++ intervals

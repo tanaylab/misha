@@ -157,6 +157,11 @@ public:
 	// Safe to call when no entry is cached.
 	static void invalidate_index_cache(const std::string &track_dir);
 
+	// Drop the cached TrackIndex for `track_dir` if its track.idx was replaced since it was cached
+	// (by another session) or is gone. Returns true if it was dropped. For a reader that got a size
+	// or signature error: it reads once more with the index as it is now.
+	static bool drop_stale_index(const std::string &track_dir);
+
 	// Wipe every cached TrackIndex entry. Used by tests and as a coarse
 	// reset when callers cannot enumerate the affected dirs.
 	static void clear_index_cache();
@@ -167,6 +172,7 @@ public:
 protected:
 	// Track index cache (thread-safe)
 	static std::map<std::string, std::shared_ptr<TrackIndex>> s_index_cache;
+	static std::map<std::string, std::string> s_index_stamp; // track.idx stamp (index_file_stamp) when cached
 	static std::mutex s_cache_mutex;
 };
 

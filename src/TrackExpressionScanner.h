@@ -141,6 +141,7 @@ private:
 
 	void verify_1d_iter(GIntervalsFetcher1D *scope1d, GIntervalsFetcher2D *scope2d) const;
 	void verify_2d_iter(GIntervalsFetcher1D *scope1d, GIntervalsFetcher2D *scope2d) const;
+	void build_deferred_2d_scope(GIntervalsFetcher2D *scope2d) const;
 
 	TrackExpressionIteratorBase *create_expr_iterator(SEXP giterator, const TrackExpressionVars &vars, const vector<string> &track_exprs,
 													  GIntervalsFetcher1D *scope1d, GIntervalsFetcher2D *scope2d,

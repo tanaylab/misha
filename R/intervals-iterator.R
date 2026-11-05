@@ -186,6 +186,8 @@ giterator.intervals <- function(expr = NULL, intervals = .misha$ALLGENOME, itera
     }
 
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
+    # (the deferred 2D part of the whole-genome scope: built for a 2D computation only)
+    intervals <- .gscope_lazy_2d(intervals)
     intervals.set.out <- do.call(.gexpr2str, list(substitute(intervals.set.out)), envir = parent.frame())
 
     # Validate and convert partial_bins to integer code

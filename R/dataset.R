@@ -204,6 +204,22 @@ gdataset.load <- function(path, force = FALSE, verbose = FALSE) {
         stop(error_msg, call. = FALSE)
     }
 
+    # A name that would be a track in one loaded database and an interval set in another stops
+    # gdb.reload() below, with the session already changed; force does not resolve it. (In a
+    # subdirectory, gdir.cd(), the session lists names under GWD only, and the reload adds none.)
+    cross <- if (is.null(.gdb.gwd_db())) {
+        intersect(
+            union(get("GTRACKS", envir = .misha), dataset_tracks),
+            union(get("GINTERVS", envir = .misha), dataset_intervals)
+        )
+    }
+    if (length(cross) > 0) {
+        stop(sprintf(
+            "Cannot load dataset '%s': %s would be both a track and an interval set",
+            path, paste0("'", cross, "'", collapse = ", ")
+        ), call. = FALSE)
+    }
+
     # Load tracks and intervals using unified collision helper
     track_result <- .gdb.apply_collisions(dataset_tracks, gtrack_dataset, groot, path_norm)
     gtrack_dataset <- track_result$map
@@ -480,6 +496,22 @@ gdataset.save <- function(path, description, tracks = NULL, intervals = NULL,
                     .gwith_umask(file.copy(source_file, dirname(dest_path), recursive = TRUE)),
                     sprintf("copy interval set %s from %s to %s", interval, source_file, dirname(dest_path))
                 )
+            }
+            # a small set's attributes are in a file next to it (a big set's are inside its directory)
+            source_attr <- sub("\\.interv$", ".iattr", source_file)
+            if (!dir.exists(source_file) && file.exists(source_attr)) {
+                dest_attr <- sub("\\.interv$", ".iattr", dest_path)
+                if (symlinks) {
+                    checked(
+                        file.symlink(source_attr, dest_attr),
+                        sprintf("symlink the attributes of interval set %s (%s -> %s)", interval, source_attr, dest_attr)
+                    )
+                } else {
+                    checked(
+                        .gwith_umask(file.copy(source_attr, dest_attr)),
+                        sprintf("copy the attributes of interval set %s from %s to %s", interval, source_attr, dest_attr)
+                    )
+                }
             }
         }
     }
@@ -764,26 +796,13 @@ gdataset.example_path <- function() {
         return(list(tracks = character(0), intervals = character(0)))
     }
 
-    res <- .gcall("gfind_tracks_n_intervals", tracks_dir, .misha_env())
+    # scanned, and the cache written (nothing is written to a database that cannot be)
+    res <- .gdb.cache_rescan(db)
     if (is.null(res)) {
         return(list(tracks = character(0), intervals = character(0)))
     }
 
-    tracks <- .gdb.normalize_cache_list(res[[1]])
-    intervals <- .gdb.normalize_cache_list(res[[2]])
-
-    # Write cache for future use (silently fail if no write permission)
-    try(
-        {
-            f <- .gwith_umask(file(cache_path, "wb"))
-            serialize(list(tracks, intervals), f)
-            close(f)
-            .gdb.cache_clear_dirty(db)
-        },
-        silent = TRUE
-    )
-
-    list(tracks = tracks, intervals = intervals)
+    list(tracks = res[[1]], intervals = res[[2]])
 }
 
 .gdb.scan_tracks <- function(db, use_cache = TRUE) {

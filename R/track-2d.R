@@ -93,7 +93,7 @@ gtrack.2d.create <- function(track = NULL, description = NULL, intervals = NULL,
     intervalsstr <- deparse(substitute(intervals), width.cutoff = 500)[1]
     valuesstr <- deparse(substitute(values), width.cutoff = 500)[1]
 
-    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+    intervals <- .gscope_expand_2d(rescue_ALLGENOME(intervals, as.character(substitute(intervals))))
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
     .gconfirmtrackcreate(trackstr)

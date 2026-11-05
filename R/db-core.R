@@ -634,6 +634,29 @@
     intervals2d
 }
 
+# The whole-genome 2D intervals built in options(gmulticontig.2d.mode), NULL when the option is not
+# set. Called from C++ (IntervUtils::build_deferred_2d_scope) when a 2D computation runs over the
+# whole-genome scope of a genome above gmulticontig.2d.threshold contigs, whose 2D part is a
+# placeholder: only a 2D computation builds it.
+.gintervals.2d.whole_genome <- function() {
+    mode <- getOption("gmulticontig.2d.mode")
+    if (is.null(mode)) {
+        return(NULL)
+    }
+    allgenome <- get("ALLGENOME", envir = .misha)
+    # built already in this mode and kept (options(gmulticontig.2d.cache), as gintervals.2d.all())
+    if (!.is_2d_deferred(allgenome[[2]]) && identical(attr(allgenome[[2]], "mode"), mode)) {
+        return(allgenome[[2]])
+    }
+    intervals2d <- .generate_2d_on_demand(allgenome[[1]], mode)
+    if (getOption("gmulticontig.2d.cache", FALSE)) {
+        attr(intervals2d, "mode") <- mode
+        allgenome[[2]] <- intervals2d
+        assign("ALLGENOME", allgenome, envir = .misha)
+    }
+    intervals2d
+}
+
 # Helper function to create deferred 2D placeholder
 .create_deferred_2d <- function(n_contigs) {
     intervals2d <- list() # Use empty list instead of NULL so we can set attributes

@@ -137,6 +137,8 @@ gextract <- function(..., intervals = NULL, colnames = NULL, iterator = NULL, ba
     }
 
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
+    # (the deferred 2D part of the whole-genome scope: built for a 2D computation only)
+    intervals <- .gscope_lazy_2d(intervals)
     intervals.set.out <- do.call(.gexpr2str, list(substitute(intervals.set.out)), envir = parent.frame())
 
     if (!is.null(intervals.set.out)) {
@@ -266,6 +268,8 @@ gquantiles <- function(expr = NULL, percentiles = 0.5, intervals = get("ALLGENOM
 
     exprstr <- do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame())
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
+    # (the deferred 2D part of the whole-genome scope: built for a 2D computation only)
+    intervals <- .gscope_lazy_2d(intervals)
 
     if (.ggetOption("gmultitasking")) {
         res <- .gcall("gquantiles_multitask", intervals, exprstr, percentiles, .iterator, band, .misha_env())
@@ -316,6 +320,8 @@ gsummary <- function(expr = NULL, intervals = NULL, iterator = NULL, band = NULL
 
     exprstr <- do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame())
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
+    # (the deferred 2D part of the whole-genome scope: built for a 2D computation only)
+    intervals <- .gscope_lazy_2d(intervals)
 
     if (.ggetOption("gmultitasking")) {
         res <- .gcall("gtracksummary_multitask", exprstr, intervals, .iterator, band, .misha_env())
@@ -426,6 +432,8 @@ gcor <- function(expr1 = NULL, expr2 = NULL, ..., intervals = NULL, iterator = N
         do.call(.gexpr2str, list(arg), envir = eval_env)
     }, character(1))
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = eval_env)
+    # (the deferred 2D part of the whole-genome scope: built for a 2D computation only)
+    intervals <- .gscope_lazy_2d(intervals)
     num_pairs <- length(exprs) / 2
 
     if (!is.null(names) && length(names) != num_pairs) {

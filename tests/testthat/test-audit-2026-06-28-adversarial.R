@@ -115,13 +115,17 @@ test_that("ADV H6: bedGraph export round-trips coordinates and values", {
     expect_equal(bg$value, inmem[[track]], tolerance = 1e-12)
 })
 
-test_that("ADV H8: a track create at the database root marks the cache clean (not dirty)", {
-    misha:::.gdb.cache_mark_dirty(get("GROOT", envir = .misha))
-    expect_true(misha:::.gdb.cache_is_dirty(get("GROOT", envir = .misha)))
+test_that("ADV H8: a track create at the database root writes the cache (does not mark it dirty)", {
+    # a clean cache to start from: a rescan clears the flag it found
+    gdb.reload(rescan = TRUE)
+    expect_false(misha:::.gdb.cache_is_dirty(get("GROOT", envir = .misha)))
     gtrack.create_sparse("rootclean", "r", gintervals(1, 0, 10000), 1)
     withr::defer(gtrack.rm("rootclean", force = TRUE))
-    # at the root, the fix must still WRITE the cache and clear dirty (only subdirs mark dirty)
+    # at the root, the fix must still WRITE the cache and leave it clean (only subdirs mark dirty)
     expect_false(misha:::.gdb.cache_is_dirty(get("GROOT", envir = .misha)))
+    f <- file(file.path(get("GROOT", envir = .misha), ".db.cache"), "rb")
+    withr::defer(close(f))
+    expect_true("rootclean" %in% unserialize(f)[[1]])
 })
 
 test_that("ADV M9: gintervals.annotate keeps real annotations for found neighbors", {

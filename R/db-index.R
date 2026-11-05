@@ -892,8 +892,19 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
 
         idx_path_1d <- file.path(intervset_path, "intervals.idx")
         idx_path_2d <- file.path(intervset_path, "intervals2d.idx")
-        pair_files <- list.files(intervset_path, pattern = "-")
-        has_2d <- length(pair_files) > 0
+        # 1D or 2D as the set's .meta says (chrom1 in its stats: .gintervals.big.is2d); a contig name may
+        # have a "-", as a chromosome pair's file has. By the files only without a readable .meta.
+        read_meta <- function(path) {
+            f <- file(path, "rb")
+            on.exit(close(f))
+            unserialize(f)
+        }
+        meta <- tryCatch(read_meta(file.path(intervset_path, ".meta")), error = function(e) NULL, warning = function(w) NULL)
+        has_2d <- if (!is.null(meta$stats)) {
+            "chrom1" %in% colnames(meta$stats)
+        } else {
+            length(list.files(intervset_path, pattern = "-")) > 0
+        }
 
         if (has_2d) {
             if (file.exists(idx_path_2d)) {
@@ -1241,6 +1252,29 @@ gtrack.convert_to_indexed <- function(track = NULL) {
     invisible()
 }
 
+# A forced re-conversion of an indexed interval set rebuilds its index from its per-chromosome
+# files only (ginterv_convert, ginterv2d_convert): the data of a chromosome (pair) that lives only in
+# the existing index would be dropped. Stops, before anything is changed, when a chromosome (pair)
+# the set's .meta lists has no file of its own (named by it or by an alias, as the converters list them).
+.gintervals.check_reconvert <- function(set.name, intervset_path, is_2d) {
+    stats <- .gintervals.big.meta(set.name)$stats
+    files <- .gchrom_files(intervset_path, is_2d)
+    if (is_2d) {
+        listed <- paste(stats$chrom1, stats$chrom2, sep = "\t")
+        missing <- sub("\t", "-", setdiff(listed, paste(files$chrom1, files$chrom2, sep = "\t")), fixed = TRUE)
+    } else {
+        missing <- setdiff(as.character(stats$chrom), files$chrom)
+    }
+    if (length(missing)) {
+        stop(sprintf(
+            "Cannot re-convert interval set %s with force = TRUE: the intervals of %s are only in its index, and the conversion rebuilds the index from per-chromosome files. Nothing was changed.",
+            set.name,
+            paste0(paste(utils::head(missing, 5), collapse = ", "), if (length(missing) > 5) sprintf(" (and %d more)", length(missing) - 5) else "")
+        ), call. = FALSE)
+    }
+    invisible()
+}
+
 #' Convert 1D interval set to indexed format
 #'
 #' Converts a per-chromosome interval set to indexed format
@@ -1318,6 +1352,10 @@ gintervals.convert_to_indexed <- function(set.name = NULL, remove.old = FALSE, f
     # ids (.gdb.same_order()), not one reached through a link or of a dataset of unknown order
     if (!is.null(.gdb.gwd_db()) && !.gdb.same_order(.gdb.path_db(intervset_path))) {
         stop(sprintf("Interval set %s is in a database that may number the chromosomes differently from this session; convert it with gsetroot() on that database.", set.name), call. = FALSE)
+    }
+
+    if (file.exists(idx_path)) {
+        .gintervals.check_reconvert(set.name, intervset_path, is_2d = FALSE)
     }
 
     # Call C++ function to perform the conversion
@@ -1517,6 +1555,10 @@ gintervals.2d.convert_to_indexed <- function(set.name = NULL, remove.old = FALSE
     # ids (.gdb.same_order()), not one reached through a link or of a dataset of unknown order
     if (!is.null(.gdb.gwd_db()) && !.gdb.same_order(.gdb.path_db(intervset_path))) {
         stop(sprintf("Interval set %s is in a database that may number the chromosomes differently from this session; convert it with gsetroot() on that database.", set.name), call. = FALSE)
+    }
+
+    if (file.exists(idx_path)) {
+        .gintervals.check_reconvert(set.name, intervset_path, is_2d = TRUE)
     }
 
     # Call C++ function to perform the conversion

@@ -84,6 +84,8 @@ gbins.quantiles <- function(..., expr = NULL, percentiles = 0.5, intervals = get
     }
 
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
+    # (the deferred 2D part of the whole-genome scope: built for a 2D computation only)
+    intervals <- .gscope_lazy_2d(intervals)
 
     res <- .gcall("gbins_quantiles", exprs, breaks, include.lowest, percentiles, intervals, .iterator, band, .misha_env())
     attr(res, "breaks") <- breaks
@@ -168,6 +170,8 @@ gbins.summary <- function(..., expr = NULL, intervals = get("ALLGENOME", envir =
     }
 
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
+    # (the deferred 2D part of the whole-genome scope: built for a 2D computation only)
+    intervals <- .gscope_lazy_2d(intervals)
 
     res <- .gcall("gbins_summary", exprs, breaks, include.lowest, intervals, .iterator, band, .misha_env())
     attr(res, "breaks") <- breaks

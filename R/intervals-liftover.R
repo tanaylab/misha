@@ -91,7 +91,7 @@ gintervals.liftover <- function(intervals = NULL,
         stop("include_metadata must be a single logical value", call. = FALSE)
     }
 
-    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+    intervals <- .gscope_expand_2d(rescue_ALLGENOME(intervals, as.character(substitute(intervals))))
 
     if (is.character(chain)) {
         # Chain file path provided - validate and use the policies

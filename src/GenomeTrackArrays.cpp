@@ -29,6 +29,21 @@ void GenomeTrackArrays::set_master_obj(GenomeTrackArrays *master_obj)
 
 void GenomeTrackArrays::init_read(const char *filename, int chromid)
 {
+	// A stale cached track.idx (another session replaced the track): as GenomeTrackSparse::init_read
+	const std::string track_dir = GenomeTrack::get_track_dir(filename);
+	try {
+		init_read_once(filename, chromid);
+	} catch (TGLException &) {
+		if (m_master_obj || (!drop_stale_index(track_dir) && !m_dat_open))
+			throw;
+		m_bfile.close();
+		m_dat_open = false;
+		init_read_once(filename, chromid);
+	}
+}
+
+void GenomeTrackArrays::init_read_once(const char *filename, int chromid)
+{
 	finish_writing();
 	m_base_offset = 0;
 	m_loaded = false;
@@ -67,6 +82,8 @@ void GenomeTrackArrays::init_read(const char *filename, int chromid)
 				return;
 			}
 
+			if (entry->offset + entry->length > (uint64_t)m_bfile.file_size())
+				TGLError<GenomeTrackArrays>("Index entry of chromosome %d extends past the end of %s", chromid, dat_path.c_str());
 			if (m_bfile.seek(entry->offset, SEEK_SET))
 				TGLError<GenomeTrackArrays>("Failed to seek to offset %llu in %s",
 					(unsigned long long)entry->offset, dat_path.c_str());

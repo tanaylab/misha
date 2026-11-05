@@ -25,6 +25,20 @@
 using namespace std;
 using namespace rdb;
 
+// Flushes, syncs and closes a file written here; returns 0 or the errno of the first step that
+// failed (the file is closed either way). A full disk or an I/O error shows at the flush, the sync
+// or the close, and the file must not then be renamed into place.
+static int flush_sync_close(FILE *fp)
+{
+    int err = 0;
+
+    if (fflush(fp) || fsync(fileno(fp)))
+        err = errno;
+    if (fclose(fp) && !err)
+        err = errno;
+    return err;
+}
+
 // Offset to checksum field in 1D index header
 static const size_t IDX_1D_HEADER_SIZE_TO_CHECKSUM =
     8 +                    // Magic header
@@ -266,14 +280,13 @@ SEXP ginterv_convert(SEXP _intervset, SEXP _remove_old, SEXP _envir) {
             TGLError("Failed to update checksum in index");
         }
 
-        // Flush and sync both files
-        fflush(dat_fp);
-        fflush(idx_fp);
-        fsync(fileno(dat_fp));
-        fsync(fileno(idx_fp));
-
-        fclose(dat_fp);
-        fclose(idx_fp);
+        // Flush and sync both files; neither is renamed into place (nor the old files removed) unless both are complete
+        int dat_err = flush_sync_close(dat_fp);
+        int idx_err = flush_sync_close(idx_fp);
+        if (dat_err)
+            TGLError("Failed to write %s: %s", dat_path_tmp.c_str(), strerror(dat_err));
+        if (idx_err)
+            TGLError("Failed to write %s: %s", idx_path_tmp.c_str(), strerror(idx_err));
 
         // Atomic rename: intervals.dat first, then intervals.idx
         if (rename(dat_path_tmp.c_str(), dat_path.c_str()) != 0) {
@@ -453,14 +466,13 @@ SEXP ginterv2d_convert(SEXP _intervset, SEXP _remove_old, SEXP _envir) {
             TGLError("Failed to update checksum in index");
         }
 
-        // Flush and sync both files
-        fflush(dat_fp);
-        fflush(idx_fp);
-        fsync(fileno(dat_fp));
-        fsync(fileno(idx_fp));
-
-        fclose(dat_fp);
-        fclose(idx_fp);
+        // Flush and sync both files; neither is renamed into place (nor the old files removed) unless both are complete
+        int dat_err = flush_sync_close(dat_fp);
+        int idx_err = flush_sync_close(idx_fp);
+        if (dat_err)
+            TGLError("Failed to write %s: %s", dat_path_tmp.c_str(), strerror(dat_err));
+        if (idx_err)
+            TGLError("Failed to write %s: %s", idx_path_tmp.c_str(), strerror(idx_err));
 
         // Atomic rename: intervals2d.dat first, then intervals2d.idx
         if (rename(dat_path_tmp.c_str(), dat_path.c_str()) != 0) {
@@ -733,9 +745,9 @@ SEXP gbigintervs_indexed_finalize(SEXP _idx_path, SEXP _dat_path, SEXP _intervse
             verror("Failed to write checksum");
         }
 
-        fflush(idx_fp);
-        fsync(fileno(idx_fp));
-        fclose(idx_fp);
+        int idx_err = flush_sync_close(idx_fp);
+        if (idx_err)
+            verror("Failed to write %s: %s", idx_path_tmp.c_str(), strerror(idx_err));
 
         // Atomic rename
         string dat_path_final = intervset_path + "/intervals.dat";
@@ -921,9 +933,9 @@ SEXP gbigintervs_2d_indexed_finalize(SEXP _idx_path, SEXP _dat_path, SEXP _inter
             verror("Failed to write checksum");
         }
 
-        fflush(idx_fp);
-        fsync(fileno(idx_fp));
-        fclose(idx_fp);
+        int idx_err = flush_sync_close(idx_fp);
+        if (idx_err)
+            verror("Failed to write %s: %s", idx_path_tmp.c_str(), strerror(idx_err));
 
         // Atomic rename
         string dat_path_final = intervset_path + "/intervals2d.dat";

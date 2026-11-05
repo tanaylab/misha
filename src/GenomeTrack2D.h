@@ -60,6 +60,8 @@ public:
 	bool has_data_for_pair() const { return m_pair_has_data; }
 
 protected:
+	void init_read_once(const char *filename, int chromid1, int chromid2);
+
 	uint32_t     m_func_mask{0};
 	int          m_chromid1;
 	int          m_chromid2;

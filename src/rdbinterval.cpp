@@ -263,7 +263,11 @@ const GIntervals2D &IntervUtils::get_all_genome_intervs_cached2d() const
 		}
 	}
 	auto built = std::make_shared<GIntervals2D>();
-	convert_rintervs(rallgenome, NULL, built.get());
+	// above gmulticontig.2d.threshold contigs .misha$ALLGENOME[[2]] is a placeholder with no intervals
+	// (.create_deferred_2d): no 2D intervals here, as before, without the converter's check, which is
+	// for a scope that a user gives (DEFERRED_2D_SCOPE_MSG)
+	if (Rf_length(rallgenome))
+		convert_rintervs(rallgenome, NULL, built.get());
 	built->sort();
 	std::lock_guard<std::mutex> lock(s_all_genome_intervs_mutex);
 	if (s_cached_all_genome_intervs2d && s_cached_rallgenome2d == rallgenome) {
@@ -293,9 +297,29 @@ void IntervUtils::get_all_genome_intervs(GIntervals &intervals) const
 
 void IntervUtils::get_all_genome_intervs(GIntervals2D &intervals) const
 {
+	// the deferred whole-genome 2D scope (a placeholder): a 2D computation over it builds it or stops
+	if (!Rf_length(get_rallgenome2d()))
+		set_deferred_2d_scope();
 	const GIntervals2D &cached = get_all_genome_intervs_cached2d();
 	intervals.clear();
 	intervals.insert(intervals.end(), cached.begin(), cached.end());
+}
+
+bool IntervUtils::build_deferred_2d_scope(GIntervals2D &intervals) const
+{
+	if (RdbInitializer::is_kid())
+		verror("Internal error: the whole-genome 2D scope was not built before the multitasking children started");
+	// in misha's namespace, not get_env(), whose parent is the caller's frame (the global environment
+	// for a user's call). Built into the scope itself, so not held twice; reused across calls through
+	// options(gmulticontig.2d.cache) (.gintervals.2d.whole_genome).
+	SEXP rintervals = run_in_R("misha:::.gintervals.2d.whole_genome()", R_BaseEnv);
+	if (rintervals == R_NilValue)
+		return false;
+	intervals.clear();
+	convert_rintervs(rintervals, NULL, &intervals);
+	intervals.sort();
+	m_deferred_2d_scope = false;
+	return true;
 }
 
 GIntervalsFetcher1D *IntervUtils::get_kid_intervals1d()
