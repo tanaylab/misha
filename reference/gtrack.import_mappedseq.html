@@ -141,9 +141,13 @@ position of these columns should be specified in 'cols.order' argument. The
 default value of 'cols.order' is an array of (9, 11, 13, 14) meaning that
 sequence is expected to be found at column number 9, chromosome - at column
 11, coordinate - at column 13 and strand - at column 14. The column indices
-are 1-based, i.e. the first column is referenced by 1. Chromosome needs a
-prefix 'chr' e.g. 'chr1'. Valid strand values are '+' or 'F' for forward
-strand and '-' or 'R' for the reverse strand.</p>
+are 1-based, i.e. the first column is referenced by 1. Valid strand values
+are '+' or 'F' for forward strand and '-' or 'R' for the reverse strand.</p>
+<p>In every format, chromosome names are matched against the genome database
+through the chromosome alias chain, as in <code><a href="gtrack.import.html">gtrack.import</a></code>
+(<code>chr1</code> &lt;-&gt; <code>1</code>, <code>M</code> &lt;-&gt; <code>MT</code>, and
+<code>&lt;groot&gt;/chrom_aliases.tsv</code> if present). Reads on other chromosomes
+are counted as unmapped.</p>
 <p>Coordinates. SAM / BAM 'POS' is 1-based, as the SAM specification defines
 it, and is converted to the 0-based leftmost aligned base. The 5' end of a
 reverse-strand read is its rightmost aligned base, from the CIGAR. A mapped

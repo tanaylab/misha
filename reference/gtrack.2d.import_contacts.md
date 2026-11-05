@@ -52,6 +52,13 @@ doubled to include also '(coord2, coord1)' unless 'coord1' equals to
 
 Contacts may come in one or more files.
 
+Chromosome names (in the contacts file, or in the fragment ends file if
+'fends' is given) are matched as in
+[`gtrack.import`](https://tanaylab.github.io/misha/reference/gtrack.import.md):
+through the chromosome alias chain, with the contacts on other
+chromosomes skipped and their names reported. If no name matches, or no
+contact is left to import, the function fails and no track is created.
+
 If 'gmultitasking' is on (the default), the input files are read by
 several processes in parallel, each process reading a contiguous subset
 of the files, and the chromosome pairs are then written in parallel, one

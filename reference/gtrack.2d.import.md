@@ -43,6 +43,12 @@ name of the file.
 If all the imported intervals represent a point (i.e. end == start + 1)
 a 'Points' track is created otherwise it is a 'Rectangles' track.
 
+Chromosome names are matched as in
+[`gtrack.import`](https://tanaylab.github.io/misha/reference/gtrack.import.md):
+through the chromosome alias chain, with the intervals of other
+chromosomes skipped and their names reported. If no name matches, or no
+interval is left to import, the function fails and no track is created.
+
 If 'gmultitasking' is on (the default), the input files are read by
 several processes in parallel, each process reading a contiguous subset
 of the files, and the chromosome pairs are then written in parallel, one

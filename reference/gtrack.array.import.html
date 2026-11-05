@@ -83,6 +83,10 @@ equally named columns are merged. Intervals that appear in one source but
 not in the other are added and the values for the missing columns are set to
 NaN. Intervals with all NaN values are not added. Partial overlaps between
 two intervals from different sources are forbidden.</p>
+<p>Chromosome names in a file are matched as in <code><a href="gtrack.import.html">gtrack.import</a></code>:
+through the chromosome alias chain, with the lines of other chromosomes
+skipped and their names reported. A file that names chromosomes and matches
+none of them is an error.</p>
 <p>'description' is added as a track attribute.</p>
     </div>
     <div class="section level2">

@@ -51,6 +51,33 @@ depends on them.
   returns NULL, with a warning, when no input chromosome is in the chain
   (was an error).
 
+- **Behavior fix:**
+  [`gtrack.import()`](https://tanaylab.github.io/misha/reference/gtrack.import.md)
+  of a tab-delimited file with a header and
+  [`gtrack.array.import()`](https://tanaylab.github.io/misha/reference/gtrack.array.import.md)
+  no longer drop the last line when the file has no trailing newline.
+
+- **Behavior fix:**
+  [`gtrack.2d.import_contacts()`](https://tanaylab.github.io/misha/reference/gtrack.2d.import_contacts.md)
+  keeps all fragment ends when the fends file is not sorted by id. A
+  negative, duplicated or too large fend id is an error; a negative or
+  huge id used to crash R.
+
+- **Behavior fix:**
+  [`gtrack.create_dense()`](https://tanaylab.github.io/misha/reference/gtrack.create_dense.md)
+  (and BED import with `binsize > 0`) gives `defval` the right weight
+  where intervals overlap.
+
+- **Behavior fix:**
+  [`gtrack.import_mappedseq()`](https://tanaylab.github.io/misha/reference/gtrack.import_mappedseq.md)
+  resolves chromosome aliases (“1”, “MT”).
+
+- **Behavior fix:**
+  [`gtrack.export_bedgraph()`](https://tanaylab.github.io/misha/reference/gtrack.export_bedgraph.md)
+  no longer writes overlapping records for overlapping intervals
+  ([`gtrack.export_bigwig()`](https://tanaylab.github.io/misha/reference/gtrack.export_bigwig.md)
+  failed on them).
+
 - Sequence and value-based virtual tracks under a 2D iterator require
   `gvtrack.iterator(dim =)`; they gave NaN or 0, or crashed.
 
@@ -65,6 +92,39 @@ depends on them.
   is much faster for large windows (same results), and
   [`gintervals.2d.intersect()`](https://tanaylab.github.io/misha/reference/gintervals.2d.intersect.md)
   uses bounded memory.
+
+- [`gtrack.create_dense()`](https://tanaylab.github.io/misha/reference/gtrack.create_dense.md)
+  rejects invalid intervals (negative start, start \>= end, NA, end past
+  the chromosome) like
+  [`gtrack.create_sparse()`](https://tanaylab.github.io/misha/reference/gtrack.create_sparse.md),
+  and is no longer slow when a long interval spans many bins.
+
+- BED import clips records that run past the chromosome end and drops
+  empty records, with one warning; a file with nothing left to import is
+  an error. Chromosomes missing from the database are skipped and
+  reported, as in the other formats.
+
+- WIG/bedGraph import skips UCSC “browser” lines; a chromosome block
+  that resumes after an unknown chromosome is an error instead of being
+  dropped.
+
+- [`gtrack.2d.import()`](https://tanaylab.github.io/misha/reference/gtrack.2d.import.md),
+  [`gtrack.2d.import_contacts()`](https://tanaylab.github.io/misha/reference/gtrack.2d.import_contacts.md)
+  and
+  [`gtrack.array.import()`](https://tanaylab.github.io/misha/reference/gtrack.array.import.md)
+  report skipped chromosomes, and fail without leaving a broken track
+  when nothing can be imported.
+
+- [`gtrack.import_mappedseq()`](https://tanaylab.github.io/misha/reference/gtrack.import_mappedseq.md)
+  and
+  [`gtrack.array.import()`](https://tanaylab.github.io/misha/reference/gtrack.array.import.md)
+  write the indexed format on indexed databases.
+
+- Track format conversion checks that its writes reached the disk before
+  it replaces or removes the old files, and
+  `gtrack.2d.convert_to_indexed(force = TRUE)` refuses, without changing
+  anything, when only some pairs have a per-pair file (it lost the
+  others).
 
 ## misha 5.15.1
 

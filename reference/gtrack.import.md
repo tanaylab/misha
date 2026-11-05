@@ -90,6 +90,10 @@ value; otherwise a constant value of 1 is used. For BED inputs,
 'binsize' controls the output type: if 'binsize' is 0 the track is
 'Sparse'; otherwise the track is 'Dense' with bin-averaged values based
 on overlaps with BED intervals (and 'defval' for regions not covered).
+BED records that run past the end of their chromosome are clipped to it,
+and records left empty (zero length, or starting at or past the
+chromosome end) are dropped, with one warning giving the counts; a BED
+file with no record left is an error.
 
 If 'binsize' is 0 the resulted track is created in 'Sparse' format.
 Otherwise the 'Dense' format is chosen with a bin size equal to

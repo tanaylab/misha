@@ -57,7 +57,7 @@ Maximum of columns' values.
 *func = "min", params = NULL*  
 Minimum of columns' values.
 
-*func = "stdev", params = NULL*  
+*func = "stddev", params = NULL*  
 Unbiased standard deviation of columns' values.
 
 *func = "sum", params = NULL*  

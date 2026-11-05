@@ -99,8 +99,14 @@ The default value of 'cols.order' is an array of (9, 11, 13, 14) meaning
 that sequence is expected to be found at column number 9, chromosome -
 at column 11, coordinate - at column 13 and strand - at column 14. The
 column indices are 1-based, i.e. the first column is referenced by 1.
-Chromosome needs a prefix 'chr' e.g. 'chr1'. Valid strand values are '+'
-or 'F' for forward strand and '-' or 'R' for the reverse strand.
+Valid strand values are '+' or 'F' for forward strand and '-' or 'R' for
+the reverse strand.
+
+In every format, chromosome names are matched against the genome
+database through the chromosome alias chain, as in
+[`gtrack.import`](https://tanaylab.github.io/misha/reference/gtrack.import.md)
+(`chr1` \<-\> `1`, `M` \<-\> `MT`, and `<groot>/chrom_aliases.tsv` if
+present). Reads on other chromosomes are counted as unmapped.
 
 Coordinates. SAM / BAM 'POS' is 1-based, as the SAM specification
 defines it, and is converted to the 0-based leftmost aligned base. The
