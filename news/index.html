@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">misha</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.15.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.16.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -36,9 +36,27 @@
   <main id="main" class="col-md-9"><div class="page-header">
 
       <h1>Changelog</h1>
-      <small>Source: <a href="https://github.com/tanaylab/misha/blob/v5.15.1/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
+      <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="5.16.0" id="misha-5160">misha 5.16.0<a class="anchor" aria-label="anchor" href="#misha-5160"></a></h2>
+<p>This release fixes the remaining defects found in the review of 5.14.4. Several change results, marked <strong>Behavior fix</strong>; recompute anything that depends on them.</p>
+<ul><li><p><strong>Behavior fix:</strong> <code><a href="../reference/gcor.html">gcor()</a></code> computes standard deviations, covariance and correlation without cancellation; values far from zero relative to their spread gave NaN or wrong correlations, also in multitask runs.</p></li>
+<li><p><strong>Behavior fix:</strong> <code><a href="../reference/gsummary.html">gsummary()</a></code>, <code><a href="../reference/gintervals.summary.html">gintervals.summary()</a></code> and <code><a href="../reference/gbins.summary.html">gbins.summary()</a></code> give a NaN standard deviation when a value is infinite (was 0), and report <code>-Inf</code>/<code>Inf</code> as the minimum or maximum when all values are infinite (was +-1.8e308).</p></li>
+<li><p><strong>Behavior fix:</strong> <code>first</code>, <code>last</code>, <code>sample</code>, <code>lse</code> and their <code>.pos</code> functions work on array tracks; they returned NA, and <code>lse</code> returned garbage.</p></li>
+<li><p><strong>Behavior fix:</strong> <code><a href="../reference/gtrack.array.extract.html">gtrack.array.extract()</a></code> no longer repeats the previous chromosome’s values after a chromosome with one interval.</p></li>
+<li><p><strong>Behavior fix:</strong> multitasked computations no longer split one iterator bin into two rows.</p></li>
+<li><p><strong>Behavior fix:</strong> <code>gseq.kmer.dist(mask =)</code> leaves out k-mers that overlap the mask, as documented; it left out only those starting in it.</p></li>
+<li><p><strong>Behavior fix:</strong> <code>pwm</code> and <code>pwm.max</code> are NA at a chromosome end where no motif fits (were -Inf).</p></li>
+<li><p><strong>Behavior fix:</strong> <code><a href="../reference/gintervals.neighbors.html">gintervals.neighbors()</a></code> ties and <code><a href="../reference/gseq.pwm_edits.html">gseq.pwm_edits()</a></code> tied edits no longer depend on the input order or the C++ library.</p></li>
+<li><p><strong>Behavior fix:</strong> <code><a href="../reference/gintervals.liftover.html">gintervals.liftover()</a></code> returns NULL, with a warning, when no input chromosome is in the chain (was an error).</p></li>
+<li><p>Sequence and value-based virtual tracks under a 2D iterator require <code>gvtrack.iterator(dim =)</code>; they gave NaN or 0, or crashed.</p></li>
+<li><p><code><a href="../reference/gintervals.annotate.html">gintervals.annotate()</a></code> with <code>tie_method</code> on 2D intervals gives a clear error.</p></li>
+<li><p>Bands wider than 2^31 are accepted; non-finite bands are an error.</p></li>
+<li><p><code>pwm.edit_distance</code> no longer crashes on long motifs with <code>max_edits</code>.</p></li>
+<li><p><code><a href="../reference/gtrack.smooth.html">gtrack.smooth()</a></code> is much faster for large windows (same results), and <code><a href="../reference/gintervals.2d.intersect.html">gintervals.2d.intersect()</a></code> uses bounded memory.</p></li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="5.15.1" id="misha-5151">misha 5.15.1<a class="anchor" aria-label="anchor" href="#misha-5151"></a></h2>
 <ul><li>

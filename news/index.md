@@ -1,5 +1,71 @@
 # Changelog
 
+## misha 5.16.0
+
+This release fixes the remaining defects found in the review of 5.14.4.
+Several change results, marked **Behavior fix**; recompute anything that
+depends on them.
+
+- **Behavior fix:**
+  [`gcor()`](https://tanaylab.github.io/misha/reference/gcor.md)
+  computes standard deviations, covariance and correlation without
+  cancellation; values far from zero relative to their spread gave NaN
+  or wrong correlations, also in multitask runs.
+
+- **Behavior fix:**
+  [`gsummary()`](https://tanaylab.github.io/misha/reference/gsummary.md),
+  [`gintervals.summary()`](https://tanaylab.github.io/misha/reference/gintervals.summary.md)
+  and
+  [`gbins.summary()`](https://tanaylab.github.io/misha/reference/gbins.summary.md)
+  give a NaN standard deviation when a value is infinite (was 0), and
+  report `-Inf`/`Inf` as the minimum or maximum when all values are
+  infinite (was +-1.8e308).
+
+- **Behavior fix:** `first`, `last`, `sample`, `lse` and their `.pos`
+  functions work on array tracks; they returned NA, and `lse` returned
+  garbage.
+
+- **Behavior fix:**
+  [`gtrack.array.extract()`](https://tanaylab.github.io/misha/reference/gtrack.array.extract.md)
+  no longer repeats the previous chromosome’s values after a chromosome
+  with one interval.
+
+- **Behavior fix:** multitasked computations no longer split one
+  iterator bin into two rows.
+
+- **Behavior fix:** `gseq.kmer.dist(mask =)` leaves out k-mers that
+  overlap the mask, as documented; it left out only those starting in
+  it.
+
+- **Behavior fix:** `pwm` and `pwm.max` are NA at a chromosome end where
+  no motif fits (were -Inf).
+
+- **Behavior fix:**
+  [`gintervals.neighbors()`](https://tanaylab.github.io/misha/reference/gintervals.neighbors.md)
+  ties and
+  [`gseq.pwm_edits()`](https://tanaylab.github.io/misha/reference/gseq.pwm_edits.md)
+  tied edits no longer depend on the input order or the C++ library.
+
+- **Behavior fix:**
+  [`gintervals.liftover()`](https://tanaylab.github.io/misha/reference/gintervals.liftover.md)
+  returns NULL, with a warning, when no input chromosome is in the chain
+  (was an error).
+
+- Sequence and value-based virtual tracks under a 2D iterator require
+  `gvtrack.iterator(dim =)`; they gave NaN or 0, or crashed.
+
+- [`gintervals.annotate()`](https://tanaylab.github.io/misha/reference/gintervals.annotate.md)
+  with `tie_method` on 2D intervals gives a clear error.
+
+- Bands wider than 2^31 are accepted; non-finite bands are an error.
+
+- `pwm.edit_distance` no longer crashes on long motifs with `max_edits`.
+
+- [`gtrack.smooth()`](https://tanaylab.github.io/misha/reference/gtrack.smooth.md)
+  is much faster for large windows (same results), and
+  [`gintervals.2d.intersect()`](https://tanaylab.github.io/misha/reference/gintervals.2d.intersect.md)
+  uses bounded memory.
+
 ## misha 5.15.1
 
 - [`gtrack.2d.import_contacts()`](https://tanaylab.github.io/misha/reference/gtrack.2d.import_contacts.md)
