@@ -1,3 +1,25 @@
+# misha 5.16.0
+
+This release fixes the remaining defects found in the review of 5.14.4. Several change results, marked **Behavior fix**; recompute anything that depends on them.
+
+* **Behavior fix:** `gtrack.create_sparse()`, `gtrack.2d.create()`, `glookup()` and `gtrack.lookup()` store an integer or logical `NA` as `NaN`; it was written as -2147483648. Recreate tracks made from integer values that contain NA.
+
+* **Behavior fix:** `gintervals.neighbors()` treats `maxdist = Inf` and `mindist = -Inf` as no limit; they errored or returned NULL.
+
+* **Behavior fix:** an `NA` in a logical argument (`include.lowest`, `force.binning`, `na.if.notfound`, `use_intervals1_strand`, `smooth_nans`, ...) or an integer `NA` strand is an error; they were read as `TRUE`, `FALSE` or strand 0.
+
+* Integer arguments are accepted wherever a number is expected (breaks, percentiles, window sizes, `minsegment`, `mindist`/`maxdist`, `min_score`, a `gintervals.mapply()` FUN or track expression that returns integers).
+
+* A numeric chrom column (`chrom = 1`) is read as the chromosome name, through the aliases, as `gintervals(1, ...)` does. A chrom column of another type (a list, NA, a fraction) and invalid chain columns are clear errors; they used to leave the R session with Ctrl-C disabled, the umask changed and warnings silenced.
+
+* `options(gmax.data.size = Inf)` (or unset) means no limit, also with multitasking: the shared memory is then bounded by half the RAM and `gmax.mem.usage`. A value below 1 counts as 1; a negative value or NA is an error. `gmax.mem.usage` NA or negative is an error. `gquantiles()` crashed R with `Inf`, `2^64` or `0`.
+
+* A misha call made inside a `gintervals.mapply()` FUN or a track expression runs in a single process; with multitasking it crashed the worker or broke the session's database.
+
+* `gintervals.neighbors()`, `gintervals.annotate()` and `gintervals.rbind()` accept data.tables and grouped tibbles.
+
+* `options(gmultitasking = NA)`, NA/NaN/Inf `sshift`/`eshift`, NA percentiles, NaN breaks, and empty `maxdist` or `iterator` values are rejected with clear errors.
+
 # misha 5.15.1
 
 * `gtrack.2d.import_contacts()` writes the same track files on every platform: it stores the contacts in coordinate order, which used to depend on the C++ library. It is also about twice as fast and needs about 20% less memory. Each contact keeps its value; `gextract()` may list contacts in a different order than for a track imported by an earlier version, and a sum over many contacts may differ in floating-point rounding.
