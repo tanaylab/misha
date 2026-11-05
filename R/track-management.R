@@ -773,6 +773,12 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
                     assign("GTRACK_DATASET", track_db_before, envir = .misha)
                     .gdb.cache_mark_dirty(dest_db)
                 } else {
+                    # (what holds the name now is a track this session lists, as it did)
+                    if (dir.exists(dest_dir)) {
+                        .gdb.invalidate_dir_cache(dest_dir)
+                        assign("GTRACKS", tracks_before, envir = .misha)
+                        assign("GTRACK_DATASET", track_db_before, envir = .misha)
+                    }
                     warning(sprintf("The copy over %s failed; the track that was there is kept at %s", dest_dir, aside), call. = FALSE)
                 }
                 if (!is.null(failed) && dir.exists(failed)) {

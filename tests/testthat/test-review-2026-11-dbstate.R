@@ -686,6 +686,8 @@ test_that("a failed gtrack.copy(overwrite = TRUE) keeps what another session put
     orig_bytes <- readBin(file.path(tracks, "orig.track", "track.dat"), "raw", 1e6)
     expect_warning(expect_error(gtrack.copy("src", "orig", overwrite = TRUE), "Failed to rename"), "is kept at")
     expect_equal(readBin(file.path(tracks, "orig.track", "track.dat"), "raw", 1e6), other_bytes)
+    # the session still lists the name, which a track holds
+    expect_true(gtrack.exists("orig"))
     # the track that was there is kept, under its hidden name: what took the name may be incomplete
     # (an older misha writes in place) or go again (a copy that fails after it was placed)
     kept <- list.files(tracks, pattern = "^\\.[0-9a-f]+$", all.files = TRUE, full.names = TRUE)
