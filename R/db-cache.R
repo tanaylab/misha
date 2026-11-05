@@ -789,7 +789,8 @@ gdb.reload <- function(rescan = TRUE) {
     token <- NULL
     seen <- character(0)
     # the legacy flag (.db.cache.dirty) as it was at the start: rewritten since by a lasting mark
-    # (.gdb.cache_mark_dirty() puts the mark's token in it), it is kept
+    # (.gdb.cache_mark_dirty() puts the mark's token in it), it is kept. One that cannot be read (another
+    # user's) cannot be rewritten by this version either, and is removed as before.
     legacy_path <- paste0(cache_path, ".dirty")
     read_legacy <- function() tryCatch(suppressWarnings(readLines(legacy_path, warn = FALSE)), error = function(e) NULL)
     legacy_seen <- NULL
@@ -798,6 +799,9 @@ gdb.reload <- function(rescan = TRUE) {
         seen <- .gdb.cache_dirty_files(groot)
         if (legacy_path %in% seen) {
             legacy_seen <- read_legacy()
+            if (is.null(legacy_seen)) {
+                legacy_seen <- NA
+            }
         }
         token <- .gdb.cache_mark_dirty(groot, legacy = FALSE)
         if (!is.null(lock)) {
@@ -820,7 +824,7 @@ gdb.reload <- function(rescan = TRUE) {
                 written <- tryCatch(.gdb.cache_write_file(cache_path, res), error = function(e) FALSE)
                 if (isTRUE(written)) {
                     unlink(setdiff(seen, legacy_path))
-                    if (!is.null(legacy_seen) && identical(read_legacy(), legacy_seen)) {
+                    if (identical(legacy_seen, NA) || (!is.null(legacy_seen) && identical(read_legacy(), legacy_seen))) {
                         unlink(legacy_path)
                     }
                     .gdb.cache_clear_dirty(groot, token)

@@ -998,3 +998,17 @@ test_that("gintervals.save of the deferred 2D whole-genome intervals builds them
     withr::with_options(list(gmulticontig.2d.mode = "full"), suppressWarnings(gintervals.save("all2d", .misha$ALLGENOME[[2]])))
     expect_equal(nrow(gintervals.load("all2d")), 16)
 })
+
+test_that("a rescan removes a legacy flag it could not read", {
+    skip_on_os("windows")
+    skip_if(Sys.info()[["user"]] == "root")
+    local_db_state()
+    db <- review_db(withr::local_tempdir())
+    legacy <- file.path(db, ".db.cache.dirty")
+    writeLines("another user's", legacy)
+    Sys.chmod(legacy, "000")
+    withr::defer(if (file.exists(legacy)) Sys.chmod(legacy, "644"))
+    suppressMessages(gdb.reload())
+    expect_false(file.exists(legacy))
+    expect_false(.gdb.cache_is_dirty(db))
+})
