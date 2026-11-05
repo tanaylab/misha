@@ -643,7 +643,18 @@
     if (is.null(mode)) {
         return(NULL)
     }
-    .generate_2d_on_demand(get("ALLGENOME", envir = .misha)[[1]], mode)
+    allgenome <- get("ALLGENOME", envir = .misha)
+    # built already in this mode and kept (options(gmulticontig.2d.cache), as gintervals.2d.all())
+    if (!.is_2d_deferred(allgenome[[2]]) && identical(attr(allgenome[[2]], "mode"), mode)) {
+        return(allgenome[[2]])
+    }
+    intervals2d <- .generate_2d_on_demand(allgenome[[1]], mode)
+    if (getOption("gmulticontig.2d.cache", FALSE)) {
+        attr(intervals2d, "mode") <- mode
+        allgenome[[2]] <- intervals2d
+        assign("ALLGENOME", allgenome, envir = .misha)
+    }
+    intervals2d
 }
 
 # Helper function to create deferred 2D placeholder

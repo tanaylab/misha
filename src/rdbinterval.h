@@ -484,7 +484,6 @@ private:
 	ChainIntervalConverter         m_chain_converter;
 	IntervalConverter              m_interval_converter;
 	mutable bool                   m_deferred_2d_scope{false};
-	mutable std::shared_ptr<GIntervals2D> m_built_deferred_2d_scope;
 	mutable map<string, GenomeTrack::ChromFiles> m_chrom_files;
 
 	SEXP get_rallgenome1d() const { return VECTOR_ELT(m_allgenome, 0); }

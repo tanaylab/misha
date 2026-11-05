@@ -316,7 +316,8 @@ gintervals.2d.all <- function() {
         # are not the whole-genome scope)
         if (getOption("gmulticontig.2d.cache", FALSE) && !is.null(getOption("gmulticontig.2d.mode"))) {
             allgenome <- get("ALLGENOME", envir = .misha)
-            allgenome[[2]] <- intervals2d
+            # with the mode it was built in: .gintervals.2d.whole_genome() reuses it in that mode
+            allgenome[[2]] <- structure(intervals2d, mode = mode)
             assign("ALLGENOME", allgenome, envir = .misha)
         }
     }

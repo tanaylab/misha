@@ -973,6 +973,23 @@ test_that("2D computations over the whole-genome scope give the same values defe
     })
 })
 
+test_that("the whole-genome 2D scope built in C++ is kept with options(gmulticontig.2d.cache)", {
+    local_db_state()
+    withr::local_options(list(gmulticontig.2d.threshold = 2, gmulticontig.2d.mode = "full", gmulticontig.2d.cache = TRUE))
+    deferred_2d_db(withr::local_tempdir())
+    built <- 0
+    real_generate <- .generate_2d_on_demand
+    local_mocked_bindings(.generate_2d_on_demand = function(...) {
+        built <<- built + 1
+        real_generate(...)
+    })
+    s1 <- suppressWarnings(gsummary("rt"))
+    s2 <- suppressWarnings(gsummary("rt"))
+    expect_equal(s1, s2)
+    expect_equal(built, 1)
+    expect_equal(attr(.misha$ALLGENOME[[2]], "mode"), "full")
+})
+
 test_that("gintervals.save of the deferred 2D whole-genome intervals builds them or stops", {
     local_db_state()
     withr::local_options(list(gmulticontig.2d.threshold = 2, gmulticontig.2d.mode = NULL))
