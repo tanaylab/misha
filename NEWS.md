@@ -1,3 +1,35 @@
+# misha 5.16.0
+
+This release fixes the remaining defects found in the review of 5.14.4. Several change results, marked **Behavior fix**; recompute anything that depends on them.
+
+* **Behavior fix:** `gcor()` computes standard deviations, covariance and correlation without cancellation; values far from zero relative to their spread gave NaN or wrong correlations, also in multitask runs.
+
+* **Behavior fix:** `gsummary()`, `gintervals.summary()` and `gbins.summary()` give a NaN standard deviation when a value is infinite (was 0), and report `-Inf`/`Inf` as the minimum or maximum when all values are infinite (was +-1.8e308).
+
+* **Behavior fix:** `first`, `last`, `sample`, `lse` and their `.pos` functions work on array tracks; they returned NA, and `lse` returned garbage.
+
+* **Behavior fix:** `gtrack.array.extract()` no longer repeats the previous chromosome's values after a chromosome with one interval.
+
+* **Behavior fix:** multitasked computations no longer split one iterator bin into two rows.
+
+* **Behavior fix:** `gseq.kmer.dist(mask =)` leaves out k-mers that overlap the mask, as documented; it left out only those starting in it.
+
+* **Behavior fix:** `pwm` and `pwm.max` are NA at a chromosome end where no motif fits (were -Inf).
+
+* **Behavior fix:** `gintervals.neighbors()` ties and `gseq.pwm_edits()` tied edits no longer depend on the input order or the C++ library.
+
+* **Behavior fix:** `gintervals.liftover()` returns NULL, with a warning, when no input chromosome is in the chain (was an error).
+
+* Sequence and value-based virtual tracks under a 2D iterator require `gvtrack.iterator(dim =)`; they gave NaN or 0, or crashed.
+
+* `gintervals.annotate()` with `tie_method` on 2D intervals gives a clear error.
+
+* Bands wider than 2^31 are accepted; non-finite bands are an error.
+
+* `pwm.edit_distance` no longer crashes on long motifs with `max_edits`.
+
+* `gtrack.smooth()` is much faster for large windows (same results), and `gintervals.2d.intersect()` uses bounded memory.
+
 # misha 5.15.1
 
 * `gtrack.2d.import_contacts()` writes the same track files on every platform: it stores the contacts in coordinate order, which used to depend on the C++ library. It is also about twice as fast and needs about 20% less memory. Each contact keeps its value; `gextract()` may list contacts in a different order than for a track imported by an earlier version, and a sum over many contacts may differ in floating-point rounding.

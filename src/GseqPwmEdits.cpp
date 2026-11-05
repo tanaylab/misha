@@ -286,10 +286,11 @@ WindowResult compute_window_edits_detailed(
             sorted_positions.push_back(i);
         }
     }
-    std::sort(sorted_positions.begin(), sorted_positions.end(),
-              [&positions](int a, int b) {
-                  return positions[a].gain > positions[b].gain;
-              });
+    // stable: equal gains keep position order under every C++ library
+    std::stable_sort(sorted_positions.begin(), sorted_positions.end(),
+                     [&positions](int a, int b) {
+                         return positions[a].gain > positions[b].gain;
+                     });
 
     // Greedy: take largest gains until gap is covered
     double acc = 0.0;
@@ -742,10 +743,11 @@ WindowResult compute_window_edits_detailed_with_indels(
                         optional.push_back(&ap);
                     }
                 }
-                std::sort(optional.begin(), optional.end(),
-                          [](const AlignedPos* a, const AlignedPos* b) {
-                              return a->gain > b->gain;
-                          });
+                // stable: equal gains keep alignment order under every C++ library
+                std::stable_sort(optional.begin(), optional.end(),
+                                 [](const AlignedPos* a, const AlignedPos* b) {
+                                     return a->gain > b->gain;
+                                 });
 
                 double acc = 0.0;
                 subs_needed = mandatory_subs;
@@ -786,10 +788,11 @@ WindowResult compute_window_edits_detailed_with_indels(
                         optional.push_back(&ap);
                     }
                 }
-                std::sort(optional.begin(), optional.end(),
-                          [](const AlignedPos* a, const AlignedPos* b) {
-                              return a->gain > b->gain;
-                          });
+                // stable: equal gains keep alignment order under every C++ library
+                std::stable_sort(optional.begin(), optional.end(),
+                                 [](const AlignedPos* a, const AlignedPos* b) {
+                                     return a->gain > b->gain;
+                                 });
                 double acc = 0.0;
                 double remaining_gap = below
                     ? (adjusted - static_cast<double>(threshold))

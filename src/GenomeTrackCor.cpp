@@ -24,50 +24,90 @@ struct CorSummary {
     double num_non_nan_bins;
     double sum_x;
     double sum_y;
-    double sum_x2;
-    double sum_y2;
-    double sum_xy;
+    // Sums of (x - shift_x), (y - shift_y) and their squares and cross product, shifted by
+    // the first pair. Unshifted, sum(x^2) - sum(x)^2/n cancels catastrophically when the
+    // variance is small relative to mean^2 (offset 1e8 gave a NaN sd and cor).
+    double shift_x;
+    double shift_y;
+    double shifted_sum_x;
+    double shifted_sum_y;
+    double shifted_sum_x2;
+    double shifted_sum_y2;
+    double shifted_sum_xy;
 
     void update(double x, double y) {
         ++num_bins;
         if (!std::isnan(x) && !std::isnan(y)) {
+            if (!num_non_nan_bins) {
+                shift_x = x;
+                shift_y = y;
+            }
             ++num_non_nan_bins;
             sum_x += x;
             sum_y += y;
-            sum_x2 += x * x;
-            sum_y2 += y * y;
-            sum_xy += x * y;
+            double dx = x - shift_x;
+            double dy = y - shift_y;
+            shifted_sum_x += dx;
+            shifted_sum_y += dy;
+            shifted_sum_x2 += dx * dx;
+            shifted_sum_y2 += dy * dy;
+            shifted_sum_xy += dx * dy;
         }
     }
 
+    // sum((x - mean_x)^2), sum((y - mean_y)^2), sum((x - mean_x)(y - mean_y))
+    double sq_dev_x() const { return shifted_sum_x2 - shifted_sum_x * shifted_sum_x / num_non_nan_bins; }
+    double sq_dev_y() const { return shifted_sum_y2 - shifted_sum_y * shifted_sum_y / num_non_nan_bins; }
+    double co_dev() const { return shifted_sum_xy - shifted_sum_x * shifted_sum_y / num_non_nan_bins; }
+
     void merge(const CorSummary &obj) {
+        if (obj.num_non_nan_bins) {
+            if (!num_non_nan_bins) {
+                shift_x = obj.shift_x;
+                shift_y = obj.shift_y;
+                shifted_sum_x = obj.shifted_sum_x;
+                shifted_sum_y = obj.shifted_sum_y;
+                shifted_sum_x2 = obj.shifted_sum_x2;
+                shifted_sum_y2 = obj.shifted_sum_y2;
+                shifted_sum_xy = obj.shifted_sum_xy;
+            } else {
+                // Combine the (co)moments pairwise (Chan et al.), then store the result
+                // relative to this summary's shifts
+                double n1 = num_non_nan_bins, n2 = obj.num_non_nan_bins, n = n1 + n2;
+                // mean2 - mean1, without forming the means themselves (they may be large)
+                double delta_x = (obj.shift_x - shift_x) + (obj.shifted_sum_x / n2 - shifted_sum_x / n1);
+                double delta_y = (obj.shift_y - shift_y) + (obj.shifted_sum_y / n2 - shifted_sum_y / n1);
+                double w = n1 * n2 / n;
+                double mxx = sq_dev_x() + obj.sq_dev_x() + delta_x * delta_x * w;
+                double myy = sq_dev_y() + obj.sq_dev_y() + delta_y * delta_y * w;
+                double mxy = co_dev() + obj.co_dev() + delta_x * delta_y * w;
+                shifted_sum_x = shifted_sum_x + obj.shifted_sum_x + n2 * (obj.shift_x - shift_x);
+                shifted_sum_y = shifted_sum_y + obj.shifted_sum_y + n2 * (obj.shift_y - shift_y);
+                shifted_sum_x2 = mxx + shifted_sum_x * shifted_sum_x / n;
+                shifted_sum_y2 = myy + shifted_sum_y * shifted_sum_y / n;
+                shifted_sum_xy = mxy + shifted_sum_x * shifted_sum_y / n;
+            }
+        }
         num_bins += obj.num_bins;
         num_non_nan_bins += obj.num_non_nan_bins;
         sum_x += obj.sum_x;
         sum_y += obj.sum_y;
-        sum_x2 += obj.sum_x2;
-        sum_y2 += obj.sum_y2;
-        sum_xy += obj.sum_xy;
     }
 
     double mean_x() const { return sum_x / num_non_nan_bins; }
     double mean_y() const { return sum_y / num_non_nan_bins; }
 
-    double cov() const {
-        double n = num_non_nan_bins;
-        return (sum_xy - (sum_x * sum_y) / n) / (n - 1);
-    }
+    double cov() const { return co_dev() / (num_non_nan_bins - 1); }
 
+    // Rounding can leave a tiny negative sum of squared deviations; NaN (from Inf values) is kept
     double var_x() const {
-        double n = num_non_nan_bins;
-        double var = (sum_x2 - (sum_x * sum_x) / n) / (n - 1);
-        return var;
+        double sq_dev = sq_dev_x();
+        return (sq_dev < 0 ? 0 : sq_dev) / (num_non_nan_bins - 1);
     }
 
     double var_y() const {
-        double n = num_non_nan_bins;
-        double var = (sum_y2 - (sum_y * sum_y) / n) / (n - 1);
-        return var;
+        double sq_dev = sq_dev_y();
+        return (sq_dev < 0 ? 0 : sq_dev) / (num_non_nan_bins - 1);
     }
 
     CorSummary() :
@@ -75,9 +115,13 @@ struct CorSummary {
         num_non_nan_bins(0),
         sum_x(0),
         sum_y(0),
-        sum_x2(0),
-        sum_y2(0),
-        sum_xy(0) {}
+        shift_x(0),
+        shift_y(0),
+        shifted_sum_x(0),
+        shifted_sum_y(0),
+        shifted_sum_x2(0),
+        shifted_sum_y2(0),
+        shifted_sum_xy(0) {}
 };
 
 enum CorSummaryCols { TOTAL_BINS, TOTAL_NAN_BINS, MEAN1, MEAN2, SD1, SD2, COV, CORR, NUM_COLS };
@@ -112,18 +156,8 @@ static void fill_values(const CorSummary &summary, double *out)
         return;
     }
 
-    double var1 = summary.var_x();
-    double var2 = summary.var_y();
-
-    if (var1 < 0 && var1 > -1e-12) {
-        var1 = 0;
-    }
-    if (var2 < 0 && var2 > -1e-12) {
-        var2 = 0;
-    }
-
-    double sd1 = var1 >= 0 ? sqrt(var1) : numeric_limits<double>::quiet_NaN();
-    double sd2 = var2 >= 0 ? sqrt(var2) : numeric_limits<double>::quiet_NaN();
+    double sd1 = sqrt(summary.var_x());
+    double sd2 = sqrt(summary.var_y());
     out[SD1] = sd1;
     out[SD2] = sd2;
 
@@ -249,28 +283,28 @@ static double pearson_from_values(const vector<double> &x, const vector<double> 
     if (n < 2)
         return numeric_limits<double>::quiet_NaN();
 
-    double sum_x = 0, sum_y = 0, sum_x2 = 0, sum_y2 = 0, sum_xy = 0;
+    // Two passes (means first), so the sums of squares do not cancel
+    double mean_x = 0, mean_y = 0;
     for (uint64_t i = 0; i < n; ++i) {
-        sum_x += x[i];
-        sum_y += y[i];
-        sum_x2 += x[i] * x[i];
-        sum_y2 += y[i] * y[i];
-        sum_xy += x[i] * y[i];
+        mean_x += x[i];
+        mean_y += y[i];
+    }
+    mean_x /= n;
+    mean_y /= n;
+
+    double sq_dev_x = 0, sq_dev_y = 0, co_dev = 0;
+    for (uint64_t i = 0; i < n; ++i) {
+        double dx = x[i] - mean_x;
+        double dy = y[i] - mean_y;
+        sq_dev_x += dx * dx;
+        sq_dev_y += dy * dy;
+        co_dev += dx * dy;
     }
 
-    double var_x = (sum_x2 - (sum_x * sum_x) / n) / (n - 1);
-    double var_y = (sum_y2 - (sum_y * sum_y) / n) / (n - 1);
-
-    // Clamp tiny negative variance from catastrophic cancellation; we
-    // still bail out on genuinely zero variance below.
-    if (var_x < 0 && var_x > -1e-12) var_x = 0;
-    if (var_y < 0 && var_y > -1e-12) var_y = 0;
-
-    if (var_x <= 0 || var_y <= 0)
+    if (!(sq_dev_x > 0) || !(sq_dev_y > 0))
         return numeric_limits<double>::quiet_NaN();
 
-    double cov = (sum_xy - (sum_x * sum_y) / n) / (n - 1);
-    return cov / (sqrt(var_x) * sqrt(var_y));
+    return co_dev / (sqrt(sq_dev_x) * sqrt(sq_dev_y));
 }
 
 // Build result vector for Spearman (single pair)

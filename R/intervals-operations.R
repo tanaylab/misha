@@ -138,31 +138,34 @@ gintervals.2d.intersect <- function(intervals1 = NULL, intervals2 = NULL) {
     key2 <- paste(as.character(intervals2$chrom1), as.character(intervals2$chrom2), sep = "\r")
     common <- intersect(unique(key1), unique(key2))
 
-    pieces <- vector("list", length(common))
+    pieces <- list()
     for (ix in seq_along(common)) {
         s1 <- intervals1[key1 == common[ix], , drop = FALSE]
         s2 <- intervals2[key2 == common[ix], , drop = FALSE]
-        i <- rep(seq_len(nrow(s1)), times = nrow(s2))
-        j <- rep(seq_len(nrow(s2)), each = nrow(s1))
+        # All pairs, a block of s2 rows at a time, so that memory stays bounded by the block and the output
+        block <- max(1L, floor(1e6 / nrow(s1)))
+        for (j0 in seq(1L, nrow(s2), by = block)) {
+            i <- rep(seq_len(nrow(s1)), times = min(block, nrow(s2) - j0 + 1L))
+            j <- rep(j0:min(nrow(s2), j0 + block - 1L), each = nrow(s1))
 
-        new_s1 <- pmax(s1$start1[i], s2$start1[j])
-        new_e1 <- pmin(s1$end1[i], s2$end1[j])
-        new_s2 <- pmax(s1$start2[i], s2$start2[j])
-        new_e2 <- pmin(s1$end2[i], s2$end2[j])
-        valid <- new_s1 < new_e1 & new_s2 < new_e2
+            new_s1 <- pmax(s1$start1[i], s2$start1[j])
+            new_e1 <- pmin(s1$end1[i], s2$end1[j])
+            new_s2 <- pmax(s1$start2[i], s2$start2[j])
+            new_e2 <- pmin(s1$end2[i], s2$end2[j])
+            valid <- new_s1 < new_e1 & new_s2 < new_e2
 
-        if (any(valid)) {
-            pieces[[ix]] <- data.frame(
-                chrom1 = as.character(s1$chrom1[i[valid]]),
-                start1 = new_s1[valid], end1 = new_e1[valid],
-                chrom2 = as.character(s1$chrom2[i[valid]]),
-                start2 = new_s2[valid], end2 = new_e2[valid],
-                stringsAsFactors = FALSE
-            )
+            if (any(valid)) {
+                pieces[[length(pieces) + 1L]] <- data.frame(
+                    chrom1 = as.character(s1$chrom1[i[valid]]),
+                    start1 = new_s1[valid], end1 = new_e1[valid],
+                    chrom2 = as.character(s1$chrom2[i[valid]]),
+                    start2 = new_s2[valid], end2 = new_e2[valid],
+                    stringsAsFactors = FALSE
+                )
+            }
         }
     }
 
-    pieces <- pieces[!vapply(pieces, is.null, logical(1))]
     if (length(pieces) == 0) {
         return(NULL)
     }
