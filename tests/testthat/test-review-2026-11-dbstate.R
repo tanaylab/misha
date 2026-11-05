@@ -840,3 +840,35 @@ test_that("a mark also makes the flag earlier versions read, which a rescan that
     expect_length(flags(), 0)
     expect_true("t9" %in% read_cache(db)[[1]])
 })
+
+test_that("interval operations and cartesian iterators over the deferred whole-genome 2D scope build it or stop", {
+    local_db_state()
+    withr::local_options(list(gmulticontig.2d.threshold = 2, gmulticontig.2d.mode = NULL))
+    review_db(withr::local_tempdir())
+    r <- data.frame(
+        chrom1 = c("chr1", "chr1", "chr2", "chrX"), start1 = c(0, 0, 0, 0), end1 = c(100, 100, 100, 100),
+        chrom2 = c("chr1", "chr2", "chrX", "chrM"), start2 = c(200, 0, 0, 0), end2 = c(300, 100, 100, 100)
+    )
+    gtrack.2d.create("mr", "", r, c(10, 20, 30, 40))
+    msg <- 'options(gmulticontig.2d.mode = "full")'
+    cg <- giterator.cartesian_grid(gintervals(c("chr1", "chr2"), 0, 100), c(-50, 50))
+
+    # it returned no 2D intervals
+    expect_error(gintervals.2d.band_intersect(.misha$ALLGENOME, c(-1e9, 1e9)), msg, fixed = TRUE)
+    expect_error(gintervals.canonic(.misha$ALLGENOME), msg, fixed = TRUE)
+    expect_error(gextract("mr", .misha$ALLGENOME, iterator = cg), msg, fixed = TRUE)
+    expect_error(gtrack.create("cg_unset", "", "mr", iterator = cg), msg, fixed = TRUE)
+
+    withr::with_options(list(gmulticontig.2d.mode = "full"), {
+        # the 4 cis pairs within the band
+        expect_equal(nrow(gintervals.2d.band_intersect(.misha$ALLGENOME, c(-1e9, 1e9))), 4)
+        expect_equal(nrow(gintervals.canonic(.misha$ALLGENOME)), 16)
+        # the cartesian grid of chr1 0-100 and chr2 0-100, with chr1-chr2 0-100 holding 20
+        res <- gextract("mr", .misha$ALLGENOME, iterator = cg)
+        expect_equal(res$mr[as.character(res$chrom1) == "chr1" & as.character(res$chrom2) == "chr2"], 20)
+        gtrack.create("cg_full", "", "mr", iterator = cg)
+        expect_equal(gextract("cg_full", gintervals.2d("chr1", 0, 100, "chr2", 0, 100))$cg_full, 20)
+        # from the global environment, as a user calls it (the build is evaluated in misha's namespace)
+        expect_equal(evalq(misha::gsummary("mr")[["Sum"]], globalenv()), 100)
+    })
+})

@@ -213,9 +213,9 @@ void TrackExprScanner::check(const vector<string> &track_exprs, GIntervalsFetche
 	// initiate the expression iterator
 	delete m_expr_itr;
 	m_expr_itr = create_expr_iterator(iterator_policy, m_expr_vars, m_track_exprs, scope1d, scope2d, m_1d.intervals, m_2d.intervals, m_band);
-	// a 2D computation over the whole-genome scope of a genome above gmulticontig.2d.threshold
-	// contigs, which holds no 2D intervals (IntervUtils::set_deferred_2d_scope), with an iterator made
-	// without verify_2d_iter, which builds them: it would return nothing
+	// a 2D computation over the deferred whole-genome scope (IntervUtils::set_deferred_2d_scope) whose
+	// iterator was made without building it (every 2D iterator above builds it): it would return
+	// nothing
 	if (!m_expr_itr->is_1d() && m_iu.deferred_2d_scope() && (!scope2d || !scope2d->size()))
 		verror("%s", DEFERRED_2D_SCOPE_MSG);
 	m_expr_vars.init(*m_expr_itr);
@@ -980,6 +980,7 @@ TrackExpressionIteratorBase *TrackExprScanner::create_expr_iterator(SEXP giterat
 		int64_t max_band_idx = Rf_isReal(rband_idx) ? (int64_t)REAL(rband_idx)[1] : INTEGER(rband_idx)[1];
 		bool use_band_idx_limit = Rf_isReal(rband_idx) ? (bool)REAL(rband_idx)[2] : (bool)INTEGER(rband_idx)[2];
 
+		build_deferred_2d_scope(scope2d);
 		expr_itr = new TrackExpressionCartesianGridIterator;
 		if (call_begin) 
 			((TrackExpressionCartesianGridIterator *)expr_itr)->begin(m_iu.get_chromkey(), &intervals1, Rf_isNull(VECTOR_ELT(giterator, 1)) ? NULL : &intervals2,
@@ -994,6 +995,7 @@ TrackExpressionIteratorBase *TrackExprScanner::create_expr_iterator(SEXP giterat
 			if (call_begin) 
 				((TrackExpressionBigSet1DIterator *)expr_itr)->begin(intervset, meta, *scope1d);
 		} else if (GIntervalsBigSet2D::is2d(meta)) {
+			build_deferred_2d_scope(scope2d);
 			expr_itr = new TrackExpressionBigSet2DIterator(m_iu);
 			if (call_begin) 
 				((TrackExpressionBigSet2DIterator *)expr_itr)->begin(intervset, meta, *scope2d, band, m_iu.get_max_data_size());

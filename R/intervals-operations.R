@@ -34,7 +34,7 @@ gintervals.2d.band_intersect <- function(intervals = NULL, band = NULL, interval
         stop("Usage: gintervals.2d.band_intersect(intervals, band = NULL, intervals.set.out = NULL)", call. = FALSE)
     }
 
-    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+    intervals <- .gscope_expand_2d(rescue_ALLGENOME(intervals, as.character(substitute(intervals))))
 
     intervals.set.out <- do.call(.gexpr2str, list(substitute(intervals.set.out)), envir = parent.frame())
 
@@ -322,7 +322,7 @@ gintervals.canonic <- function(intervals = NULL, unify_touching_intervals = TRUE
         stop("Usage: gintervals.canonic(intervals, unify_touching_intervals = TRUE)", call. = FALSE)
     }
 
-    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+    intervals <- .gscope_expand_2d(rescue_ALLGENOME(intervals, as.character(substitute(intervals))))
 
     res <- .gcall("gintervcanonic", intervals, unify_touching_intervals, .misha_env())
     res
@@ -565,7 +565,7 @@ gintervals.force_range <- function(intervals = NULL, intervals.set.out = NULL) {
     }
     .gcheckroot()
 
-    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+    intervals <- .gscope_expand_2d(rescue_ALLGENOME(intervals, as.character(substitute(intervals))))
 
     intervals.set.out <- do.call(.gexpr2str, list(substitute(intervals.set.out)), envir = parent.frame())
 
@@ -706,7 +706,7 @@ gintervals.normalize <- function(intervals = NULL, size = NULL, intervals.set.ou
     # Check vector length matches intervals or is one-to-many case
     is_size_vector <- length(size) > 1
     if (is_size_vector) {
-        intervals_temp <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+        intervals_temp <- .gscope_expand_2d(rescue_ALLGENOME(intervals, as.character(substitute(intervals))))
         n_intervals <- nrow(intervals_temp)
         n_sizes <- length(size)
 
@@ -719,7 +719,7 @@ gintervals.normalize <- function(intervals = NULL, size = NULL, intervals.set.ou
         }
     }
 
-    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+    intervals <- .gscope_expand_2d(rescue_ALLGENOME(intervals, as.character(substitute(intervals))))
     intervals.set.out <- do.call(.gexpr2str, list(substitute(intervals.set.out)), envir = parent.frame())
 
     # Handle one-to-many case: single interval with multiple sizes
@@ -1067,7 +1067,7 @@ gintervals.chrom_sizes <- function(intervals = NULL) {
     }
     .gcheckroot()
 
-    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+    intervals <- .gscope_expand_2d(rescue_ALLGENOME(intervals, as.character(substitute(intervals))))
 
     if (.gintervals.is_bigset(intervals)) {
         if (.gintervals.big.is1d(intervals)) {

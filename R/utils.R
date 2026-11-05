@@ -643,8 +643,51 @@ rescue_ALLGENOME <- function(intervals, intervals_name) {
     }
 
     # The whole-genome scope passed as a whole (.misha$ALLGENOME) keeps its 2D part as it is, the
-    # placeholder above gmulticontig.2d.threshold contigs: a 1D computation does not need it, and a 2D
-    # one is run again with it built in options(gmulticontig.2d.mode), or stops without the option
-    # (.gcall)
+    # placeholder above gmulticontig.2d.threshold contigs. The C++ conversion builds it in
+    # options(gmulticontig.2d.mode) when 2D intervals are asked for, or stops without the option; for a
+    # computation of the track expression scanner (.gscope_lazy_2d), only when it is 2D.
     return(intervals)
+}
+
+# The message of a computation over the deferred whole-genome 2D scope (as DEFERRED_2D_SCOPE_MSG in C++)
+.DEFERRED_2D_SCOPE_MSG <- paste(
+    "The whole-genome 2D scope of a database with more than getOption(\"gmulticontig.2d.threshold\") contigs is not built",
+    "by default, and a 2D computation over it would miss the trans chromosome pairs. Set",
+    "options(gmulticontig.2d.mode = \"full\") for all chromosome pairs, options(gmulticontig.2d.mode = \"diagonal\")",
+    "for the cis pairs only, or give the 2D intervals explicitly."
+)
+
+# The whole-genome scope (.misha$ALLGENOME), or its deferred 2D part alone, for an interval operation
+# done without the track expression scanner (in R or in C++): the 2D part, deferred above
+# gmulticontig.2d.threshold contigs, built in options(gmulticontig.2d.mode), or an error without it.
+# Anything else is returned as it is.
+.gscope_expand_2d <- function(intervals) {
+    placeholder <- function(x) is.list(x) && !is.data.frame(x) && !is.null(attr(x, "deferred"))
+    whole <- is.list(intervals) && !is.data.frame(intervals) && length(intervals) == 2 && placeholder(intervals[[2]])
+    if (!whole && !placeholder(intervals)) {
+        return(intervals)
+    }
+    intervals2d <- .gintervals.2d.whole_genome()
+    if (is.null(intervals2d)) {
+        stop(.DEFERRED_2D_SCOPE_MSG, call. = FALSE)
+    }
+    if (whole) {
+        intervals[[2]] <- intervals2d
+        intervals
+    } else {
+        intervals2d
+    }
+}
+
+# The whole-genome scope (.misha$ALLGENOME) for a computation of the track expression scanner: its
+# deferred 2D part (the placeholder above gmulticontig.2d.threshold contigs) is marked "lazy", so that
+# the C++ conversion leaves it to the scanner, which builds it only for a 2D computation
+# (TrackExprScanner::build_deferred_2d_scope). Unmarked, a conversion that asks for 2D intervals
+# builds it at once or stops. Anything else is returned as it is.
+.gscope_lazy_2d <- function(intervals) {
+    if (is.list(intervals) && !is.data.frame(intervals) && length(intervals) == 2 &&
+        is.list(intervals[[2]]) && !is.data.frame(intervals[[2]]) && !is.null(attr(intervals[[2]], "deferred"))) {
+        attr(intervals[[2]], "lazy") <- TRUE
+    }
+    intervals
 }

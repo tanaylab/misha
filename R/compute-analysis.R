@@ -51,6 +51,8 @@ gsegment <- function(expr = NULL, minsegment = NULL, maxpval = 0.05, onetailed =
 
     exprstr <- do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame())
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
+    # (the deferred 2D part of the whole-genome scope: built for a 2D computation only)
+    intervals <- .gscope_lazy_2d(intervals)
     intervals.set.out <- do.call(.gexpr2str, list(substitute(intervals.set.out)), envir = parent.frame())
     if (!is.null(intervals.set.out)) {
         fullpath <- .gintervals.check_new_set(intervals.set.out)
@@ -151,6 +153,8 @@ gwilcox <- function(expr = NULL, winsize1 = NULL, winsize2 = NULL, maxpval = 0.0
 
     exprstr <- do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame())
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
+    # (the deferred 2D part of the whole-genome scope: built for a 2D computation only)
+    intervals <- .gscope_lazy_2d(intervals)
     intervals.set.out <- do.call(.gexpr2str, list(substitute(intervals.set.out)), envir = parent.frame())
     if (!is.null(intervals.set.out)) {
         fullpath <- .gintervals.check_new_set(intervals.set.out)

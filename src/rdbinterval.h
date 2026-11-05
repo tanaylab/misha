@@ -269,6 +269,7 @@ public:
 	// whose 2D part is a placeholder (gsetroot()): converted as no 2D intervals. A computation that
 	// iterates in 2D over it gets them built (build_deferred_2d_scope), or stops.
 	void set_deferred_2d_scope() const { m_deferred_2d_scope = true; }
+	void clear_deferred_2d_scope() const { m_deferred_2d_scope = false; }
 	bool deferred_2d_scope() const { return m_deferred_2d_scope; }
 
 	// The whole-genome 2D intervals, into `intervals`, built in options(gmulticontig.2d.mode)
@@ -483,6 +484,7 @@ private:
 	ChainIntervalConverter         m_chain_converter;
 	IntervalConverter              m_interval_converter;
 	mutable bool                   m_deferred_2d_scope{false};
+	mutable std::shared_ptr<GIntervals2D> m_built_deferred_2d_scope;
 	mutable map<string, GenomeTrack::ChromFiles> m_chrom_files;
 
 	SEXP get_rallgenome1d() const { return VECTOR_ELT(m_allgenome, 0); }

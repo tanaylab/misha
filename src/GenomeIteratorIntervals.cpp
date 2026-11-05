@@ -210,6 +210,9 @@ SEXP gcheck_iterator(SEXP _iterator_policy, SEXP _envir)
 		GIntervals2D scope2d;
 		iu.get_all_genome_intervs(scope1d);
 		iu.get_all_genome_intervs(scope2d);
+		// a check of the iterator's definition, over no scope: the deferred whole-genome 2D scope
+		// (above gmulticontig.2d.threshold contigs) is not built for it
+		iu.clear_deferred_2d_scope();
 
 		TrackExprScanner scanner(iu);
 		scanner.create_expr_iterator(R_NilValue, &scope1d, &scope2d, _iterator_policy, R_NilValue);

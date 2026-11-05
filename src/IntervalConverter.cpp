@@ -26,13 +26,18 @@ IntervalConverter::IntervalConverter(rdb::IntervUtils &iu) :
 // The 2D part of the whole-genome scope of a genome above gmulticontig.2d.threshold contigs: a
 // placeholder with attribute "deferred" (.create_deferred_2d), no intervals. (Read from the attribute
 // list, not with Rf_getAttrib/Rf_install, which may allocate.)
-static bool is_deferred_2d(SEXP rintervals)
+static bool has_attr(SEXP rintervals, const char *name)
 {
 	for (SEXP attr = ATTRIB(rintervals); attr != R_NilValue; attr = CDR(attr)) {
-		if (TAG(attr) != R_NilValue && !strcmp(CHAR(PRINTNAME(TAG(attr))), "deferred"))
+		if (TAG(attr) != R_NilValue && !strcmp(CHAR(PRINTNAME(TAG(attr))), name))
 			return true;
 	}
 	return false;
+}
+
+static bool is_deferred_2d(SEXP rintervals)
+{
+	return has_attr(rintervals, "deferred");
 }
 
 unsigned IntervalConverter::get_rintervs_type_mask(SEXP rintervals, const char *error_msg_prefix) const
@@ -410,15 +415,22 @@ SEXP IntervalConverter::convert_rintervs(SEXP rintervals, GIntervals *intervals,
 	if (intervs_type_mask == (rdb::IntervUtils::INTERVS1D | rdb::IntervUtils::INTERVS2D))
 		rintervals = VECTOR_ELT(_rintervals, 1);
 
-	// the whole-genome 2D scope of a genome above gmulticontig.2d.threshold contigs (the placeholder, or
-	// the cis pairs gintervals.2d.all() gives by default): converted as no 2D intervals, and a 2D
-	// computation over it stops (TrackExprScanner::check) instead of missing the trans pairs
+	// the 2D part of the whole-genome scope of a genome above gmulticontig.2d.threshold contigs, a
+	// placeholder (gsetroot()), is never taken as no intervals. Not asked for (1D intervals only): not
+	// used. Marked "lazy" (.gscope_lazy_2d: the scope of a track expression scanner): left to the
+	// scanner, which builds it for a 2D computation only (TrackExprScanner::build_deferred_2d_scope).
+	// Otherwise built now in options(gmulticontig.2d.mode), or an error without it.
 	if ((intervs_type_mask & rdb::IntervUtils::INTERVS2D) && is_deferred_2d(rintervals)) {
-		// given alone, it is what is asked for; in the whole-genome scope (1D and 2D) only a 2D
-		// computation over it stops
 		if (intervs_type_mask == rdb::IntervUtils::INTERVS2D)
 			verror("%s%s", error_msg_prefix, rdb::DEFERRED_2D_SCOPE_MSG);
-		m_iu.set_deferred_2d_scope();
+		if (!intervals2d)
+			return _rintervals;
+		if (has_attr(rintervals, "lazy")) {
+			m_iu.set_deferred_2d_scope();
+			return _rintervals;
+		}
+		if (!m_iu.build_deferred_2d_scope(*intervals2d))
+			verror("%s%s", error_msg_prefix, rdb::DEFERRED_2D_SCOPE_MSG);
 		return _rintervals;
 	}
 

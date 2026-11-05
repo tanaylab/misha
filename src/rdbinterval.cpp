@@ -305,13 +305,22 @@ void IntervUtils::get_all_genome_intervs(GIntervals2D &intervals) const
 
 bool IntervUtils::build_deferred_2d_scope(GIntervals2D &intervals) const
 {
-	if (RdbInitializer::is_kid())
-		verror("%s", DEFERRED_2D_SCOPE_MSG);
-	SEXP rintervals = run_in_R(".gintervals.2d.whole_genome()", get_env());
-	if (rintervals == R_NilValue)
-		return false;
-	convert_rintervs(rintervals, NULL, &intervals);
-	intervals.sort();
+	// built once per call: a serial fallback after the multitasking plan reuses it
+	if (!m_built_deferred_2d_scope) {
+		if (RdbInitializer::is_kid())
+			verror("Internal error: the whole-genome 2D scope was not built before the multitasking children started");
+		// in misha's namespace, not get_env(), whose parent is the caller's frame (the global environment
+		// for a user's call)
+		SEXP rintervals = run_in_R("misha:::.gintervals.2d.whole_genome()", R_BaseEnv);
+		if (rintervals == R_NilValue)
+			return false;
+		auto built = std::make_shared<GIntervals2D>();
+		convert_rintervs(rintervals, NULL, built.get());
+		built->sort();
+		m_built_deferred_2d_scope = built;
+	}
+	intervals.clear();
+	intervals.insert(intervals.end(), m_built_deferred_2d_scope->begin(), m_built_deferred_2d_scope->end());
 	m_deferred_2d_scope = false;
 	return true;
 }

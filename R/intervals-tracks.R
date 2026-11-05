@@ -96,6 +96,8 @@ gintervals.mapply <- function(FUN = NULL, ..., intervals = NULL, enable.gapply.i
     }
 
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
+    # (the deferred 2D part of the whole-genome scope: built for a 2D computation only)
+    intervals <- .gscope_lazy_2d(intervals)
 
     if (exists("GAPPLY.INTERVALS", envir = .misha)) {
         remove(list = "GAPPLY.INTERVALS", envir = .misha)
@@ -194,6 +196,8 @@ gintervals.quantiles <- function(expr = NULL, percentiles = 0.5, intervals = NUL
 
     exprstr <- do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame())
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
+    # (the deferred 2D part of the whole-genome scope: built for a 2D computation only)
+    intervals <- .gscope_lazy_2d(intervals)
     intervals.set.out <- do.call(.gexpr2str, list(substitute(intervals.set.out)), envir = parent.frame())
 
     if (!is.null(intervals.set.out)) {
@@ -276,6 +280,8 @@ gintervals.summary <- function(expr = NULL, intervals = NULL, iterator = NULL, b
 
     exprstr <- do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame())
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
+    # (the deferred 2D part of the whole-genome scope: built for a 2D computation only)
+    intervals <- .gscope_lazy_2d(intervals)
     intervals.set.out <- do.call(.gexpr2str, list(substitute(intervals.set.out)), envir = parent.frame())
 
     if (!is.null(intervals.set.out)) {
