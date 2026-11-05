@@ -89,8 +89,8 @@ gcis_decay <- function(expr = NULL, breaks = NULL, src = NULL, domain = NULL, in
     src <- .gnormalize_chrom_names(src)
     domain <- .gnormalize_chrom_names(domain)
     intervals <- .gnormalize_chrom_names(intervals)
-    # (the deferred 2D part of the whole-genome scope: built for a 2D computation only)
-    intervals <- .gscope_lazy_2d(intervals)
+    # (not .gscope_lazy_2d: gcis_decay is always 2D, and builds its cis mask from the scope before the
+    # scanner, so the deferred whole-genome 2D scope is built, or stops, at its conversion)
 
     res <- .gcall("C_gcis_decay", exprstr, breaks, src, domain, intervals, include.lowest, .iterator, band, .misha_env())
     attr(res, "breaks") <- breaks

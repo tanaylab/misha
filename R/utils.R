@@ -683,8 +683,12 @@ rescue_ALLGENOME <- function(intervals, intervals_name) {
 # deferred 2D part (the placeholder above gmulticontig.2d.threshold contigs) is marked "lazy", so that
 # the C++ conversion leaves it to the scanner, which builds it only for a 2D computation
 # (TrackExprScanner::build_deferred_2d_scope). Unmarked, a conversion that asks for 2D intervals
-# builds it at once or stops. Anything else is returned as it is.
+# builds it at once or stops. The deferred 2D part alone (.misha$ALLGENOME[[2]]) is a 2D scope, so it is
+# built at once (.gscope_expand_2d). Anything else is returned as it is.
 .gscope_lazy_2d <- function(intervals) {
+    if (is.list(intervals) && !is.data.frame(intervals) && !is.null(attr(intervals, "deferred"))) {
+        return(.gscope_expand_2d(intervals))
+    }
     if (is.list(intervals) && !is.data.frame(intervals) && length(intervals) == 2 &&
         is.list(intervals[[2]]) && !is.data.frame(intervals[[2]]) && !is.null(attr(intervals[[2]], "deferred"))) {
         attr(intervals[[2]], "lazy") <- TRUE

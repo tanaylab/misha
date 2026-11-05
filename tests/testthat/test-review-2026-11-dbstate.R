@@ -909,3 +909,75 @@ test_that("a writer whose cache write fails leaves a lasting mark, the legacy fl
     expect_true(file.exists(file.path(db, ".db.cache.dirty")))
     expect_true(dir.exists(file.path(db, "tracks", "t10.track")))
 })
+
+# A database of three 100 kb contigs with a 2D track holding a cis and a trans rectangle
+deferred_2d_db <- function(dir) {
+    db <- create_test_db(file.path(dir, "db3"), data.frame(chrom = c("chr1", "chr2", "chr3"), size = 1e5))
+    suppressMessages(gsetroot(db))
+    gtrack.2d.create("rt", "", data.frame(
+        chrom1 = c("chr1", "chr1"), start1 = c(0, 0), end1 = c(100, 100),
+        chrom2 = c("chr1", "chr2"), start2 = c(1000, 50000), end2 = c(1100, 50100)
+    ), c(1, 2))
+    db
+}
+
+test_that("2D computations over the whole-genome scope give the same values deferred (full mode) as materialized", {
+    local_db_state()
+    db <- deferred_2d_db(withr::local_tempdir())
+    calls <- list(
+        gextract = function() gextract("rt", .misha$ALLGENOME),
+        gquantiles = function() gquantiles("rt", c(0.2, 0.8)),
+        gsummary = function() gsummary("rt"),
+        gcor = function() gcor("rt", "rt"),
+        gscreen = function() gscreen("rt > 0"),
+        gsample = function() sort(gsample("rt", 10)),
+        gdist = function() gdist("rt", c(0, 1, 2)),
+        gpartition = function() gpartition("rt", c(0, 1.5, 3), .misha$ALLGENOME),
+        glookup = function() glookup(c(10, 20), "rt", c(0, 1.5, 3), .misha$ALLGENOME),
+        gbins.quantiles = function() gbins.quantiles("rt", c(0, 1.5, 3), expr = "rt", percentiles = 0.5),
+        gbins.summary = function() gbins.summary("rt", c(0, 1.5, 3), expr = "rt"),
+        giterator.intervals = function() giterator.intervals("rt", .misha$ALLGENOME),
+        gintervals.mapply = function() gintervals.mapply(function(x) max(x, na.rm = TRUE), "rt", .misha$ALLGENOME[[2]], iterator = c(1e4, 1e4)),
+        gintervals.quantiles = function() gintervals.quantiles("rt", 0.5, .misha$ALLGENOME[[2]], iterator = c(1e4, 1e4)),
+        gintervals.summary = function() gintervals.summary("rt", .misha$ALLGENOME),
+        gcis_decay = function() gcis_decay("rt", c(0, 1e4, 1e5), gintervals.all(), gintervals.all(), intervals = .misha$ALLGENOME),
+        gcis_decay_default = function() gcis_decay("rt", c(0, 1e4, 1e5), gintervals.all(), gintervals.all())
+    )
+    run_all <- function() {
+        lapply(calls, function(f) {
+            set.seed(1)
+            tryCatch(suppressWarnings(f()), error = function(e) paste("error:", conditionMessage(e)))
+        })
+    }
+    withr::local_options(list(gmultitasking = FALSE))
+
+    # below the threshold the whole-genome 2D scope is materialized
+    withr::with_options(list(gmulticontig.2d.threshold = 100), suppressMessages(gsetroot(db)))
+    expect_gt(NROW(.misha$ALLGENOME[[2]]), 0)
+    materialized <- run_all()
+    # the trans contact is not inter-domain cis decay
+    expect_equal(unname(materialized$gcis_decay[2, 2]), 0)
+
+    # above it, deferred and built in "full" mode
+    withr::local_options(list(gmulticontig.2d.threshold = 2, gmulticontig.2d.mode = "full"))
+    suppressMessages(gsetroot(db))
+    expect_equal(NROW(.misha$ALLGENOME[[2]]), 0)
+    deferred <- run_all()
+    expect_false(any(vapply(materialized, is.character, TRUE)))
+    for (name in names(calls)) {
+        expect_equal(deferred[[name]], materialized[[name]], label = name)
+    }
+    withr::with_options(list(gmultitasking = TRUE), {
+        expect_equal(gcis_decay("rt", c(0, 1e4, 1e5), gintervals.all(), gintervals.all()), materialized$gcis_decay_default)
+        expect_equal(gsummary("rt"), materialized$gsummary)
+    })
+})
+
+test_that("gintervals.save of the deferred 2D whole-genome intervals builds them or stops", {
+    local_db_state()
+    withr::local_options(list(gmulticontig.2d.threshold = 2, gmulticontig.2d.mode = NULL))
+    review_db(withr::local_tempdir())
+    expect_error(gintervals.save("all2d_unset", .misha$ALLGENOME[[2]]), 'options(gmulticontig.2d.mode = "full")', fixed = TRUE)
+    withr::with_options(list(gmulticontig.2d.mode = "full"), suppressWarnings(gintervals.save("all2d", .misha$ALLGENOME[[2]])))
+    expect_equal(nrow(gintervals.load("all2d")), 16)
+})
