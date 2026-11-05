@@ -53,8 +53,11 @@ void Wig::init(const GenomeChromKey &chromkey, const string &filename, bool igno
 
 			chrom_rec_type = rec.type;
 
-			if (chromid == -1) // unknown chrom
+			if (chromid == -1) { // unknown chrom
+				// a block of a known chromosome that resumes after it is out of order, as after any other chromosome
+				last_chromid = -1;
 				continue;
+			}
 
 			if (chromid != last_chromid) {
 				last_chromid = chromid;
@@ -185,7 +188,8 @@ bool Wig::read_record(Rec &rec, int64_t &lineno)
 		if (fields.empty())
 			break;
 
-		if (fields[0] == "track" || (fields[0].size() && fields[0][0] == '#'))
+		// UCSC header lines
+		if (fields[0] == "track" || fields[0] == "browser" || (fields[0].size() && fields[0][0] == '#'))
 			continue;
 
 		if (fields[0] == "variableStep") {

@@ -172,8 +172,10 @@ void Linear_ramp_smoother::set_next_sample(double sample)
 	if (++m_peak_idx >= m_num_samples) m_peak_idx = 0;
 
 	// over time the loss of precision in floating point operations is accumulated =>
-	// recalculate all from scratch each 1/2 window size samples
-	if (m_counter % m_num_samples_aside == 0) {
+	// recalculate all from scratch each 1/2 window size samples. m_counter counts
+	// written samples only, so wait until the window is filled: recalculating on
+	// every sample of the fill made each chromosome cost O(window^2).
+	if (m_num_read_samples > m_num_samples_aside && m_counter % m_num_samples_aside == 0) {
 		// m_left/right_weights_sum never lose precision since they are always updated with only integer values,
 		// the rest should be recalculated
 		double val;
@@ -286,8 +288,10 @@ void Mean_smoother::set_next_sample(double sample)
 	if (++m_peak_idx >= m_num_samples) m_peak_idx = 0;
 
 	// over time the loss of precision in floating point operations is accumulated =>
-	// recalculate all from scratch each 1/2 window size samples
-	if (m_counter % m_num_samples_aside == 0) {
+	// recalculate all from scratch each 1/2 window size samples. m_counter counts
+	// written samples only, so wait until the window is filled: recalculating on
+	// every sample of the fill made each chromosome cost O(window^2).
+	if (m_num_read_samples > m_num_samples_aside && m_counter % m_num_samples_aside == 0) {
 		m_vals_sum = 0;
 		for (vector<double>::iterator i = m_vals.begin(); i != m_vals.end(); ++i) {
 			if (!std::isnan(*i))

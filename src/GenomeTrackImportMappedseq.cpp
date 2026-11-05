@@ -367,12 +367,15 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 
 		IntervUtils iu(_envir);
 		GIntervals all_genome_intervs;
+		// chromosome name -> index in all_genome_intervs; aliases (1, MT, chrom_aliases.tsv) are added as they are met
 		unordered_map<string, int> str2chrom;
+		vector<int> chromid2idx(iu.get_chromkey().get_num_chroms(), -1);
 		int64_t genome_len = 0;
 
 		iu.get_all_genome_intervs(all_genome_intervs);
 		for (GIntervals::const_iterator iinterv = all_genome_intervs.begin(); iinterv != all_genome_intervs.end(); ++iinterv) {
 			str2chrom[iu.id2chrom(iinterv->chromid)] = iinterv - all_genome_intervs.begin();
+			chromid2idx[iinterv->chromid] = iinterv - all_genome_intervs.begin();
 			genome_len += iinterv->end;
 		}
 
@@ -459,9 +462,15 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 							}
 						}
 
-						if ((istr2chrom = str2chrom.find(str[CHROM_COL])) == str2chrom.end())
-							break;
-						chrom_idx = istr2chrom->second;
+						if ((istr2chrom = str2chrom.find(str[CHROM_COL])) != str2chrom.end())
+							chrom_idx = istr2chrom->second;
+						else {
+							int chromid = iu.get_chromkey().find_chromid(str[CHROM_COL]);
+
+							if (chromid < 0 || chromid2idx[chromid] < 0)
+								break;
+							chrom_idx = str2chrom[str[CHROM_COL]] = chromid2idx[chromid];
+						}
 						int64_t chrom_end = all_genome_intervs[chrom_idx].end;
 
 						coord = strtoll(str[COORD_COL].c_str(), &endptr, 10);

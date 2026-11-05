@@ -294,6 +294,11 @@ gtrack.array.get_colnames <- function(track = NULL) {
 #' NaN. Intervals with all NaN values are not added. Partial overlaps between
 #' two intervals from different sources are forbidden.
 #'
+#' Chromosome names in a file are matched as in \code{\link{gtrack.import}}:
+#' through the chromosome alias chain, with the lines of other chromosomes
+#' skipped and their names reported. A file that names chromosomes and matches
+#' none of them is an error.
+#'
 #' 'description' is added as a track attribute.
 #'
 #' @param track name of the newly created track
@@ -378,6 +383,11 @@ gtrack.array.import <- function(track = NULL, description = NULL, ...) {
             .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
             .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
             .gtrack.attr.set(trackstr, "description", description, TRUE)
+
+            # If database is indexed, automatically convert the track to indexed format
+            if (.gdb.is_indexed()) {
+                gtrack.convert_to_indexed(trackstr)
+            }
             success <- TRUE
         },
         finally = {

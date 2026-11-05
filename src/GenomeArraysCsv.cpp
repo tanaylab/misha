@@ -40,7 +40,9 @@ void GenomeArraysCsv::init(const char *filename, const GenomeChromKey &chromkey)
 		Position pos(m_bfile.tell(), lineno);
 
 		lineno += read_fields(pos);
-		if (m_bfile.eof()) 
+		// Empty lines are skipped by the reader, so no fields means the end of the file. Not eof(): it is
+		// already set after a last line that has no trailing newline.
+		if (m_fields.empty())
 			return;
 
 		try {

@@ -210,7 +210,9 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 			vector<IntervNeighbor> result;
 
 			intervals1d[0].sort();
-			intervals1d[1].sort();
+			// stable: equal intervals keep their input order on every platform, so
+			// neighbor ties don't depend on the C++ library
+			stable_sort(intervals1d[1].begin(), intervals1d[1].end(), GIntervalsFetcher1D::compare_by_start_coord);
 
 			int chromid = -1;
 			SegmentFinder<GInterval> segment_finder;

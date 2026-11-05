@@ -474,6 +474,19 @@ static inline void clear_pending_diagnostics(SEXP envir) {
     define_in_misha(envir, ".GPENDING.DIAGNOSTICS", R_NilValue);
 }
 
+// Flushes, syncs and closes a file that was written. Returns 0, or the errno of the first step that failed;
+// fp is closed either way. A full disk or quota can show up only here, on NFS often only at the close, so a
+// writer checks this before it renames the file into place or removes what the file replaces.
+static inline int fclose_synced(FILE *fp) {
+    int err = 0;
+
+    if (fflush(fp) || fsync(fileno(fp)))
+        err = errno;
+    if (fclose(fp) && !err)
+        err = errno;
+    return err;
+}
+
 
 // res_size_from_ram: max_res_size is the RAM-sized fallback of distribute_task(), not what
 // gmax.data.size asks for; the "Result size exceeded" error then says so.

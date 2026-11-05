@@ -152,6 +152,11 @@ gtrack.2d.create <- function(track = NULL, description = NULL, intervals = NULL,
 #' If all the imported intervals represent a point (i.e. end == start + 1) a
 #' 'Points' track is created otherwise it is a 'Rectangles' track.
 #'
+#' Chromosome names are matched as in \code{\link{gtrack.import}}: through
+#' the chromosome alias chain, with the intervals of other chromosomes skipped
+#' and their names reported. If no name matches, or no interval is left to
+#' import, the function fails and no track is created.
+#'
 #' If 'gmultitasking' is on (the default), the input files are read by
 #' several processes in parallel, each process reading a contiguous subset of
 #' the files, and the chromosome pairs are then written in parallel, one pair
@@ -253,6 +258,12 @@ gtrack.2d.import <- function(track = NULL, description = NULL, file = NULL) {
 #' 'coord2'.
 #'
 #' Contacts may come in one or more files.
+#'
+#' Chromosome names (in the contacts file, or in the fragment ends file if
+#' 'fends' is given) are matched as in \code{\link{gtrack.import}}: through
+#' the chromosome alias chain, with the contacts on other chromosomes skipped
+#' and their names reported. If no name matches, or no contact is left to
+#' import, the function fails and no track is created.
 #'
 #' If 'gmultitasking' is on (the default), the input files are read by
 #' several processes in parallel, each process reading a contiguous subset of

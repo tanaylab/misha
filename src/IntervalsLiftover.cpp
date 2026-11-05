@@ -116,7 +116,7 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 		for (vector<string>::const_iterator ichrom = src_id2chrom.begin(); ichrom != src_id2chrom.end(); ++ichrom)
 			src_chromkey.add_chrom(*ichrom, numeric_limits<int64_t>::max());
 
-		// Capture original number of source intervals (for error reporting when none map to chain source chromosomes)
+		// Number of source intervals, to tell "no chromosome in the chain" from "nothing given"
 		int64_t orig_src_rows = -1;
 		if (Rf_isVector(_src_intervs) && !Rf_isString(_src_intervs) && Rf_length(_src_intervs) >= GInterval::NUM_COLS) {
 			SEXP starts = VECTOR_ELT(_src_intervs, GInterval::START);
@@ -124,12 +124,19 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 				orig_src_rows = Rf_length(starts);
 		}
 
+		// Intervals on chromosomes the chain does not have are dropped: they map nowhere, and when none
+		// is left the result is empty, as when no interval overlaps the chain
 		GIntervals src_intervs1d;
 		GIntervals2D src_intervs2d;
 		iu.convert_rintervs(_src_intervs, &src_intervs1d, &src_intervs2d, false, &src_chromkey, "", NULL, true, true);
-		// If we had source intervals but none survived chromosome filtering, report an error
-		if (orig_src_rows > 0 && src_intervs1d.empty() && src_intervs2d.empty())
-			verror("Source chromosome does not exist in the chain source genome");
+		// None of them at all is more likely a naming mismatch (e.g. "7" vs "chr7") than a real empty result
+		if (orig_src_rows > 0 && src_intervs1d.empty() && src_intervs2d.empty()) {
+			char msg[1000];
+			snprintf(msg, sizeof(msg), "None of the intervals' chromosomes is a source chromosome of the chain (%s%s); the result is empty",
+					 src_id2chrom.empty() ? "the chain is empty" : "for example ",
+					 src_id2chrom.empty() ? "" : src_id2chrom.front().c_str());
+			add_pending_diagnostic(_envir, "warning", msg);
+		}
 		src_intervs1d.sort();
 		src_intervs2d.sort();
 

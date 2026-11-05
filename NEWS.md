@@ -2,11 +2,61 @@
 
 This release fixes the remaining defects found in the review of 5.14.4. Several change results, marked **Behavior fix**; recompute anything that depends on them.
 
+* **Behavior fix:** `gcor()` computes standard deviations, covariance and correlation without cancellation; values far from zero relative to their spread gave NaN or wrong correlations, also in multitask runs.
+
+* **Behavior fix:** `gsummary()`, `gintervals.summary()` and `gbins.summary()` give a NaN standard deviation when a value is infinite (was 0), and report `-Inf`/`Inf` as the minimum or maximum when all values are infinite (was +-1.8e308).
+
+* **Behavior fix:** `first`, `last`, `sample`, `lse` and their `.pos` functions work on array tracks; they returned NA, and `lse` returned garbage.
+
+* **Behavior fix:** `gtrack.array.extract()` no longer repeats the previous chromosome's values after a chromosome with one interval.
+
+* **Behavior fix:** multitasked computations no longer split one iterator bin into two rows.
+
+* **Behavior fix:** `gseq.kmer.dist(mask =)` leaves out k-mers that overlap the mask, as documented; it left out only those starting in it.
+
+* **Behavior fix:** `pwm` and `pwm.max` are NA at a chromosome end where no motif fits (were -Inf).
+
+* **Behavior fix:** `gintervals.neighbors()` ties and `gseq.pwm_edits()` tied edits no longer depend on the input order or the C++ library.
+
+* **Behavior fix:** `gintervals.liftover()` returns NULL, with a warning, when no input chromosome is in the chain (was an error).
+
+* **Behavior fix:** `gtrack.import()` of a tab-delimited file with a header and `gtrack.array.import()` no longer drop the last line when the file has no trailing newline.
+
+* **Behavior fix:** `gtrack.2d.import_contacts()` keeps all fragment ends when the fends file is not sorted by id. A negative, duplicated or too large fend id is an error; a negative or huge id used to crash R.
+
+* **Behavior fix:** `gtrack.create_dense()` (and BED import with `binsize > 0`) gives `defval` the right weight where intervals overlap.
+
+* **Behavior fix:** `gtrack.import_mappedseq()` resolves chromosome aliases ("1", "MT").
+
+* **Behavior fix:** `gtrack.export_bedgraph()` no longer writes overlapping records for overlapping intervals (`gtrack.export_bigwig()` failed on them).
+
 * **Behavior fix:** `gtrack.create_sparse()`, `gtrack.2d.create()`, `glookup()` and `gtrack.lookup()` store an integer or logical `NA` as `NaN`; it was written as -2147483648. Recreate tracks made from integer values that contain NA.
 
 * **Behavior fix:** `gintervals.neighbors()` treats `maxdist = Inf` and `mindist = -Inf` as no limit; they errored or returned NULL.
 
 * **Behavior fix:** an `NA` in a logical argument (`include.lowest`, `force.binning`, `na.if.notfound`, `use_intervals1_strand`, `smooth_nans`, ...) or an integer `NA` strand is an error; they were read as `TRUE`, `FALSE` or strand 0.
+
+* Sequence and value-based virtual tracks under a 2D iterator require `gvtrack.iterator(dim =)`; they gave NaN or 0, or crashed.
+
+* `gintervals.annotate()` with `tie_method` on 2D intervals gives a clear error.
+
+* Bands wider than 2^31 are accepted; non-finite bands are an error.
+
+* `pwm.edit_distance` no longer crashes on long motifs with `max_edits`.
+
+* `gtrack.smooth()` is much faster for large windows (same results), and `gintervals.2d.intersect()` uses bounded memory.
+
+* `gtrack.create_dense()` rejects invalid intervals (negative start, start >= end, NA, end past the chromosome) like `gtrack.create_sparse()`, and is no longer slow when a long interval spans many bins.
+
+* BED import clips records that run past the chromosome end and drops empty records, with one warning; a file with nothing left to import is an error. Chromosomes missing from the database are skipped and reported, as in the other formats.
+
+* WIG/bedGraph import skips UCSC "browser" lines; a chromosome block that resumes after an unknown chromosome is an error instead of being dropped.
+
+* `gtrack.2d.import()`, `gtrack.2d.import_contacts()` and `gtrack.array.import()` report skipped chromosomes, and fail without leaving a broken track when nothing can be imported.
+
+* `gtrack.import_mappedseq()` and `gtrack.array.import()` write the indexed format on indexed databases.
+
+* Track format conversion checks that its writes reached the disk before it replaces or removes the old files, and `gtrack.2d.convert_to_indexed(force = TRUE)` refuses, without changing anything, when only some pairs have a per-pair file (it lost the others).
 
 * Integer arguments are accepted wherever a number is expected (breaks, percentiles, window sizes, `minsegment`, `mindist`/`maxdist`, `min_score`, a `gintervals.mapply()` FUN or track expression that returns integers).
 

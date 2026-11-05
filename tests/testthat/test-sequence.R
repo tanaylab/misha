@@ -1686,8 +1686,8 @@ test_that("gseq.kmer.dist mask excludes positions correctly", {
     result_with_mask <- gseq.kmer.dist(intervals, k = 3, mask = mask)
     total_with_mask <- sum(result_with_mask$count)
 
-    # Mask should reduce the count by exactly 100 positions
-    expect_equal(total_no_mask - total_with_mask, 100)
+    # Mask removes the k-mers with any base in it: starts 498-599, 102 positions
+    expect_equal(total_no_mask - total_with_mask, 102)
 })
 
 test_that("gseq.kmer.dist handles multiple intervals", {
@@ -1807,12 +1807,12 @@ test_that("gseq.kmer.dist handles mask at interval boundaries", {
     # Without mask: 99 dinucleotides (positions 100-198)
     expect_equal(sum(result_no_mask$count), 99)
 
-    # Mask at start [100, 120) covers dinucleotide starts at 100-119 = 20 positions
+    # Mask at start [100, 120) covers dinucleotides starting at 100-119 = 20 positions
     expect_equal(sum(result_no_mask$count) - sum(result_mask_start$count), 20)
 
-    # Mask at end [180, 200) covers dinucleotide starts at 180-198 = 19 positions
+    # Mask at end [180, 200) covers dinucleotides starting at 179-198 = 20 positions
     # (position 199 can't start a dinucleotide in interval ending at 200)
-    expect_equal(sum(result_no_mask$count) - sum(result_mask_end$count), 19)
+    expect_equal(sum(result_no_mask$count) - sum(result_mask_end$count), 20)
 })
 
 test_that("gseq.kmer.dist handles overlapping intervals correctly", {
@@ -1846,8 +1846,9 @@ test_that("gseq.kmer.dist handles multiple mask intervals", {
     result_no_mask <- gseq.kmer.dist(intervals, k = 3)
     result_with_mask <- gseq.kmer.dist(intervals, k = 3, mask = mask)
 
-    # Total masked: 50 + 100 + 100 = 250
-    expected_diff <- 250
+    # Each mask also removes the 2 k-mers that start before it and reach into it:
+    # 52 + 102 + 102 = 256
+    expected_diff <- 256
     actual_diff <- sum(result_no_mask$count) - sum(result_with_mask$count)
     expect_equal(actual_diff, expected_diff)
 })
@@ -2049,8 +2050,8 @@ test_that("gseq.kmer.dist handles partial mask overlap", {
 
     # For k=2, positions 0-98 can start a dinucleotide (99 total)
     # Mask covers positions 50-99 in our interval
-    # K-mers starting at positions 50-98 are masked (49 k-mers)
-    expect_equal(sum(result_no_mask$count) - sum(result_with_mask$count), 49)
+    # K-mers starting at positions 49-98 reach into the mask (50 k-mers)
+    expect_equal(sum(result_no_mask$count) - sum(result_with_mask$count), 50)
 })
 
 test_that("gseq.kmer.dist with all possible k values", {

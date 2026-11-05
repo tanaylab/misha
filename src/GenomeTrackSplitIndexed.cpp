@@ -114,9 +114,13 @@ SEXP gtrack_split_indexed_to_per_chrom(SEXP _track_dir, SEXP _chrom_names, SEXP 
 
             // Per-file fsync + atomic rename: each per-chrom file is canonical db state;
             // we accept N fsyncs (one per contig) for crash-safe individual files.
-            fflush(out_fp);
-            fsync(fileno(out_fp));
-            fclose(out_fp);
+            // A full disk shows up at the flush, sync or close: check before the rename,
+            // and before track.dat is removed below.
+            int out_err = fclose_synced(out_fp);
+            if (out_err) {
+                fclose(dat_fp);
+                verror("Failed to write %s: %s", out_path_tmp.c_str(), strerror(out_err));
+            }
 
             if (rename(out_path_tmp.c_str(), out_path.c_str()) != 0) {
                 fclose(dat_fp);
@@ -263,23 +267,26 @@ SEXP gtrack_pack_per_chrom_to_indexed(SEXP _track_dir, SEXP _chrom_names, SEXP _
             throw;
         }
 
-        fflush(dat_fp); fflush(idx_fp);
-        fsync(fileno(dat_fp)); fsync(fileno(idx_fp));
-        fclose(dat_fp); fclose(idx_fp);
+        // A full disk shows up at the flush, sync or close; check it, and the size, while
+        // the result is still in the tmp files and before the source files are removed.
+        int dat_err = fclose_synced(dat_fp);
+        int idx_err = fclose_synced(idx_fp);
+        if (dat_err || idx_err)
+            verror("Failed to write %s: %s", (dat_err ? dat_path_tmp : idx_path_tmp).c_str(),
+                   strerror(dat_err ? dat_err : idx_err));
+
+        struct stat dat_stat;
+        if (stat(dat_path_tmp.c_str(), &dat_stat) != 0)
+            verror("Failed to stat %s after pack: %s", dat_path_tmp.c_str(), strerror(errno));
+        if ((uint64_t)dat_stat.st_size != current_offset)
+            verror("track.dat size mismatch after pack: expected %llu bytes, got %llu bytes",
+                   (unsigned long long)current_offset,
+                   (unsigned long long)dat_stat.st_size);
 
         if (rename(dat_path_tmp.c_str(), dat_path.c_str()) != 0)
             verror("Failed to rename %s to %s: %s", dat_path_tmp.c_str(), dat_path.c_str(), strerror(errno));
         if (rename(idx_path_tmp.c_str(), idx_path.c_str()) != 0)
             verror("Failed to rename %s to %s: %s", idx_path_tmp.c_str(), idx_path.c_str(), strerror(errno));
-
-        // Validate track.dat size matches what we wrote, before destroying source files.
-        struct stat dat_stat;
-        if (stat(dat_path.c_str(), &dat_stat) != 0)
-            verror("Failed to stat %s after pack: %s", dat_path.c_str(), strerror(errno));
-        if ((uint64_t)dat_stat.st_size != current_offset)
-            verror("track.dat size mismatch after pack: expected %llu bytes, got %llu bytes",
-                   (unsigned long long)current_offset,
-                   (unsigned long long)dat_stat.st_size);
 
         // Remove old per-chrom files (always remove; this is a destructive pack)
         for (const string &p : chr_files_to_remove) unlink(p.c_str());
