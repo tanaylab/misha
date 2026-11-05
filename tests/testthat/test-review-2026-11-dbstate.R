@@ -400,7 +400,7 @@ test_that("a write leaves a .db.cache that another session marked dirty dirty, a
     gtrack.create_sparse("t5", "", gintervals("chr1", 0, 10), 5)
     # a flag of this writer's own is added: whoever set the other cannot clear the cache while t5
     # is missing too
-    expect_equal(readLines(dirty), "set by another session")
+    expect_true(file.exists(dirty))
     expect_length(flags(), 2)
     expect_false(.gdb.cache_clear_dirty(db, "set by another session"))
     gintervals.rm("nothing_here", force = TRUE)
@@ -766,13 +766,13 @@ test_that("a mark made by another session while a writer merges is not lost", {
     expect_false(.gdb.cache_is_dirty(db))
     real_mark <- misha:::.gdb.cache_mark_dirty
     other <- FALSE
-    local_mocked_bindings(.gdb.cache_mark_dirty = function(groot = NULL) {
+    local_mocked_bindings(.gdb.cache_mark_dirty = function(groot = NULL, ...) {
         # between this writer's look at the flag and its own mark, another session marks the cache
         if (!other) {
             other <<- TRUE
             in_other_session(real_mark(groot))
         }
-        real_mark(groot)
+        real_mark(groot, ...)
     })
     gtrack.create_sparse("t6", "", gintervals("chr1", 0, 10), 1)
     expect_true(other)
@@ -816,7 +816,27 @@ test_that("a rescan interrupted while it holds the lock does not leave it", {
     local_db_state()
     db <- review_db(withr::local_tempdir())
     real_mark <- misha:::.gdb.cache_mark_dirty
-    local_mocked_bindings(.gdb.cache_mark_dirty = function(groot = NULL) stop("interrupted here"))
+    local_mocked_bindings(.gdb.cache_mark_dirty = function(...) stop("interrupted here"))
     expect_error(suppressMessages(gdb.reload()), "interrupted here")
     expect_false(file.exists(file.path(db, ".db.cache.lock")))
+})
+
+test_that("a mark also makes the flag earlier versions read, which a rescan that saw it removes", {
+    local_db_state()
+    db <- review_db(withr::local_tempdir())
+    legacy <- file.path(db, ".db.cache.dirty")
+    flags <- function() list.files(db, pattern = "^\\.db\\.cache\\.dirty", all.files = TRUE)
+    expect_length(flags(), 0)
+
+    token <- .gdb.cache_mark_dirty(db)
+    expect_setequal(flags(), c(".db.cache.dirty", paste0(".db.cache.dirty.", token)))
+
+    # a rescan that saw both at its start removes both
+    suppressMessages(gdb.reload())
+    expect_length(flags(), 0)
+
+    # a write that merges its name leaves neither (its own mark while it works is not a lasting one)
+    gtrack.create_sparse("t9", "", gintervals("chr1", 0, 10), 1)
+    expect_length(flags(), 0)
+    expect_true("t9" %in% read_cache(db)[[1]])
 })

@@ -495,8 +495,11 @@ gdb.reload <- function(rescan = TRUE) {
 
 # Marks the cache dirty with a flag file of this mark's own. Returns the mark's token, or NULL if
 # it was not made: quietly for a database root that cannot be written (nothing writes its cache
-# then either).
-.gdb.cache_mark_dirty <- function(groot = NULL) {
+# then either). With `legacy`, also <groot>/.db.cache.dirty (best effort), the flag that earlier
+# versions read, so that their sessions rescan too; it stays until a rescan that saw it at its start.
+# The marks a writer or a rescan makes only while it works, and removes when done, are made without
+# it (it would leave the cache dirty for every session after them).
+.gdb.cache_mark_dirty <- function(groot = NULL, legacy = TRUE) {
     cache_path <- .gdb.cache_path(groot)
     if (is.null(cache_path) || file.access(dirname(cache_path), 2) != 0) {
         return(invisible(NULL))
@@ -516,6 +519,9 @@ gdb.reload <- function(rescan = TRUE) {
             FALSE
         }
     )
+    if (success && legacy) {
+        try(suppressWarnings(.gwith_umask(writeLines(format(Sys.time(), "%Y-%m-%d %H:%M:%OS6"), paste0(cache_path, ".dirty")))), silent = TRUE)
+    }
     invisible(if (success) token)
 }
 
@@ -624,8 +630,9 @@ gdb.reload <- function(rescan = TRUE) {
         return(invisible(FALSE))
     }
 
-    # dirty while it is rewritten: a session killed meanwhile leaves it for a rescan
-    token <- .gdb.cache_mark_dirty(groot)
+    # dirty while it is rewritten: a session killed meanwhile leaves it for a rescan (of a version
+    # that reads these flags: the legacy one would outlive the write)
+    token <- .gdb.cache_mark_dirty(groot, legacy = FALSE)
     if (is.null(token)) {
         return(invisible(FALSE))
     }
@@ -774,7 +781,7 @@ gdb.reload <- function(rescan = TRUE) {
     if (writable) {
         lock <- .gdb.cache_lock(groot)
         seen <- .gdb.cache_dirty_files(groot)
-        token <- .gdb.cache_mark_dirty(groot)
+        token <- .gdb.cache_mark_dirty(groot, legacy = FALSE)
         if (!is.null(lock)) {
             held <- .gdb.cache_unlock(groot, lock)
             lock <- NULL
