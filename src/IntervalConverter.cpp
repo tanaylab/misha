@@ -24,20 +24,17 @@ IntervalConverter::IntervalConverter(rdb::IntervUtils &iu) :
 }
 
 // The 2D part of the whole-genome scope of a genome above gmulticontig.2d.threshold contigs: a
-// placeholder with attribute "deferred" (.create_deferred_2d), no intervals. (Read from the attribute
-// list, not with Rf_getAttrib/Rf_install, which may allocate.)
-static bool has_attr(SEXP rintervals, const char *name)
+// placeholder with attribute "deferred" (.create_deferred_2d), no intervals. (ATTRIB is not part of
+// R's API, so look the attribute up by symbol; each symbol is installed once and never collected.)
+static bool has_attr(SEXP rintervals, SEXP sym)
 {
-	for (SEXP attr = ATTRIB(rintervals); attr != R_NilValue; attr = CDR(attr)) {
-		if (TAG(attr) != R_NilValue && !strcmp(CHAR(PRINTNAME(TAG(attr))), name))
-			return true;
-	}
-	return false;
+	return Rf_getAttrib(rintervals, sym) != R_NilValue;
 }
 
 static bool is_deferred_2d(SEXP rintervals)
 {
-	return has_attr(rintervals, "deferred");
+	static SEXP deferred_sym = Rf_install("deferred");
+	return has_attr(rintervals, deferred_sym);
 }
 
 unsigned IntervalConverter::get_rintervs_type_mask(SEXP rintervals, const char *error_msg_prefix) const
@@ -425,7 +422,8 @@ SEXP IntervalConverter::convert_rintervs(SEXP rintervals, GIntervals *intervals,
 			verror("%s%s", error_msg_prefix, rdb::DEFERRED_2D_SCOPE_MSG);
 		if (!intervals2d)
 			return _rintervals;
-		if (has_attr(rintervals, "lazy")) {
+		static SEXP lazy_sym = Rf_install("lazy");
+		if (has_attr(rintervals, lazy_sym)) {
 			m_iu.set_deferred_2d_scope();
 			return _rintervals;
 		}
