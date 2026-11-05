@@ -808,7 +808,8 @@ test_that("an unbreakable stale lock or a root that cannot be written does not m
     unlink(list.files(db, pattern = "^\\.db\\.cache\\.dirty", all.files = TRUE, full.names = TRUE))
     Sys.chmod(db, "555")
     withr::defer(Sys.chmod(db, "755"))
-    expect_no_warning(gtrack.create_sparse("t8", "", gintervals("chr1", 0, 10), 1))
+    # (the cache there stays stale: said)
+    expect_warning(gtrack.create_sparse("t8", "", gintervals("chr1", 0, 10), 1), "Failed to mark cache dirty")
     expect_true(dir.exists(file.path(db, "tracks", "t8.track")))
 })
 
@@ -871,4 +872,36 @@ test_that("interval operations and cartesian iterators over the deferred whole-g
         # from the global environment, as a user calls it (the build is evaluated in misha's namespace)
         expect_equal(evalq(misha::gsummary("mr")[["Sum"]], globalenv()), 100)
     })
+})
+
+test_that("a rescan keeps the legacy flag that a lasting mark rewrote during its scan", {
+    skip_on_os("windows")
+    local_db_state()
+    db <- review_db(withr::local_tempdir())
+    legacy <- file.path(db, ".db.cache.dirty")
+    .gdb.cache_mark_dirty(db)
+    real_gcall <- misha:::.gcall
+    other <- FALSE
+    local_mocked_bindings(.gcall = function(...) {
+        res <- real_gcall(...)
+        # during the scan, another session marks the cache (a track it made is not in the scan)
+        if (identical(..1, "gfind_tracks_n_intervals") && !other) {
+            other <<- TRUE
+            in_other_session(misha:::.gdb.cache_mark_dirty(db))
+        }
+        res
+    })
+    suppressMessages(gdb.reload())
+    expect_true(other)
+    expect_true(file.exists(legacy))
+    expect_true(.gdb.cache_is_dirty(db))
+})
+
+test_that("a writer whose cache write fails leaves a lasting mark, the legacy flag included", {
+    local_db_state()
+    db <- review_db(withr::local_tempdir())
+    local_mocked_bindings(.gdb.cache_write_file = function(...) stop("disk full"))
+    expect_warning(gtrack.create_sparse("t10", "", gintervals("chr1", 0, 10), 1), "disk full")
+    expect_true(file.exists(file.path(db, ".db.cache.dirty")))
+    expect_true(dir.exists(file.path(db, "tracks", "t10.track")))
 })

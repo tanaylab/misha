@@ -501,7 +501,12 @@ gdb.reload <- function(rescan = TRUE) {
 # it (it would leave the cache dirty for every session after them).
 .gdb.cache_mark_dirty <- function(groot = NULL, legacy = TRUE) {
     cache_path <- .gdb.cache_path(groot)
-    if (is.null(cache_path) || file.access(dirname(cache_path), 2) != 0) {
+    if (is.null(cache_path)) {
+        return(invisible(NULL))
+    }
+    # (a root that cannot be written while tracks/ can: the cache there stays as it is, stale, so say so)
+    if (file.access(dirname(cache_path), 2) != 0) {
+        warning(sprintf("Failed to mark cache dirty: %s cannot be written", dirname(cache_path)), call. = FALSE)
         return(invisible(NULL))
     }
     token <- paste(.gdb.host_tag(), Sys.getpid(), basename(tempfile("")), sep = "-")
@@ -519,8 +524,9 @@ gdb.reload <- function(rescan = TRUE) {
             FALSE
         }
     )
+    # (it holds this mark's token: a rescan removes it only if no mark rewrote it since its start)
     if (success && legacy) {
-        try(suppressWarnings(.gwith_umask(writeLines(format(Sys.time(), "%Y-%m-%d %H:%M:%OS6"), paste0(cache_path, ".dirty")))), silent = TRUE)
+        try(suppressWarnings(.gwith_umask(writeLines(token, paste0(cache_path, ".dirty")))), silent = TRUE)
     }
     invisible(if (success) token)
 }
@@ -559,9 +565,9 @@ gdb.reload <- function(rescan = TRUE) {
 # that one name, and writes it back (a temporary file renamed over it). The session's own lists
 # are not written: another session may have created or removed names since this one loaded them.
 # A cache that is dirty (marked by anyone: some change is missing from it), missing or unreadable
-# is left dirty for the next gsetroot()/gdb.reload() to rescan. Two sessions writing at the same
-# instant can still lose one change (there is no lock); the flag each sets is cleared only by its
-# own writer, so the later write leaves it set when the other got in between.
+# is left dirty for the next gsetroot()/gdb.reload() to rescan. Writers and rescans take the lock
+# of the cache around their read-merge-rename (.gdb.cache_lock), and each removes only its own flag
+# (.gdb.cache_dirty_files).
 .gdb.cache_update_lists <- function(groot = NULL, name = NULL, kind = c("tracks", "intervals"), add = TRUE) {
     kind <- match.arg(kind)
     if (!exists("GROOT", envir = .misha, inherits = FALSE) ||
@@ -636,6 +642,10 @@ gdb.reload <- function(rescan = TRUE) {
     if (is.null(token)) {
         return(invisible(FALSE))
     }
+    # a write that does not finish (the cache unreadable, the write failed) leaves a lasting mark,
+    # which older versions read too
+    success <- FALSE
+    on.exit(if (!success) .gdb.cache_mark_dirty(groot), add = TRUE)
     read_cache <- function() {
         f <- file(cache_path, "rb")
         on.exit(close(f))
@@ -778,9 +788,17 @@ gdb.reload <- function(rescan = TRUE) {
     on.exit(if (!is.null(lock)) .gdb.cache_unlock(groot, lock), add = TRUE)
     token <- NULL
     seen <- character(0)
+    # the legacy flag (.db.cache.dirty) as it was at the start: rewritten since by a lasting mark
+    # (.gdb.cache_mark_dirty() puts the mark's token in it), it is kept
+    legacy_path <- paste0(cache_path, ".dirty")
+    read_legacy <- function() tryCatch(suppressWarnings(readLines(legacy_path, warn = FALSE)), error = function(e) NULL)
+    legacy_seen <- NULL
     if (writable) {
         lock <- .gdb.cache_lock(groot)
         seen <- .gdb.cache_dirty_files(groot)
+        if (legacy_path %in% seen) {
+            legacy_seen <- read_legacy()
+        }
         token <- .gdb.cache_mark_dirty(groot, legacy = FALSE)
         if (!is.null(lock)) {
             held <- .gdb.cache_unlock(groot, lock)
@@ -801,7 +819,10 @@ gdb.reload <- function(rescan = TRUE) {
             if (file.exists(paste0(cache_path, ".dirty.", token))) {
                 written <- tryCatch(.gdb.cache_write_file(cache_path, res), error = function(e) FALSE)
                 if (isTRUE(written)) {
-                    unlink(seen)
+                    unlink(setdiff(seen, legacy_path))
+                    if (!is.null(legacy_seen) && identical(read_legacy(), legacy_seen)) {
+                        unlink(legacy_path)
+                    }
                     .gdb.cache_clear_dirty(groot, token)
                 }
             }
