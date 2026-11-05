@@ -214,8 +214,9 @@ void TrackExprScanner::check(const vector<string> &track_exprs, GIntervalsFetche
 	delete m_expr_itr;
 	m_expr_itr = create_expr_iterator(iterator_policy, m_expr_vars, m_track_exprs, scope1d, scope2d, m_1d.intervals, m_2d.intervals, m_band);
 	// a 2D computation over the whole-genome scope of a genome above gmulticontig.2d.threshold
-	// contigs, which holds no 2D intervals (IntervUtils::set_deferred_2d_scope): it would return nothing
-	if (!m_expr_itr->is_1d() && m_iu.deferred_2d_scope())
+	// contigs, which holds no 2D intervals (IntervUtils::set_deferred_2d_scope), with an iterator made
+	// without verify_2d_iter, which builds them: it would return nothing
+	if (!m_expr_itr->is_1d() && m_iu.deferred_2d_scope() && (!scope2d || !scope2d->size()))
 		verror("%s", DEFERRED_2D_SCOPE_MSG);
 	m_expr_vars.init(*m_expr_itr);
 
@@ -491,12 +492,22 @@ void TrackExprScanner::verify_2d_iter(GIntervalsFetcher1D *scope1d, GIntervalsFe
 	if (!scope2d)
 		verror("The function does not support 2D iterators");
 
-	// (as in check(), which also covers the 2D iterators made without this check)
-	if (m_iu.deferred_2d_scope())
-		verror("%s", DEFERRED_2D_SCOPE_MSG);
+	build_deferred_2d_scope(scope2d);
 
 	if (scope1d && scope2d && scope1d->size() && !scope2d->size())
 		verror("2D iterator is used along with 1D intervals");
+}
+
+// The deferred whole-genome 2D scope (IntervUtils::set_deferred_2d_scope) of a 2D computation, still
+// without intervals: built in options(gmulticontig.2d.mode) into scope2d, or an error without it.
+// Only a 2D computation builds it, so a 1D one costs the same whatever the option.
+void TrackExprScanner::build_deferred_2d_scope(GIntervalsFetcher2D *scope2d) const
+{
+	if (!m_iu.deferred_2d_scope() || !scope2d || scope2d->size())
+		return;
+	GIntervals2D *intervals = dynamic_cast<GIntervals2D *>(scope2d);
+	if (!intervals || !m_iu.build_deferred_2d_scope(*intervals))
+		verror("%s", DEFERRED_2D_SCOPE_MSG);
 }
 
 TrackExpressionIteratorBase *TrackExprScanner::create_expr_iterator(SEXP rtrack_exprs, GIntervalsFetcher1D *scope1d, GIntervalsFetcher2D *scope2d,

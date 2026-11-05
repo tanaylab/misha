@@ -484,7 +484,28 @@ test_that("2D computations over the deferred whole-genome 2D scope stop and name
     gtrack.2d.create("some_track", "", some, c(1, 2))
     expect_equal(gextract("some_track", some)$some_track, c(1, 2))
 
-    # in a mode that was set, the whole-genome scope is built in it, everywhere
+    # track creation over the whole genome too
+    expect_error(gtrack.create("c2d", "", "mr"), msg, fixed = TRUE)
+
+    # in a mode that was set, the whole-genome scope is built in it, everywhere, and only for a 2D
+    # computation
+    built <- 0
+    real_generate <- .generate_2d_on_demand
+    local_mocked_bindings(.generate_2d_on_demand = function(...) {
+        built <<- built + 1
+        real_generate(...)
+    })
+    withr::with_options(list(gmulticontig.2d.mode = "full"), {
+        expect_equal(gsummary("t1d")[["Sum"]], 6)
+        expect_equal(nrow(gextract("t1d", .misha$ALLGENOME)), 3)
+        expect_equal(unname(gquantiles("t1d", 0.5)), 2)
+        expect_equal(nrow(gscreen("t1d > 0")), 3)
+        gtrack.create("c1d", "", "t1d", iterator = 50)
+        expect_equal(built, 0)
+        gtrack.create("c2d", "", "mr")
+        expect_equal(sort(gextract("c2d", r)$c2d), c(10, 20, 30, 40))
+        expect_gt(built, 0)
+    })
     withr::with_options(list(gmulticontig.2d.mode = "full"), {
         suppressWarnings({
             expect_equal(nrow(gextract("mr", gintervals.2d.all())), 4)

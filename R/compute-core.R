@@ -113,8 +113,7 @@ gextract <- function(..., intervals = NULL, colnames = NULL, iterator = NULL, ba
     intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
 
     if (is.null(intervals)) {
-        # (given by position: the whole-genome scope as when given by name)
-        intervals <- rescue_ALLGENOME(eval.parent(args[[length(args)]]), "intervals")
+        intervals <- eval.parent(args[[length(args)]])
         args <- args[1:(length(args) - 1)]
     }
 
@@ -312,7 +311,7 @@ gsummary <- function(expr = NULL, intervals = NULL, iterator = NULL, band = NULL
     intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
 
     if (is.null(intervals)) {
-        intervals <- .gallgenome()
+        intervals <- get("ALLGENOME", envir = .misha)
     }
 
     exprstr <- do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame())
@@ -420,7 +419,7 @@ gcor <- function(expr1 = NULL, expr2 = NULL, ..., intervals = NULL, iterator = N
 
     # Default to ALLGENOME after positional intervals check
     if (is.null(intervals)) {
-        intervals <- .gallgenome()
+        intervals <- get("ALLGENOME", envir = .misha)
     }
 
     exprs <- vapply(args, function(arg) {

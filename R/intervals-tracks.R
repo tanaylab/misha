@@ -86,7 +86,7 @@ gintervals.mapply <- function(FUN = NULL, ..., intervals = NULL, enable.gapply.i
     intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
 
     if (is.null(intervals)) {
-        intervals <- rescue_ALLGENOME(eval.parent(args[[length(args)]]), "intervals")
+        intervals <- eval.parent(args[[length(args)]])
         args <- args[1:(length(args) - 1)]
     }
 

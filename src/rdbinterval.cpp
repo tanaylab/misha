@@ -295,9 +295,25 @@ void IntervUtils::get_all_genome_intervs(GIntervals &intervals) const
 
 void IntervUtils::get_all_genome_intervs(GIntervals2D &intervals) const
 {
+	// the deferred whole-genome 2D scope (a placeholder): a 2D computation over it builds it or stops
+	if (!Rf_length(get_rallgenome2d()))
+		set_deferred_2d_scope();
 	const GIntervals2D &cached = get_all_genome_intervs_cached2d();
 	intervals.clear();
 	intervals.insert(intervals.end(), cached.begin(), cached.end());
+}
+
+bool IntervUtils::build_deferred_2d_scope(GIntervals2D &intervals) const
+{
+	if (RdbInitializer::is_kid())
+		verror("%s", DEFERRED_2D_SCOPE_MSG);
+	SEXP rintervals = run_in_R(".gintervals.2d.whole_genome()", get_env());
+	if (rintervals == R_NilValue)
+		return false;
+	convert_rintervs(rintervals, NULL, &intervals);
+	intervals.sort();
+	m_deferred_2d_scope = false;
+	return true;
 }
 
 GIntervalsFetcher1D *IntervUtils::get_kid_intervals1d()

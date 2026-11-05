@@ -265,11 +265,16 @@ public:
 
 	GIntervalsFetcher2D *get_kid_intervals2d();
 
-	// Set when an intervals argument was the whole-genome scope of a genome above
-	// gmulticontig.2d.threshold contigs, whose 2D part is a placeholder (gsetroot()): converted as 1D
-	// only, and a computation that iterates in 2D over it stops (TrackExprScanner::check)
-	void set_deferred_2d_scope() { m_deferred_2d_scope = true; }
+	// Set when the whole-genome scope of a genome above gmulticontig.2d.threshold contigs was taken,
+	// whose 2D part is a placeholder (gsetroot()): converted as no 2D intervals. A computation that
+	// iterates in 2D over it gets them built (build_deferred_2d_scope), or stops.
+	void set_deferred_2d_scope() const { m_deferred_2d_scope = true; }
 	bool deferred_2d_scope() const { return m_deferred_2d_scope; }
+
+	// The whole-genome 2D intervals, into `intervals`, built in options(gmulticontig.2d.mode)
+	// (.gintervals.2d.whole_genome); false, and nothing built, when the option is not set. Not in a
+	// multitasking child: the parent builds them before it divides the scope (prepare4multitasking).
+	bool build_deferred_2d_scope(GIntervals2D &intervals) const;
 
 	unsigned get_rintervs_type_mask(SEXP rintervals, const char *error_msg_prefix = "") const {
 		return m_interval_converter.get_rintervs_type_mask(rintervals, error_msg_prefix);
@@ -477,7 +482,7 @@ private:
 	IntervalValidator             m_validator;
 	ChainIntervalConverter         m_chain_converter;
 	IntervalConverter              m_interval_converter;
-	bool                           m_deferred_2d_scope{false};
+	mutable bool                   m_deferred_2d_scope{false};
 	mutable map<string, GenomeTrack::ChromFiles> m_chrom_files;
 
 	SEXP get_rallgenome1d() const { return VECTOR_ELT(m_allgenome, 0); }

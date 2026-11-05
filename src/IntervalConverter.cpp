@@ -273,9 +273,15 @@ SEXP IntervalConverter::convert_rintervs(SEXP rintervals, GIntervals *intervals,
 
 	SEXP _rintervals = rintervals;
 
-	// the placeholder of the whole-genome 2D scope given alone (.misha$ALLGENOME[[2]]): as above, below
-	if (Rf_isVector(rintervals) && Rf_length(rintervals) == 0 && is_deferred_2d(rintervals))
-		verror("%s%s", error_msg_prefix, rdb::DEFERRED_2D_SCOPE_MSG);
+	// the placeholder of the whole-genome 2D scope given alone (.misha$ALLGENOME[[2]]): what is asked
+	// for is 2D, so built in options(gmulticontig.2d.mode), or an error without it
+	if (Rf_isVector(rintervals) && Rf_length(rintervals) == 0 && is_deferred_2d(rintervals)) {
+		if (!intervals2d || !m_iu.build_deferred_2d_scope(*intervals2d))
+			verror("%s%s", error_msg_prefix, rdb::DEFERRED_2D_SCOPE_MSG);
+		if (pintervs_type_mask)
+			*pintervs_type_mask = rdb::IntervUtils::INTERVS2D;
+		return _rintervals;
+	}
 
 	// Handle empty intervals - determine type based on what the caller expects
 	// For empty intervals, the caller's GIntervals/GIntervals2D objects are already
