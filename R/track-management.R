@@ -762,7 +762,7 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
                 # the failed copy is moved away first (it may not be removable at once, e.g. read-only
                 # files kept by copy.mode), then the existing track comes back, with the session's
                 # track list as it was. Only this call's copy: what another session put at the name
-                # meanwhile stays (below).
+                # meanwhile stays, and the track set aside is then kept where it is.
                 failed <- file.path(dest_parent, .gdb.staging_name(basename(dest_dir)))
                 if (!placed || (dir.exists(dest_dir) && !suppressWarnings(file.rename(dest_dir, failed)))) {
                     failed <- NULL
@@ -772,15 +772,6 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
                     assign("GTRACKS", tracks_before, envir = .misha)
                     assign("GTRACK_DATASET", track_db_before, envir = .misha)
                     .gdb.cache_mark_dirty(dest_db)
-                } else if (!placed && dir.exists(dest_dir)) {
-                    # another session's complete copy took the name (writers put only complete
-                    # tracks there): it replaces the track as this call's would have, which
-                    # overwrite = TRUE asked for, so the track set aside goes
-                    .gdb.invalidate_dir_cache(dest_dir)
-                    assign("GTRACKS", tracks_before, envir = .misha)
-                    assign("GTRACK_DATASET", track_db_before, envir = .misha)
-                    .gdb.cache_mark_dirty(dest_db)
-                    .gdb.trash(aside)
                 } else {
                     warning(sprintf("The copy over %s failed; the track that was there is kept at %s", dest_dir, aside), call. = FALSE)
                 }
