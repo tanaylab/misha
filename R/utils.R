@@ -165,15 +165,26 @@
         val <- options(x)[[1L]]
         # If option not set, use centralized default from .misha_defaults
         if (is.null(val) && exists(".misha_defaults") && x %in% names(.misha_defaults)) {
-            return(.misha_defaults[[x]])
+            val <- .misha_defaults[[x]]
         }
-        return(val)
-    }
-    if (x %in% names(options())) {
-        options(x)[[1L]]
+    } else if (x %in% names(options())) {
+        val <- options(x)[[1L]]
     } else {
-        default
+        val <- default
     }
+    if (identical(x, "gmultitasking")) {
+        # if (.ggetOption("gmultitasking")) would stop with "missing value where TRUE/FALSE needed"
+        if (length(val) == 1 && is.na(val)) {
+            stop("options(gmultitasking) must be TRUE or FALSE, not NA", call. = FALSE)
+        }
+        # A misha call made by R code that another misha call runs (the FUN of
+        # gintervals.mapply, a track expression), in the parent or in one of its kids, runs
+        # serially: forking would reuse the outer call's shared memory and kid slots.
+        if (.glifetime_counters()[["ref_count"]] > 0) {
+            val <- FALSE
+        }
+    }
+    val
 }
 
 # Runs `expr` with misha's file-creation umask in force and restores the
@@ -246,7 +257,9 @@
 }
 
 .grbind <- function(...) {
-    objs <- list(...)
+    # A tibble, grouped tibble or data.table is bound as the plain data frame it is; their
+    # own attributes (groups, the data.table self reference) would not describe the result.
+    objs <- lapply(list(...), function(obj) if (is.data.frame(obj)) as.data.frame(obj) else obj)
 
     zerolines <- lapply(objs, function(obj) {
         obj[0, ]

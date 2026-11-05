@@ -5,6 +5,8 @@
  *      Author: hoichman
  */
 
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include "rdbinterval.h"
 #include "rdbprogress.h"
@@ -137,6 +139,19 @@ bool has_strand_column(const SEXP intervals_df) {
     return false;
 }
 
+// A distance limit argument (mindist, maxdist, ...): a single number, not NA. -Inf and Inf
+// (and anything beyond +-1e18, far past any genome) mean no limit; casting them to int64_t
+// is undefined.
+static int64_t get_dist_arg(SEXP x, const char *name)
+{
+	if (!is_num_vector(x) || Rf_length(x) != 1)
+		verror("%s argument is not numeric", name);
+	double v = num_elt(x, 0);
+	if (std::isnan(v))
+		verror("%s argument is NA", name);
+	return (int64_t)std::max(-1e18, std::min(1e18, v));
+}
+
 extern "C" {
 
 SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _distrange_start, SEXP _distrange_end,
@@ -162,17 +177,17 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 		if (type_mask1 != type_mask2) 
 			verror("Cannot intermix 1D and 2D intervals");
 
-		if (!Rf_isInteger(_maxneighbors) && !Rf_isReal(_maxneighbors)) 
+		if (!is_num_vector(_maxneighbors) || Rf_length(_maxneighbors) != 1)
 			verror("maxneighbors argument is not numeric");
 		int maxneighbors = Rf_isInteger(_maxneighbors) ? INTEGER(_maxneighbors)[0] : (int)REAL(_maxneighbors)[0];
 		if (maxneighbors < 1) 
 			verror("maxneighbors must be greater or equal to 1");
 
-		if (!Rf_isLogical(_na_if_notfound))
+		if (!is_true_or_false(_na_if_notfound))
 			verror("na.if.notfound argument is not logical");
 		bool na_if_notfound = LOGICAL(_na_if_notfound)[0];
 
-		if (!Rf_isLogical(_use_intervals1_strand))
+		if (!is_true_or_false(_use_intervals1_strand))
 			verror("use_intervals1_strand argument is not logical");
 		bool use_intervals1_strand = LOGICAL(_use_intervals1_strand)[0];
 
@@ -180,13 +195,8 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 		Progress_reporter progress;
 
 		if (type_mask1 & IntervUtils::INTERVS1D) {
-			if (!Rf_isReal(_distrange_start))
-				verror("mindist argument is not numeric");
-			int64_t distance_start = (int64_t)REAL(_distrange_start)[0];
-
-			if (!Rf_isReal(_distrange_end))
-				verror("maxdist argument is not numeric");
-			int64_t distance_end = (int64_t)REAL(_distrange_end)[0];
+			int64_t distance_start = get_dist_arg(_distrange_start, "mindist");
+			int64_t distance_end = get_dist_arg(_distrange_end, "maxdist");
 
 			if (distance_start > distance_end)
 				verror("mindist exceeds maxdist");
@@ -200,7 +210,9 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 			vector<IntervNeighbor> result;
 
 			intervals1d[0].sort();
-			intervals1d[1].sort();
+			// stable: equal intervals keep their input order on every platform, so
+			// neighbor ties don't depend on the C++ library
+			stable_sort(intervals1d[1].begin(), intervals1d[1].end(), GIntervalsFetcher1D::compare_by_start_coord);
 
 			int chromid = -1;
 			SegmentFinder<GInterval> segment_finder;
@@ -312,24 +324,14 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 				verror("use_intervals1_strand not yet supported for 2D intervals");
 			}
 
-			if (!Rf_isReal(_distrange_start1))
-				verror("mindist1 argument is not numeric");
-			int64_t distance_start1 = (int64_t)REAL(_distrange_start1)[0];
-
-			if (!Rf_isReal(_distrange_end1))
-				verror("maxdist1 argument is not numeric");
-			int64_t distance_end1 = (int64_t)REAL(_distrange_end1)[0];
+			int64_t distance_start1 = get_dist_arg(_distrange_start1, "mindist1");
+			int64_t distance_end1 = get_dist_arg(_distrange_end1, "maxdist1");
 
 			if (distance_start1 > distance_end1)
 				verror("mindist1 exceeds maxdist1");
 
-			if (!Rf_isReal(_distrange_start2))
-				verror("mindist2 argument is not numeric");
-			int64_t distance_start2 = (int64_t)REAL(_distrange_start2)[0];
-
-			if (!Rf_isReal(_distrange_end2))
-				verror("maxdist2 argument is not numeric");
-			int64_t distance_end2 = (int64_t)REAL(_distrange_end2)[0];
+			int64_t distance_start2 = get_dist_arg(_distrange_start2, "mindist2");
+			int64_t distance_end2 = get_dist_arg(_distrange_end2, "maxdist2");
 
 			if (distance_start2 > distance_end2)
 				verror("mindist2 exceeds maxdist2");

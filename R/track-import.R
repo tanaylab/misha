@@ -34,6 +34,37 @@
     list(intervals = intervals_df, values = values)
 }
 
+# BED files from other tools often have records that run past the end of the chromosome, or that are empty.
+# Clips the first to the chromosome end and drops records left empty (zero length, or starting at or past the
+# end), which the track creators would reject, and sets $warning to a message giving the counts, if any. Fails
+# when no record is left. The chromosomes of bed must exist in the database.
+.gtrack_bed_fit_chroms <- function(bed, file) {
+    allgenome <- get("ALLGENOME", envir = .misha)[[1]]
+    iv <- bed$intervals
+    sizes <- allgenome$end[match(as.character(.gchroms(iv$chrom)), as.character(allgenome$chrom))]
+    # an inverted record (start > end) is left for the creator to reject
+    past <- iv$end > sizes & iv$start <= iv$end
+    end <- ifelse(past, sizes, iv$end)
+    empty <- iv$end == iv$start | (past & end <= iv$start)
+    num_clipped <- sum(past & !empty)
+    if (length(empty) && all(empty)) {
+        stop(sprintf(
+            "BED file %s: all of its %d record(s) are empty (zero length, or starting at or past the end of their chromosome): nothing to import",
+            file, length(empty)
+        ), call. = FALSE)
+    }
+    if (num_clipped || any(empty)) {
+        iv$end <- end
+        bed$intervals <- iv[!empty, , drop = FALSE]
+        bed$values <- bed$values[!empty]
+        bed$warning <- sprintf(
+            "BED file %s: %d record(s) running past the end of their chromosome were clipped to it, and %d empty record(s) (zero length, or starting at or past the chromosome end) were dropped",
+            file, num_clipped, sum(empty)
+        )
+    }
+    bed
+}
+
 .gtrack_set_created_attrs <- function(trackstr, description, created_by, attrs) {
     .gtrack.attr.set(trackstr, "created.by", created_by, TRUE)
     .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
@@ -88,7 +119,10 @@
 #' otherwise a constant value of 1 is used. For BED inputs, 'binsize' controls
 #' the output type: if 'binsize' is 0 the track is 'Sparse'; otherwise the track
 #' is 'Dense' with bin-averaged values based on overlaps with BED intervals (and
-#' 'defval' for regions not covered).
+#' 'defval' for regions not covered). BED records that run past the end of
+#' their chromosome are clipped to it, and records left empty (zero length, or
+#' starting at or past the chromosome end) are dropped, with one warning giving
+#' the counts; a BED file with no record left is an error.
 #'
 #' If 'binsize' is 0 the resulted track is created in 'Sparse' format.
 #' Otherwise the 'Dense' format is chosen with a bin size equal to 'binsize'.
@@ -217,6 +251,16 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
                 report.progress <- TRUE
                 bed_parsed <- .gtrack_read_bed(file)
                 used_bed <- TRUE
+                # the creators accept only chromosomes of the database: drop the others here, and report
+                # them once the track is created, as the other formats do
+                bed_chroms <- unique(bed_parsed$intervals$chrom)
+                bed_known <- .gcall("gimport_check_chroms", bed_chroms, file.original, FALSE, .misha_env())
+                if (!all(bed_known)) {
+                    keep <- bed_parsed$intervals$chrom %in% bed_chroms[bed_known]
+                    bed_parsed$intervals <- bed_parsed$intervals[keep, , drop = FALSE]
+                    bed_parsed$values <- bed_parsed$values[keep]
+                }
+                bed_parsed <- .gtrack_bed_fit_chroms(bed_parsed, file.original)
             }
 
             if (!used_bed && report.progress) {
@@ -242,6 +286,10 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
                         .gcall("gtrack_create_dense", trackstr, intervalData, binsize, defval, "weighted.mean", .misha_env())
                     } else {
                         .gcall("gtrack_create_sparse", trackstr, bed_parsed$intervals, bed_parsed$values, .misha_env())
+                    }
+                    .gcall("gimport_check_chroms", bed_chroms, file.original, TRUE, .misha_env())
+                    if (!is.null(bed_parsed$warning)) {
+                        warning(bed_parsed$warning, call. = FALSE)
                     }
                 } else {
                     # file may be a temporary unzipped copy that is
@@ -350,9 +398,14 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
 #' default value of 'cols.order' is an array of (9, 11, 13, 14) meaning that
 #' sequence is expected to be found at column number 9, chromosome - at column
 #' 11, coordinate - at column 13 and strand - at column 14. The column indices
-#' are 1-based, i.e. the first column is referenced by 1. Chromosome needs a
-#' prefix 'chr' e.g. 'chr1'. Valid strand values are '+' or 'F' for forward
-#' strand and '-' or 'R' for the reverse strand.
+#' are 1-based, i.e. the first column is referenced by 1. Valid strand values
+#' are '+' or 'F' for forward strand and '-' or 'R' for the reverse strand.
+#'
+#' In every format, chromosome names are matched against the genome database
+#' through the chromosome alias chain, as in \code{\link{gtrack.import}}
+#' (\code{chr1} <-> \code{1}, \code{M} <-> \code{MT}, and
+#' \code{<groot>/chrom_aliases.tsv} if present). Reads on other chromosomes
+#' are counted as unmapped.
 #'
 #' Coordinates. SAM / BAM 'POS' is 1-based, as the SAM specification defines
 #' it, and is converted to the 0-based leftmost aligned base. The 5' end of a
@@ -493,6 +546,11 @@ gtrack.import_mappedseq <- function(track = NULL, description = NULL, file = NUL
             .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
             .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
             .gtrack.attr.set(trackstr, "description", description, TRUE)
+
+            # If database is indexed, automatically convert the track to indexed format
+            if (.gdb.is_indexed()) {
+                gtrack.convert_to_indexed(trackstr)
+            }
             success <- TRUE
         },
         finally = {

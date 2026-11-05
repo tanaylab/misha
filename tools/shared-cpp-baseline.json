@@ -10,13 +10,15 @@
     "pymisha": "29305b2b3494233f"
   },
   "BinFinder.cpp": {
-    "identical": true,
-    "misha": "122ae8addcac725a",
+    "identical": false,
+    "misha": "595b59f13a5fa668",
+    "needs_port": true,
     "pymisha": "122ae8addcac725a"
   },
   "BinFinder.h": {
-    "identical": true,
-    "misha": "0b0797d738f6ef3d",
+    "identical": false,
+    "misha": "da7d581e42415c61",
+    "needs_port": true,
     "pymisha": "0b0797d738f6ef3d"
   },
   "BinsManager.h": {
@@ -111,7 +113,7 @@
   },
   "GenomeTrack.cpp": {
     "identical": false,
-    "misha": "e3f41b836f4991a8",
+    "misha": "cfecc116d98319dc",
     "needs_port": true,
     "pymisha": "15e38dbba77e4ad3"
   },
@@ -206,8 +208,8 @@
     "pymisha": "adca921a2f225b60"
   },
   "PWMEditDistanceScorer.cpp": {
-    "identical": false,
-    "misha": "bfff75719b6346d5",
+    "identical": true,
+    "misha": "bbd78854c3a2fd90",
     "pymisha": "bbd78854c3a2fd90"
   },
   "PWMEditDistanceScorer.h": {
@@ -227,7 +229,8 @@
   },
   "PWMScorer.cpp": {
     "identical": false,
-    "misha": "55ef3419a2fe397d",
+    "misha": "8eaf1f9ae73446e0",
+    "needs_port": true,
     "pymisha": "cbb0d0bdee03ffcb"
   },
   "PWMScorer.h": {
@@ -352,7 +355,7 @@
   },
   "TrackIndex2D.cpp": {
     "identical": false,
-    "misha": "21b773abc93ec8d4",
+    "misha": "3a6d8f087f7e917d",
     "needs_port": true,
     "pymisha": "135c387d6b445944"
   },

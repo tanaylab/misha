@@ -6,7 +6,7 @@ using namespace rdb;
 bool TrackExpressionCartesianGridIterator::begin(const GenomeChromKey &chromkey, const GIntervals *intervals1, const GIntervals *intervals2,
 												 const vector<int64_t> &expansion1, const vector<int64_t> &expansion2,
 												 int min_band_idx, int max_band_idx, bool use_band_idx_limit, GIntervalsFetcher2D &scope, const DiagonalBand &band,
-												 int max_data_size)
+												 uint64_t max_data_size)
 {
 	TrackExpression2DIterator::begin(scope, band);
 

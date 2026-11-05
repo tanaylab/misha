@@ -126,9 +126,9 @@ SEXP gmapply(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enable_gapply_i
 				}
 
 				SEXP res = eval_in_R(eval_expr, _envir);
-				if (!Rf_isReal(res) || Rf_length(res) != 1)
+				if (!is_num_vector(res) || Rf_length(res) != 1)
 					verror("Evaluation of function does not produce a single numeric value");
-				result[interval_idx] = REAL(res)[0];
+				result[interval_idx] = num_elt(res, 0);
 
 				if (enable_gapply_intervals)
 					runprotect(rlast_intervals);
@@ -302,9 +302,9 @@ SEXP gmapply_multitask(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enabl
                     }
 
 					SEXP res = eval_in_R(eval_expr, _envir);
-					if (!Rf_isReal(res) || Rf_length(res) != 1)
+					if (!is_num_vector(res) || Rf_length(res) != 1)
 						verror("Evaluation of function does not produce a single numeric value");
-					result[interval_idx] = REAL(res)[0];
+					result[interval_idx] = num_elt(res, 0);
 
 					if (enable_gapply_intervals)
 						runprotect(rlast_intervals);

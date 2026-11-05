@@ -130,8 +130,8 @@ GenomeTrack::ChromFiles::ChromFiles(const GenomeChromKey &chromkey, const string
 {
 	struct stat st;
 
-	// an indexed track keeps all the chromosomes in track.dat
-	if (!stat((dir + "/track.idx").c_str(), &st))
+	// an indexed track keeps all the chromosomes in track.dat (unless it is being converted again)
+	if (!converting && !stat((dir + "/track.idx").c_str(), &st))
 		return;
 
 	DIR *d = opendir(dir.c_str());

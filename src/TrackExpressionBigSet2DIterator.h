@@ -14,7 +14,7 @@ class TrackExpressionBigSet2DIterator : public TrackExpression2DIterator {
 public:
 	TrackExpressionBigSet2DIterator(const IntervUtils &iu) : TrackExpression2DIterator(INTERVALS2D), m_iu(iu) {}
 
-	bool begin(const char *intervset, SEXP meta, GIntervalsFetcher2D &scope, const DiagonalBand &band, int max_data_size);
+	bool begin(const char *intervset, SEXP meta, GIntervalsFetcher2D &scope, const DiagonalBand &band, uint64_t max_data_size);
 	virtual bool next();
 
 private:

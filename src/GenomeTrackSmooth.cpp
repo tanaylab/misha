@@ -172,8 +172,10 @@ void Linear_ramp_smoother::set_next_sample(double sample)
 	if (++m_peak_idx >= m_num_samples) m_peak_idx = 0;
 
 	// over time the loss of precision in floating point operations is accumulated =>
-	// recalculate all from scratch each 1/2 window size samples
-	if (m_counter % m_num_samples_aside == 0) {
+	// recalculate all from scratch each 1/2 window size samples. m_counter counts
+	// written samples only, so wait until the window is filled: recalculating on
+	// every sample of the fill made each chromosome cost O(window^2).
+	if (m_num_read_samples > m_num_samples_aside && m_counter % m_num_samples_aside == 0) {
 		// m_left/right_weights_sum never lose precision since they are always updated with only integer values,
 		// the rest should be recalculated
 		double val;
@@ -286,8 +288,10 @@ void Mean_smoother::set_next_sample(double sample)
 	if (++m_peak_idx >= m_num_samples) m_peak_idx = 0;
 
 	// over time the loss of precision in floating point operations is accumulated =>
-	// recalculate all from scratch each 1/2 window size samples
-	if (m_counter % m_num_samples_aside == 0) {
+	// recalculate all from scratch each 1/2 window size samples. m_counter counts
+	// written samples only, so wait until the window is filled: recalculating on
+	// every sample of the fill made each chromosome cost O(window^2).
+	if (m_num_read_samples > m_num_samples_aside && m_counter % m_num_samples_aside == 0) {
 		m_vals_sum = 0;
 		for (vector<double>::iterator i = m_vals.begin(); i != m_vals.end(); ++i) {
 			if (!std::isnan(*i))
@@ -313,21 +317,21 @@ SEXP gsmooth(SEXP _track, SEXP _expr, SEXP _winsize, SEXP _weight_thr, SEXP _smo
 		if (!Rf_isString(_expr) || Rf_length(_expr) != 1)
 			verror("Track expression argument is not a string");
 
-		if (!Rf_isReal(_winsize) || Rf_length(_winsize) != 1)
+		if (!is_num_vector(_winsize) || Rf_length(_winsize) != 1)
 			verror("Winsize is not numeric");
 
-		if (!Rf_isReal(_weight_thr) || Rf_length(_weight_thr) != 1)
+		if (!is_num_vector(_weight_thr) || Rf_length(_weight_thr) != 1)
 			verror("Weight threshold is not numeric");
 
-		if (!Rf_isLogical(_smooth_nans) || Rf_length(_smooth_nans) != 1)
+		if (!is_true_or_false(_smooth_nans))
 			verror("Smooth nans argument is not logical");
 
 		if (!Rf_isString(_type) || Rf_length(_type) != 1)
 			verror("Algorithm is not a string");
 
 		const char *track = CHAR(STRING_ELT(_track, 0));
-		double winsize = REAL(_winsize)[0];
-		double weight_thr = REAL(_weight_thr)[0];
+		double winsize = num_elt(_winsize, 0);
+		double weight_thr = num_elt(_weight_thr, 0);
 		bool smooth_nans = LOGICAL(_smooth_nans)[0];
 
 		if (winsize < 0)

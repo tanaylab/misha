@@ -50,6 +50,9 @@ void GenomeTrackArrays::init_read_once(const char *filename, int chromid)
 	m_is_writing = false;
 	m_intervals.clear();
 	m_vals_pos.clear();
+	// read_array_vals() caches by the interval's index within the chromosome: index 0 of the next
+	// chromosome is a different record
+	m_last_array_vals_idx = (uint64_t)-1;
 
 	if (!m_master_obj) {
 		// Check for indexed format FIRST. get_track_index() hits the process-
@@ -248,6 +251,8 @@ void GenomeTrackArrays::read_interval(const GInterval &interval)
 			(*itrack)->m_last_max_pos = numeric_limits<double>::quiet_NaN();
 		if ((*itrack)->has_function(MIN_POS))
 			(*itrack)->m_last_min_pos = numeric_limits<double>::quiet_NaN();
+		(*itrack)->m_last_lse = (*itrack)->m_last_first = (*itrack)->m_last_last = (*itrack)->m_last_sample = numeric_limits<float>::quiet_NaN();
+		(*itrack)->m_last_first_pos = (*itrack)->m_last_last_pos = (*itrack)->m_last_sample_pos = numeric_limits<double>::quiet_NaN();
 
 		if ((*itrack)->m_use_quantile)
 			(*itrack)->m_sp.reset();

@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <cmath>
+#include <cstring>
 #include <cctype>
 #include <limits>
 #include <fstream>
@@ -20,6 +21,7 @@
 #include <utility>
 
 #include "rdbinterval.h"
+#include "ConfigurationDefaults.h"
 #include "rdbutils.h"
 #include "TrackExpressionScanner.h"
 #include "TrackExpressionFixedBinIterator.h"
@@ -346,8 +348,15 @@ DiagonalBand IntervUtils::convert_band(SEXP rband)
 	if ((!Rf_isReal(rband) && !Rf_isInteger(rband)) || Rf_length(rband) != 2)
 		verror("Invalid format of band argument");
 
-	int d1 = Rf_isReal(rband) ? (int)(REAL(rband)[0] > 0 ? REAL(rband)[0] + 0.5 : REAL(rband)[0] - 0.5) : INTEGER(rband)[0];
-	int d2 = Rf_isReal(rband) ? (int)(REAL(rband)[1] > 0 ? REAL(rband)[1] + 0.5 : REAL(rband)[1] - 0.5) : INTEGER(rband)[1];
+	// Converting NA, an infinite value or one beyond int64 is undefined; 1e18 is past any genome
+	for (int i = 0; i < 2; ++i) {
+		double v = Rf_isReal(rband) ? REAL(rband)[i] : (INTEGER(rband)[i] == NA_INTEGER ? NA_REAL : INTEGER(rband)[i]);
+		if (!std::isfinite(v) || std::fabs(v) > 1e18)
+			verror("Invalid band argument: band distances must be finite numbers between -1e18 and 1e18");
+	}
+
+	int64_t d1 = Rf_isReal(rband) ? (int64_t)(REAL(rband)[0] > 0 ? REAL(rband)[0] + 0.5 : REAL(rband)[0] - 0.5) : INTEGER(rband)[0];
+	int64_t d2 = Rf_isReal(rband) ? (int64_t)(REAL(rband)[1] > 0 ? REAL(rband)[1] + 0.5 : REAL(rband)[1] - 0.5) : INTEGER(rband)[1];
 
 	if (d1 >= d2)
 		verror("Invalid band argument: distance1 exceeds distance2");
@@ -422,8 +431,9 @@ static void split_intervals_1d_by_range(const GIntervals &intervals, int desired
 				int64_t aligned_end = (chunk_end / split_align_1d) * split_align_1d;
 				if (aligned_end <= seg_start)
 					aligned_end = ((seg_start / split_align_1d) + 1) * split_align_1d;
-				if (aligned_end < seg_end_total)
-					chunk_end = aligned_end;
+				// No bin boundary left inside the interval: don't cut it at an
+				// unaligned point, or one iterator bin becomes two rows.
+				chunk_end = aligned_end < seg_end_total ? aligned_end : seg_end_total;
 			}
 
 			if (chunk_end <= seg_start)
@@ -839,6 +849,31 @@ uint64_t IntervUtils::estimate_num_bins(SEXP iterator_policy, GIntervalsFetcher1
 	return 0;
 }
 
+uint64_t IntervUtils::get_ram_shm_size() const
+{
+	// Half the physical RAM: once the kids are done the parent copies their results out of the
+	// arena into R objects of about the same size, so arena and copy together fit in RAM. This is
+	// also within the 70% of RAM that the default gmax.data.size budgets for all processes
+	// (R/utils-memory.R). Never more than gmax.mem.usage, the memory the user lets misha's
+	// processes use (by default 80% of RAM).
+	long pages = sysconf(_SC_PHYS_PAGES);
+	long page_size = sysconf(_SC_PAGE_SIZE);
+	uint64_t ram = pages > 0 && page_size > 0 ? (uint64_t)pages * (uint64_t)page_size : (uint64_t)8e9; // 8 GB, the fallback of get_system_memory()
+	return max(min(ram / 2, get_max_mem_usage()), misha::config::MIN_RAM_SHM_SIZE);
+}
+
+bool IntervUtils::is_data_size_unlimited() const
+{
+	return get_max_data_size() >= misha::config::MAX_DATA_SIZE_NO_LIMIT;
+}
+
+uint64_t IntervUtils::get_kid_buf_size(unsigned num_kids, uint64_t num_bufs, uint64_t record_size) const
+{
+	if (!is_data_size_unlimited())
+		return (uint64_t)ceil(get_max_data_size() / (double)num_kids);
+	return max(get_ram_shm_size() / (max(num_bufs, (uint64_t)1) * record_size), (uint64_t)1);
+}
+
 // Original 2-parameter version for backward compatibility
 bool IntervUtils::distribute_task(uint64_t res_const_size,    // data size in bytes for all the result
 								  uint64_t res_record_size)   // size in bytes per datum in the result
@@ -868,9 +903,35 @@ bool IntervUtils::distribute_task(uint64_t res_const_size,    // data size in by
 	if (max_records > 0 && max_records < max_records_limit)
 		max_records_limit = max_records;
 
-	uint64_t max_res_size = max_records_limit * res_record_size + m_num_planned_kids * res_const_size;
+	// Saturated: the product overflowed for a large limit (gmax.data.size = Inf) and mapped a
+	// tiny arena that the kids then wrote past.
+	uint64_t max_res_size, const_size;
+	if (__builtin_mul_overflow((uint64_t)m_num_planned_kids, res_const_size, &const_size))
+		const_size = numeric_limits<uint64_t>::max();
+	if (__builtin_mul_overflow(max_records_limit, res_record_size, &max_res_size) ||
+		__builtin_add_overflow(max_res_size, const_size, &max_res_size) ||
+		max_res_size > ((uint64_t)1 << 62))
+		max_res_size = (uint64_t)1 << 62;
 
-	rdb::prepare4multitasking(res_const_size, res_record_size, max_res_size, get_max_mem_usage(), m_num_planned_kids);
+	try {
+		rdb::prepare4multitasking(res_const_size, res_record_size, max_res_size, get_max_mem_usage(), m_num_planned_kids);
+	} catch (TGLException &e) {
+		// The arena is sized for the most the limit allows, which cannot always be mapped:
+		// gmax.data.size = Inf or unset means no limit, and a large finite limit can ask for more
+		// than RAM and swap. Map one sized from RAM instead. The pages are only committed as the
+		// kids write results, and a result that really exceeds this arena fails in allocate_res()
+		// with the usual "Result size exceeded".
+		// Only when the limit sized the arena: a caller that sized it from its own estimate
+		// (gextract, gscreen) backs off the estimate first and then runs serially. And only
+		// when the kids' fixed-size blocks fit into it: otherwise every kid would scan its share
+		// and then fail, which a finite limit too large to map (gquantiles, gcor) used to report
+		// at once.
+		uint64_t ram_shm_size = get_ram_shm_size();
+		if (max_records_limit != get_max_data_size() || max_res_size <= ram_shm_size || const_size > ram_shm_size ||
+			!strstr(e.msg(), "Failed to allocate shared memory"))
+			throw;
+		rdb::prepare4multitasking(res_const_size, res_record_size, ram_shm_size, get_max_mem_usage(), m_num_planned_kids, true);
+	}
 
 	for (vector<GIntervalsFetcher1D *>::const_iterator ikid_intervs = m_kids_intervals1d.begin(); ikid_intervs != m_kids_intervals1d.end(); ++ikid_intervs) {
 		if (!launch_process())

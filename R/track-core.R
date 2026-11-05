@@ -56,7 +56,10 @@
 
     selected.percentiles <- NULL
 
-    multitasking <- .ggetOption("gmultitasking")
+    # getOption, not .ggetOption: this runs nested inside a misha call (a global.percentile
+    # virtual track), where .ggetOption reports multitasking as off, and restoring that would
+    # switch it off for the rest of the session.
+    multitasking <- getOption("gmultitasking")
     on.exit(options(gmultitasking = multitasking))
     tryCatch(
         {

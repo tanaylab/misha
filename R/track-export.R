@@ -98,13 +98,21 @@ gtrack.export_bedgraph <- function(track, file, intervals = NULL, iterator = NUL
         name <- track
     }
 
-    # Set up intervals
-    if (is.null(intervals)) {
-        intervals <- .misha$ALLGENOME
+    # Extract the data. Overlapping intervals would extract the same bins twice, and bedGraph (and
+    # bedGraphToBigWig) does not allow overlapping records, so they are merged first.
+    extract_canonic <- function(intervals) {
+        gextract(track, intervals = gintervals.canonic(intervals, unify_touching_intervals = FALSE), iterator = iterator)
     }
-
-    # Extract data using gextract
-    data <- gextract(track, intervals = intervals, iterator = iterator)
+    if (is.null(intervals)) {
+        data <- gextract(track, intervals = .misha$ALLGENOME, iterator = iterator)
+    } else if (is.character(intervals) && length(intervals) == 1 && .gintervals.is_bigset(intervals, FALSE)) {
+        # gintervals.canonic cannot read a big intervals set: one chromosome at a time
+        data <- do.call(rbind, lapply(as.character(gintervals.chrom_sizes(intervals)$chrom), function(chrom) {
+            extract_canonic(gintervals.load(intervals, chrom = chrom))
+        }))
+    } else {
+        data <- extract_canonic(intervals)
+    }
 
     # The value column name is the track expression itself
     value_col <- track

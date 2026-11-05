@@ -324,10 +324,10 @@ void TrackExpressionVars::parse_imdf(SEXP rvtrack, const string &vtrack, Iterato
 		for (int i = 0; i < NUM_SHIFTS; i++) {
 			SEXP rshift = get_rvector_col(rimdf, shift_col_names[i], vname.c_str(), false);
 
-			if (!(Rf_isReal(rshift) || Rf_isInteger(rshift)) || Rf_length(rshift) != 1)
+			if (!is_num_vector(rshift) || Rf_length(rshift) != 1 || !std::isfinite(num_elt(rshift, 0)))
 				verror("Virtual track %s: %s must be an integer", vtrack.c_str(), shift_col_names[i]);
 
-			int64_t shift = Rf_isReal(rshift) ? (int64_t)REAL(rshift)[0] : INTEGER(rshift)[0];
+			int64_t shift = (int64_t)num_elt(rshift, 0);
 
 			if (i == SSHIFT)
 				imdf1d->sshift = shift;
@@ -344,10 +344,10 @@ void TrackExpressionVars::parse_imdf(SEXP rvtrack, const string &vtrack, Iterato
 		for (int i = 0; i < NUM_SHIFTS; i++) {
 			SEXP rshift = get_rvector_col(rimdf, shift_col_names[i], vname.c_str(), false);
 
-			if (!(Rf_isReal(rshift) || Rf_isInteger(rshift)) || Rf_length(rshift) != 1)
+			if (!is_num_vector(rshift) || Rf_length(rshift) != 1 || !std::isfinite(num_elt(rshift, 0)))
 				verror("Virtual track %s: %s must be an integer", vtrack.c_str(), shift_col_names[i]);
 
-			int64_t shift = Rf_isReal(rshift) ? (int64_t)REAL(rshift)[0] : INTEGER(rshift)[0];
+			int64_t shift = (int64_t)num_elt(rshift, 0);
 
 			if (i == SSHIFT1)
 				imdf2d->sshift1 = shift;
@@ -1194,10 +1194,10 @@ TrackExpressionVars::Track_var &TrackExpressionVars::add_vtrack_var_src_track(SE
 			if (ifunc == Track_var::QUANTILE) {
 				if (Rf_isNull(rparams))
 					verror("Virtual track %s: function %s requires an additional parameter (percentile) to be specified", vtrack.c_str(), func.c_str());
-				if (!Rf_isReal(rparams) || Rf_length(rparams) != 1)
+				if (!is_num_vector(rparams) || Rf_length(rparams) != 1)
 					verror("Virtual track %s: invalid parameters used for function %s", vtrack.c_str(), func.c_str());
-				var.percentile = REAL(rparams)[0];
-				if (var.percentile < 0 || var.percentile > 1)
+				var.percentile = num_elt(rparams, 0);
+				if (!(var.percentile >= 0 && var.percentile <= 1))
 					verror("Virtual track %s: parameter (percentile) used for function %s is out of range", vtrack.c_str(), func.c_str());
 				
 			} else	if (ifunc == Track_var::PWM || ifunc == Track_var::PWM_MAX || ifunc == Track_var::PWM_MAX_POS || ifunc == Track_var::PWM_COUNT) {
@@ -1479,7 +1479,7 @@ TrackExpressionVars::Value_var &TrackExpressionVars::add_vtrack_var_src_value(SE
 		else
 			verror("Virtual track %s: invalid percentile parameter for function %s", vtrack.c_str(), func.c_str());
 
-		if (var.percentile < 0 || var.percentile > 1)
+		if (!(var.percentile >= 0 && var.percentile <= 1))
 			verror("Virtual track %s: percentile must be between 0 and 1, got %g", vtrack.c_str(), var.percentile);
 	} else {
 		if (!Rf_isNull(rparams))
@@ -1747,8 +1747,10 @@ void TrackExpressionVars::init(const TrackExpressionIteratorBase &expr_itr)
 	// First validate iterator compatibility
 	for (Track_vars::const_iterator itrack_var = m_track_vars.begin(); itrack_var != m_track_vars.end(); ++itrack_var)
 	{
-	    // Skip iterator validation for sequence-based variables since they don't have tracks or imdf
+	    // Sequence-based variables have no track: under a 2D iterator they need a dimension projection
         if (TrackExpressionVars::is_sequence_based_function(itrack_var->val_func)) {
+            if (expr_itr.is_2d() && (!itrack_var->seq_imdf1d || itrack_var->seq_imdf1d->dim == Iterator_modifier1D::DIM_NONE))
+                verror("Virtual track %s: 2D iterator is used without explicit dimension projection", itrack_var->var_name.c_str());
             continue;
         }
 
@@ -1777,6 +1779,12 @@ void TrackExpressionVars::init(const TrackExpressionIteratorBase &expr_itr)
 			verror("Virtual track %s: 1D iterator is used for a virtual track that specifies dimension projection and hence expects 2D iterators", iinterv_var->var_name.c_str());
 		else if (expr_itr.is_2d() && (!iinterv_var->imdf1d || iinterv_var->imdf1d->dim == Iterator_modifier1D::DIM_NONE))
 			verror("Virtual track %s: 2D iterator is used without explicit dimension projection", iinterv_var->var_name.c_str());
+	}
+
+	for (Value_vars::const_iterator ivalue_var = m_value_vars.begin(); ivalue_var != m_value_vars.end(); ++ivalue_var)
+	{
+		if (expr_itr.is_2d() && (!ivalue_var->imdf1d || ivalue_var->imdf1d->dim == Iterator_modifier1D::DIM_NONE))
+			verror("Virtual track %s: 2D iterator is used without explicit dimension projection", ivalue_var->var_name.c_str());
 	}
 
 	// Collect non-PWM tracks that need file checking
@@ -1886,8 +1894,17 @@ void TrackExpressionVars::init(const TrackExpressionIteratorBase &expr_itr)
 			if (breaks == R_NilValue || !Rf_isReal(breaks) || Rf_length(breaks) != Rf_length(val))
 				verror("File %s is in invalid format.", pv_fname.c_str());
 
-			pv.bins.assign(REAL(val), REAL(val) + Rf_length(val));
-			pv.binfinder.init(REAL(breaks), Rf_length(breaks));
+			// A track with no values at all gets the table c(1, 1) with breaks c(NaN, NaN), in files
+			// written by any version. Leave it empty: the track has no value to look up, and
+			// TrackVarProcessor gives NaN for an empty table.
+			// Only an all-NaN table is that one; BinFinder rejects any other NaN break.
+			bool all_nan_breaks = Rf_length(breaks) > 0;
+			for (int i = 0; i < Rf_length(breaks); ++i)
+				all_nan_breaks &= std::isnan(REAL(breaks)[i]);
+			if (!all_nan_breaks) {
+				pv.bins.assign(REAL(val), REAL(val) + Rf_length(val));
+				pv.binfinder.init(REAL(breaks), Rf_length(breaks));
+			}
 		}
 	}
 }

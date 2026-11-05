@@ -29,12 +29,8 @@ SEXP DataFrameUtils::create_data_frame(int numrows, int numcols, SEXP attrs_src)
 
 void DataFrameUtils::define_data_frame_cols(SEXP src, vector<SEXP> &src_cols, SEXP tgt, vector<SEXP> &tgt_cols, int tgt_col_offset)
 {
-	SEXP src_class = Rf_getAttrib(src, R_ClassSymbol);
-
-	if (Rf_isNull(src_class) || !Rf_isString(src_class) ||
-		(!(Rf_length(src_class) == 1 && !strcmp(CHAR(STRING_ELT(src_class, 0)), "data.frame")) &&
-		!(Rf_length(src_class) == 3 && !strcmp(CHAR(STRING_ELT(src_class, 0)), "tbl_df")  &&
-          !strcmp(CHAR(STRING_ELT(src_class, 1)), "tbl") && !strcmp(CHAR(STRING_ELT(src_class, 2)), "data.frame"))))
+	// Any data frame: a plain one, a tibble (grouped or not) or a data.table
+	if (TYPEOF(src) != VECSXP || !Rf_inherits(src, "data.frame"))
 		verror("Copied object is not a data frame or tibble");
 
 	if (Rf_length(tgt) < Rf_length(src) + tgt_col_offset)

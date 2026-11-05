@@ -122,10 +122,10 @@ SEXP C_gpartition(SEXP _intervals, SEXP _track_expr, SEXP _breaks, SEXP _include
 		if (!Rf_isString(_track_expr) || Rf_length(_track_expr) != 1)
 			verror("Expression argument is not a string");
 
-		if (!Rf_isReal(_breaks))
+		if (!is_num_vector(_breaks))
 			verror("Breaks argument is not a number");
 
-		if (!Rf_isLogical(_include_lowest) || Rf_length(_include_lowest) != 1)
+		if (!Rf_isLogical(_include_lowest) || Rf_length(_include_lowest) != 1 || LOGICAL(_include_lowest)[0] == NA_LOGICAL)
 			verror("include.lowest argument is not logical");
 
 		if (!Rf_isNull(_intervals_set_out) && (!Rf_isString(_intervals_set_out) || Rf_length(_intervals_set_out) != 1))
@@ -134,7 +134,7 @@ SEXP C_gpartition(SEXP _intervals, SEXP _track_expr, SEXP _breaks, SEXP _include
 		string intervset_out = Rf_isNull(_intervals_set_out) ? "" : CHAR(STRING_ELT(_intervals_set_out, 0));
 
 		bool include_lowest = LOGICAL(_include_lowest)[0];
-		BinFinder bin_finder(REAL(_breaks), Rf_length(_breaks), include_lowest);
+		BinFinder bin_finder(num_vector(_breaks), include_lowest);
 
 		GIntervals res_intervals;
 		vector<int> res_bins;

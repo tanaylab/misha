@@ -372,6 +372,19 @@ public:
 	// Returns the upper limit for memory usage
 	uint64_t get_max_mem_usage() const { return m_config.get_max_mem_usage(); }
 
+	// Size in bytes of the multitasking shared memory that distribute_task() maps when the size
+	// asked for by the data size limit cannot be mapped (see there)
+	uint64_t get_ram_shm_size() const;
+
+	// True when gmax.data.size sets no limit (Inf, 2^53 or more, or unset)
+	bool is_data_size_unlimited() const;
+
+	// The size, in records of record_size bytes, of a fixed-size buffer a kid hands over through
+	// the shared memory (a quantile or correlation sample), when num_bufs such buffers go into
+	// it: gmax.data.size / num_kids, as it always was, for any finite limit. With no limit that
+	// fits no arena that can be mapped, so the buffers split the RAM-sized one instead.
+	uint64_t get_kid_buf_size(unsigned num_kids, uint64_t num_bufs, uint64_t record_size) const;
+
 	// Returns the threshold for creating a big intervals set
 	uint64_t get_big_intervals_size() const { return m_config.get_big_intervals_size(); }
 

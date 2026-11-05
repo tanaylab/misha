@@ -134,18 +134,17 @@ SEXP C_gquantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _iterator
 		if (!Rf_isString(_expr) || Rf_length(_expr) != 1)
 			verror("Track argument is not a string");
 
-		if (!Rf_isReal(_percentiles) || Rf_length(_percentiles) < 1)
+		if (!is_num_vector(_percentiles) || Rf_length(_percentiles) < 1)
 			verror("Percentile argument is not a vector of numbers");
 
 		vector<Percentile> percentiles(Rf_length(_percentiles));
 		for (int64_t i = 0; i < Rf_length(_percentiles); ++i)
-			percentiles[i] = Percentile(REAL(_percentiles)[i], i);
-		sort(percentiles.begin(), percentiles.end());
-
+			percentiles[i] = Percentile(num_elt(_percentiles, i), i);
 		for (vector<Percentile>::const_iterator ip = percentiles.begin(); ip != percentiles.end(); ++ip) {
-			if (ip->percentile < 0 || ip->percentile > 1)
+			if (!(ip->percentile >= 0 && ip->percentile <= 1))
 				verror("Percentile (%g) is not in [0, 1] range\n", ip->percentile);
 		}
+		sort(percentiles.begin(), percentiles.end());
 
 		IntervUtils iu(_envir);
 		TrackExprScanner scanner(iu);
@@ -290,18 +289,17 @@ SEXP gquantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 		if (!Rf_isString(_expr) || Rf_length(_expr) != 1)
 			verror("Track argument is not a string");
 
-		if (!Rf_isReal(_percentiles) || Rf_length(_percentiles) < 1)
+		if (!is_num_vector(_percentiles) || Rf_length(_percentiles) < 1)
 			verror("Percentile argument is not a vector of numbers");
 
 		vector<Percentile> percentiles(Rf_length(_percentiles));
 		for (int64_t i = 0; i < Rf_length(_percentiles); ++i)
-			percentiles[i] = Percentile(REAL(_percentiles)[i], i);
-		sort(percentiles.begin(), percentiles.end());
-
+			percentiles[i] = Percentile(num_elt(_percentiles, i), i);
 		for (vector<Percentile>::const_iterator ip = percentiles.begin(); ip != percentiles.end(); ++ip) {
-			if (ip->percentile < 0 || ip->percentile > 1)
+			if (!(ip->percentile >= 0 && ip->percentile <= 1))
 				verror("Percentile (%g) is not in [0, 1] range\n", ip->percentile);
 		}
+		sort(percentiles.begin(), percentiles.end());
 
 		IntervUtils iu(_envir);
 		TrackExprScanner scanner(iu);
@@ -323,7 +321,8 @@ SEXP gquantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 			throw rdb::SingleShard();
 
 		if (num_kids) {
-			uint64_t kid_rnd_sampling_buf_size = (uint64_t)ceil(iu.get_max_data_size() / (double)num_kids);
+			// Each kid's sample goes into the shared memory as a fixed-size block
+			uint64_t kid_rnd_sampling_buf_size = iu.get_kid_buf_size(num_kids, num_kids, sizeof(double));
 			uint64_t estimated_bins = iu.estimate_num_bins(_iterator_policy, intervals1d, intervals2d);
 			if (estimated_bins > 0 && estimated_bins < kid_rnd_sampling_buf_size)
 				kid_rnd_sampling_buf_size = estimated_bins;
@@ -585,6 +584,9 @@ SEXP gquantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 					// calculate the percentiles
 					if (calc_medians(sp, percentiles, medians, 0))
 						add_pending_diagnostic(iu.get_env(), "warning",
+								iu.is_data_size_unlimited() ?
+								"The data was sampled to fit the limit and the resulted quantiles are hence approximate.\n"
+								"(gmax.data.size sets no limit, so the samples were bounded by half the RAM, at most gmax.mem.usage)" :
 								"The data was sampled to fit the limit and the resulted quantiles are hence approximate.\n"
 								"(The limit can be controlled by gmax.data.size limit)");
 				}
@@ -638,7 +640,7 @@ SEXP gintervals_quantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 		if (!Rf_isString(_expr) || Rf_length(_expr) != 1)
 			verror("Track argument is not a string");
 
-		if (!Rf_isReal(_percentiles) || Rf_length(_percentiles) < 1)
+		if (!is_num_vector(_percentiles) || Rf_length(_percentiles) < 1)
 			verror("Percentile argument is not a vector of numbers");
 
 		if (!Rf_isNull(_intervals_set_out) && (!Rf_isString(_intervals_set_out) || Rf_length(_intervals_set_out) != 1))
@@ -647,13 +649,12 @@ SEXP gintervals_quantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 		vector<Percentile> percentiles(Rf_length(_percentiles));
 		uint64_t num_percentiles = percentiles.size();
 		for (int64_t i = 0; i < Rf_length(_percentiles); ++i)
-			percentiles[i] = Percentile(REAL(_percentiles)[i], i);
-		sort(percentiles.begin(), percentiles.end());
-
+			percentiles[i] = Percentile(num_elt(_percentiles, i), i);
 		for (vector<Percentile>::const_iterator ip = percentiles.begin(); ip != percentiles.end(); ++ip) {
-			if (ip->percentile < 0 || ip->percentile > 1)
+			if (!(ip->percentile >= 0 && ip->percentile <= 1))
 				verror("Percentile (%g) is not in [0, 1] range\n", ip->percentile);
 		}
+		sort(percentiles.begin(), percentiles.end());
 
 		IntervUtils iu(_envir);
 		TrackExprScanner scanner(iu);
@@ -889,7 +890,7 @@ SEXP gintervals_quantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentil
 		if (!Rf_isString(_expr) || Rf_length(_expr) != 1)
 			verror("Track argument is not a string");
 
-		if (!Rf_isReal(_percentiles) || Rf_length(_percentiles) < 1)
+		if (!is_num_vector(_percentiles) || Rf_length(_percentiles) < 1)
 			verror("Percentile argument is not a vector of numbers");
 
 		if (!Rf_isNull(_intervals_set_out) && (!Rf_isString(_intervals_set_out) || Rf_length(_intervals_set_out) != 1))
@@ -898,13 +899,12 @@ SEXP gintervals_quantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentil
 		vector<Percentile> percentiles(Rf_length(_percentiles));
 		uint64_t num_percentiles = percentiles.size();
 		for (int64_t i = 0; i < Rf_length(_percentiles); ++i)
-			percentiles[i] = Percentile(REAL(_percentiles)[i], i);
-		sort(percentiles.begin(), percentiles.end());
-
+			percentiles[i] = Percentile(num_elt(_percentiles, i), i);
 		for (vector<Percentile>::const_iterator ip = percentiles.begin(); ip != percentiles.end(); ++ip) {
-			if (ip->percentile < 0 || ip->percentile > 1)
+			if (!(ip->percentile >= 0 && ip->percentile <= 1))
 				verror("Percentile (%g) is not in [0, 1] range\n", ip->percentile);
 		}
+		sort(percentiles.begin(), percentiles.end());
 
 		IntervUtils iu(_envir);
 
@@ -1255,18 +1255,17 @@ SEXP gbins_quantiles(SEXP _track_exprs, SEXP _breaks, SEXP _include_lowest, SEXP
 		if (bins_manager.get_num_bin_finders() != numexpr - 1)
 			verror("Number of breaks sets must be equal to the number of tracks used");
 
-		if (!Rf_isReal(_percentiles) || Rf_length(_percentiles) < 1)
+		if (!is_num_vector(_percentiles) || Rf_length(_percentiles) < 1)
 			verror("Percentile argument is not a vector of numbers");
 
 		vector<Percentile> percentiles(Rf_length(_percentiles));
 		for (int64_t i = 0; i < Rf_length(_percentiles); ++i)
-			percentiles[i] = Percentile(REAL(_percentiles)[i], i);
-		sort(percentiles.begin(), percentiles.end());
-
+			percentiles[i] = Percentile(num_elt(_percentiles, i), i);
 		for (vector<Percentile>::const_iterator ip = percentiles.begin(); ip != percentiles.end(); ++ip) {
-			if (ip->percentile < 0 || ip->percentile > 1)
+			if (!(ip->percentile >= 0 && ip->percentile <= 1))
 				verror("Percentile (%g) is not in [0, 1] range\n", ip->percentile);
 		}
+		sort(percentiles.begin(), percentiles.end());
 
 		IntervUtils iu(_envir);
 		TrackExprScanner scanner(iu);
@@ -1308,7 +1307,7 @@ SEXP gbins_quantiles(SEXP _track_exprs, SEXP _breaks, SEXP _include_lowest, SEXP
 					uint64_t old_buf_size = sp.cur_rnd_sampling_buf_size();
 					sp.add(val, unif_rand);
 					data_size += sp.cur_rnd_sampling_buf_size() - old_buf_size;
-					if (data_size > (int64_t)iu.get_max_data_size())
+					if ((uint64_t)data_size > iu.get_max_data_size())
 						verror("Memory limit was reached. To reduce memory usage you can lower down the number of bins.\n"
 								"Note: the memory limit is controlled via gmax.data.size option (see options, getOptions).");
 				}

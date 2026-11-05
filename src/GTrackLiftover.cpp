@@ -429,8 +429,8 @@ static void write_2d_points(const string &infilename, const char *filename, cons
 		TGLError("Opening file %s: %s", infilename.c_str(), strerror(errno));
 
 	int64_t num_points = infile.file_size() / POINT_RECORD_SIZE;
-	// Unsigned: an unset gmax.data.size reads as UINT64_MAX. Below 1 (0, or 0.5 read as 0)
-	// it counts as 1 rather than dividing by zero.
+	// get_max_data_size() is at least 1 (a value below 1 counts as 1) and at most 2^53 (no limit),
+	// so the division is safe; the max() only guards it.
 	uint64_t max_data_size = max(iu.get_max_data_size(), (uint64_t)1);
 	int64_t num_subtrees = max((int64_t)((uint64_t)num_points / max_data_size), (int64_t)1);
 	num_subtrees = (int64_t)1 << (2 * (int)(log2(num_subtrees) / 2));  // round down to a power of 4
@@ -595,7 +595,7 @@ SEXP gtrack_liftover(SEXP _track,
 
 		// Validate min_score (optional, currently unused)
 		if (!Rf_isNull(_min_score)) {
-			if (!Rf_isReal(_min_score) || Rf_length(_min_score) != 1)
+			if (!is_num_vector(_min_score) || Rf_length(_min_score) != 1)
 				verror("min_score must be a single numeric value");
 		}
 

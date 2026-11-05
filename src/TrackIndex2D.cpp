@@ -384,9 +384,14 @@ void TrackIndex2D::write_index(const string &index_path,
     }
 
     int fd = fileno(fp);
-    if (fd >= 0) {
-        fsync(fd);
+    if (fd >= 0 && fsync(fd) != 0) {
+        int err = errno;
+        fclose(fp);
+        TGLError<TrackIndex2D>(FILE_READ_FAILED,
+            "Failed to sync index file %s: %s", index_path.c_str(), strerror(err));
     }
 
-    fclose(fp);
+    if (fclose(fp) != 0)
+        TGLError<TrackIndex2D>(FILE_READ_FAILED,
+            "Failed to close index file %s: %s", index_path.c_str(), strerror(errno));
 }

@@ -2,6 +2,40 @@
 
 This release fixes the remaining defects found in the review of 5.14.4. Several change results, marked **Behavior fix**; recompute anything that depends on them.
 
+* **Behavior fix:** `gcor()` computes standard deviations, covariance and correlation without cancellation; values far from zero relative to their spread gave NaN or wrong correlations, also in multitask runs.
+
+* **Behavior fix:** `gsummary()`, `gintervals.summary()` and `gbins.summary()` give a NaN standard deviation when a value is infinite (was 0), and report `-Inf`/`Inf` as the minimum or maximum when all values are infinite (was +-1.8e308).
+
+* **Behavior fix:** `first`, `last`, `sample`, `lse` and their `.pos` functions work on array tracks; they returned NA, and `lse` returned garbage.
+
+* **Behavior fix:** `gtrack.array.extract()` no longer repeats the previous chromosome's values after a chromosome with one interval.
+
+* **Behavior fix:** multitasked computations no longer split one iterator bin into two rows.
+
+* **Behavior fix:** `gseq.kmer.dist(mask =)` leaves out k-mers that overlap the mask, as documented; it left out only those starting in it.
+
+* **Behavior fix:** `pwm` and `pwm.max` are NA at a chromosome end where no motif fits (were -Inf).
+
+* **Behavior fix:** `gintervals.neighbors()` ties and `gseq.pwm_edits()` tied edits no longer depend on the input order or the C++ library.
+
+* **Behavior fix:** `gintervals.liftover()` returns NULL, with a warning, when no input chromosome is in the chain (was an error).
+
+* **Behavior fix:** `gtrack.import()` of a tab-delimited file with a header and `gtrack.array.import()` no longer drop the last line when the file has no trailing newline.
+
+* **Behavior fix:** `gtrack.2d.import_contacts()` keeps all fragment ends when the fends file is not sorted by id. A negative, duplicated or too large fend id is an error; a negative or huge id used to crash R.
+
+* **Behavior fix:** `gtrack.create_dense()` (and BED import with `binsize > 0`) gives `defval` the right weight where intervals overlap.
+
+* **Behavior fix:** `gtrack.import_mappedseq()` resolves chromosome aliases ("1", "MT").
+
+* **Behavior fix:** `gtrack.export_bedgraph()` no longer writes overlapping records for overlapping intervals (`gtrack.export_bigwig()` failed on them).
+
+* **Behavior fix:** `gtrack.create_sparse()`, `gtrack.2d.create()`, `glookup()` and `gtrack.lookup()` store an integer or logical `NA` as `NaN`; it was written as -2147483648. Recreate tracks made from integer values that contain NA.
+
+* **Behavior fix:** `gintervals.neighbors()` treats `maxdist = Inf` and `mindist = -Inf` as no limit; they errored or returned NULL.
+
+* **Behavior fix:** an `NA` in a logical argument (`include.lowest`, `force.binning`, `na.if.notfound`, `use_intervals1_strand`, `smooth_nans`, ...) or an integer `NA` strand is an error; they were read as `TRUE`, `FALSE` or strand 0.
+
 * **Behavior fix:** `gintervals.save()` stores alias chromosome names ("1", "MT") under their canonical names; small sets got NA chromosomes and big sets dropped those rows.
 
 * **Behavior fix:** a session no longer erases from `.db.cache` the tracks and interval sets that other sessions (e.g. parallel cluster jobs) created or removed; they were missing until `gdb.reload()`. Cache updates now take a short lock (`.db.cache.lock`).
@@ -11,6 +45,40 @@ This release fixes the remaining defects found in the review of 5.14.4. Several 
 * **Behavior fix:** on databases with more than `gmulticontig.2d.threshold` contigs, a 2D computation over the whole-genome scope stops and points to `options(gmulticontig.2d.mode = "full")`; `gquantiles()` and others silently used cis pairs only. `gintervals.2d.all()` warns that it returns cis pairs only. 1D `gsummary()`, `gscreen()` and `gdist()` with the default scope work again on such databases, and in "full" mode the 2D scope is built only for 2D computations.
 
 * **Behavior fix:** after `gtrack.rm()` or `gintervals.rm()` of a working-database copy, the dataset copy is visible at once, and it is the copy of the dataset loaded last, as after `gdb.reload()`.
+
+* Sequence and value-based virtual tracks under a 2D iterator require `gvtrack.iterator(dim =)`; they gave NaN or 0, or crashed.
+
+* `gintervals.annotate()` with `tie_method` on 2D intervals gives a clear error.
+
+* Bands wider than 2^31 are accepted; non-finite bands are an error.
+
+* `pwm.edit_distance` no longer crashes on long motifs with `max_edits`.
+
+* `gtrack.smooth()` is much faster for large windows (same results), and `gintervals.2d.intersect()` uses bounded memory.
+
+* `gtrack.create_dense()` rejects invalid intervals (negative start, start >= end, NA, end past the chromosome) like `gtrack.create_sparse()`, and is no longer slow when a long interval spans many bins.
+
+* BED import clips records that run past the chromosome end and drops empty records, with one warning; a file with nothing left to import is an error. Chromosomes missing from the database are skipped and reported, as in the other formats.
+
+* WIG/bedGraph import skips UCSC "browser" lines; a chromosome block that resumes after an unknown chromosome is an error instead of being dropped.
+
+* `gtrack.2d.import()`, `gtrack.2d.import_contacts()` and `gtrack.array.import()` report skipped chromosomes, and fail without leaving a broken track when nothing can be imported.
+
+* `gtrack.import_mappedseq()` and `gtrack.array.import()` write the indexed format on indexed databases.
+
+* Track format conversion checks that its writes reached the disk before it replaces or removes the old files, and `gtrack.2d.convert_to_indexed(force = TRUE)` refuses, without changing anything, when only some pairs have a per-pair file (it lost the others).
+
+* Integer arguments are accepted wherever a number is expected (breaks, percentiles, window sizes, `minsegment`, `mindist`/`maxdist`, `min_score`, a `gintervals.mapply()` FUN or track expression that returns integers).
+
+* A numeric chrom column (`chrom = 1`) is read as the chromosome name, through the aliases, as `gintervals(1, ...)` does. A chrom column of another type (a list, NA, a fraction) and invalid chain columns are clear errors; they used to leave the R session with Ctrl-C disabled, the umask changed and warnings silenced.
+
+* `options(gmax.data.size = Inf)` (or unset) means no limit, also with multitasking: the shared memory is then bounded by half the RAM and `gmax.mem.usage`. A value below 1 counts as 1; a negative value or NA is an error. `gmax.mem.usage` NA or negative is an error. `gquantiles()` crashed R with `Inf`, `2^64` or `0`.
+
+* A misha call made inside a `gintervals.mapply()` FUN or a track expression runs in a single process; with multitasking it crashed the worker or broke the session's database.
+
+* `gintervals.neighbors()`, `gintervals.annotate()` and `gintervals.rbind()` accept data.tables and grouped tibbles.
+
+* `options(gmultitasking = NA)`, NA/NaN/Inf `sshift`/`eshift`, NA percentiles, NaN breaks, and empty `maxdist` or `iterator` values are rejected with clear errors.
 
 * `gtrack.copy()` builds the copy in a staging directory: a copy killed partway no longer loses the track it was replacing. `gtrack.copy()` and `gtrack.mv()` refuse the name of an interval set (the database could no longer be opened).
 

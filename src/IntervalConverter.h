@@ -15,6 +15,7 @@
 #undef warning
 #endif
 
+#include <cstddef>
 #include <cstdint>
 
 // Forward declarations
@@ -27,6 +28,14 @@ class GenomeChromKey;
 namespace rdb {
 	class IntervUtils;
 }
+
+// True for a chrom column the converters can read: character, a factor with character levels,
+// or numbers (1 is the chromosome named "1").
+bool is_chrom_col(SEXP col);
+
+// The name of the chromosome in row i of a column accepted by is_chrom_col(). A number is printed
+// into buf as a whole number; NA, a fraction or a bad factor code is a verror.
+const char *chrom_name(SEXP chroms, SEXP chrom_levels, unsigned i, char *buf, size_t bufsize, const char *error_msg_prefix);
 
 // Converter class for interval conversions between R and C++
 class IntervalConverter {

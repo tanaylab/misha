@@ -12,6 +12,12 @@ void BinFinder::init(const double *breaks, unsigned num_breaks, bool include_low
 	if (num_breaks < 2)
 		TGLError<BinFinder>(BAD_NUM_BREAKS, "Invalid number of breaks %d", num_breaks);
 
+	// NaN compares false with everything, so the checks below would let it through
+	for (unsigned i = 0; i < num_breaks; ++i) {
+		if (std::isnan(breaks[i]))
+			TGLError<BinFinder>(NAN_BREAKS, "Breaks contain NA (break[%d])", i);
+	}
+
 	m_binsize = breaks[1] - breaks[0];
 	m_include_lowest = include_lowest;
     m_right = right;

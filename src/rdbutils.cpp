@@ -102,6 +102,7 @@ uint64_t               RdbInitializer::s_res_const_size;
 uint64_t               RdbInitializer::s_res_var_size;
 uint64_t               RdbInitializer::s_max_res_size;
 uint64_t               RdbInitializer::s_max_mem_usage;
+bool                   RdbInitializer::s_res_size_from_ram = false;
 bool                 RdbInitializer::s_is_kid = false;
 pid_t                RdbInitializer::s_parent_pid = 0;
 sem_t               *RdbInitializer::s_shm_sem = SEM_FAILED;
@@ -254,7 +255,7 @@ string RdbInitializer::get_alloc_suspend_sem_name()
 	return buf;
 }
 
-void RdbInitializer::prepare4multitasking(uint64_t res_const_size, uint64_t res_var_size, uint64_t max_res_size, uint64_t max_mem_usage, unsigned num_planned_kids)
+void RdbInitializer::prepare4multitasking(uint64_t res_const_size, uint64_t res_var_size, uint64_t max_res_size, uint64_t max_mem_usage, unsigned num_planned_kids, bool res_size_from_ram)
 {
 	if (num_planned_kids > MAX_KIDS) 
 		verror("Too many child processes");
@@ -286,6 +287,7 @@ void RdbInitializer::prepare4multitasking(uint64_t res_const_size, uint64_t res_
 		s_res_var_size = res_var_size;
 		s_max_res_size = max_res_size;
 		s_max_mem_usage = max_mem_usage;
+		s_res_size_from_ram = res_size_from_ram;
 		s_shm_size = s_max_res_size + sizeof(Shm);
 
 		s_shm = (Shm *)mmap(NULL, s_shm_size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
@@ -631,12 +633,23 @@ void *RdbInitializer::allocate_res(uint64_t res_num_records)
 
 	SemLocker sl(s_shm_sem);
 	s_shm->kid_res_offset[s_kid_index] = s_shm->res_offset;
-	s_shm->res_offset += s_res_const_size + res_num_records * s_res_var_size;
 
-	if (s_shm->res_offset > s_max_res_size) 
+	// Checked before it is added: with a very large limit the size could wrap around
+	uint64_t res_size;
+	if (__builtin_mul_overflow(res_num_records, s_res_var_size, &res_size) ||
+		__builtin_add_overflow(res_size, s_res_const_size, &res_size) ||
+		res_size > s_max_res_size - min(s_shm->res_offset, s_max_res_size))
+	{
+		if (s_res_size_from_ram)
+			verror("Result size exceeded the maximal allowed.\n"
+					"Try to bound the scope of the function.\n"
+					"Note: gmax.data.size sets no limit or more than can be mapped, so the result had to fit\n"
+					"into half the RAM, at most gmax.mem.usage (see options, getOptions).");
 		verror("Result size exceeded the maximal allowed.\n"
 				"Try to bound the scope of the function.\n"
 				"Note: the maximum data size is controlled via gmax.data.size option (see options, getOptions).");
+	}
+	s_shm->res_offset += res_size;
 
 	return &s_shm->res + s_shm->kid_res_offset[s_kid_index];
 }

@@ -56,7 +56,7 @@ SEXP gtrack_create_track2d(SEXP _track, SEXP _intervs, SEXP _values, SEXP _envir
 				gtrack.init_write(filename, cur_chromid1, cur_chromid2);
 			}
 
-			float val = Rf_isReal(_values) ? REAL(_values)[iu.get_orig_interv_idx(*iinterv)] : INTEGER(_values)[iu.get_orig_interv_idx(*iinterv)];
+			float val = num_elt(_values, iu.get_orig_interv_idx(*iinterv));
 			qtree.insert(RectsQuadTree::ValueType(*iinterv, val));
 
 			progress.report(1);

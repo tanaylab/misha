@@ -12,11 +12,20 @@ using namespace rdb;
 
 bool ConfigurationManager::get_multitasking() const
 {
+	// A call nested in another misha call (made by R code that the outer call runs, such as
+	// the FUN of gintervals.mapply) does not multitask: the shared memory, semaphores and kid
+	// slots belong to the outermost call, and a nested prepare4multitasking() would reuse them.
+	if (RdbInitializer::get_ref_count() > 1)
+		return false;
+
 	if (m_multitasking < 0) {
 		SEXP r_multitasking = Rf_GetOption1(Rf_install("gmultitasking"));
 
-		if (Rf_isLogical(r_multitasking))
+		if (Rf_isLogical(r_multitasking) && Rf_length(r_multitasking) >= 1) {
+			if (LOGICAL(r_multitasking)[0] == NA_LOGICAL)
+				verror("options(gmultitasking) must be TRUE or FALSE, not NA");
 			m_multitasking = (int)LOGICAL(r_multitasking)[0];
+		}
 		else
 			m_multitasking = false;
 	}
@@ -92,12 +101,27 @@ uint64_t ConfigurationManager::get_max_data_size() const
 	if (!m_max_data_size) {
 		SEXP r_max_data_size = Rf_GetOption1(Rf_install("gmax.data.size"));
 
-		if (Rf_isReal(r_max_data_size))
-			m_max_data_size = (uint64_t)REAL(r_max_data_size)[0];
-		else if (Rf_isInteger(r_max_data_size))
-			m_max_data_size = INTEGER(r_max_data_size)[0];
-		else
-			m_max_data_size = misha::config::UNLIMITED;
+		// options(gmax.data.size = NA) gives a logical NA, which is as invalid as NA_real_
+		if (Rf_isLogical(r_max_data_size) && Rf_length(r_max_data_size) >= 1 && LOGICAL(r_max_data_size)[0] == NA_LOGICAL)
+			verror("options(gmax.data.size) must be a number, not NA");
+
+		if (is_num_vector(r_max_data_size) && Rf_length(r_max_data_size) >= 1) {
+			double size = num_elt(r_max_data_size, 0);
+
+			// Casting NA, Inf, a negative value or one of 2^64 or more to uint64_t is undefined.
+			// Inf and any value of 2^53 or more mean no limit. A value in [0, 1) counts as 1,
+			// as in gtrack.liftover: 0 could not be told apart from "not read yet" above, and a
+			// quantile sampling buffer of size 0 crashed R.
+			if (std::isnan(size))
+				verror("options(gmax.data.size) must be a number, not NA");
+			if (size < 0)
+				verror(std::isinf(size) ? "options(gmax.data.size) must not be negative (got -Inf)" : "options(gmax.data.size) must not be negative (got %g)", size);
+			if (size >= (double)misha::config::MAX_DATA_SIZE_NO_LIMIT)
+				m_max_data_size = misha::config::MAX_DATA_SIZE_NO_LIMIT;
+			else
+				m_max_data_size = size < 1 ? 1 : (uint64_t)size;
+		} else
+			m_max_data_size = misha::config::MAX_DATA_SIZE_NO_LIMIT;
 	}
 	return m_max_data_size;
 }
@@ -107,11 +131,21 @@ uint64_t ConfigurationManager::get_max_mem_usage() const
 	if (!m_max_mem_usage) {
 		SEXP r_max_mem_usage = Rf_GetOption1(Rf_install("gmax.mem.usage"));
 
-		if (Rf_isReal(r_max_mem_usage))
-			m_max_mem_usage = (uint64_t)REAL(r_max_mem_usage)[0] * 1000;
-		else if (Rf_isInteger(r_max_mem_usage))
-			m_max_mem_usage = (uint64_t)INTEGER(r_max_mem_usage)[0] * 1000;  // in 64 bits: 4 GB as KB overflows an int
-		else
+		// In KB. As for gmax.data.size: NA (logical or double) and negative values are errors
+		// (casting them to uint64_t is undefined), and Inf or any value too large to hold in
+		// bytes is no limit. 0 stays allowed: it throttles the kids to one at a time.
+		if (Rf_isLogical(r_max_mem_usage) && Rf_length(r_max_mem_usage) >= 1 && LOGICAL(r_max_mem_usage)[0] == NA_LOGICAL)
+			verror("options(gmax.mem.usage) must be a number, not NA");
+
+		if (is_num_vector(r_max_mem_usage) && Rf_length(r_max_mem_usage) >= 1) {
+			double kb = num_elt(r_max_mem_usage, 0);
+
+			if (std::isnan(kb))
+				verror("options(gmax.mem.usage) must be a number, not NA");
+			if (kb < 0)
+				verror(std::isinf(kb) ? "options(gmax.mem.usage) must not be negative (got -Inf)" : "options(gmax.mem.usage) must not be negative (got %g)", kb);
+			m_max_mem_usage = kb * 1000 >= (double)misha::config::UNLIMITED ? misha::config::UNLIMITED : (uint64_t)kb * 1000;
+		} else
 			m_max_mem_usage = misha::config::UNLIMITED;
 	}
 	return m_max_mem_usage;

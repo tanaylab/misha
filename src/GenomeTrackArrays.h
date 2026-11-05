@@ -130,6 +130,8 @@ protected:
 	double                      m_stddev_mean;
 	double                      m_stddev_m2;
 	double                      m_sum_accum;
+	vector<float>               m_sample_vals;      // values and positions that "sample" and "sample.pos" draw from
+	vector<double>              m_sample_positions;
 
 	void read_intervals_map();
 	void fail_writing();  // always throws TGLException
@@ -184,6 +186,10 @@ inline void GenomeTrackArrays::calc_vals(const GInterval &interval)
 			(*itrack)->m_last_max_pos = numeric_limits<double>::quiet_NaN();
 		if ((*itrack)->has_function(MIN_POS))
 			(*itrack)->m_last_min_pos = numeric_limits<double>::quiet_NaN();
+		(*itrack)->m_sample_vals.clear();
+		(*itrack)->m_sample_positions.clear();
+		if ((*itrack)->has_function(LSE))
+			(*itrack)->m_last_lse = -numeric_limits<float>::infinity();
 	}
 
 	for (GIntervals::const_iterator iinterv = m_icur_interval; iinterv != m_intervals.end(); ++iinterv) {
@@ -215,6 +221,23 @@ inline void GenomeTrackArrays::calc_vals(const GInterval &interval)
 
 				if ((*itrack)->m_use_quantile)
 					(*itrack)->m_sp.add(v, s_rnd_func);
+
+				if ((*itrack)->has_function(LSE))
+					lse_accumulate((*itrack)->m_last_lse, v);
+
+				double pos = std::max(iinterv->start, interval.start);
+				if ((*itrack)->has_function(FIRST) && (*itrack)->m_num_vs == 1)
+					(*itrack)->m_last_first = v;
+				if ((*itrack)->has_function(FIRST_POS) && (*itrack)->m_num_vs == 1)
+					(*itrack)->m_last_first_pos = pos;
+				if ((*itrack)->has_function(LAST))
+					(*itrack)->m_last_last = v;
+				if ((*itrack)->has_function(LAST_POS))
+					(*itrack)->m_last_last_pos = pos;
+				if ((*itrack)->has_function(SAMPLE))
+					(*itrack)->m_sample_vals.push_back(v);
+				if ((*itrack)->has_function(SAMPLE_POS))
+					(*itrack)->m_sample_positions.push_back(pos);
 			}
 		}
 	}
@@ -227,8 +250,20 @@ inline void GenomeTrackArrays::calc_vals(const GInterval &interval)
 			(*itrack)->m_last_avg = (*itrack)->m_last_nearest = (float)((*itrack)->m_sum_accum / (*itrack)->m_num_vs);
 		else {
 			(*itrack)->m_last_avg = (*itrack)->m_last_nearest = (*itrack)->m_last_min = (*itrack)->m_last_max = (*itrack)->m_last_sum = numeric_limits<float>::quiet_NaN();
+			if ((*itrack)->has_function(LSE))
+				(*itrack)->m_last_lse = numeric_limits<float>::quiet_NaN();
 			if ((*itrack)->has_function(MIN_POS))
 				(*itrack)->m_last_min_pos = numeric_limits<double>::quiet_NaN();
+		}
+
+		// One uniform draw each, as for sparse tracks
+		if ((*itrack)->has_function(SAMPLE) && !(*itrack)->m_sample_vals.empty()) {
+			uint64_t idx = std::min((uint64_t)(s_rnd_func() * (*itrack)->m_sample_vals.size()), (uint64_t)(*itrack)->m_sample_vals.size() - 1);
+			(*itrack)->m_last_sample = (*itrack)->m_sample_vals[idx];
+		}
+		if ((*itrack)->has_function(SAMPLE_POS) && !(*itrack)->m_sample_positions.empty()) {
+			uint64_t idx = std::min((uint64_t)(s_rnd_func() * (*itrack)->m_sample_positions.size()), (uint64_t)(*itrack)->m_sample_positions.size() - 1);
+			(*itrack)->m_last_sample_pos = (*itrack)->m_sample_positions[idx];
 		}
 
 		// Unbiased sample standard deviation via Welford's stable algorithm.

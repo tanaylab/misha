@@ -232,16 +232,16 @@ SEXP C_gwilcox(SEXP _expr, SEXP _intervals, SEXP _winsize1, SEXP _winsize2, SEXP
 		if (!Rf_isString(_expr) || Rf_length(_expr) != 1)
 			verror("Track expression argument is not a string");
 
-		if (!Rf_isReal(_winsize1) || Rf_length(_winsize1) != 1)
+		if (!is_num_vector(_winsize1) || Rf_length(_winsize1) != 1)
 			verror("Winsize1 argument is not numeric");
 
-		if (!Rf_isReal(_winsize2) || Rf_length(_winsize2) != 1)
+		if (!is_num_vector(_winsize2) || Rf_length(_winsize2) != 1)
 			verror("Winsize2 argument is not numeric");
 
-		if (!Rf_isReal(_maxz) || Rf_length(_maxz) != 1)
+		if (!is_num_vector(_maxz) || Rf_length(_maxz) != 1)
 			verror("Max Z-score argument is not numeric");
 
-		if (!Rf_isLogical(_one_tailed) || Rf_length(_one_tailed) != 1)
+		if (!is_true_or_false(_one_tailed))
 			verror("One-tailed argument is not boolean");
 
 		if (!Rf_isInteger(_what2find) || Rf_length(_what2find) != 1)
@@ -259,8 +259,8 @@ SEXP C_gwilcox(SEXP _expr, SEXP _intervals, SEXP _winsize1, SEXP _winsize2, SEXP
 		intervals->sort();
 		intervals->unify_overlaps();
 
-		double winsize[2] = { *REAL(_winsize1), *REAL(_winsize2) };
-		double maxz = *REAL(_maxz);
+		double winsize[2] = { num_elt(_winsize1, 0), num_elt(_winsize2, 0) };
+		double maxz = num_elt(_maxz, 0);
 		bool one_tailed = *LOGICAL(_one_tailed) == 1;
 		GenomeTrackSlidingWilcox::What2find what2find;
 

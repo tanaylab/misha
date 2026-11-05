@@ -231,6 +231,17 @@ void PWMEditDistanceScorer::precompute_tables()
                 }
             }
 
+            // A block of n columns needs a 4^n table: gigabytes past ~14 columns,
+            // and n >= 16 overflows the int shifts below. The prefilter only skips
+            // work, so leave it off for such motifs.
+            const size_t MAX_PREFILTER_BLOCK_LEN = 10;
+            for (const auto &blk : m_prefilter_blocks) {
+                if (blk.columns.size() > MAX_PREFILTER_BLOCK_LEN) {
+                    m_prefilter_blocks.clear();
+                    return;
+                }
+            }
+
             // Build viable tables and compute avg_ic for each block.
             // For subs-only ABOVE mode, use score-aware viability: a hash is viable
             // only if block_score + outside_col_max >= threshold. This is correct

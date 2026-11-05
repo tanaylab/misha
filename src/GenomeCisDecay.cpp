@@ -19,13 +19,13 @@ SEXP C_gcis_decay(SEXP _expr, SEXP _breaks, SEXP _src_intervals, SEXP _domain_in
 		if (!Rf_isString(_expr) || Rf_length(_expr) != 1)
 			verror("Track argument is not a character string");
 
-		if (!Rf_isReal(_breaks))
+		if (!is_num_vector(_breaks))
 			verror("Breaks argument is not a number");
 
-		if (!Rf_isLogical(_include_lowest) || Rf_length(_include_lowest) != 1)
+		if (!Rf_isLogical(_include_lowest) || Rf_length(_include_lowest) != 1 || LOGICAL(_include_lowest)[0] == NA_LOGICAL)
 			verror("include.lowest argument is not logical");
 
-		BinFinder bin_finder(REAL(_breaks), Rf_length(_breaks), LOGICAL(_include_lowest)[0]);
+		BinFinder bin_finder(num_vector(_breaks), LOGICAL(_include_lowest)[0]);
 
 		IntervUtils iu(_envir);
 		iu.verify_max_data_size(bin_finder.get_numbins(), "Result");

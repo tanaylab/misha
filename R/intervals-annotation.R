@@ -136,6 +136,11 @@ gintervals.annotate <- function(intervals,
     intervals <- .gintervals.load_ext(intervals)
     annotation_intervals <- .gintervals.load_ext(annotation_intervals)
 
+    # Ties are broken by start or end, which 2D intervals do not have
+    if (tie_method != "first" && maxneighbors > 1 && !.gintervals.is1d(annotation_intervals)) {
+        stop("tie_method other than \"first\" is supported for 1D intervals only", call. = FALSE)
+    }
+
     # Original row order: used to group ties and, with keep_order, to restore the order
     intervals$.orig_order <- seq_len(nrow(intervals))
 

@@ -21,7 +21,7 @@
 
 class BinFinder {
 public:
-	enum Errors { BAD_NUM_BREAKS, NOT_UNIQUE_BREAKS, UNSORTED_BREAKS };
+	enum Errors { BAD_NUM_BREAKS, NOT_UNIQUE_BREAKS, UNSORTED_BREAKS, NAN_BREAKS };
 
 	BinFinder() {}
 	BinFinder(const std::vector<double> &breaks, bool include_lowest = false, bool right = true) { init(breaks, include_lowest, right); }
@@ -33,7 +33,7 @@ public:
     // If right=false, then the break intervals are closed from the left: [x1,x2), [x2,x3), [x3,x4).
     // If include_lowest=true and right=true, then the first interval is closed from both sides: [x1,x2].
     // If include_lowest=true and right=false, then the last interval is closed from both sides: [x3,x4].
-	void init(const std::vector<double> &breaks, bool include_lowest = false, bool right = true) { init(&*breaks.begin(), (unsigned)breaks.size(), include_lowest, right); }
+	void init(const std::vector<double> &breaks, bool include_lowest = false, bool right = true) { init(breaks.data(), (unsigned)breaks.size(), include_lowest, right); }
 	void init(const double *breaks, unsigned num_breaks, bool include_lowest = false, bool right = true);
 
 	// returns the bin or -1 if the value is out of range
