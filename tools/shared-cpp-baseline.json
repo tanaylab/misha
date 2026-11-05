@@ -201,8 +201,8 @@
     "pymisha": "adca921a2f225b60"
   },
   "PWMEditDistanceScorer.cpp": {
-    "identical": false,
-    "misha": "bfff75719b6346d5",
+    "identical": true,
+    "misha": "bbd78854c3a2fd90",
     "pymisha": "bbd78854c3a2fd90"
   },
   "PWMEditDistanceScorer.h": {
@@ -222,7 +222,8 @@
   },
   "PWMScorer.cpp": {
     "identical": false,
-    "misha": "55ef3419a2fe397d",
+    "misha": "8eaf1f9ae73446e0",
+    "needs_port": true,
     "pymisha": "cbb0d0bdee03ffcb"
   },
   "PWMScorer.h": {

@@ -146,8 +146,10 @@ SEXP C_gseq_kmer_dist(SEXP _intervals, SEXP _k, SEXP _mask, SEXP _envir) {
             for (int64_t pos = 0; pos <= seq_size - k; ++pos) {
                 int64_t genome_pos = iv.start + pos;
 
-                // Check if masked
-                if (is_position_masked(genome_pos, mask_ivs, mask_cursor)) {
+                // Skip k-mers that overlap the mask. When genome_pos itself is not masked, the cursor is at
+                // the first mask interval that starts after it, and no later one starts earlier.
+                if (is_position_masked(genome_pos, mask_ivs, mask_cursor) ||
+                    (mask_cursor < mask_ivs.size() && mask_ivs[mask_cursor].start < genome_pos + k)) {
                     ++total_masked;
                     continue;
                 }

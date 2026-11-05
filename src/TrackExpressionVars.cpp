@@ -1747,8 +1747,10 @@ void TrackExpressionVars::init(const TrackExpressionIteratorBase &expr_itr)
 	// First validate iterator compatibility
 	for (Track_vars::const_iterator itrack_var = m_track_vars.begin(); itrack_var != m_track_vars.end(); ++itrack_var)
 	{
-	    // Skip iterator validation for sequence-based variables since they don't have tracks or imdf
+	    // Sequence-based variables have no track: under a 2D iterator they need a dimension projection
         if (TrackExpressionVars::is_sequence_based_function(itrack_var->val_func)) {
+            if (expr_itr.is_2d() && (!itrack_var->seq_imdf1d || itrack_var->seq_imdf1d->dim == Iterator_modifier1D::DIM_NONE))
+                verror("Virtual track %s: 2D iterator is used without explicit dimension projection", itrack_var->var_name.c_str());
             continue;
         }
 
@@ -1777,6 +1779,12 @@ void TrackExpressionVars::init(const TrackExpressionIteratorBase &expr_itr)
 			verror("Virtual track %s: 1D iterator is used for a virtual track that specifies dimension projection and hence expects 2D iterators", iinterv_var->var_name.c_str());
 		else if (expr_itr.is_2d() && (!iinterv_var->imdf1d || iinterv_var->imdf1d->dim == Iterator_modifier1D::DIM_NONE))
 			verror("Virtual track %s: 2D iterator is used without explicit dimension projection", iinterv_var->var_name.c_str());
+	}
+
+	for (Value_vars::const_iterator ivalue_var = m_value_vars.begin(); ivalue_var != m_value_vars.end(); ++ivalue_var)
+	{
+		if (expr_itr.is_2d() && (!ivalue_var->imdf1d || ivalue_var->imdf1d->dim == Iterator_modifier1D::DIM_NONE))
+			verror("Virtual track %s: 2D iterator is used without explicit dimension projection", ivalue_var->var_name.c_str());
 	}
 
 	// Collect non-PWM tracks that need file checking
