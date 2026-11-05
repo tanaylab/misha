@@ -1,3 +1,29 @@
+# misha 5.16.0
+
+This release fixes the remaining defects found in the review of 5.14.4. Several change results, marked **Behavior fix**; recompute anything that depends on them.
+
+* **Behavior fix:** `gtrack.import()` of a tab-delimited file with a header and `gtrack.array.import()` no longer drop the last line when the file has no trailing newline.
+
+* **Behavior fix:** `gtrack.2d.import_contacts()` keeps all fragment ends when the fends file is not sorted by id. A negative, duplicated or too large fend id is an error; a negative or huge id used to crash R.
+
+* **Behavior fix:** `gtrack.create_dense()` (and BED import with `binsize > 0`) gives `defval` the right weight where intervals overlap.
+
+* **Behavior fix:** `gtrack.import_mappedseq()` resolves chromosome aliases ("1", "MT").
+
+* **Behavior fix:** `gtrack.export_bedgraph()` no longer writes overlapping records for overlapping intervals (`gtrack.export_bigwig()` failed on them).
+
+* `gtrack.create_dense()` rejects invalid intervals (negative start, start >= end, NA, end past the chromosome) like `gtrack.create_sparse()`, and is no longer slow when a long interval spans many bins.
+
+* BED import clips records that run past the chromosome end and drops empty records, with one warning; a file with nothing left to import is an error. Chromosomes missing from the database are skipped and reported, as in the other formats.
+
+* WIG/bedGraph import skips UCSC "browser" lines; a chromosome block that resumes after an unknown chromosome is an error instead of being dropped.
+
+* `gtrack.2d.import()`, `gtrack.2d.import_contacts()` and `gtrack.array.import()` report skipped chromosomes, and fail without leaving a broken track when nothing can be imported.
+
+* `gtrack.import_mappedseq()` and `gtrack.array.import()` write the indexed format on indexed databases.
+
+* Track format conversion checks that its writes reached the disk before it replaces or removes the old files, and `gtrack.2d.convert_to_indexed(force = TRUE)` refuses, without changing anything, when only some pairs have a per-pair file (it lost the others).
+
 # misha 5.15.1
 
 * `gtrack.2d.import_contacts()` writes the same track files on every platform: it stores the contacts in coordinate order, which used to depend on the C++ library. It is also about twice as fast and needs about 20% less memory. Each contact keeps its value; `gextract()` may list contacts in a different order than for a track imported by an earlier version, and a sum over many contacts may differ in floating-point rounding.
