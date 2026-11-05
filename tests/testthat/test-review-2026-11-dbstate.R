@@ -683,8 +683,10 @@ test_that("a failed gtrack.copy(overwrite = TRUE) keeps what another session put
         }
         rename(from, to)
     })
-    expect_error(suppressWarnings(gtrack.copy("src", "orig", overwrite = TRUE)), "Failed to rename")
+    expect_no_warning(expect_error(gtrack.copy("src", "orig", overwrite = TRUE), "Failed to rename"))
     expect_equal(readBin(file.path(tracks, "orig.track", "track.dat"), "raw", 1e6), other_bytes)
+    # the track that was set aside is replaced by the other session's copy: not kept
+    expect_length(list.files(tracks, pattern = "^\\.[0-9a-f]+$", all.files = TRUE), 0)
 })
 
 test_that("gtrack.copy stops on a short copy instead of committing it", {
