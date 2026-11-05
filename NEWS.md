@@ -1,3 +1,33 @@
+# misha 5.16.0
+
+This release fixes the remaining defects found in the review of 5.14.4. Several change results, marked **Behavior fix**; recompute anything that depends on them.
+
+* **Behavior fix:** `gintervals.save()` stores alias chromosome names ("1", "MT") under their canonical names; small sets got NA chromosomes and big sets dropped those rows.
+
+* **Behavior fix:** a session no longer erases from `.db.cache` the tracks and interval sets that other sessions (e.g. parallel cluster jobs) created or removed; they were missing until `gdb.reload()`. Cache updates now take a short lock (`.db.cache.lock`).
+
+* **Behavior fix:** a track or interval set that another session re-created is read with its current index; it gave wrong values or errors until R was restarted.
+
+* **Behavior fix:** on databases with more than `gmulticontig.2d.threshold` contigs, a 2D computation over the whole-genome scope stops and points to `options(gmulticontig.2d.mode = "full")`; `gquantiles()` and others silently used cis pairs only. `gintervals.2d.all()` warns that it returns cis pairs only. 1D `gsummary()`, `gscreen()` and `gdist()` with the default scope work again on such databases, and in "full" mode the 2D scope is built only for 2D computations.
+
+* **Behavior fix:** after `gtrack.rm()` or `gintervals.rm()` of a working-database copy, the dataset copy is visible at once, and it is the copy of the dataset loaded last, as after `gdb.reload()`.
+
+* `gtrack.copy()` builds the copy in a staging directory: a copy killed partway no longer loses the track it was replacing. `gtrack.copy()` and `gtrack.mv()` refuse the name of an interval set (the database could no longer be opened).
+
+* `gintervals.convert_to_indexed(force = TRUE)` and its 2D version refuse, without changing anything, when the data is only in the index; they deleted it. Interval-set conversion stops on a write error instead of replacing the per-chromosome files with a short index.
+
+* `gintervals.update()` refuses an interval set of a loaded dataset (it wrote into the working database or failed), accepts a character chrom column and alias names, and keeps the set's attributes when it moves between the small and big formats; `gdataset.save()` copies the attributes of small sets.
+
+* A big interval set saved from a character chrom column with `gmulticontig.indexed_format = TRUE` can be read per chromosome.
+
+* `gdataset.load()` refuses a dataset whose track names an interval set, or the reverse, before changing the session; the session was left empty.
+
+* `ggenome.implant()` and `gdb.export_fasta()` with another database keep the loaded datasets and working directory, and no longer leave the donor database loaded after an error.
+
+* A failed track creation over the name of a dataset track no longer makes that track unreadable for the session.
+
+* `gdb.convert_to_indexed()` converts 1D interval sets over contigs with "-" in their names.
+
 # misha 5.15.1
 
 * `gtrack.2d.import_contacts()` writes the same track files on every platform: it stores the contacts in coordinate order, which used to depend on the C++ library. It is also about twice as fast and needs about 20% less memory. Each contact keeps its value; `gextract()` may list contacts in a different order than for a track imported by an earlier version, and a sum over many contacts may differ in floating-point rounding.
