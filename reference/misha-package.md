@@ -18,12 +18,19 @@ function to alter the value of the options.
 |  |  | Formula: min((RAM \* 0.7) / gmax.processes, 10GB). |
 |  |  | Controls max in-memory result buffer size for streaming/sampling. |
 |  |  | Operations like gextract, gscreen use this as upper bound. |
+|  |  | Inf or unset means no limit; NA or a negative value is an error; |
+|  |  | a value below 1 counts as 1. |
 | gbig.intervals.size | 1000000 | Threshold for converting interval sets to disk-based |
 |  |  | "big" format. When interval count exceeds this, intervals |
 |  |  | are stored per-chromosome instead of all in memory. |
 |  |  | Note: Independent of gmax.data.size (different purposes). |
-| gmax.mem.usage | 10000000 | Maximal memory consumption of all child |
+| gmax.mem.usage | AUTO | Auto-configured to max(10000000, 80% of RAM in KB). |
+|  |  | Maximal memory consumption of all child |
 |  |  | processes in KB before the limiting algorithm is invoked. |
+|  |  | 0 runs the child processes one at a time; Inf means no limit; |
+|  |  | NA or a negative value is an error. When gmax.data.size sets no |
+|  |  | limit, it also bounds the shared memory for the results of |
+|  |  | child processes (half the RAM at most) and gquantiles' samples. |
 | gmax.processes | AUTO | Auto-configured to min(32, 70% of CPU cores). |
 |  |  | Maximal number of processes for multitasking. |
 | gmax.processes2core | 2 | Maximal number of processes per CPU core for multitasking |

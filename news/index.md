@@ -78,6 +78,25 @@ depends on them.
   ([`gtrack.export_bigwig()`](https://tanaylab.github.io/misha/reference/gtrack.export_bigwig.md)
   failed on them).
 
+- **Behavior fix:**
+  [`gtrack.create_sparse()`](https://tanaylab.github.io/misha/reference/gtrack.create_sparse.md),
+  [`gtrack.2d.create()`](https://tanaylab.github.io/misha/reference/gtrack.2d.create.md),
+  [`glookup()`](https://tanaylab.github.io/misha/reference/glookup.md)
+  and
+  [`gtrack.lookup()`](https://tanaylab.github.io/misha/reference/gtrack.lookup.md)
+  store an integer or logical `NA` as `NaN`; it was written as
+  -2147483648. Recreate tracks made from integer values that contain NA.
+
+- **Behavior fix:**
+  [`gintervals.neighbors()`](https://tanaylab.github.io/misha/reference/gintervals.neighbors.md)
+  treats `maxdist = Inf` and `mindist = -Inf` as no limit; they errored
+  or returned NULL.
+
+- **Behavior fix:** an `NA` in a logical argument (`include.lowest`,
+  `force.binning`, `na.if.notfound`, `use_intervals1_strand`,
+  `smooth_nans`, …) or an integer `NA` strand is an error; they were
+  read as `TRUE`, `FALSE` or strand 0.
+
 - Sequence and value-based virtual tracks under a 2D iterator require
   `gvtrack.iterator(dim =)`; they gave NaN or 0, or crashed.
 
@@ -125,6 +144,40 @@ depends on them.
   `gtrack.2d.convert_to_indexed(force = TRUE)` refuses, without changing
   anything, when only some pairs have a per-pair file (it lost the
   others).
+
+- Integer arguments are accepted wherever a number is expected (breaks,
+  percentiles, window sizes, `minsegment`, `mindist`/`maxdist`,
+  `min_score`, a
+  [`gintervals.mapply()`](https://tanaylab.github.io/misha/reference/gintervals.mapply.md)
+  FUN or track expression that returns integers).
+
+- A numeric chrom column (`chrom = 1`) is read as the chromosome name,
+  through the aliases, as `gintervals(1, ...)` does. A chrom column of
+  another type (a list, NA, a fraction) and invalid chain columns are
+  clear errors; they used to leave the R session with Ctrl-C disabled,
+  the umask changed and warnings silenced.
+
+- `options(gmax.data.size = Inf)` (or unset) means no limit, also with
+  multitasking: the shared memory is then bounded by half the RAM and
+  `gmax.mem.usage`. A value below 1 counts as 1; a negative value or NA
+  is an error. `gmax.mem.usage` NA or negative is an error.
+  [`gquantiles()`](https://tanaylab.github.io/misha/reference/gquantiles.md)
+  crashed R with `Inf`, `2^64` or `0`.
+
+- A misha call made inside a
+  [`gintervals.mapply()`](https://tanaylab.github.io/misha/reference/gintervals.mapply.md)
+  FUN or a track expression runs in a single process; with multitasking
+  it crashed the worker or broke the session’s database.
+
+- [`gintervals.neighbors()`](https://tanaylab.github.io/misha/reference/gintervals.neighbors.md),
+  [`gintervals.annotate()`](https://tanaylab.github.io/misha/reference/gintervals.annotate.md)
+  and
+  [`gintervals.rbind()`](https://tanaylab.github.io/misha/reference/gintervals.rbind.md)
+  accept data.tables and grouped tibbles.
+
+- `options(gmultitasking = NA)`, NA/NaN/Inf `sshift`/`eshift`, NA
+  percentiles, NaN breaks, and empty `maxdist` or `iterator` values are
+  rejected with clear errors.
 
 ## misha 5.15.1
 
