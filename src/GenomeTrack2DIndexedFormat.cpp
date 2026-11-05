@@ -131,16 +131,24 @@ SEXP gtrack2d_convert_to_indexed(SEXP _track, SEXP _remove_old, SEXP _envir) {
             try {
                 auto old_idx = TrackIndex2D::get_track_index_2d(track_dir);
                 if (old_idx && old_idx->is_loaded()) {
-                    // Check if any per-pair files exist
+                    // Check which per-pair files exist
                     bool have_pair_files = false;
+                    string missing_pair_file;
+                    // the files the packing below finds, also those named by aliases (e.g. "2-X" for chr2-chrX)
+                    const GenomeTrack::ChromFiles pair_files(chromkey, track_dir, true);
                     for (const auto &entry : old_idx->entries()) {
-                        string pair_file = track_dir + "/" + GenomeTrack::get_2d_filename(chromkey, entry.chrom1_id, entry.chrom2_id);
-                        struct stat pst;
-                        if (stat(pair_file.c_str(), &pst) == 0) {
+                        if (pair_files.exists(entry.chrom1_id, entry.chrom2_id))
                             have_pair_files = true;
-                            break;
-                        }
+                        else if (missing_pair_file.empty())
+                            missing_pair_file = GenomeTrack::get_2d_filename(chromkey, entry.chrom1_id, entry.chrom2_id);
                     }
+
+                    // Only some of the pairs have a file: packing them would replace track.dat, and lose the data of
+                    // the other pairs. Refuse before anything is changed.
+                    if (have_pair_files && !missing_pair_file.empty())
+                        extract_error = "Track " + track + " is indexed and has per-pair files for only some of its chromosome pairs (" +
+                            missing_pair_file + " is one that is missing): converting it would lose the data of the pairs without a file. "
+                            "Remove the per-pair files and run it again to extract all the pairs from track.dat.";
 
                     if (!have_pair_files) {
                         // Extract per-pair data from track.dat back to per-pair files
@@ -234,29 +242,16 @@ SEXP gtrack2d_convert_to_indexed(SEXP _track, SEXP _remove_old, SEXP _envir) {
             entries.push_back(entry);
         }
 
-        // Flush and sync data file
-        fflush(dat_fp);
-        fsync(fileno(dat_fp));
-        fclose(dat_fp);
-
-        // Write index file using TrackIndex2D::write_index()
-        TrackIndex2D::write_index(idx_path_tmp, track_type_2d, entries);
-
-        // Atomic rename: track.dat first, then track.idx
-        if (rename(dat_path_tmp.c_str(), dat_path.c_str()) != 0) {
-            TGLError<GenomeTrack>("Failed to rename %s to %s: %s",
-                dat_path_tmp.c_str(), dat_path.c_str(), strerror(errno));
+        // Check the writes, the size of track.dat and the index while they are still in the temporary files:
+        // once they are renamed into place, the per-pair files and the old index and data are removed.
+        int dat_err = fclose_synced(dat_fp);
+        if (dat_err) {
+            TGLError<GenomeTrack>("Failed to write %s: %s", dat_path_tmp.c_str(), strerror(dat_err));
         }
 
-        if (rename(idx_path_tmp.c_str(), idx_path.c_str()) != 0) {
-            TGLError<GenomeTrack>("Failed to rename %s to %s: %s",
-                idx_path_tmp.c_str(), idx_path.c_str(), strerror(errno));
-        }
-
-        // Validate conversion: check that track.dat has the expected size
         struct stat dat_stat;
-        if (stat(dat_path.c_str(), &dat_stat) != 0) {
-            TGLError<GenomeTrack>("Failed to stat %s after conversion", dat_path.c_str());
+        if (stat(dat_path_tmp.c_str(), &dat_stat) != 0) {
+            TGLError<GenomeTrack>("Failed to stat %s after conversion", dat_path_tmp.c_str());
         }
 
         if ((uint64_t)dat_stat.st_size != current_offset) {
@@ -264,21 +259,23 @@ SEXP gtrack2d_convert_to_indexed(SEXP _track, SEXP _remove_old, SEXP _envir) {
                 (unsigned long long)current_offset, (unsigned long long)dat_stat.st_size);
         }
 
+        // Write index file using TrackIndex2D::write_index()
+        TrackIndex2D::write_index(idx_path_tmp, track_type_2d, entries);
+
         // Validate by loading the index and checking entries
-        TrackIndex2D::clear_cache();
-        auto loaded_idx = TrackIndex2D::get_track_index_2d(track_dir);
-        if (!loaded_idx || !loaded_idx->is_loaded()) {
+        TrackIndex2D loaded_idx;
+        if (!loaded_idx.load(idx_path_tmp) || !loaded_idx.is_loaded()) {
             TGLError<GenomeTrack>("Failed to validate 2D track index after conversion for %s", track_dir.c_str());
         }
 
-        if (loaded_idx->num_entries() != entries.size()) {
+        if (loaded_idx.num_entries() != entries.size()) {
             TGLError<GenomeTrack>("2D track index entry count mismatch: expected %u, got %u",
-                (unsigned)entries.size(), (unsigned)loaded_idx->num_entries());
+                (unsigned)entries.size(), (unsigned)loaded_idx.num_entries());
         }
 
         // Verify each entry matches
         for (const auto &entry : entries) {
-            const Track2DPairEntry *loaded_entry = loaded_idx->get_entry(entry.chrom1_id, entry.chrom2_id);
+            const Track2DPairEntry *loaded_entry = loaded_idx.get_entry(entry.chrom1_id, entry.chrom2_id);
             if (!loaded_entry) {
                 TGLError<GenomeTrack>("2D track index missing pair (%u,%u) after conversion",
                     entry.chrom1_id, entry.chrom2_id);
@@ -291,6 +288,18 @@ SEXP gtrack2d_convert_to_indexed(SEXP _track, SEXP _remove_old, SEXP _envir) {
                     (unsigned long long)loaded_entry->offset, (unsigned long long)loaded_entry->length);
             }
         }
+
+        // Atomic rename: track.dat first, then track.idx
+        if (rename(dat_path_tmp.c_str(), dat_path.c_str()) != 0) {
+            TGLError<GenomeTrack>("Failed to rename %s to %s: %s",
+                dat_path_tmp.c_str(), dat_path.c_str(), strerror(errno));
+        }
+
+        if (rename(idx_path_tmp.c_str(), idx_path.c_str()) != 0) {
+            TGLError<GenomeTrack>("Failed to rename %s to %s: %s",
+                idx_path_tmp.c_str(), idx_path.c_str(), strerror(errno));
+        }
+        TrackIndex2D::clear_cache();
 
         // Remove old per-pair files if requested, also those that the packed ones hid
         if (remove_old) {

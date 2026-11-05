@@ -3,8 +3,11 @@
 
 #include <cstdint>
 #include <functional>
+#include <set>
 #include <string>
 #include <vector>
+
+#include "UnknownChroms.h"
 
 // Shared by gtrack_2d_import and gtrack_import_contacts. Both run in three stages:
 //   1. read the input files and split the records into intermediate binary files, one per
@@ -39,6 +42,39 @@ std::string pair_file_name(const std::string &dirname, int chromid1, int chromid
 
 // Collects the intermediate files that stage 1 left in dirname, ordered by chromosome pair
 std::vector<PairFiles> list_pair_files(const std::string &dirname);
+
+// The chromosomes that a kid of stage 1 met: the ids of the names it resolved, and the names it could not
+// resolve. A kid hands them to the parent in a file (save), and the parent merges the files of all the kids
+// (load_kid_chroms) to report them as the 1D importers do. The unresolved names are kept in order of
+// appearance: the distinct names up to one more than UnknownChroms tracks, so that the merged UnknownChroms
+// knows when names were left out, and every name that looks like a primary chromosome.
+struct KidChroms {
+	std::vector<char>        matched;  // by chromosome id
+	std::set<std::string>    seen;
+	std::vector<std::string> names;
+
+	// Notes a chromosome name of the input and what it resolved to (a negative id if nothing)
+	void note(int chromid, const std::string &chrom) {
+		if (chromid < 0)
+			record(chrom);
+		else {
+			if ((size_t)chromid >= matched.size())
+				matched.resize(chromid + 1);
+			matched[chromid] = 1;
+		}
+	}
+	void record(const std::string &chrom);
+	void save(const std::string &dirname, int kid) const;
+};
+
+// Merges what the kids of stage 1 saved into matched (chromosome ids) and unknown, and removes their files
+void load_kid_chroms(const std::string &dirname, int num_kids, std::set<int> &matched, UnknownChroms &unknown);
+
+// Number of distinct chromosomes in the chromosome pairs: those that got data
+uint64_t pairs_num_chroms(const std::vector<PairFiles> &pairs);
+
+// What the messages about unknown chromosomes call the input files: the file, or the first one and a count
+std::string import_src_name(const std::vector<std::string> &files);
 
 // Runs work(kid) for each kid - in forked kids when num_kids > 1, in this process otherwise -
 // and returns the byte each work() returned. With throttle, a kid is suspended while the kids together

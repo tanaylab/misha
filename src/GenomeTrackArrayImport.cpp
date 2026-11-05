@@ -12,6 +12,10 @@
 using namespace std;
 using namespace rdb;
 
+// The checks of the 1D importers (GenomeTrackImportWig.cpp)
+void verify_chroms_matched(const GenomeChromKey &chromkey, const char *fname, const UnknownChroms &unknown, uint64_t num_matched, SEXP envir);
+void report_skipped_chroms(const char *fname, const UnknownChroms &unknown, uint64_t num_matched, SEXP envir);
+
 class Source {
 public:
 	Source(const GenomeChromKey &chromkey, const char *src) : m_chromkey(chromkey) {
@@ -36,6 +40,8 @@ public:
 	bool is_csv() const { return m_colnames.empty(); }
 
 	const vector<string> &get_colnames() const { return is_csv() ? m_csv.get_colnames() : m_colnames; }
+
+	const GenomeArraysCsv &get_csv() const { return m_csv; }
 
 	const GIntervals &get_intervals() const { return *m_intervals; }
 
@@ -167,8 +173,11 @@ SEXP garrays_import(SEXP _track, SEXP _src, SEXP _colnames, SEXP _envir)
 
 			if (Rf_length(rcolnames))
 				sources.push_back(new Source(iu.get_chromkey(), src, iu.get_chrom_files(track2path(_envir, src)), rcolnames));
-			else
+			else {
 				sources.push_back(new Source(iu.get_chromkey(), src));
+				verify_chroms_matched(iu.get_chromkey(), src, sources.back()->get_csv().get_unknown_chroms(),
+				                      sources.back()->get_csv().get_num_matched_chroms(), _envir);
+			}
 
 			Source *source = sources.back();
 			const vector<string> &colnames1 = source->get_colnames();
@@ -279,6 +288,12 @@ SEXP garrays_import(SEXP _track, SEXP _src, SEXP _colnames, SEXP _envir)
 			}
 		}
 		progress.report_last();
+
+		for (Source *source : sources) {
+			if (source->is_csv())
+				report_skipped_chroms(source->get_src(), source->get_csv().get_unknown_chroms(),
+				                      source->get_csv().get_num_matched_chroms(), _envir);
+		}
 
         SEXP answer;
 		unsigned colidx = 0;

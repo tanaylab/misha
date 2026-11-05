@@ -446,6 +446,19 @@ static inline void clear_pending_diagnostics(SEXP envir) {
     define_in_misha(envir, ".GPENDING.DIAGNOSTICS", R_NilValue);
 }
 
+// Flushes, syncs and closes a file that was written. Returns 0, or the errno of the first step that failed;
+// fp is closed either way. A full disk or quota can show up only here, on NFS often only at the close, so a
+// writer checks this before it renames the file into place or removes what the file replaces.
+static inline int fclose_synced(FILE *fp) {
+    int err = 0;
+
+    if (fflush(fp) || fsync(fileno(fp)))
+        err = errno;
+    if (fclose(fp) && !err)
+        err = errno;
+    return err;
+}
+
 
 void prepare4multitasking(uint64_t res_const_size, uint64_t res_var_size, uint64_t max_res_size, uint64_t max_mem_usage, unsigned num_planned_kids);
 
