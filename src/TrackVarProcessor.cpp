@@ -97,7 +97,9 @@ void TrackVarProcessor::process_single_track_var_1d(
 
 	if (var.requires_pv) {
 		double val = var.var[idx];
-		if (!std::isnan(val)) {
+		if (var.pv_binned.bins.empty())  // the track has no values (see TrackExpressionVars)
+			var.var[idx] = numeric_limits<double>::quiet_NaN();
+		else if (!std::isnan(val)) {
 			int bin = var.pv_binned.binfinder.val2bin(val);
 			if (bin < 0) {
 				if (val <= var.pv_binned.binfinder.get_breaks().front())

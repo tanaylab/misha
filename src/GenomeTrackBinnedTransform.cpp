@@ -51,7 +51,7 @@ static double get_bin_tranformed_value(unsigned numexpr, bool force_binning, SEX
 		if ((int)index >= Rf_length(lookup_table))
 			verror("Internal error: index %d is out of range", index);
 
-		value = Rf_isReal(lookup_table) ? REAL(lookup_table)[index] : INTEGER(lookup_table)[index];
+		value = num_elt(lookup_table, index);
 	}
 
 	return value;
@@ -131,11 +131,11 @@ SEXP gbintransform(SEXP _intervals, SEXP _track_exprs, SEXP _breaks, SEXP _inclu
 		if (Rf_length(_breaks) != (int)numexpr)
 			verror("Number of breaks sets must be equal to the number of tracks used");
 
-		if (!Rf_isLogical(_include_lowest) || Rf_length(_include_lowest) != 1)
+		if (!Rf_isLogical(_include_lowest) || Rf_length(_include_lowest) != 1 || LOGICAL(_include_lowest)[0] == NA_LOGICAL)
 			verror("include.lowest argument is not logical");
 
-		if (!Rf_isLogical(_force_binning) || Rf_length(_force_binning) != 1)
-			verror("include.lowest argument is not logical");
+		if (!is_true_or_false(_force_binning))
+			verror("force.binning argument is not logical");
 
 		if (!Rf_isNumeric(_lookup_table))
 			verror("Lookup table argument must be numeric");
@@ -154,11 +154,11 @@ SEXP gbintransform(SEXP _intervals, SEXP _track_exprs, SEXP _breaks, SEXP _inclu
 		for (unsigned i = 0; i < numexpr; ++i) {
 			SEXP breaks = VECTOR_ELT(_breaks, i);
 
-			if (!Rf_isReal(breaks))
-				verror("Breaks[%d] is not numeric", i);
+			if (!is_num_vector(breaks))
+				verror("breaks[%d] is not numeric", i + 1);
 
 			bin_finders.push_back(BinFinder());
-			bin_finders.back().init(REAL(breaks), Rf_length(breaks), include_lowest);
+			bin_finders.back().init(num_vector(breaks), include_lowest);
 
 			totalbins *= bin_finders.back().get_numbins();
 			track_mult[i] = !i ? 1 : track_mult[i - 1] * bin_finders[i - 1].get_numbins();
@@ -494,11 +494,11 @@ SEXP gtrack_bintransform(SEXP _track, SEXP _track_exprs, SEXP _breaks, SEXP _inc
 		if (Rf_length(_breaks) != (int)numexpr)
 			verror("Number of breaks sets must be equal to the number of tracks used");
 
-		if (!Rf_isLogical(_include_lowest) || Rf_length(_include_lowest) != 1)
+		if (!Rf_isLogical(_include_lowest) || Rf_length(_include_lowest) != 1 || LOGICAL(_include_lowest)[0] == NA_LOGICAL)
 			verror("include.lowest argument is not logical");
 
-		if (!Rf_isLogical(_force_binning) || Rf_length(_force_binning) != 1)
-			verror("include.lowest argument is not logical");
+		if (!is_true_or_false(_force_binning))
+			verror("force.binning argument is not logical");
 
 		if (!Rf_isNumeric(_lookup_table))
 			verror("Lookup table argument must be numeric");
@@ -513,11 +513,11 @@ SEXP gtrack_bintransform(SEXP _track, SEXP _track_exprs, SEXP _breaks, SEXP _inc
 		for (unsigned i = 0; i < numexpr; ++i) {
 			SEXP breaks = VECTOR_ELT(_breaks, i);
 
-			if (!Rf_isReal(breaks))
-				verror("Breaks[%d] is not numeric", i);
+			if (!is_num_vector(breaks))
+				verror("breaks[%d] is not numeric", i + 1);
 
 			bin_finders.push_back(BinFinder());
-			bin_finders.back().init(REAL(breaks), Rf_length(breaks), include_lowest);
+			bin_finders.back().init(num_vector(breaks), include_lowest);
 
 			totalbins *= bin_finders.back().get_numbins();
 			track_mult[i] = !i ? 1 : track_mult[i - 1] * bin_finders[i - 1].get_numbins();

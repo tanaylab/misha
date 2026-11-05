@@ -1,7 +1,7 @@
 #include "TrackExpressionBigSet2DIterator.h"
 #include "rdbutils.h"
 
-bool TrackExpressionBigSet2DIterator::begin(const char *intervset, SEXP meta, GIntervalsFetcher2D &scope, const DiagonalBand &band, int max_data_size)
+bool TrackExpressionBigSet2DIterator::begin(const char *intervset, SEXP meta, GIntervalsFetcher2D &scope, const DiagonalBand &band, uint64_t max_data_size)
 {
 	TrackExpression2DIterator::begin(scope, band);
 

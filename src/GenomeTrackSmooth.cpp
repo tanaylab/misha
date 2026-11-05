@@ -317,21 +317,21 @@ SEXP gsmooth(SEXP _track, SEXP _expr, SEXP _winsize, SEXP _weight_thr, SEXP _smo
 		if (!Rf_isString(_expr) || Rf_length(_expr) != 1)
 			verror("Track expression argument is not a string");
 
-		if (!Rf_isReal(_winsize) || Rf_length(_winsize) != 1)
+		if (!is_num_vector(_winsize) || Rf_length(_winsize) != 1)
 			verror("Winsize is not numeric");
 
-		if (!Rf_isReal(_weight_thr) || Rf_length(_weight_thr) != 1)
+		if (!is_num_vector(_weight_thr) || Rf_length(_weight_thr) != 1)
 			verror("Weight threshold is not numeric");
 
-		if (!Rf_isLogical(_smooth_nans) || Rf_length(_smooth_nans) != 1)
+		if (!is_true_or_false(_smooth_nans))
 			verror("Smooth nans argument is not logical");
 
 		if (!Rf_isString(_type) || Rf_length(_type) != 1)
 			verror("Algorithm is not a string");
 
 		const char *track = CHAR(STRING_ELT(_track, 0));
-		double winsize = REAL(_winsize)[0];
-		double weight_thr = REAL(_weight_thr)[0];
+		double winsize = num_elt(_winsize, 0);
+		double weight_thr = num_elt(_weight_thr, 0);
 		bool smooth_nans = LOGICAL(_smooth_nans)[0];
 
 		if (winsize < 0)

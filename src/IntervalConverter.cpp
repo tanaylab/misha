@@ -11,6 +11,7 @@
 #include "TGLException.h"
 #include <cstring> // For strcmp
 #include <cmath> // For isnan
+#include <cstdio> // For snprintf
 #include <sys/stat.h> // For stat, S_ISDIR
 #include <unistd.h> // For access, errno, ENOENT
 #include <string>
@@ -23,9 +24,38 @@ IntervalConverter::IntervalConverter(rdb::IntervUtils &iu) :
 {
 }
 
+// A chrom column the converter can read: character, a factor with character levels, or numbers
+// (1 for "1", resolved through the chromosome aliases to chr1, as gintervals(1, ...) does).
+bool is_chrom_col(SEXP col)
+{
+	return Rf_isString(col) || (Rf_isFactor(col) && Rf_isString(Rf_getAttrib(col, R_LevelsSymbol))) || is_num_vector(col);
+}
+
+// The name of the chromosome in row i of a chrom column accepted by is_chrom_col(). A number is
+// printed into buf the way as.character() prints a whole number; NA or a fraction is an error.
+const char *chrom_name(SEXP chroms, SEXP chrom_levels, unsigned i, char *buf, size_t bufsize, const char *error_msg_prefix)
+{
+	if (Rf_isString(chroms))
+		return CHAR(STRING_ELT(chroms, i));
+	if (Rf_isFactor(chroms)) {
+		int code = INTEGER(chroms)[i];
+		if (code < 1 || code > Rf_length(chrom_levels))
+			verror("%sInvalid format of interval at index %d", error_msg_prefix, i + 1);
+		return CHAR(STRING_ELT(chrom_levels, code - 1));
+	}
+	double v = num_elt(chroms, i);
+	if (!std::isfinite(v) || v != std::floor(v) || std::fabs(v) > 1e15)
+		verror("%sInvalid format of interval at index %d", error_msg_prefix, i + 1);
+	snprintf(buf, bufsize, "%.0f", v == 0 ? 0.0 : v);  // -0 is "0", as as.character(-0) is
+	return buf;
+}
+
 unsigned IntervalConverter::get_rintervs_type_mask(SEXP rintervals, const char *error_msg_prefix) const
 {
-	if (!Rf_isVector(rintervals))
+	// Intervals are a data frame, or a list of a 1D and a 2D one. Anything else must stop here:
+	// the code below reads it with VECTOR_ELT() and STRING_ELT(), whose R error on a wrong type
+	// is a longjmp past ~RdbInitializer (C3).
+	if (TYPEOF(rintervals) != VECSXP)
 		verror("%sInvalid format of intervals argument", error_msg_prefix);
 
 	if (Rf_length(rintervals) == 2) {
@@ -49,6 +79,8 @@ unsigned IntervalConverter::get_rintervs_type_mask(SEXP rintervals, const char *
 	}
 
 	if (type == rdb::IntervUtils::INTERVS2D) {
+		if (Rf_length(colnames) < GInterval2D::NUM_COLS)
+			verror("Invalid format of intervals: column names do not match neither 1d nor 2d intervals");
 		for (unsigned i = 0; i < GInterval2D::NUM_COLS; i++) {
 			if (strcmp(CHAR(STRING_ELT(colnames, i)), GInterval2D::COL_NAMES[i]))
 				verror("Invalid format of intervals: column names do not match neither 1d nor 2d intervals");
@@ -75,6 +107,9 @@ unsigned IntervalConverter::get_rintervs_type_mask(SEXP rintervals, const char *
 				verror("%sNumber of rows in column %s differs than the number of rows in column %s", error_msg_prefix, GInterval::COL_NAMES[i - 1], GInterval::COL_NAMES[i]);
 		}
 
+		if (!is_chrom_col(VECTOR_ELT(rintervals, GInterval::CHROM)))
+			verror("%sInvalid format of intervals argument: column chrom must be character, factor or numeric", error_msg_prefix);
+
 		if ((!Rf_isReal(starts) && !Rf_isInteger(starts)) || (!Rf_isReal(ends) && !Rf_isInteger(ends)) ||
 			(strands != R_NilValue && !Rf_isReal(strands) && !Rf_isInteger(strands) && !Rf_isString(strands) && !Rf_isFactor(strands)))
 			verror("%sInvalid format of intervals argument", error_msg_prefix);
@@ -89,6 +124,9 @@ unsigned IntervalConverter::get_rintervs_type_mask(SEXP rintervals, const char *
 			if (i != 0 && Rf_length(VECTOR_ELT(rintervals, i)) != Rf_length(VECTOR_ELT(rintervals, i - 1)))
 				verror("%sNumber of rows in column %s differs than the number of rows in column %s", error_msg_prefix, GInterval2D::COL_NAMES[i - 1], GInterval2D::COL_NAMES[i]);
 		}
+
+		if (!is_chrom_col(VECTOR_ELT(rintervals, GInterval2D::CHROM1)) || !is_chrom_col(VECTOR_ELT(rintervals, GInterval2D::CHROM2)))
+			verror("%sInvalid format of intervals argument: columns chrom1 and chrom2 must be character, factor or numeric", error_msg_prefix);
 
 		if ((!Rf_isReal(starts1) && !Rf_isInteger(starts1)) || (!Rf_isReal(ends1) && !Rf_isInteger(ends1)) || (!Rf_isReal(starts2) && !Rf_isInteger(starts2)) || (!Rf_isReal(ends2) && !Rf_isInteger(ends2)))
 			verror("%sInvalid format of intervals argument", error_msg_prefix);
@@ -318,21 +356,34 @@ SEXP IntervalConverter::convert_rintervs(SEXP rintervals, GIntervals *intervals,
 
 		unsigned zero_length_bumped = 0;
 
+		// A numeric chrom column comes in runs of one value: print and look up each run once
+		bool num_chroms = is_num_vector(chroms);
+		double last_num_chrom = std::numeric_limits<double>::quiet_NaN();
+		int last_num_chromid = -1;
+
 		for (unsigned i = 0; i < num_intervals; i++) {
-			if ((Rf_isFactor(chroms) && INTEGER(chroms)[i] < 0) ||
-				(Rf_isReal(starts) && std::isnan(REAL(starts)[i])) || (Rf_isReal(ends) && std::isnan(REAL(ends)[i])) ||
+			if ((Rf_isReal(starts) && std::isnan(REAL(starts)[i])) || (Rf_isReal(ends) && std::isnan(REAL(ends)[i])) ||
 				(strands != R_NilValue && Rf_isReal(strands) && std::isnan(REAL(strands)[i])))
 				verror("%sInvalid format of interval at index %d", error_msg_prefix, i + 1);
 
-			const char *chrom = Rf_isString(chroms) ? CHAR(STRING_ELT(chroms, i)) : CHAR(STRING_ELT(chrom_levels, INTEGER(chroms)[i] - 1));
 			int chromid;
-			try {
-				chromid = chromkey ? chromkey->chrom2id(chrom) : m_iu.chrom2id(chrom);
-			} catch (const TGLException &) {
-				// If skip_missing_chroms is enabled, skip intervals with chromosomes not in the key
-				if (skip_missing_chroms && chromkey)
-					continue;
-				throw;
+			if (num_chroms && num_elt(chroms, i) == last_num_chrom)
+				chromid = last_num_chromid;
+			else {
+				char chrom_buf[32];
+				const char *chrom = chrom_name(chroms, chrom_levels, i, chrom_buf, sizeof(chrom_buf), error_msg_prefix);
+				try {
+					chromid = chromkey ? chromkey->chrom2id(chrom) : m_iu.chrom2id(chrom);
+				} catch (const TGLException &) {
+					// If skip_missing_chroms is enabled, skip intervals with chromosomes not in the key
+					if (skip_missing_chroms && chromkey)
+						continue;
+					throw;
+				}
+				if (num_chroms) {
+					last_num_chrom = num_elt(chroms, i);
+					last_num_chromid = chromid;
+				}
 			}
 			int64_t start = (int64_t)(Rf_isReal(starts) ? REAL(starts)[i] : INTEGER(starts)[i]);
 			int64_t end = (int64_t)(Rf_isReal(ends) ? REAL(ends)[i] : INTEGER(ends)[i]);
@@ -350,6 +401,8 @@ SEXP IntervalConverter::convert_rintervs(SEXP rintervals, GIntervals *intervals,
 						verror("%sInvalid strand value (NA) at index %d", error_msg_prefix, i + 1);
 					strand = GInterval::str2strand(CHAR(STRING_ELT(strand_levels, level_idx - 1)));
 				} else {
+					if (!Rf_isReal(strands) && INTEGER(strands)[i] == NA_INTEGER)
+						verror("%sInvalid strand value (NA) at index %d", error_msg_prefix, i + 1);
 					strand = (char)(Rf_isReal(strands) ? REAL(strands)[i] : INTEGER(strands)[i]);
 				}
 			}
@@ -398,14 +451,13 @@ SEXP IntervalConverter::convert_rintervs(SEXP rintervals, GIntervals *intervals,
 		unsigned num_intervals = (unsigned)Rf_length(starts1);
 
 		for (unsigned i = 0; i < num_intervals; i++) {
-			if ((Rf_isFactor(chroms1) && INTEGER(chroms1)[i] < 0) ||
-				(Rf_isReal(starts1) && std::isnan(REAL(starts1)[i])) || (Rf_isReal(ends1) && std::isnan(REAL(ends1)[i])) ||
-				(Rf_isFactor(chroms2) && INTEGER(chroms2)[i] < 0) ||
+			if ((Rf_isReal(starts1) && std::isnan(REAL(starts1)[i])) || (Rf_isReal(ends1) && std::isnan(REAL(ends1)[i])) ||
 				(Rf_isReal(starts2) && std::isnan(REAL(starts2)[i])) || (Rf_isReal(ends2) && std::isnan(REAL(ends2)[i])))
 				verror("%sInvalid format of interval at index %d", error_msg_prefix, i + 1);
 
-			const char *chrom1 = Rf_isString(chroms1) ? CHAR(STRING_ELT(chroms1, i)) : CHAR(STRING_ELT(chrom_levels1, INTEGER(chroms1)[i] - 1));
-			const char *chrom2 = Rf_isString(chroms2) ? CHAR(STRING_ELT(chroms2, i)) : CHAR(STRING_ELT(chrom_levels2, INTEGER(chroms2)[i] - 1));
+			char chrom_buf1[32], chrom_buf2[32];
+			const char *chrom1 = chrom_name(chroms1, chrom_levels1, i, chrom_buf1, sizeof(chrom_buf1), error_msg_prefix);
+			const char *chrom2 = chrom_name(chroms2, chrom_levels2, i, chrom_buf2, sizeof(chrom_buf2), error_msg_prefix);
 			int chromid1, chromid2;
 			try {
 				chromid1 = chromkey ? chromkey->chrom2id(chrom1) : m_iu.chrom2id(chrom1);

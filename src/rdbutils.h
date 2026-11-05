@@ -45,6 +45,7 @@ static inline MISHA_MAYBE_UNUSED int clock_gettime(int clk_id, struct timespec *
 #endif
 
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <vector>
 #include <pthread.h>
@@ -341,6 +342,33 @@ inline SEXP RSaneAllocMatrix(SEXPTYPE type, int nrow, int ncol)
 
 SEXP get_rvector_col(SEXP v, const char *colname, const char *varname, bool error_if_missing);
 
+// True for an argument that holds numbers: a double or an integer vector (not a factor).
+// Read it with num_elt(), not REAL(): REAL() on an integer vector is an R error, i.e. a
+// longjmp (C3), and integer arguments (0:7, 500L, a count column) are common.
+inline bool is_num_vector(SEXP x) { return Rf_isReal(x) || Rf_isInteger(x); }
+
+// Element i of a double, integer or logical vector as a double. An integer or logical NA
+// is NaN, as as.numeric() makes it; INTEGER() alone reads it as -2147483648.
+inline double num_elt(SEXP x, R_xlen_t i)
+{
+	if (TYPEOF(x) == REALSXP)
+		return REAL(x)[i];
+	int v = INTEGER(x)[i];
+	return v == NA_INTEGER ? std::numeric_limits<double>::quiet_NaN() : (double)v;
+}
+
+// True for a single TRUE or FALSE; LOGICAL() of an NA is NA_LOGICAL, which C++ reads as true.
+inline bool is_true_or_false(SEXP x) { return Rf_isLogical(x) && Rf_length(x) == 1 && LOGICAL(x)[0] != NA_LOGICAL; }
+
+// All the elements of a double, integer or logical vector, read with num_elt().
+inline std::vector<double> num_vector(SEXP x)
+{
+	std::vector<double> res(Rf_xlength(x));
+	for (R_xlen_t i = 0; i < (R_xlen_t)res.size(); ++i)
+		res[i] = num_elt(x, i);
+	return res;
+}
+
 // Backward-compatible shims for R < 4.5.0
 #if R_VERSION < R_Version(4, 5, 0)
 static inline SEXP R_getVar(SEXP sym, SEXP rho, Rboolean inherits) {
@@ -460,7 +488,9 @@ static inline int fclose_synced(FILE *fp) {
 }
 
 
-void prepare4multitasking(uint64_t res_const_size, uint64_t res_var_size, uint64_t max_res_size, uint64_t max_mem_usage, unsigned num_planned_kids);
+// res_size_from_ram: max_res_size is the RAM-sized fallback of distribute_task(), not what
+// gmax.data.size asks for; the "Result size exceeded" error then says so.
+void prepare4multitasking(uint64_t res_const_size, uint64_t res_var_size, uint64_t max_res_size, uint64_t max_mem_usage, unsigned num_planned_kids, bool res_size_from_ram = false);
 
 pid_t launch_process();
 
@@ -661,6 +691,7 @@ private:
 	static uint64_t               s_res_var_size;
 	static uint64_t               s_max_res_size;
 	static uint64_t               s_max_mem_usage;
+	static bool                   s_res_size_from_ram;
 	static bool                 s_is_kid;
 	static pid_t                s_parent_pid;
 	static sem_t               *s_shm_sem;
@@ -687,7 +718,7 @@ private:
 	static string  get_alloc_suspend_sem_name();
 	static void    sigint_handler(int);
 	static void    sigchld_handler(int);
-	static void    prepare4multitasking(uint64_t res_const_size, uint64_t res_var_size, uint64_t max_res_size, uint64_t max_mem_usage, unsigned num_planned_kids);
+	static void    prepare4multitasking(uint64_t res_const_size, uint64_t res_var_size, uint64_t max_res_size, uint64_t max_mem_usage, unsigned num_planned_kids, bool res_size_from_ram = false);
 	static pid_t   launch_process();
     static void    check_kids_state(bool ignore_errors);
 	static void    wait_for_kids(rdb::IntervUtils &iu);
@@ -772,7 +803,7 @@ private:
 		friend SEXP rdb::rprotect_ptr(SEXP expr);
 	friend void rdb::rerror(const char *fmt, ...);
 	friend void rdb::verror(const char *fmt, ...);
-	friend void rdb::prepare4multitasking(uint64_t res_const_size, uint64_t res_var_size, uint64_t max_res_size, uint64_t max_mem_usage, unsigned num_planned_kids);
+	friend void rdb::prepare4multitasking(uint64_t res_const_size, uint64_t res_var_size, uint64_t max_res_size, uint64_t max_mem_usage, unsigned num_planned_kids, bool res_size_from_ram);
 	friend pid_t rdb::launch_process();
 	friend void rdb::wait_for_kids(rdb::IntervUtils &iu);
 	friend int rdb::get_num_kids();
@@ -870,9 +901,9 @@ inline string rdb::track2attrs_path(SEXP envir, const string &trackname) {
 	return rdb::track2path(envir, trackname) + "/.attributes";
 }
 
-inline void rdb::prepare4multitasking(uint64_t res_const_size, uint64_t res_var_size, uint64_t max_res_size, uint64_t max_mem_usage, unsigned num_planned_kids)
+inline void rdb::prepare4multitasking(uint64_t res_const_size, uint64_t res_var_size, uint64_t max_res_size, uint64_t max_mem_usage, unsigned num_planned_kids, bool res_size_from_ram)
 {
-	RdbInitializer::prepare4multitasking(res_const_size, res_var_size, max_res_size, max_mem_usage, num_planned_kids);
+	RdbInitializer::prepare4multitasking(res_const_size, res_var_size, max_res_size, max_mem_usage, num_planned_kids, res_size_from_ram);
 }
 
 inline pid_t rdb::launch_process() { return RdbInitializer::launch_process(); }

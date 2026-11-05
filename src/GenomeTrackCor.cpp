@@ -871,7 +871,8 @@ SEXP gtrackcor_spearman_multitask(SEXP _track_exprs, SEXP _intervals, SEXP _iter
         if (num_kids == 1)
             throw rdb::SingleShard();
 
-        uint64_t sample_size = (uint64_t)ceil(iu.get_max_data_size() / (double)num_kids);
+        // Each kid hands over a fixed-size sample per pair through the shared memory
+        uint64_t sample_size = iu.get_kid_buf_size(num_kids, (uint64_t)num_kids * num_pairs, sizeof(ValuePair) + 2 * sizeof(double));
         uint64_t estimated_bins = iu.estimate_num_bins(_iterator_policy, intervals1d, intervals2d);
         if (estimated_bins > 0 && estimated_bins < sample_size)
             sample_size = estimated_bins;
@@ -885,7 +886,10 @@ SEXP gtrackcor_spearman_multitask(SEXP _track_exprs, SEXP _intervals, SEXP _iter
                                  sizeof(uint64_t) + sample_size * sizeof(ValuePair) +  // pair_samples
                                  sizeof(uint64_t) + sample_size * sizeof(double) +     // x_samples
                                  sizeof(uint64_t) + sample_size * sizeof(double);      // y_samples
-        uint64_t result_size = num_pairs * per_pair_size;
+        // Saturated: it wrapped for many pairs, and the kids then wrote past the arena
+        uint64_t result_size;
+        if (__builtin_mul_overflow((uint64_t)num_pairs, per_pair_size, &result_size))
+            result_size = numeric_limits<uint64_t>::max();
 
         if (iu.distribute_task(result_size, 0)) {
             // Child process: collect samples

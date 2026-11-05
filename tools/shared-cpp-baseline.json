@@ -10,13 +10,15 @@
     "pymisha": "29305b2b3494233f"
   },
   "BinFinder.cpp": {
-    "identical": true,
-    "misha": "122ae8addcac725a",
+    "identical": false,
+    "misha": "595b59f13a5fa668",
+    "needs_port": true,
     "pymisha": "122ae8addcac725a"
   },
   "BinFinder.h": {
-    "identical": true,
-    "misha": "0b0797d738f6ef3d",
+    "identical": false,
+    "misha": "da7d581e42415c61",
+    "needs_port": true,
     "pymisha": "0b0797d738f6ef3d"
   },
   "BinsManager.h": {

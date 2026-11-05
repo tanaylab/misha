@@ -32,9 +32,9 @@ SEXP gchain2interv(SEXP _chainfile, SEXP _src_overlap_policy, SEXP _tgt_overlap_
 		// Parse min_score (optional)
 		double min_score = -1.0;  // negative means no filtering
 		if (!Rf_isNull(_min_score)) {
-			if (!Rf_isReal(_min_score) || Rf_length(_min_score) != 1)
+			if (!is_num_vector(_min_score) || Rf_length(_min_score) != 1)
 				verror("min_score must be a single numeric value");
-			min_score = REAL(_min_score)[0];
+			min_score = num_elt(_min_score, 0);
 		}
 
 		IntervUtils iu(_envir);
