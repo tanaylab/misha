@@ -33,7 +33,7 @@ jobs:
           - {os: ubuntu-latest, r_base: "4.3"}
           - {os: ubuntu-latest, r_base: "4.4"}
           - {os: ubuntu-latest, r_base: "4.5"}
-          - {os: macos-14, r_base: "4.5"}
+          - {os: macos-15, r_base: "4.5"}
     steps:
       - uses: actions/checkout@v5
 
