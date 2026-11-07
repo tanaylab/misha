@@ -4,9 +4,9 @@
 
 * `gextract()` and other track expressions that combine a sparse, array or 2D track with a sequence virtual track (`kmer`, `pwm`, `potts`, `masked`) no longer crash R when no iterator is given.
 
-* `gtrack.create()` of a 2D expression whose iterator gives no rectangles stops with an error; it created a track that could not be read.
+* `gtrack.create()` and `gtrack.lookup()` with a 2D iterator that gives no rectangles stop with an error; they created a track that could not be read.
 
-* `gtrack.import_parquet()` reads an empty file written by arrow or pyarrow (a row group of no rows).
+* `gtrack.import_parquet()` reads empty files written by arrow, pyarrow or pandas.
 
 * A `gtrack.copy(overwrite = TRUE)` killed after putting the copy in place no longer leaves the track missing from other sessions until `gdb.reload()`.
 
