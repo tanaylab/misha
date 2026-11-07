@@ -429,7 +429,11 @@ SEXP IntervalConverter::convert_rintervs(SEXP rintervals, GIntervals *intervals,
 				} else {
 					if (!Rf_isReal(strands) && INTEGER(strands)[i] == NA_INTEGER)
 						verror("%sInvalid strand value (NA) at index %d", error_msg_prefix, i + 1);
-					strand = (char)(Rf_isReal(strands) ? REAL(strands)[i] : INTEGER(strands)[i]);
+					// -1, 0 or 1 only, as gintervals() checks (a cast read 255 as -1)
+					double v = Rf_isReal(strands) ? REAL(strands)[i] : INTEGER(strands)[i];
+					if (v != -1 && v != 0 && v != 1)
+						verror("%sInvalid strand value %g at index %d", error_msg_prefix, v, i + 1);
+					strand = (char)v;
 				}
 			}
 

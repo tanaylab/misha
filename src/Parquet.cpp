@@ -1384,6 +1384,10 @@ void ParquetReader::read_chunk(int row_group, int col, vector<T> &vals, vector<u
 			TGLError<ParquetReader>(UNSUPPORTED, "compression codec %s (%d) is not supported; supported are UNCOMPRESSED, SNAPPY and GZIP (rewrite the file with compression=\"snappy\")",
 			                        codec_name(md.codec), md.codec);
 
+		// nothing to read in a chunk of no values (pyarrow writes data_page_offset 0 for one)
+		if (md.num_values == 0 && rg.num_rows == 0)
+			return;
+
 		int64_t start = md.dictionary_page_offset > 0 && md.dictionary_page_offset < md.data_page_offset ? md.dictionary_page_offset : md.data_page_offset;
 		if (start < 4 || md.total_compressed_size < 0 || (uint64_t)start + md.total_compressed_size > m_size - 8)
 			corrupt("column chunk offsets");

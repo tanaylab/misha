@@ -1338,8 +1338,9 @@ for (unsigned ivar = 0; ivar < vars.get_num_track_vars(); ++ivar) {
 			 common_track_type == GenomeTrack::COMPUTED) &&
 			num_tracks > 1)
 		{
-			for (unsigned ivar = 1; ivar < vars.get_num_track_vars(); ++ivar) {
-				if (vars.get_track_name(ivar) != vars.get_track_name(ivar - 1)) {
+			// (track_names: a sequence virtual track has no track, and no track name)
+			for (unsigned i = 1; i < track_names.size(); ++i) {
+				if (track_names[i] != track_names[i - 1]) {
 					if (track_exprs.size() == 1)
 						verror("Cannot implicitly determine iterator policy: track expression \"%s\" contains more than one %s track.\n",
 								track_exprs.front().c_str(), GenomeTrack::TYPE_NAMES[common_track_type]);
@@ -1360,7 +1361,7 @@ for (unsigned ivar = 0; ivar < vars.get_num_track_vars(); ++ivar) {
 				if (Rf_isString(giterator))
 					((TrackExpressionSparseIterator *)expr_itr)->begin(track2path(m_iu.get_env(), CHAR(STRING_ELT(giterator, 0))), *scope1d);
 				else
-					((TrackExpressionSparseIterator *)expr_itr)->begin(track2path(m_iu.get_env(), vars.get_track_name(0)), *scope1d);
+					((TrackExpressionSparseIterator *)expr_itr)->begin(track2path(m_iu.get_env(), track_names.front()), *scope1d);
 			}
 		} else if (common_track_type == GenomeTrack::RECTS || common_track_type == GenomeTrack::POINTS || common_track_type == GenomeTrack::COMPUTED) {
 			verify_2d_iter(scope1d, scope2d);
@@ -1369,7 +1370,7 @@ for (unsigned ivar = 0; ivar < vars.get_num_track_vars(); ++ivar) {
 				if (Rf_isString(giterator))
 					((TrackExpressionTrackRectsIterator *)expr_itr)->begin(track2path(m_iu.get_env(), CHAR(STRING_ELT(giterator, 0))), (GenomeTrack::Type)common_track_type, *scope2d, band, m_iu.get_max_data_size());
 				else
-					((TrackExpressionTrackRectsIterator *)expr_itr)->begin(track2path(m_iu.get_env(), vars.get_track_name(0)), (GenomeTrack::Type)common_track_type, *scope2d, band, m_iu.get_max_data_size());
+					((TrackExpressionTrackRectsIterator *)expr_itr)->begin(track2path(m_iu.get_env(), track_names.front()), (GenomeTrack::Type)common_track_type, *scope2d, band, m_iu.get_max_data_size());
 			}
 		} else
 		verror("Unrecognized type of iterator");
