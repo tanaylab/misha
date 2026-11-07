@@ -81,6 +81,11 @@ test_that("gtrack.import_parquet reads an empty shard with an empty row group", 
     # (arrow writes one row group of no rows, its column chunks with data_page_offset 0)
     arrow::write_parquet(data.frame(chrom = character(0), start = numeric(0), end = numeric(0), a = numeric(0)), file.path(dir, "s2.parquet"))
     expect_equal(arrow::ParquetFileReader$create(file.path(dir, "s2.parquet"))$num_row_groups, 1)
+    # (pandas writes the chrom column of an empty data frame as type null)
+    arrow::write_parquet(arrow::Table$create(
+        chrom = arrow::Array$create(logical(0), type = arrow::null()), start = arrow::Array$create(integer(0), type = arrow::int64()),
+        end = arrow::Array$create(integer(0), type = arrow::int64()), a = arrow::Array$create(numeric(0))
+    ), file.path(dir, "s3.parquet"))
     gtrack.import_parquet("", file.path(dir, "s*.parquet"), 10, track.prefix = "pq_")
     # (a dense track of 10 bp bins: the shard's one row covers the first ten)
     res <- gextract("pq_a", gintervals("chr1", 0, 200))
@@ -88,7 +93,7 @@ test_that("gtrack.import_parquet reads an empty shard with an empty row group", 
     expect_equal(res$pq_a, c(rep(2.5, 10), rep(NaN, 10)))
 })
 
-test_that("gtrack.create of a 2D expression that gives no rectangles creates no track", {
+test_that("gtrack.create and gtrack.lookup of a 2D expression that give no rectangles create no track", {
     local_db_state()
     for (indexed in c(FALSE, TRUE)) {
         db <- small_db(indexed)
@@ -100,6 +105,9 @@ test_that("gtrack.create of a 2D expression that gives no rectangles creates no 
             expect_error(gtrack.create("e1", "", "rB", iterator = "rA", band = c(10000, 20000)), "gave no rectangles")
             expect_false(dir.exists(file.path(db, "tracks", "e1.track")))
             expect_false("e1" %in% gtrack.ls())
+            expect_error(gtrack.lookup("l1", "", 1:3, "rB", c(0, 1, 2, 1e9), iterator = "rA", band = c(10000, 20000)), "gave no rectangles")
+            expect_false(dir.exists(file.path(db, "tracks", "l1.track")))
+            expect_false("l1" %in% gtrack.ls())
         }
         # (a rectangle in the scope still gives a track)
         gtrack.create("e2", "", "rB", iterator = "rA")

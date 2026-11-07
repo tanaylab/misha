@@ -326,6 +326,8 @@ test_that("gtrack.copy(overwrite = TRUE) killed between its renames keeps the ol
     local_db_state()
     st <- copy_killed_at("aside")
     expect_false(dir.exists(file.path(st$tracks, "orig.track")))
+    # the copy left the cache dirty, so the next session (copy_killed_at's gsetroot) rescanned
+    expect_false("orig" %in% gtrack.ls())
     expect_length(st$leftovers, 1)
     kept <- file.path(st$tracks, st$leftovers)
     expect_equal(readBin(file.path(kept, "track.dat"), "raw", 1e6), st$orig_bytes)
@@ -340,11 +342,47 @@ test_that("gtrack.copy(overwrite = TRUE) killed once the copy is in place leaves
     skip_on_os("windows")
     local_db_state()
     st <- copy_killed_at("swap")
-    # listed by the next session without a gdb.reload() (the cache was left dirty, so it rescanned)
+    # listed by the next session without a gdb.reload()
     expect_true("orig" %in% gtrack.ls())
     res <- gextract("orig", gintervals("chr1", 0, 200))
     expect_equal(res$start, 100)
     expect_equal(res$orig, 7)
+})
+
+test_that("gtrack.copy(overwrite = TRUE) that fails after another session rescanned leaves the cache dirty", {
+    skip_on_cran()
+    skip_on_os("windows")
+    local_db_state()
+    td <- withr::local_tempdir()
+    db <- review_db(td)
+    gtrack.create_sparse("orig", "", gintervals("chr1", 0, 10), 42)
+    gtrack.create_sparse("src", "", gintervals("chr1", 100, 110), 7)
+    # another session rescans while the old track is set aside (its rescan removes the copy's flag,
+    # and writes a cache without "orig"); then putting the copy in place fails. (In this process: the
+    # copy is not killed, and a forked child's result can be lost to another SIGCHLD handler.)
+    rename <- base::file.rename
+    unlockBinding("file.rename", .BaseNamespaceEnv)
+    withr::defer({
+        assign("file.rename", rename, envir = .BaseNamespaceEnv)
+        lockBinding("file.rename", .BaseNamespaceEnv)
+    })
+    assign("file.rename", function(from, to) {
+        if (basename(from[1]) == "orig.track") {
+            res <- rename(from, to)
+            .gdb.cache_rescan(db)
+            return(res)
+        }
+        if (basename(to[1]) == "orig.track" && grepl("\\.tmp\\.", basename(from[1]))) {
+            return(FALSE)
+        }
+        rename(from, to)
+    }, envir = .BaseNamespaceEnv)
+    expect_error(gtrack.copy("src", "orig", overwrite = TRUE), "Failed to rename")
+    assign("file.rename", rename, envir = .BaseNamespaceEnv)
+    expect_true(.gdb.cache_is_dirty(db))
+    suppressMessages(gsetroot(db))
+    expect_true("orig" %in% gtrack.ls())
+    expect_equal(gextract("orig", gintervals("chr1", 0, 200))$orig, 42)
 })
 
 test_that("gtrack.copy(overwrite = TRUE) that succeeds leaves .db.cache current and not dirty", {
