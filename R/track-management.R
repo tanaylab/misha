@@ -774,8 +774,9 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
                     .gdb.invalidate_dir_cache(dest_dir)
                     assign("GTRACKS", tracks_before, envir = .misha)
                     assign("GTRACK_DATASET", track_db_before, envir = .misha)
-                    # the track is back under its name, which .db.cache still lists
-                    if (is.null(swap_mark)) .gdb.cache_mark_dirty(dest_db)
+                    # the track is back under its name, which .db.cache still lists unless a rescan ran
+                    # meanwhile (it removes the swap's flag): only a flag still there shows that it did not
+                    if (!.gdb.cache_clear_dirty(dest_db, swap_mark)) .gdb.cache_mark_dirty(dest_db)
                 } else {
                     # the name may now hold nothing, or another session's track
                     .gdb.cache_mark_dirty(dest_db)
@@ -803,6 +804,7 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
         aside <- if (!file.exists(aside_path)) aside_path
         if (is.null(aside) || !suppressWarnings(file.rename(dest_dir, aside_path))) {
             aside <- NULL
+            .gdb.cache_clear_dirty(dest_db, swap_mark)
             stop(sprintf(
                 "Failed to set the existing destination %s aside; copy aborted.",
                 dest_dir
