@@ -47,12 +47,12 @@ returns all such paths, which is useful for debugging when using
 gdb.init_examples()
 gtrack.dbs("dense_track")
 #>                    dense_track 
-#> "/tmp/Rtmp65I99C/trackdb/test" 
+#> "/tmp/Rtmp8nDUah/trackdb/test" 
 gtrack.dbs(gtrack.ls(), dataframe = TRUE)
 #>                 track                           db
-#> 1         array_track /tmp/Rtmp65I99C/trackdb/test
-#> 2         dense_track /tmp/Rtmp65I99C/trackdb/test
-#> 3         rects_track /tmp/Rtmp65I99C/trackdb/test
-#> 4        sparse_track /tmp/Rtmp65I99C/trackdb/test
-#> 5 subdir.dense_track2 /tmp/Rtmp65I99C/trackdb/test
+#> 1         array_track /tmp/Rtmp8nDUah/trackdb/test
+#> 2         dense_track /tmp/Rtmp8nDUah/trackdb/test
+#> 3         rects_track /tmp/Rtmp8nDUah/trackdb/test
+#> 4        sparse_track /tmp/Rtmp8nDUah/trackdb/test
+#> 5 subdir.dense_track2 /tmp/Rtmp8nDUah/trackdb/test
 ```
