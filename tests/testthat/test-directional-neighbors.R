@@ -127,10 +127,10 @@ test_that("parameter validation works", {
         chrom = "chr1", start = 1000, end = 1001, strand = 2 # Invalid strand value
     )
 
-    # Should error on invalid strand values
+    # Should error on invalid strand values (2 is no strand at all: rejected when the intervals are read)
     expect_error(
         gintervals.neighbors(tss_invalid_strand, features, use_intervals1_strand = TRUE),
-        "Invalid strand value.*Strand must be -1 or 1"
+        "Invalid strand value 2"
     )
 
     # Test invalid strand values in multiple rows
