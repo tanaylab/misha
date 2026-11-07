@@ -105,6 +105,7 @@ test_that(".gdb.staging_name embeds this host and pid", {
 })
 
 test_that(".gdb.staging_owner_gone only judges this host's dead pids", {
+    skip_if_not(dir.exists("/proc"), "a pid is judged through /proc")
     host <- .gdb.host_tag()
     # a pid that cannot be running: the kernel's own pid 1 is alive, and our
     # own pid is alive, so use a pid taken from a process that has exited
