@@ -186,6 +186,9 @@ void ParquetImport::index()
 
 	for (size_t f = 0; f < m_files.size(); ++f) {
 		for (int rg = 0; rg < m_readers[f]->num_row_groups(); ++rg) {
+			// (an empty row group may type an all-missing column as null, e.g. pandas' empty chrom column)
+			if (!m_readers[f]->num_rows(rg))
+				continue;
 			m_readers[f]->read_strings(rg, m_col_idx[f][CHROM], chroms);
 			for (size_t i = 0, j; i < chroms.size(); i = j) {
 				for (j = i + 1; j < chroms.size() && chroms[j] == chroms[i]; ++j)
