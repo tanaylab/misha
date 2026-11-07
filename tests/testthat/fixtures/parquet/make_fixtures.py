@@ -284,3 +284,8 @@ long_chrom = frame(rows, ("chrom", "start", "end", "a"))
 long_chrom["chrom"] = "c" * 1025
 write("long_chrom.parquet", long_chrom)
 assert pq.ParquetFile(path("long_chrom.parquet")).metadata.row_group(0).column(0).dictionary_page_offset is not None
+
+# Empty files, as shards with no rows: pyarrow writes one row group of no rows (column chunks with
+# data_page_offset 0); pandas also types the chrom column of an empty frame as null.
+pq.write_table(table(frame(bins())).slice(0, 0), path("empty_pyarrow.parquet"))
+frame([]).to_parquet(path("empty_pandas.parquet"), index=False)

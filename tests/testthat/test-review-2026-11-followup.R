@@ -70,27 +70,26 @@ test_that("a numeric strand other than -1, 0 or 1 is an error", {
     expect_error(gseq.extract(cbind(intervs, strand = 255L)), "Invalid strand value")
 })
 
-test_that("gtrack.import_parquet reads an empty shard with an empty row group", {
-    skip_if_not_installed("arrow")
+test_that("gtrack.import_parquet reads empty shards written by pyarrow and pandas", {
     local_db_state()
     db <- withr::local_tempdir()
     create_test_db(db)
     suppressMessages(gsetroot(db))
-    dir <- withr::local_tempdir()
-    arrow::write_parquet(data.frame(chrom = "chr1", start = 0, end = 100, a = 2.5), file.path(dir, "s1.parquet"))
-    # (arrow writes one row group of no rows, its column chunks with data_page_offset 0)
-    arrow::write_parquet(data.frame(chrom = character(0), start = numeric(0), end = numeric(0), a = numeric(0)), file.path(dir, "s2.parquet"))
-    expect_equal(arrow::ParquetFileReader$create(file.path(dir, "s2.parquet"))$num_row_groups, 1)
-    # (pandas writes the chrom column of an empty data frame as type null)
-    arrow::write_parquet(arrow::Table$create(
-        chrom = arrow::Array$create(logical(0), type = arrow::null()), start = arrow::Array$create(integer(0), type = arrow::int64()),
-        end = arrow::Array$create(integer(0), type = arrow::int64()), a = arrow::Array$create(numeric(0))
-    ), file.path(dir, "s3.parquet"))
-    gtrack.import_parquet("", file.path(dir, "s*.parquet"), 10, track.prefix = "pq_")
-    # (a dense track of 10 bp bins: the shard's one row covers the first ten)
-    res <- gextract("pq_a", gintervals("chr1", 0, 200))
-    expect_equal(res$start, seq(0, 190, by = 10))
-    expect_equal(res$pq_a, c(rep(2.5, 10), rep(NaN, 10)))
+    # (fixtures/parquet/make_fixtures.py: one row group of no rows, column chunks with
+    # data_page_offset 0; pandas also types the chrom column null)
+    fixtures <- test_path("fixtures", "parquet")
+    gtrack.import_parquet("", file.path(fixtures, "shard_chr1.parquet"), 32, track.prefix = "one_")
+    for (empty in c("empty_pyarrow.parquet", "empty_pandas.parquet")) {
+        dir <- withr::local_tempdir()
+        file.copy(file.path(fixtures, c("shard_chr1.parquet", empty)), dir)
+        prefix <- paste0(sub("\\.parquet$", "", empty), "_")
+        gtrack.import_parquet("", file.path(dir, "*.parquet"), 32, track.prefix = prefix)
+        expect_equal(
+            gextract(paste0(prefix, "a"), gintervals.all(), colnames = "v")$v,
+            gextract("one_a", gintervals.all(), colnames = "v")$v
+        )
+    }
+    expect_equal(gextract("one_a", gintervals("chr1", 0, 64))$one_a, c(0.25, 1.25))
 })
 
 test_that("gtrack.create and gtrack.lookup of a 2D expression that give no rectangles create no track", {
