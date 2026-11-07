@@ -312,6 +312,7 @@ copy_killed_at <- function(kill_at) {
 test_that("gtrack.copy(overwrite = TRUE) killed during the copy leaves the old track in place", {
     skip_on_cran()
     skip_on_os("windows")
+    skip_if_not(dir.exists("/proc"), "a dead writer's staging directory is recognized through /proc")
     local_db_state()
     st <- copy_killed_at("copy")
     expect_equal(gextract("orig", gintervals("chr1", 0, 200))$orig, 42)
@@ -321,6 +322,7 @@ test_that("gtrack.copy(overwrite = TRUE) killed during the copy leaves the old t
 test_that("gtrack.copy(overwrite = TRUE) killed between its renames keeps the old track where no cleanup removes it", {
     skip_on_cran()
     skip_on_os("windows")
+    skip_if_not(dir.exists("/proc"), "a dead writer's staging directory is recognized through /proc")
     local_db_state()
     st <- copy_killed_at("aside")
     expect_false(dir.exists(file.path(st$tracks, "orig.track")))
@@ -338,10 +340,26 @@ test_that("gtrack.copy(overwrite = TRUE) killed once the copy is in place leaves
     skip_on_os("windows")
     local_db_state()
     st <- copy_killed_at("swap")
-    suppressMessages(gdb.reload())
+    # listed by the next session without a gdb.reload() (the cache was left dirty, so it rescanned)
+    expect_true("orig" %in% gtrack.ls())
     res <- gextract("orig", gintervals("chr1", 0, 200))
     expect_equal(res$start, 100)
     expect_equal(res$orig, 7)
+})
+
+test_that("gtrack.copy(overwrite = TRUE) that succeeds leaves .db.cache current and not dirty", {
+    local_db_state()
+    td <- withr::local_tempdir()
+    db <- review_db(td)
+    gtrack.create_sparse("orig", "", gintervals("chr1", 0, 10), 42)
+    gtrack.create_sparse("src", "", gintervals("chr1", 100, 110), 7)
+    gtrack.copy("src", "orig", overwrite = TRUE)
+    expect_false(.gdb.cache_is_dirty(db))
+    f <- file(file.path(db, ".db.cache"), "rb")
+    cache <- unserialize(f)
+    close(f)
+    expect_true(all(c("orig", "src") %in% cache[[1]]))
+    expect_equal(gextract("orig", gintervals("chr1", 0, 200))$orig, 7)
 })
 
 # Another session on the same database: a forked child, which starts with a copy of this session's

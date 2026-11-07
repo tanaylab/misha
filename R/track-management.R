@@ -746,6 +746,9 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
 
     aside <- NULL
     success <- FALSE
+    # the cache's dirty flag for the swap (.gdb.cache_mark_dirty): the name stays in .db.cache throughout,
+    # so a copy killed before the flag is removed leaves the cache for the next session to rescan
+    swap_mark <- NULL
     # whether this call's copy is at the real name: only then is what is there this call's to move away
     placed <- FALSE
     if (dir.exists(dest_dir)) {
@@ -771,8 +774,11 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
                     .gdb.invalidate_dir_cache(dest_dir)
                     assign("GTRACKS", tracks_before, envir = .misha)
                     assign("GTRACK_DATASET", track_db_before, envir = .misha)
-                    .gdb.cache_mark_dirty(dest_db)
+                    # the track is back under its name, which .db.cache still lists
+                    if (is.null(swap_mark)) .gdb.cache_mark_dirty(dest_db)
                 } else {
+                    # the name may now hold nothing, or another session's track
+                    .gdb.cache_mark_dirty(dest_db)
                     # (what holds the name now is a track this session lists, as it did)
                     if (dir.exists(dest_dir)) {
                         .gdb.invalidate_dir_cache(dest_dir)
@@ -784,9 +790,14 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
                 if (!is.null(failed) && dir.exists(failed)) {
                     .gdb.trash(failed)
                 }
+                .gdb.cache_clear_dirty(dest_db, swap_mark)
             },
             add = TRUE
         )
+        # (made before the old track is moved: a kill right after the move finds the cache dirty)
+        if (dest_db_loaded) {
+            swap_mark <- .gdb.cache_mark_dirty(dest_db, legacy = FALSE)
+        }
         # set before the rename, so that an interrupt right after it still finds the track there (unless the
         # name is taken: what is there is not this track)
         aside <- if (!file.exists(aside_path)) aside_path
@@ -798,11 +809,9 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
             ), call. = FALSE)
         }
         .gdb.invalidate_dir_cache(dest_dir)
-        # the session's track list is updated only for a loaded destination (.gdb.rm_track writes it
-        # into the database's .db.cache); an unloaded one is rescanned when loaded
-        if (dest_db_loaded) {
-            .gdb.rm_track(destname, trackdir = dest_dir, db = dest_db)
-        } else {
+        # a loaded destination keeps the name in its lists and .db.cache (the copy takes it); an
+        # unloaded one is rescanned when loaded
+        if (!dest_db_loaded) {
             .gdb.cache_mark_dirty(dest_db)
         }
     }
@@ -815,6 +824,10 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
     placed <- TRUE
     .gdb.fsync(dest_parent)
     .gdb.invalidate_dir_cache(dest_dir)
+    # the name holds a complete track again (removed before .gdb.add_track, which leaves a dirty cache as it is)
+    if (.gdb.cache_clear_dirty(dest_db, swap_mark)) {
+        swap_mark <- NULL
+    }
     tryCatch(
         {
             if (dest_db_loaded) {
