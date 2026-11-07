@@ -97,7 +97,12 @@ gtrack.lookup <- function(track = NULL, description = NULL, lookup_table = NULL,
     .gconfirmtrackcreate(trackstr)
 
     .gtrack.create_atomic(trackstr, function() {
+        stage_dir <- get(".create_dir_override", envir = .misha)
         .gcall("gtrack_bintransform", trackstr, exprs, breaks, include.lowest, force.binning, lookup_table, .iterator, band, .misha_env())
+        # a 2D iterator that gave no rectangle writes no file (as in gtrack.create)
+        if (!length(list.files(stage_dir))) {
+            stop(sprintf("Track %s was not created: the iterator gave no rectangles", trackstr), call. = FALSE)
+        }
     })
 
     final_dir <- .track_dir(trackstr)
