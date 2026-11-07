@@ -1,5 +1,32 @@
 # Changelog
 
+## misha 5.16.1
+
+- **Behavior fix:** a numeric `strand` other than -1, 0 or 1 is an
+  error, as in
+  [`gintervals()`](https://tanaylab.github.io/misha/reference/gintervals.md);
+  functions that read intervals took 255 as -1
+  (e.g. [`gseq.extract()`](https://tanaylab.github.io/misha/reference/gseq.extract.md)
+  returned the reverse complement) and 2 as 1.
+
+- [`gextract()`](https://tanaylab.github.io/misha/reference/gextract.md)
+  and other track expressions that combine a sparse, array or 2D track
+  with a sequence virtual track (`kmer`, `pwm`, `potts`, `masked`) no
+  longer crash R when no iterator is given.
+
+- [`gtrack.create()`](https://tanaylab.github.io/misha/reference/gtrack.create.md)
+  and
+  [`gtrack.lookup()`](https://tanaylab.github.io/misha/reference/gtrack.lookup.md)
+  with a 2D iterator that gives no rectangles stop with an error; they
+  created a track that could not be read.
+
+- [`gtrack.import_parquet()`](https://tanaylab.github.io/misha/reference/gtrack.import_parquet.md)
+  reads empty files written by arrow, pyarrow or pandas.
+
+- A `gtrack.copy(overwrite = TRUE)` killed after putting the copy in
+  place no longer leaves the track missing from other sessions until
+  [`gdb.reload()`](https://tanaylab.github.io/misha/reference/gdb.reload.md).
+
 ## misha 5.16.0
 
 This release fixes the remaining defects found in the review of 5.14.4.

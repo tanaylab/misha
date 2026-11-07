@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">misha</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.16.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.16.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -39,6 +39,14 @@
       <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="5.16.1" id="misha-5161">misha 5.16.1<a class="anchor" aria-label="anchor" href="#misha-5161"></a></h2>
+<ul><li><p><strong>Behavior fix:</strong> a numeric <code>strand</code> other than -1, 0 or 1 is an error, as in <code><a href="../reference/gintervals.html">gintervals()</a></code>; functions that read intervals took 255 as -1 (e.g. <code><a href="../reference/gseq.extract.html">gseq.extract()</a></code> returned the reverse complement) and 2 as 1.</p></li>
+<li><p><code><a href="../reference/gextract.html">gextract()</a></code> and other track expressions that combine a sparse, array or 2D track with a sequence virtual track (<code>kmer</code>, <code>pwm</code>, <code>potts</code>, <code>masked</code>) no longer crash R when no iterator is given.</p></li>
+<li><p><code><a href="../reference/gtrack.create.html">gtrack.create()</a></code> and <code><a href="../reference/gtrack.lookup.html">gtrack.lookup()</a></code> with a 2D iterator that gives no rectangles stop with an error; they created a track that could not be read.</p></li>
+<li><p><code><a href="../reference/gtrack.import_parquet.html">gtrack.import_parquet()</a></code> reads empty files written by arrow, pyarrow or pandas.</p></li>
+<li><p>A <code>gtrack.copy(overwrite = TRUE)</code> killed after putting the copy in place no longer leaves the track missing from other sessions until <code><a href="../reference/gdb.reload.html">gdb.reload()</a></code>.</p></li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="5.16.0" id="misha-5160">misha 5.16.0<a class="anchor" aria-label="anchor" href="#misha-5160"></a></h2>
 <p>This release fixes the remaining defects found in the review of 5.14.4. Several change results, marked <strong>Behavior fix</strong>; recompute anything that depends on them.</p>
