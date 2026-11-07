@@ -58,10 +58,15 @@ gtrack.create <- function(track = NULL, description = NULL, expr = NULL, iterato
     .gconfirmtrackcreate(trackstr)
 
     .gtrack.create_atomic(trackstr, function() {
+        stage_dir <- get(".create_dir_override", envir = .misha)
         if (.ggetOption("gmultitasking")) {
             .gcall("gtrackcreate_multitask", trackstr, exprstr, .iterator, band, .misha_env())
         } else {
             .gcall("gtrackcreate", trackstr, exprstr, .iterator, band, .misha_env())
+        }
+        # a 2D iterator that gave no rectangle writes no file (a 1D track always has its files)
+        if (!length(list.files(stage_dir))) {
+            stop(sprintf("Track %s was not created: the iterator gave no rectangles", trackstr), call. = FALSE)
         }
     })
 
