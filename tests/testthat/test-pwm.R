@@ -996,3 +996,48 @@ test_that("PSSM input: counts are accepted, log-odds, NA and zero rows are refus
     }
     expect_error(gvtrack.create("bad_pwm", NULL, "pwm", pssm = logodds), "log-odds")
 })
+
+test_that("PSSM input: floating-point noise below 0 is 0, a real negative is refused", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    probs <- matrix(c(
+        0.7, 0.1, 0.1, 0.1,
+        0.1, 0.1, 0.7, 0.1,
+        0.5, 0.5, 0, 0,
+        0.1, 0.1, 0.1, 0.7
+    ), ncol = 4, byrow = TRUE, dimnames = list(NULL, c("A", "C", "G", "T")))
+    noisy <- probs
+    noisy[3, 3] <- -1e-18 # e.g. left by 1 - sum(...)
+    counts <- probs * 50
+    counts_noisy <- counts
+    counts_noisy[3, 4] <- -1e-8 # below 1e-9 of the row maximum (25)
+
+    iv <- gintervals(1, c(0, 1000), c(100, 1100))
+    gvtrack.create("pssm_clean", NULL, "pwm.max", pssm = probs, prior = 0.01)
+    gvtrack.create("pssm_noisy", NULL, "pwm.max", pssm = noisy, prior = 0.01)
+    gvtrack.create("pssm_cnoisy", NULL, "pwm.max", pssm = counts_noisy, prior = 0.01)
+    r <- gextract(c("pssm_clean", "pssm_noisy", "pssm_cnoisy"), iv, iterator = iv)
+    expect_equal(r$pssm_noisy, r$pssm_clean)
+    expect_equal(r$pssm_cnoisy, r$pssm_clean, tolerance = 1e-6)
+    expect_equal(
+        gseq.pwm("ACGTACGT", noisy, mode = "max", prior = 0.01),
+        gseq.pwm("ACGTACGT", probs, mode = "max", prior = 0.01)
+    )
+    expect_equal(
+        gseq.pwm_edits("ACGTACGT", noisy, score.thresh = -3)$n_edits,
+        gseq.pwm_edits("ACGTACGT", probs, score.thresh = -3)$n_edits
+    )
+
+    # A negative beyond the noise tolerance is still refused, small or not
+    for (v in c(-1e-3, -1e-6, -0.2)) {
+        bad <- probs
+        bad[3, 3] <- v
+        expect_error(gvtrack.create("bad_neg", NULL, "pwm", pssm = bad), "negative values", info = v)
+        expect_error(gseq.pwm("ACGTACGT", bad, mode = "max"), "negative values", info = v)
+    }
+    # and so is a row with no positive entry
+    bad <- probs
+    bad[3, ] <- c(-1e-18, 0, 0, 0)
+    expect_error(gvtrack.create("bad_neg", NULL, "pwm", pssm = bad), "negative values")
+})

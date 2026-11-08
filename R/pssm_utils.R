@@ -40,6 +40,15 @@
             stop("pssm must not contain NA, NaN or infinite values", call. = FALSE)
         }
         if (any(pssm < 0)) {
+            # Floating-point noise in a probability matrix (e.g. -1e-18 from a
+            # subtraction) is 0: an entry this close below 0, relative to the
+            # largest entry of its row, is set to 0. Anything more negative is
+            # refused.
+            noise_tol <- 1e-9 * pmax(apply(pssm, 1, max), 0)
+            noise <- pssm < 0 & pssm >= -noise_tol[row(pssm)]
+            pssm[noise] <- 0
+        }
+        if (any(pssm < 0)) {
             stop("pssm has negative values: it must hold probabilities or counts for each base (non-negative, one row per motif position), not log-odds or log-probabilities", call. = FALSE)
         }
         zero <- which(rowSums(pssm) == 0)
