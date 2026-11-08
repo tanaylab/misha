@@ -795,11 +795,12 @@
 #' frame with columns \code{chrom}, \code{start}, \code{end}, and one numeric
 #' value column (any name is acceptable). Value-based tracks support all track-based
 #' summarizer functions (e.g., \code{avg}, \code{min}, \code{max}, \code{sum},
-#' \code{lse}, \code{stddev}, \code{quantile}, \code{nearest}, \code{exists},
+#' \code{weighted.sum}, \code{lse}, \code{stddev}, \code{quantile}, \code{nearest}, \code{exists},
 #' \code{size}, \code{first}, \code{last}, \code{sample}, and position functions), but do not
 #' support overlapping intervals. They behave like sparse tracks in aggregation:
 #' values are aggregated using count-based averaging (each interval contributes equally
-#' regardless of length), not coverage-based averaging.
+#' regardless of length), not coverage-based averaging; \code{weighted.sum} weighs each
+#' interval by its overlap with the iterator interval.
 #'
 #' \strong{Track-based summarizers}
 #' \tabular{llll}{
@@ -814,7 +815,8 @@
 #'   Track (1D) \tab sample \tab NULL \tab Uniformly sampled source value from the iterator interval. \cr
 #'   Track (1D) \tab size \tab NULL \tab Number of non-NaN values in the iterator interval. \cr
 #'   Dense / Sparse / Array track \tab stddev \tab NULL \tab Unbiased standard deviation of values in the iterator interval. \cr
-#'   Dense / Sparse / Array track \tab sum \tab NULL \tab Sum of values in the iterator interval. \cr
+#'   Dense / Sparse / Array track \tab sum \tab NULL \tab Sum of the values of the bins (dense) or intervals (sparse, array) that the iterator interval touches. Each counts in full, also when the interval covers only part of it: a 312 bp window (iterator 32, \code{sshift = -140}, \code{eshift = 140}) over a 20 bp track touches 16 or 17 bins depending on where it starts, so on a track that is 1 everywhere \code{sum} alternates between 16 and 17. Use \code{weighted.sum} to weigh each bin by its overlap. \cr
+#'   Dense / Sparse / Array track \tab weighted.sum \tab NULL \tab Sum of value times overlap: each bin or interval adds its value times the number of its bp inside the iterator interval (after \code{sshift}/\code{eshift}, clipped to the chromosome), the definition \code{\link{gtrack.create_dense}} uses for \code{func = "weighted.sum"}. The 312 bp window above gives 312 on a track that is 1 everywhere; on an interval aligned with the bins it equals \code{sum} times the bin size. NaN values are skipped; \code{NaN} when no value overlaps the interval, as for \code{sum}. \cr
 #'   Dense / Sparse / Array track \tab lse \tab NULL \tab Log-sum-exp of track values in the iterator interval: log(sum(exp(x))). Numerically stable. \cr
 #'   Dense / Sparse / Array track \tab quantile \tab Percentile in [0, 1] \tab Quantile of values in the iterator interval. \cr
 #'   Dense track \tab global.percentile \tab NULL \tab Percentile of the interval average relative to the full-track distribution. \cr
@@ -1849,6 +1851,7 @@ gvtrack.array.slice <- function(vtrack = NULL, slice = NULL, func = "avg", param
 #'   \item \strong{Aggregations over values:} a bin or interval of the source that overlaps an unmasked region counts once, even when the mask splits it. \code{avg}, \code{sum}, \code{size}, \code{lse}, \code{min}, \code{max}, \code{quantile} and \code{stddev} (the sample standard deviation) reduce over those values, for a track as for a value-based virtual track.
 #'   \item \strong{coverage:} Returns (covered length in unmasked region) / (total unmasked length)
 #'   \item \strong{distance/distance.center:} Unaffected by mask (pure geometry)
+#'   \item \strong{weighted.sum:} counts the unmasked bp only: a bin or interval that the mask splits adds its value times its unmasked bp.
 #'   \item \strong{PWM/kmer/potts:} Masked bases act as hard boundaries; matches cannot span masked regions.
 #'         \strong{Important:} When \code{extend=TRUE} (the default), motifs at the boundaries of unmasked
 #'         segments can use bases from the adjacent masked regions to complete the motif scoring.

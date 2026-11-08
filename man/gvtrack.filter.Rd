@@ -46,6 +46,7 @@ Filters are applied \emph{after} iterator modifiers (sshift/eshift/dim). The ord
   \item \strong{Aggregations over values:} a bin or interval of the source that overlaps an unmasked region counts once, even when the mask splits it. \code{avg}, \code{sum}, \code{size}, \code{lse}, \code{min}, \code{max}, \code{quantile} and \code{stddev} (the sample standard deviation) reduce over those values, for a track as for a value-based virtual track.
   \item \strong{coverage:} Returns (covered length in unmasked region) / (total unmasked length)
   \item \strong{distance/distance.center:} Unaffected by mask (pure geometry)
+  \item \strong{weighted.sum:} counts the unmasked bp only: a bin or interval that the mask splits adds its value times its unmasked bp.
   \item \strong{PWM/kmer/potts:} Masked bases act as hard boundaries; matches cannot span masked regions.
         \strong{Important:} When \code{extend=TRUE} (the default), motifs at the boundaries of unmasked
         segments can use bases from the adjacent masked regions to complete the motif scoring.
