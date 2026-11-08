@@ -123,6 +123,26 @@ inline void aggregation_state_add(AggregationState &state,
 	state.contributions.push_back(contrib);
 }
 
+// Whether aggregate_single_value() covers `type`.
+inline bool has_single_value_form(AggregationType type) {
+	return type == AggregationType::MIN || type == AggregationType::MAX ||
+		type == AggregationType::WEIGHTED_MEDIAN || type == AggregationType::WEIGHTED_MEAN;
+}
+
+// aggregate_values() of a state that holds one contribution, with value `value` (not NaN) and
+// overlap `overlap_len` (> 0), for a type has_single_value_form() accepts. The arithmetic is the
+// same, so is the result, to the bit.
+inline double aggregate_single_value(AggregationType type, double value, double overlap_len) {
+	if (type == AggregationType::WEIGHTED_MEAN) {
+		double sum = 0.0;
+		double w = 0.0;
+		sum += value * overlap_len;
+		w += overlap_len;
+		return sum / w;
+	}
+	return value;
+}
+
 inline double aggregate_values(const AggregationConfig &cfg, const AggregationState &state) {
 	// Under na.rm = FALSE, any NaN contribution makes the whole locus NaN.
 	if (!cfg.na_rm) {

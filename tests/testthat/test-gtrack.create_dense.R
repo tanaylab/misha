@@ -375,3 +375,42 @@ test_that("NaN interval values are skipped regardless of func", {
     r <- r[order(r$start), ]
     expect_equal(r$value, c(0, 1)) # first bin has no real interval (NaN skipped)
 })
+
+test_that("intervals on the bin grid give the bytes the general per-bin aggregation gives", {
+    # One interval per bin, sorted, skips the sort and the per-bin aggregation. An extra NaN
+    # interval off the grid adds nothing to any bin but sends the chromosome down the general
+    # path: the files must be the same.
+    local_db_state()
+    db <- withr::local_tempdir()
+    create_test_db(db, chrom_sizes = data.frame(chrom = c("chr1", "chr2", "chr3"), size = c(10007L, 503L, 7L)))
+    suppressMessages(gsetroot(db))
+    binsize <- 10
+    grid <- do.call(rbind, lapply(c("chr1", "chr2"), function(chr) {
+        size <- gintervals.all()$end[gintervals.all()$chrom == chr]
+        s <- seq(0, size - 1, by = binsize)
+        gintervals(chr, s, pmin(s + binsize, size))
+    }))
+    set.seed(11)
+    vals <- rnorm(nrow(grid)) * 10^runif(nrow(grid), -3, 3)
+    vals[sample(nrow(grid), 100)] <- NaN
+    vals[1:3] <- c(-0, Inf, -Inf)
+    grid <- grid[-(500:520), ]
+    vals <- vals[-(500:520)]
+    off <- rbind(grid, gintervals(c("chr1", "chr2"), 3, 4))
+    off <- off[order(off$chrom, off$start), ]
+    off_vals <- rep(NaN, nrow(off))
+    off_vals[!(off$start == 3 & off$end == 4)] <- vals
+    files <- function(track) {
+        dir <- file.path(db, "tracks", paste0(track, ".track"))
+        lapply(c("chr1", "chr2", "chr3"), function(f) readBin(file.path(dir, f), "raw", file.size(file.path(dir, f))))
+    }
+    for (func in c("weighted.mean", "min", "max", "median")) {
+        for (defval in c(NaN, 0, 0.1, -0)) {
+            gtrack.create_dense("on_grid", "x", grid, vals, binsize, defval, func = func)
+            gtrack.create_dense("off_grid", "x", off, off_vals, binsize, defval, func = func)
+            expect_identical(files("on_grid"), files("off_grid"), label = paste(func, defval))
+            gtrack.rm("on_grid", force = TRUE)
+            gtrack.rm("off_grid", force = TRUE)
+        }
+    }
+})
