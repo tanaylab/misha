@@ -773,7 +773,8 @@ SEXP gintervals_normalize(SEXP _intervals, SEXP _size, SEXP _envir)
 			// Calculate center
 			int64_t center = (interv.start + interv.end) / 2;
 
-			// Create normalized interval ensuring exact size
+			// The window of current_size around the center, clipped at the chromosome ends below,
+			// so it can be shorter there.
 			// For even sizes: center is exactly in the middle
 			// For odd sizes: extra bp goes to the right side
 			int64_t new_start = center - (current_size / 2);

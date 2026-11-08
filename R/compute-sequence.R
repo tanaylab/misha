@@ -157,6 +157,10 @@
 #' 'intervals'. If intervals contain an additional 'strand' column and its
 #' value is '-1', the reverse-complementary sequence is returned.
 #'
+#' Each interval must lie within its chromosome: an interval that starts
+#' before 0 or ends past the end of the chromosome is an error, and no
+#' sequence is padded.
+#'
 #' Each interval costs one disk read, so large interval sets are dominated by
 #' I/O latency rather than by the sequence data itself. When the sequence files
 #' are not in the page cache, the work is split across several processes (capped
