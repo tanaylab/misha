@@ -252,6 +252,9 @@ test_that("coordinates past 2^24 are written exactly (position vtracks)", {
 # The attributes of a track as a named character vector, sorted by name
 track_attrs <- function(track) {
     a <- gtrack.attr.export(track)
+    if (!length(a)) {
+        return(character(0))
+    }
     v <- vapply(a, as.character, "")
     v <- v[nzchar(v)]
     v[order(names(v))]
@@ -297,17 +300,6 @@ test_that("track attributes travel as field metadata, and gtrack.import_parquet 
     gtrack.import_parquet("mine", f, 32, track.prefix = "given_", columns = "pq")
     expect_identical(track_attrs("given_pq")[["description"]], "mine")
     expect_identical(track_attrs("given_pq")[["value.scale"]], "log2(x+1)")
-})
-
-test_that("field metadata survives the merge of the parts of kids", {
-    local_six_chrom_db(rep(1300000, 6))
-    withr::local_options(gmax.processes = 4, gmin.scope4process = 1000)
-    gtrack.attr.set("six", "heldout.chroms", "chr3,chr5")
-    f <- file.path(withr::local_tempdir(), "x.parquet")
-    gextract("six", intervals = gintervals.all(), iterator = 50, file = f)
-    gtrack.import_parquet("", f, 50, track.prefix = "back_")
-    expect_identical(gtrack.attr.get("back_six", "heldout.chroms"), "chr3,chr5")
-    expect_identical(gtrack.attr.get("back_six", "description"), "six")
 })
 
 test_that("an empty result is one empty row group, as pyarrow writes an empty table", {
@@ -717,4 +709,15 @@ test_that("leftovers of killed writers on this host are removed, and nothing els
         withr::with_options(list(gmultitasking = multitask), gextract("six", intervals = gintervals.all(), file = file.path(out_dir, "x.parquet")))
         expect_setequal(dir_entries(out_dir), c("x.parquet", kept))
     }
+})
+
+test_that("field metadata survives the merge of the parts of kids", {
+    local_six_chrom_db(rep(1300000, 6))
+    withr::local_options(gmax.processes = 4, gmin.scope4process = 1000)
+    gtrack.attr.set("six", "heldout.chroms", "chr3,chr5")
+    f <- file.path(withr::local_tempdir(), "x.parquet")
+    gextract("six", intervals = gintervals.all(), iterator = 50, file = f)
+    gtrack.import_parquet("", f, 50, track.prefix = "back_")
+    expect_identical(gtrack.attr.get("back_six", "heldout.chroms"), "chr3,chr5")
+    expect_identical(gtrack.attr.get("back_six", "description"), "six")
 })
