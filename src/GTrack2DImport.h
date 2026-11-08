@@ -76,6 +76,18 @@ uint64_t pairs_num_chroms(const std::vector<PairFiles> &pairs);
 // What the messages about unknown chromosomes call the input files: the file, or the first one and a count
 std::string import_src_name(const std::vector<std::string> &files);
 
+// Anonymous shared memory, zeroed, that forked kids inherit. Unmapped by the parent when it goes out of scope
+// (a kid ends without unwinding).
+struct SharedMem {
+	void  *addr;
+	size_t size;
+
+	SharedMem(size_t _size);
+	~SharedMem();
+	SharedMem(const SharedMem &) = delete;
+	SharedMem &operator=(const SharedMem &) = delete;
+};
+
 // Runs work(kid) for each kid - in forked kids when num_kids > 1, in this process otherwise -
 // and returns the byte each work() returned. With throttle, a kid is suspended while the kids together
 // use more than gmax.mem.usage (see RdbInitializer::report_alloc).

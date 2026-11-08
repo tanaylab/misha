@@ -74,16 +74,6 @@ constexpr uint64_t DEFAULT_MAX_PROCESSES2CORE = 4;
 constexpr uint64_t MIN_RECORDS_PER_PROCESS = 1000;
 
 /*
- * Multiplier for suggested size in error messages (1.5 = 50% headroom).
- *
- * When a user exceeds gmax.data.size, we suggest a new value that is 50% larger
- * than the actual needed size. This provides headroom for:
- * - Slight variations in data size between runs
- * - Additional overhead from metadata and temporary structures
- */
-constexpr double SUGGESTED_SIZE_MULTIPLIER = 1.5;
-
-/*
  * Sentinel value for "unlimited" or "unknown" size.
  * Used when:
  * - An R option is not set (defaults to unlimited)

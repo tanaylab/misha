@@ -9,10 +9,11 @@
 #' to alter the value of the options.
 #'
 #' \tabular{lll}{ NAME \tab DEFAULT \tab DESCRIPTION \cr gmax.data.size \tab
-#' AUTO \tab Auto-configured based on system RAM and processes. \cr \tab \tab
-#' Formula: min((RAM * 0.7) / gmax.processes, 10GB). \cr \tab \tab Controls
-#' max in-memory result buffer size for streaming/sampling. \cr \tab \tab
-#' Operations like gextract, gscreen use this as upper bound. \cr \tab \tab
+#' AUTO \tab Maximal number of records (rows of a result, values, bases) \cr \tab \tab
+#' a call holds in memory: gextract, gscreen and the like fail above it, \cr \tab \tab
+#' and gquantiles samples. A count, not a size in bytes. \cr \tab \tab
+#' Auto-configured from system RAM and cores to the number \cr \tab \tab
+#' min(RAM in bytes * 0.7 / (70\% of the cores), 1e10). \cr \tab \tab
 #' Inf or unset means no limit; NA or a negative value is an error; \cr \tab \tab
 #' a value below 1 counts as 1. \cr gbig.intervals.size
 #' \tab 1000000 \tab Threshold for converting interval sets to disk-based \cr \tab \tab

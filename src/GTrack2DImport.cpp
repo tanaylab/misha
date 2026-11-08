@@ -308,20 +308,17 @@ string subtree_file_name(const string &dirname, int chromid1, int chromid2, int6
 	return buf;
 }
 
-// Anonymous shared memory, zeroed, that forked kids inherit. Unmapped by the parent when it goes out of scope
-// (a kid ends without unwinding).
-struct SharedMem {
-	void  *addr;
-	size_t size;
+SharedMem::SharedMem(size_t _size) : size(_size)
+{
+	addr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+	if (addr == MAP_FAILED)
+		verror("Failed to allocate shared memory: %s", strerror(errno));
+}
 
-	SharedMem(size_t _size) : size(_size) {
-		addr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-		if (addr == MAP_FAILED)
-			verror("Failed to allocate shared memory: %s", strerror(errno));
-	}
-
-	~SharedMem() { munmap(addr, size); }
-};
+SharedMem::~SharedMem()
+{
+	munmap(addr, size);
+}
 
 vector<uint64_t> split_pairs(IntervUtils &iu, const vector<PairFiles> &pairs, int num_kids, const function<uint64_t(const PairFiles &)> &split)
 {

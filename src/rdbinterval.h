@@ -414,10 +414,13 @@ public:
 	// Returns true if iterator is 1D
 	bool is_1d_iterator(SEXP rtrack_expr, GIntervalsFetcher1D *scope1d, GIntervalsFetcher2D *scope2d, SEXP riterator);
 
-	// Verifies that the data size does not exceed the maximum allowed.
+	// Verifies that the data size, a number of records, does not exceed the maximum allowed.
 	// If check_all_kids == true then the limit is checked cumulatively for all child processes.
-	void verify_max_data_size(uint64_t data_size, const char *data_name = "Result", bool check_all_kids = true) {
-		m_config.verify_max_data_size(data_size, data_name, check_all_kids);
+	// suggestion: a line the error message lists first among the suggestions, or NULL; unit: what
+	// the message calls the records.
+	void verify_max_data_size(uint64_t data_size, const char *data_name = "Result", bool check_all_kids = true,
+							  const char *suggestion = NULL, const char *unit = "records") {
+		m_config.verify_max_data_size(data_size, data_name, check_all_kids, suggestion, unit);
 	}
 
 	// returns true if the intervals set should be saved in a big set

@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <map>
 #include <memory>
 #include <numeric>
 #include <tuple>
@@ -61,6 +62,46 @@ struct Run {
 	int64_t end;
 };
 
+// Rows that run past the end of their chromosome: clipped to it, or dropped when they start at or
+// past it. Kept in shared memory, one per kid, so that the parent reports them once.
+struct ClipReport {
+	uint64_t num_clipped;
+	uint64_t num_dropped;
+	// the first such row, in the order of the files and their rows; file < 0 if there is none
+	int      file;
+	int      row_group;
+	int64_t  row;  // in the row group
+	int      chromid;
+	int64_t  start;
+	int64_t  end;
+
+	void clear() { num_clipped = num_dropped = 0; file = -1; }
+
+	void note(bool dropped, int f, int rg, int64_t r, int c, int64_t s, int64_t e)
+	{
+		++(dropped ? num_dropped : num_clipped);
+		if (file < 0 || make_tuple(f, rg, r) < make_tuple(file, row_group, row)) {
+			file = f;
+			row_group = rg;
+			row = r;
+			chromid = c;
+			start = s;
+			end = e;
+		}
+	}
+
+	void merge(const ClipReport &other)
+	{
+		if (other.file >= 0) {
+			uint64_t clipped = num_clipped + other.num_clipped;
+			uint64_t dropped = num_dropped + other.num_dropped;
+			note(false, other.file, other.row_group, other.row, other.chromid, other.start, other.end);
+			num_clipped = clipped;
+			num_dropped = dropped;
+		}
+	}
+};
+
 // Imports columns of a set of Parquet files. index() finds which rows of which row groups lie
 // on each chromosome (reading only the chrom columns); import_chroms() then writes the track
 // files of some chromosomes for any subset of the columns.
@@ -80,8 +121,15 @@ public:
 	void index();
 
 	// Writes the track files of the chromosomes for the columns. Each column chunk that holds
-	// their rows is decoded once, however many of the chromosomes it holds.
-	void import_chroms(const vector<int> &chromids, const vector<int> &cols);
+	// their rows is decoded once, however many of the chromosomes it holds. Rows that run past
+	// the end of their chromosome are clipped (or dropped) and, unless report is NULL, noted in it.
+	void import_chroms(const vector<int> &chromids, const vector<int> &cols, ClipReport *report);
+
+	// Row row of row group row_group of the file, counted from 0 in the whole file
+	int64_t file_row(int file, int row_group, int64_t row) const;
+
+	// The warning about the rows of report, "" if there were none
+	string clip_message(const ClipReport &report) const;
 
 	const UnknownChroms &unknown() const { return m_unknown; }
 	uint64_t num_matched_chroms() const;
@@ -111,10 +159,13 @@ private:
 	// The rows of a chromosome, in the order of its runs
 	struct ChromRows {
 		vector<int64_t>  starts;
-		vector<int64_t>  ends;
+		vector<int64_t>  ends;     // clipped to the chromosome
 		vector<float>    vals;     // of the column being written
-		vector<uint32_t> order;    // the rows sorted by start, unless aligned
-		bool             aligned;  // every row is exactly a bin
+		vector<uint32_t> order;    // the rows sorted by start, unless aligned; dropped rows left out
+		vector<char>     dropped;  // the rows that start at or past the chromosome end; empty if none
+		bool             aligned;  // every row (not dropped) is exactly a bin
+
+		bool is_dropped(size_t i) const { return !dropped.empty() && dropped[i]; }
 	};
 
 	// A run of chromosome chromids[chrom] of import_chroms()
@@ -124,10 +175,11 @@ private:
 	};
 
 	[[noreturn]] void rows_error(const char *what, const Run &run1, const Run &run2) const;
+	[[noreturn]] void row_error(const char *what, const Run &run, int64_t row, int chromid, int64_t start, int64_t end) const;
 
 	template <typename T, typename D>
 	void gather(const vector<ChromRun> &runs, int col_idx, void (ParquetReader::*read)(int, int, vector<T> &), D dest);
-	void prepare_rows(int chromid, ChromRows &rows) const;
+	void prepare_rows(int chromid, ChromRows &rows, ClipReport *report) const;
 	void write_bins(int chromid, const ChromRows &rows, int col, vector<float> &bins) const;
 };
 
@@ -254,6 +306,36 @@ void ParquetImport::rows_error(const char *what, const Run &run1, const Run &run
 	       m_names[run2.file].c_str(), run2.row_group, what);
 }
 
+int64_t ParquetImport::file_row(int file, int row_group, int64_t row) const
+{
+	for (int rg = 0; rg < row_group; ++rg)
+		row += m_readers[file]->num_rows(rg);
+	return row;
+}
+
+// Rows are numbered from 0 in the whole file, as pyarrow and pandas number them
+void ParquetImport::row_error(const char *what, const Run &run, int64_t row, int chromid, int64_t start, int64_t end) const
+{
+	verror("File %s, row %lld (row group %d): %s (%s, %lld, %lld)", m_names[run.file].c_str(), (long long)file_row(run.file, run.row_group, row),
+	       run.row_group, what, m_chromkey.id2chrom(chromid).c_str(), (long long)start, (long long)end);
+}
+
+string ParquetImport::clip_message(const ClipReport &report) const
+{
+	if (report.file < 0)
+		return string();
+
+	char msg[10000];
+	snprintf(msg, sizeof(msg),
+	         "%llu row(s) running past the end of their chromosome were clipped to it, and %llu row(s) starting at or past "
+	         "the chromosome end were dropped; the first is row %lld (row group %d) of %s: (%s, %lld, %lld), chromosome size %llu",
+	         (unsigned long long)report.num_clipped, (unsigned long long)report.num_dropped,
+	         (long long)file_row(report.file, report.row_group, report.row), report.row_group, m_names[report.file].c_str(),
+	         m_chromkey.id2chrom(report.chromid).c_str(), (long long)report.start, (long long)report.end,
+	         (unsigned long long)m_chromkey.get_chrom_size(report.chromid));
+	return msg;
+}
+
 // Appends the values of column col_idx (an index into m_col_idx) of each run to dest(run.chrom).
 // runs are in the order of the files and row groups, so each column chunk is decoded once.
 template <typename T, typename D>
@@ -276,17 +358,20 @@ void ParquetImport::gather(const vector<ChromRun> &runs, int col_idx, void (Parq
 	}
 }
 
-// Checks the coordinates of the rows, sets aligned and, unless they are aligned, sorts them
-void ParquetImport::prepare_rows(int chromid, ChromRows &rows) const
+// Checks the coordinates of the rows, clips the rows that run past the end of the chromosome (or
+// drops them if they start at or past it), sets aligned and, unless the rows are aligned, sorts
+// them
+void ParquetImport::prepare_rows(int chromid, ChromRows &rows, ClipReport *report) const
 {
 	const vector<Run> &runs = m_runs[chromid];
 	uint64_t chromsize = m_chromkey.get_chrom_size(chromid);
 	uint64_t num_bins = (chromsize + m_binsize - 1) / m_binsize;
 	const vector<int64_t> &starts = rows.starts;
-	const vector<int64_t> &ends = rows.ends;
+	vector<int64_t> &ends = rows.ends;
 	vector<size_t> run_of_row;  // the first row of each run, for messages
 
 	rows.aligned = true;
+	rows.dropped.clear();
 	for (size_t r = 0, i = 0; r < runs.size(); ++r) {
 		const Run &run = runs[r];
 
@@ -296,11 +381,22 @@ void ParquetImport::prepare_rows(int chromid, ChromRows &rows) const
 			int64_t end = ends[i];
 
 			if (start < 0)
-				rows_error("start coordinate is negative", run, run);
+				row_error("start coordinate is negative", run, k, chromid, start, end);
 			if (start >= end)
-				rows_error("start coordinate exceeds or equals the end coordinate", run, run);
-			if ((uint64_t)end > chromsize)
-				rows_error("end coordinate exceeds chromosome's size", run, run);
+				row_error("start coordinate exceeds or equals the end coordinate", run, k, chromid, start, end);
+			if ((uint64_t)end > chromsize) {
+				bool drop = (uint64_t)start >= chromsize;
+
+				if (report)
+					report->note(drop, run.file, run.row_group, k, chromid, start, end);
+				if (drop) {
+					if (rows.dropped.empty())
+						rows.dropped.resize(starts.size(), 0);
+					rows.dropped[i] = 1;
+					continue;
+				}
+				ends[i] = end = chromsize;
+			}
 			rows.aligned = rows.aligned && start % m_binsize == 0 && (uint64_t)end == min((uint64_t)start + m_binsize, chromsize);
 		}
 	}
@@ -315,6 +411,8 @@ void ParquetImport::prepare_rows(int chromid, ChromRows &rows) const
 	if (rows.aligned) {
 		vector<uint32_t> row_of_bin(num_bins, UINT32_MAX);
 		for (size_t i = 0; i < starts.size(); ++i) {
+			if (rows.is_dropped(i))
+				continue;
 			uint32_t &row = row_of_bin[starts[i] / m_binsize];
 			if (row != UINT32_MAX)
 				rows_error("rows overlap", run_of(row), run_of(i));
@@ -322,8 +420,11 @@ void ParquetImport::prepare_rows(int chromid, ChromRows &rows) const
 		}
 	} else {
 		vector<uint32_t> &order = rows.order;
-		order.resize(starts.size());
-		iota(order.begin(), order.end(), 0);
+		order.clear();
+		for (size_t i = 0; i < starts.size(); ++i) {
+			if (!rows.is_dropped(i))
+				order.push_back(i);
+		}
 		sort(order.begin(), order.end(), [&](uint32_t a, uint32_t b) { return starts[a] < starts[b] || (starts[a] == starts[b] && ends[a] < ends[b]); });
 		for (size_t k = 1; k < order.size(); ++k) {
 			if (ends[order[k - 1]] > starts[order[k]])
@@ -348,13 +449,15 @@ void ParquetImport::write_bins(int chromid, const ChromRows &rows, int col, vect
 		for (uint64_t bin = 0; bin < num_bins; ++bin)
 			bins[bin] = bin_value(0, 0, min((bin + 1) * m_binsize, chromsize) - bin * m_binsize, m_defval);
 		for (size_t i = 0; i < starts.size(); ++i) {
+			if (rows.is_dropped(i))
+				continue;
 			uint64_t len = ends[i] - starts[i];
 			double sum = 0;
 			uint64_t covered_bases = 0;
 			float v = vals[i];
 
 			if (!std::isnan(v)) {
-				sum += v * len;  // a float product, as in gtrackimportwig
+				sum += (double)v * len;  // in double, as in gtrackimportwig: a float product can overflow
 				covered_bases += len;
 			}
 			bins[starts[i] / m_binsize] = bin_value(sum, covered_bases, len, m_defval);
@@ -378,7 +481,7 @@ void ParquetImport::write_bins(int chromid, const ChromRows &rows, int col, vect
 					float v = vals[order[c]];
 					if (!std::isnan(v)) {
 						uint64_t overlap_len = overlap_end - overlap_start;
-						sum += v * overlap_len;
+						sum += (double)v * overlap_len;
 						covered_bases += overlap_len;
 					}
 				}
@@ -394,7 +497,7 @@ void ParquetImport::write_bins(int chromid, const ChromRows &rows, int col, vect
 	gtrack.flush_writes();
 }
 
-void ParquetImport::import_chroms(const vector<int> &chromids, const vector<int> &cols)
+void ParquetImport::import_chroms(const vector<int> &chromids, const vector<int> &cols, ClipReport *report)
 {
 	vector<ChromRows> rows(chromids.size());
 	vector<ChromRun> runs;  // the runs of all the chromosomes, in the order of the files and row groups
@@ -412,7 +515,7 @@ void ParquetImport::import_chroms(const vector<int> &chromids, const vector<int>
 	gather(runs, START, &ParquetReader::read_int64s, [&](size_t c) -> vector<int64_t> & { return rows[c].starts; });
 	gather(runs, END, &ParquetReader::read_int64s, [&](size_t c) -> vector<int64_t> & { return rows[c].ends; });
 	for (size_t c = 0; c < chromids.size(); ++c)
-		prepare_rows(chromids[c], rows[c]);
+		prepare_rows(chromids[c], rows[c], report);
 
 	for (int col : cols) {
 		for (ChromRows &chrom_rows : rows)
@@ -471,6 +574,49 @@ SEXP parquet_columns(SEXP _file, SEXP _name, SEXP _envir)
 		SET_VECTOR_ELT(answer, 1, types);
 		SET_STRING_ELT(colnames, 0, RSaneMkChar("name"));
 		SET_STRING_ELT(colnames, 1, RSaneMkChar("type"));
+		return answer;
+	} catch (TGLException &e) {
+		rerror("%s", e.msg());
+	} catch (const bad_alloc &e) {
+		rerror("Out of memory");
+	} catch (const exception &e) {
+		rerror("%s", e.what());
+	}
+	return R_NilValue;
+}
+
+// The Arrow field metadata of the columns of a Parquet file (see arrow_field_metadata): a list named
+// by column of named character vectors (key = value), only for the columns that have some. name is
+// what messages call the file.
+SEXP parquet_field_metadata(SEXP _file, SEXP _name, SEXP _envir)
+{
+	try {
+		RdbInitializer rdb_init;
+
+		if (!Rf_isString(_file) || Rf_length(_file) != 1 || !Rf_isString(_name) || Rf_length(_name) != 1)
+			verror("File argument is not a string");
+
+		ParquetReader reader;
+		reader.open(CHAR(STRING_ELT(_file, 0)), CHAR(STRING_ELT(_name, 0)));
+
+		map<string, vector<pair<string, string>>> md = arrow_field_metadata(reader.metadata());
+		SEXP answer = rprotect_ptr(RSaneAllocVector(VECSXP, md.size()));
+		SEXP cols = rprotect_ptr(RSaneAllocVector(STRSXP, md.size()));
+		size_t i = 0;
+
+		for (const auto &col : md) {
+			SEXP values = rprotect_ptr(RSaneAllocVector(STRSXP, col.second.size()));
+			SEXP keys = rprotect_ptr(RSaneAllocVector(STRSXP, col.second.size()));
+			for (size_t k = 0; k < col.second.size(); ++k) {
+				SET_STRING_ELT(keys, k, RSaneMkCharLenCE(col.second[k].first.data(), col.second[k].first.size(), CE_NATIVE));
+				SET_STRING_ELT(values, k, RSaneMkCharLenCE(col.second[k].second.data(), col.second[k].second.size(), CE_NATIVE));
+			}
+			Rf_setAttrib(values, R_NamesSymbol, keys);
+			SET_VECTOR_ELT(answer, i, values);
+			SET_STRING_ELT(cols, i, RSaneMkCharLenCE(col.first.data(), col.first.size(), CE_NATIVE));
+			++i;
+		}
+		Rf_setAttrib(answer, R_NamesSymbol, cols);
 		return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
@@ -573,6 +719,13 @@ SEXP gtrackimportparquet(SEXP _dirs, SEXP _files, SEXP _names, SEXP _columns, SE
 		for (size_t u = 0, before = 0; u < units.size(); before += work[u++])
 			units[u].kid = min(num_kids - 1, (int)((double)before / total_work * num_kids));
 
+		// Each kid notes the rows it clips or drops in its own report; only units of the first batch
+		// note them, as every batch reads the same rows
+		SharedMem shm(num_kids * sizeof(ClipReport));
+		ClipReport *reports = (ClipReport *)shm.addr;
+		for (int kid = 0; kid < num_kids; ++kid)
+			reports[kid].clear();
+
 		// Kids read through the file descriptors they inherit, not by opening the files again: a file
 		// replaced since index() would no longer match it
 		run_kids(iu, num_kids, [&](int kid) {
@@ -591,7 +744,7 @@ SEXP gtrackimportparquet(SEXP _dirs, SEXP _files, SEXP _names, SEXP _columns, SE
 					rows += units[next].rows;
 				}
 				check_interrupt();
-				import.import_chroms(chroms, batch_cols[units[u].batch]);
+				import.import_chroms(chroms, batch_cols[units[u].batch], units[u].batch ? NULL : &reports[kid]);
 				progress.report(next - u);
 			}
 			progress.report_last();
@@ -599,6 +752,13 @@ SEXP gtrackimportparquet(SEXP _dirs, SEXP _files, SEXP _names, SEXP _columns, SE
 		});
 
 		// Only now, when nothing can fail, is it safe to leave a pending message for .gcall()
+		ClipReport clipped;
+		clipped.clear();
+		for (int kid = 0; kid < num_kids; ++kid)
+			clipped.merge(reports[kid]);
+		string clip_msg = import.clip_message(clipped);
+		if (!clip_msg.empty())
+			add_pending_diagnostic(_envir, "warning", clip_msg.c_str());
 		report_skipped_chroms(srcname.c_str(), import.unknown(), num_matched, _envir);
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());

@@ -167,6 +167,20 @@
         mc.cores = n_workers, mc.preschedule = FALSE
     )
 
+    # A worker that died (killed by the OOM killer, a segfault) comes back from
+    # mclapply as NULL, with only a warning from mccollect. Its columns would be
+    # missing from the result, so fail as the tile strategy does.
+    dead <- vapply(worker_out, function(w) {
+        !inherits(w, "try-error") && !(is.list(w) && "res" %in% names(w))
+    }, logical(1))
+    n_dead <- sum(dead) + max(0L, n_workers - length(worker_out))
+    if (n_dead > 0) {
+        stop(sprintf(
+            "track-parallel gextract: %d of %d worker processes ended without returning a result (killed, e.g. by the out-of-memory killer, or crashed)",
+            n_dead, n_workers
+        ), call. = FALSE)
+    }
+
     # Surface any worker errors.
     errs <- vapply(worker_out, inherits, logical(1), what = "try-error")
     if (any(errs)) {

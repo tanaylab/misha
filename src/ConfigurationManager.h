@@ -65,9 +65,12 @@ public:
 	// estimated_size: estimated number of result records (intervals, values, etc.)
 	rdb::MultitaskingMode select_multitasking_mode(bool is_deterministic, uint64_t estimated_size) const;
 
-	// Verifies that the data size does not exceed the maximum allowed.
+	// Verifies that the data size, a number of records, does not exceed the maximum allowed.
 	// If check_all_kids == true then the limit is checked cumulatively for all child processes.
-	void verify_max_data_size(uint64_t data_size, const char *data_name = "Result", bool check_all_kids = true) const;
+	// suggestion: a line the error message lists first among the suggestions, or NULL; unit: what
+	// the message calls the records.
+	void verify_max_data_size(uint64_t data_size, const char *data_name = "Result", bool check_all_kids = true,
+							  const char *suggestion = NULL, const char *unit = "records") const;
 
 private:
 	// Mutable cache for lazy-loaded configuration values

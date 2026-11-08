@@ -6,8 +6,11 @@
 #include "GInterval.h"
 #include "strutil.h"
 
-void GenomeArraysCsv::init(const char *filename, const GenomeChromKey &chromkey)
+void GenomeArraysCsv::init(const char *filename, const GenomeChromKey &chromkey, bool clip_to_chroms)
 {
+	m_clip_to_chroms = clip_to_chroms;
+	m_num_clipped = m_num_dropped = 0;
+	m_first_clipped.clear();
 	m_bfile.close();
 	m_chroms_positions.clear();
 	m_colnames.clear();
@@ -89,8 +92,23 @@ const GIntervals &GenomeArraysCsv::get_intervals(int chromid)
 		if (start >= end) 
 			TGLError<GenomeArraysCsv>(FORMAT_ERROR, "File %s, line %ld: start coordinate exceeds or equals the end coordinate", m_bfile.file_name().c_str(), lineno);
 
-		if ((uint64_t)end > m_chromkey->get_chrom_size(chromid)) 
-			TGLError<GenomeArraysCsv>(FORMAT_ERROR, "File %s, line %ld: end coordinate exceeds chromosome's size", m_bfile.file_name().c_str(), lineno);
+		int64_t chromsize = m_chromkey->get_chrom_size(chromid);
+		if (end > chromsize) {
+			if (!m_clip_to_chroms)
+				TGLError<GenomeArraysCsv>(FORMAT_ERROR, "File %s, line %ld: end coordinate exceeds chromosome's size", m_bfile.file_name().c_str(), lineno);
+			if (m_first_clipped.empty()) {
+				char buf[1000];
+				snprintf(buf, sizeof(buf), "line %ld: (%s, %lld, %lld), chromosome size %lld", lineno, m_chromkey->id2chrom(chromid).c_str(),
+				         (long long)start, (long long)end, (long long)chromsize);
+				m_first_clipped = buf;
+			}
+			if (start >= chromsize) {
+				++m_num_dropped;
+				continue;
+			}
+			++m_num_clipped;
+			end = chromsize;
+		}
 
 		m_intervals.push_back(GInterval(chromid, start, end, 0, (void *)&*ipos));
 	}
