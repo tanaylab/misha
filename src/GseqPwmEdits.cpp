@@ -710,43 +710,45 @@ WindowResult find_best_window_edits(
             continue;
         }
 
-        auto try_window = [&](bool reverse, int direction) {
-            int seq_avail = std::min(seqlen - s0, acgt_run[s0]);
-            // Score filter: compute L-length window score for filtering
-            if (has_score_filter) {
-                if (seq_avail < L) return;
-                float logp = 0.0f;
-                for (int i = 0; i < L; i++) {
-                    int si = reverse ? (L - 1 - i) : i;
-                    char base = window_start[si];
-                    if (reverse) base = complement_base(base);
-                    int bidx = base_to_index(base);
-                    if (bidx == 4) {
-                        float sum = 0.0f;
-                        for (int b = 0; b < 4; b++) sum += pssm[i].get_log_prob_from_code(b);
-                        logp += sum / 4.0f;
-                    } else {
-                        logp += pssm[i].get_log_prob_from_code(bidx);
-                    }
-                }
-                if (has_score_min && logp < score_min) return;
-                if (has_score_max && logp > score_max) return;
-            }
+        const int seq_avail = std::min(seqlen - s0, acgt_run[s0]);
 
-            WindowResult wr;
+        // Does one strand reading of this window pass the score filter?
+        auto passes_filter = [&](bool reverse) -> bool {
+            if (!has_score_filter) return true;
+            if (seq_avail < L) return false;
+            float logp = 0.0f;
+            for (int i = 0; i < L; i++) {
+                int si = reverse ? (L - 1 - i) : i;
+                char base = window_start[si];
+                if (reverse) base = complement_base(base);
+                int bidx = base_to_index(base);
+                if (bidx == 4) {
+                    float sum = 0.0f;
+                    for (int b = 0; b < 4; b++) sum += pssm[i].get_log_prob_from_code(b);
+                    logp += sum / 4.0f;
+                } else {
+                    logp += pssm[i].get_log_prob_from_code(bidx);
+                }
+            }
+            if (has_score_min && logp < score_min) return false;
+            if (has_score_max && logp > score_max) return false;
+            return true;
+        };
+
+        // Edits for one strand reading (n_edits < 0: unreachable within max_edits)
+        auto edits_for = [&](bool reverse) -> WindowResult {
             if (max_indels > 0) {
-                wr = compute_window_edits_detailed_with_indels(
+                return compute_window_edits_detailed_with_indels(
                     window_start, seq_avail, L, pssm, col_max_scores, col_min_scores,
                     S_max, S_min, threshold, max_edits, max_indels, reverse, below);
-            } else {
-                wr = compute_window_edits_detailed(
-                    window_start, L, pssm, col_max_scores, col_min_scores,
-                    S_max, S_min, threshold, max_edits, reverse, below,
-                    gain_values, bin_index);
             }
+            return compute_window_edits_detailed(
+                window_start, L, pssm, col_max_scores, col_min_scores,
+                S_max, S_min, threshold, max_edits, reverse, below,
+                gain_values, bin_index);
+        };
 
-            if (wr.n_edits < 0) return;  // unreachable
-
+        auto consider = [&](WindowResult& wr, int direction) {
             if (best.n_edits < 0 || wr.n_edits < best.n_edits ||
                 (wr.n_edits == best.n_edits && wr.score_before > best.score_before)) {
                 best = wr;
@@ -755,8 +757,40 @@ WindowResult find_best_window_edits(
             }
         };
 
-        if (scan_forward) try_window(false, +1);
-        if (scan_reverse) try_window(true, -1);
+        if (below && scan_forward && scan_reverse) {
+            // "below" on both strands, as in the pwm.edit_distance vtrack: a genomic substitution changes
+            // both readings and both must end up below, so the harder strand decides. A strand the score
+            // filter removes is left out; one that cannot be brought below makes the window unreachable.
+            // The reported edits are those of the deciding strand's reading.
+            const bool fwd_kept = passes_filter(false);
+            const bool rev_kept = passes_filter(true);
+            if (!fwd_kept && !rev_kept) continue;
+            WindowResult fwd, rev;
+            if (fwd_kept) {
+                fwd = edits_for(false);
+                if (fwd.n_edits < 0) continue;
+            }
+            if (rev_kept) {
+                rev = edits_for(true);
+                if (rev.n_edits < 0) continue;
+            }
+            // a tie goes to the forward strand, as in the vtrack
+            if (!rev_kept || (fwd_kept && fwd.n_edits >= rev.n_edits)) {
+                consider(fwd, +1);
+            } else {
+                consider(rev, -1);
+            }
+            continue;
+        }
+
+        for (int pass = 0; pass < 2; pass++) {
+            const bool reverse = (pass == 1);
+            if (reverse ? !scan_reverse : !scan_forward) continue;
+            if (!passes_filter(reverse)) continue;
+            WindowResult wr = edits_for(reverse);
+            if (wr.n_edits < 0) continue;  // unreachable
+            consider(wr, reverse ? -1 : +1);
+        }
     }
 
     return best;

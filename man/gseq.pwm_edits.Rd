@@ -66,7 +66,12 @@ Default TRUE.}
 \item{direction}{character; direction of the edit distance query.
 \code{"above"} (default) finds minimum edits to bring score above
 \code{score.thresh}; \code{"below"} finds minimum edits to bring score
-below \code{score.thresh}.}
+below \code{score.thresh}. With \code{"below"} and \code{bidirect = TRUE},
+as in the \code{pwm.edit_distance} virtual track, both strand readings of a
+window must end up below the threshold, so the strand needing more edits
+decides \code{n_edits} (a strand that cannot be brought below makes the
+window unreachable); the reported edits and \code{strand} are those of that
+strand's reading, and the edits are what disrupts that reading.}
 }
 \value{
 A data frame (long format) with one row per edit, containing columns:
