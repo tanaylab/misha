@@ -388,7 +388,10 @@ SEXP IntervalConverter::convert_rintervs(SEXP rintervals, GIntervals *intervals,
 		int last_num_chromid = -1;
 
 		for (unsigned i = 0; i < num_intervals; i++) {
-			if ((Rf_isReal(starts) && std::isnan(REAL(starts)[i])) || (Rf_isReal(ends) && std::isnan(REAL(ends)[i])) ||
+			// num_elt: an integer NA is NaN, as a double NA; INTEGER() read it as -2147483648
+			double start_val = num_elt(starts, i);
+			double end_val = num_elt(ends, i);
+			if (std::isnan(start_val) || std::isnan(end_val) ||
 				(strands != R_NilValue && Rf_isReal(strands) && std::isnan(REAL(strands)[i])))
 				verror("%sInvalid format of interval at index %d", error_msg_prefix, i + 1);
 
@@ -411,8 +414,8 @@ SEXP IntervalConverter::convert_rintervs(SEXP rintervals, GIntervals *intervals,
 					last_num_chromid = chromid;
 				}
 			}
-			int64_t start = (int64_t)(Rf_isReal(starts) ? REAL(starts)[i] : INTEGER(starts)[i]);
-			int64_t end = (int64_t)(Rf_isReal(ends) ? REAL(ends)[i] : INTEGER(ends)[i]);
+			int64_t start = (int64_t)start_val;
+			int64_t end = (int64_t)end_val;
 			char strand = 0;
 
 			if (strands != R_NilValue) {
@@ -501,8 +504,12 @@ SEXP IntervalConverter::convert_rintervs(SEXP rintervals, GIntervals *intervals,
 		unsigned num_intervals = (unsigned)Rf_length(starts1);
 
 		for (unsigned i = 0; i < num_intervals; i++) {
-			if ((Rf_isReal(starts1) && std::isnan(REAL(starts1)[i])) || (Rf_isReal(ends1) && std::isnan(REAL(ends1)[i])) ||
-				(Rf_isReal(starts2) && std::isnan(REAL(starts2)[i])) || (Rf_isReal(ends2) && std::isnan(REAL(ends2)[i])))
+			// num_elt: an integer NA is NaN, as a double NA; INTEGER() read it as -2147483648
+			double start1_val = num_elt(starts1, i);
+			double end1_val = num_elt(ends1, i);
+			double start2_val = num_elt(starts2, i);
+			double end2_val = num_elt(ends2, i);
+			if (std::isnan(start1_val) || std::isnan(end1_val) || std::isnan(start2_val) || std::isnan(end2_val))
 				verror("%sInvalid format of interval at index %d", error_msg_prefix, i + 1);
 
 			char chrom_buf1[32], chrom_buf2[32];
@@ -518,10 +525,10 @@ SEXP IntervalConverter::convert_rintervs(SEXP rintervals, GIntervals *intervals,
 					continue;
 				throw;
 			}
-			int64_t start1 = (int64_t)(Rf_isReal(starts1) ? REAL(starts1)[i] : INTEGER(starts1)[i]);
-			int64_t start2 = (int64_t)(Rf_isReal(starts2) ? REAL(starts2)[i] : INTEGER(starts2)[i]);
-			int64_t end1 = (int64_t)(Rf_isReal(ends1) ? REAL(ends1)[i] : INTEGER(ends1)[i]);
-			int64_t end2 = (int64_t)(Rf_isReal(ends2) ? REAL(ends2)[i] : INTEGER(ends2)[i]);
+			int64_t start1 = (int64_t)start1_val;
+			int64_t start2 = (int64_t)start2_val;
+			int64_t end1 = (int64_t)end1_val;
+			int64_t end2 = (int64_t)end2_val;
 
 			GInterval2D interval(chromid1, start1, end1, chromid2, start2, end2, (void *)(intptr_t)i);
 

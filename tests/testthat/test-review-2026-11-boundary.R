@@ -405,3 +405,22 @@ test_that("a numeric chrom of -0 is chromosome 0, as as.character(-0) is \"0\"",
         }
     })
 })
+
+test_that("an integer NA coordinate is an invalid interval, as a double NA is", {
+    # INTEGER() read NA_integer_ as -2147483648, so the error named that coordinate instead
+    one_d <- function(start, end) data.frame(chrom = "chr1", start = start, end = end)
+    for (iv in list(one_d(NA_integer_, 10L), one_d(0L, NA_integer_), one_d(NA_real_, 10))) {
+        expect_error(gseq.extract(iv), "Invalid format of interval at index 1")
+        expect_error(gextract("test.fixedbin", iv), "Invalid format of interval at index 1")
+        expect_error(gintervals.canonic(iv), "Invalid format of interval at index 1")
+    }
+    for (col in c("start1", "end1", "start2", "end2")) {
+        two_d <- data.frame(chrom1 = "chr1", start1 = 0L, end1 = 100L, chrom2 = "chr1", start2 = 0L, end2 = 100L)
+        two_d[[col]] <- NA_integer_
+        expect_error(gintervals.canonic(two_d), "Invalid format of interval at index 1", info = col)
+        expect_error(gextract("test.rects", two_d), "Invalid format of interval at index 1", info = col)
+    }
+    # an integer NA strand was already refused
+    expect_error(gseq.extract(data.frame(chrom = "chr1", start = 0L, end = 10L, strand = NA_integer_)), "Invalid strand value \\(NA\\)")
+    expect_identical(.glifetime_counters(), c(ref_count = 0L, protect_count = 0L))
+})
