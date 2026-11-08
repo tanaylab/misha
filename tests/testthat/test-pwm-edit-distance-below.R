@@ -1945,3 +1945,99 @@ test_that("pwm.edit_distance.lse direction=below with max_edits cap", {
     if (!is.na(max1)) expect_true(max1 >= 0)
     if (!is.na(max5)) expect_true(max5 >= 0)
 })
+
+# ============================================================================
+# pwm.edit_distance.lse: the search for 3+ edits gets past a local optimum
+# ============================================================================
+
+lse_tiny_genome <- function(seq, envir = parent.frame()) {
+    root <- tempfile("lse_")
+    dir.create(root)
+    dir.create(file.path(root, "tracks"))
+    dir.create(file.path(root, "seq"))
+    writeLines(sprintf("chr1\t%d", nchar(seq)), file.path(root, "chrom_sizes.txt"))
+    writeBin(charToRaw(seq), file.path(root, "seq", "chr1.seq"))
+    old_root <- .misha$GROOT
+    withr::defer(gsetroot(old_root), envir = envir)
+    gsetroot(root)
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks(), envir = envir)
+    invisible(root)
+}
+
+# Exact minimum number of substitutions that bring the strand-combined LSE of
+# the windows starting at 1..n_starts past `thr`, by enumerating every sequence
+lse_exact_min_edits <- function(seq, pssm, n_starts, thr, direction, prior = 0.01) {
+    lp <- log((pssm + prior) / rowSums(pssm + prior))
+    L <- nrow(lp)
+    b <- match(strsplit(seq, "")[[1]], c("A", "C", "G", "T"))
+    R <- length(b)
+    B <- as.matrix(expand.grid(rep(list(1:4), R)))
+    sc <- NULL
+    for (p in seq_len(n_starts)) {
+        f <- 0
+        r <- 0
+        for (i in seq_len(L)) {
+            f <- f + lp[i, B[, p + i - 1]]
+            r <- r + lp[L - i + 1, 5L - B[, p + i - 1]]
+        }
+        sc <- cbind(sc, f, r)
+    }
+    m <- apply(sc, 1, max)
+    lse <- m + log(rowSums(exp(sc - m)))
+    ok <- if (direction == "above") lse >= thr else lse <= thr
+    if (!any(ok)) {
+        return(NA_real_)
+    }
+    min(rowSums(B != matrix(b, nrow(B), R, byrow = TRUE))[ok])
+}
+
+test_that("pwm.edit_distance.lse below: reachable threshold past a greedy local optimum is found", {
+    # mm10 chr19:15,466,149-15,466,159; the greedy search for 3+ edits stopped
+    # when no single substitution lowered the LSE and returned NA (unreachable)
+    # although 4 substitutions reach the threshold.
+    seq <- "AAGTACTATA"
+    lse_tiny_genome(seq)
+    pssm <- structure(c(
+        0.4233, 0.0003, 0.0537, 0.1266, 0.0359035903590359,
+        0.0292, 0.5043, 0.0365, 0.7398, 0.0016, 0.0042004200420042, 0.3129,
+        0.002, 0.8887, 0.0312, 0.5199, 0.694369436943694, 0.0326, 0.0704,
+        0.0745, 0.1753, 0.3519, 0.265526552655266, 0.6253
+    ), dim = c(6L, 4L), dimnames = list(NULL, c("A", "C", "G", "T")))
+    iv <- gintervals(1, 0, 5)
+    gvtrack.create("lse_ed", NULL, "pwm.edit_distance.lse",
+        pssm = pssm, score.thresh = -11.2, direction = "below", bidirect = TRUE, prior = 0.01
+    )
+    gvtrack.create("lse_pos", NULL, "pwm.edit_distance.lse.pos",
+        pssm = pssm, score.thresh = -11.2, direction = "below", bidirect = TRUE, prior = 0.01
+    )
+    r <- gextract(c("lse_ed", "lse_pos"), iv, iterator = iv)
+    expect_equal(lse_exact_min_edits(seq, pssm, 5, -11.2, "below"), 4)
+    expect_equal(r$lse_ed, 4)
+    expect_false(is.na(r$lse_pos))
+})
+
+test_that("pwm.edit_distance.lse matches an exhaustive search on short regions", {
+    set.seed(4117)
+    bases <- c("A", "C", "G", "T")
+    for (k in 1:24) {
+        L <- 4
+        pssm <- matrix(rgamma(4 * L, 0.4), L)
+        pssm <- pssm / rowSums(pssm)
+        colnames(pssm) <- bases
+        seq <- paste(sample(bases, 8, TRUE), collapse = "")
+        n_starts <- 8 - L + 1
+        direction <- if (k %% 2) "above" else "below"
+        lse_tiny_genome(seq)
+        gvtrack.create("lse_f", NULL, "pwm", pssm = pssm, bidirect = TRUE, prior = 0.01)
+        F0 <- gextract("lse_f", gintervals(1, 0, n_starts), iterator = gintervals(1, 0, n_starts))$lse_f
+        # a threshold three to four log units away: usually 3+ substitutions
+        thr <- if (direction == "above") F0 + 3.5 else F0 - 3.5
+        gvtrack.create("lse_e", NULL, "pwm.edit_distance.lse",
+            pssm = pssm, score.thresh = thr, direction = direction, bidirect = TRUE, prior = 0.01
+        )
+        got <- gextract("lse_e", gintervals(1, 0, n_starts), iterator = gintervals(1, 0, n_starts))$lse_e
+        expected <- lse_exact_min_edits(seq, pssm, n_starts, thr, direction)
+        expect_equal(got, expected, info = sprintf("case %d: %s %s thr %.3f", k, seq, direction, thr))
+    }
+})

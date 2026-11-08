@@ -5,6 +5,7 @@
 #include <limits>
 #include <vector>
 #include <queue>
+#include <cstdint>
 
 PWMLseEditDistanceScorer::PWMLseEditDistanceScorer(const DnaPSSM& pssm,
                                                      GenomeSeqFetch* shared_seqfetch,
@@ -441,271 +442,161 @@ PWMLseEditDistanceScorer::try_k2_exhaustive(const std::vector<int>& seq_bases,
     return result;
 }
 
+namespace {
+// Hash of one substitution (position q to base y), XORed into the hash of an edit set
+inline uint64_t edit_hash(int q, int y)
+{
+    uint64_t z = static_cast<uint64_t>(q) * 4u + static_cast<uint64_t>(y) + 0x9e3779b97f4a7c15ULL;
+    z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9ULL;
+    z = (z ^ (z >> 27)) * 0x94d049bb133111ebULL;
+    return z ^ (z >> 31);
+}
+}
+
 PWMLseEditDistanceScorer::LseResult
-PWMLseEditDistanceScorer::greedy_search(std::vector<int>& seq_bases,
-                                         std::vector<double>& S_p,
-                                         std::vector<double>& A_p,
-                                         double& Z, double& m, double& F,
-                                         int N, int L, int R,
-                                         int first_edit_pos, int first_edit_base,
-                                         int second_edit_pos, int second_edit_base,
-                                         int edits_so_far,
-                                         size_t target_length, size_t motif_length,
-                                         int direction)
+PWMLseEditDistanceScorer::beam_search(const std::vector<int>& seq_bases,
+                                       const std::vector<double>& S_p,
+                                       const std::vector<double>& A_p,
+                                       double Z, double m,
+                                       int N, int L, int R,
+                                       int direction)
 {
     LseResult result;
-    double T = static_cast<double>(m_threshold);
+    const double T = static_cast<double>(m_threshold);
     const bool is_below = (m_direction == Direction::BELOW);
+    // F moves towards the threshold when sgn * F grows
+    const double sgn = is_below ? -1.0 : 1.0;
+    auto passes = [&](double F) { return is_below ? (F <= T) : (F >= T); };
+    const int max_k = (m_max_edits > 0) ? m_max_edits : R;
+    const double nan = std::numeric_limits<double>::quiet_NaN();
 
-    // Apply prior edits (from exhaustive k=2 that failed)
-    if (first_edit_pos >= 0) {
-        apply_edit(first_edit_pos, first_edit_base, seq_bases, S_p, A_p, Z, m, N, L);
-        F = std::log(Z) + m;
-    }
-    if (second_edit_pos >= 0) {
-        apply_edit(second_edit_pos, second_edit_base, seq_bases, S_p, A_p, Z, m, N, L);
-        F = std::log(Z) + m;
+    // Edit sets of d substitutions at d distinct positions, the BEAM_WIDTH best by F at each d. Unlike a
+    // single greedy path, the beam keeps sets that score worse than their parent, which is how it gets
+    // past a local optimum (windows share bases, and under bidirect a substitution that helps one strand
+    // can hurt the other).
+    static constexpr int BEAM_WIDTH = 16;
+
+    // dz[q * 4 + y]: change in Z of substituting y at q; NaN where no edit is allowed (the position was
+    // already edited, holds a non-ACGT base whose windows are unscored and stay so, or y is its base).
+    // An edit at q changes the weights of the windows covering q only, so a child inherits its parent's
+    // table and recomputes the positions within L - 1 of the edit.
+    struct State {
+        std::vector<int> bases;
+        std::vector<double> S, A, dz;
+        double Z, m;
+        uint64_t hash;
+        double first_pos;  // reported position of its first edit
+    };
+
+    auto fill_dz = [&](State& st, int q) {
+        for (int y = 0; y < 4; y++) {
+            st.dz[q * 4 + y] = (st.bases[q] != seq_bases[q] || seq_bases[q] == 4 || y == seq_bases[q])
+                                   ? nan
+                                   : compute_delta_z(q, y, st.bases, st.A, N, L);
+        }
+    };
+
+    std::vector<State> beam(1);
+    {
+        State& st = beam[0];
+        st.bases = seq_bases;
+        st.S = S_p;
+        st.A = A_p;
+        st.Z = Z;
+        st.m = m;
+        st.hash = 0;
+        st.first_pos = nan;
+        st.dz.assign(static_cast<size_t>(R) * 4, nan);
+        for (int q = 0; q < R; q++) fill_dz(st, q);
     }
 
-    bool threshold_met = is_below ? (F <= T) : (F >= T);
-    if (threshold_met) {
-        result.min_edits = static_cast<float>(edits_so_far);
-        if (first_edit_pos >= 0) {
-            result.best_edit_index = first_edit_pos;
+    struct Child {
+        double key;  // sgn * F
+        int parent;
+        int q, y;
+        uint64_t hash;
+    };
+    std::vector<Child> children;
+    auto by_key = [](const Child& a, const Child& b) { return a.key > b.key; };
+
+    double best_key = sgn * (std::log(Z) + m);
+    int last_improved = 0;
+
+    for (int d = 1; d <= max_k; d++) {
+        children.clear();
+        for (int si = 0; si < static_cast<int>(beam.size()); si++) {
+            const State& st = beam[si];
+            for (int e = 0; e < R * 4; e++) {
+                const double dz = st.dz[e];
+                if (std::isnan(dz)) continue;
+                const double new_Z = st.Z + dz;
+                if (new_Z <= 0.0) continue;
+                const int q = e / 4, y = e % 4;
+                children.push_back({sgn * (std::log(new_Z) + st.m), si, q, y, st.hash ^ edit_hash(q, y)});
+            }
+        }
+        if (children.empty()) break;
+
+        // The best few, enough to find BEAM_WIDTH distinct sets (the same set can come from two parents)
+        size_t n_top = std::min(children.size(), static_cast<size_t>(4 * BEAM_WIDTH));
+        std::partial_sort(children.begin(), children.begin() + n_top, children.end(), by_key);
+
+        // The best child is the best set of d edits found: done if it reaches the threshold
+        const Child& top = children.front();
+        if (passes(sgn * top.key)) {
+            const State& par = beam[top.parent];
+            result.min_edits = static_cast<float>(d);
             result.best_edit_direction = direction;
-            result.best_pos = encode_position(static_cast<size_t>(first_edit_pos),
-                                              target_length, motif_length, direction);
-        }
-        return result;
-    }
-
-    int first_greedy_edit_pos = -1;
-    float first_greedy_edit_value = std::numeric_limits<float>::quiet_NaN();
-    int k = edits_so_far;
-    int max_k = (m_max_edits > 0) ? m_max_edits : R;  // Practical limit
-
-    if (is_below) {
-        // BELOW direction: use a min-heap (most negative delta_z first)
-        // We want to DECREASE F, so pick edits with most negative delta_z
-        struct MinHeapEntry {
-            double delta_z;  // negative values are better
-            int pos;
-            int best_base;
-            // Min-heap: smallest delta_z has highest priority
-            bool operator<(const MinHeapEntry& o) const { return delta_z > o.delta_z; }
-        };
-
-        std::priority_queue<MinHeapEntry> heap;
-        std::vector<double> stored_dz(R, 0.0);
-
-        for (int q = 0; q < R; q++) {
-            int cur = seq_bases[q];
-            double best_dz = std::numeric_limits<double>::infinity();  // want most negative
-            int best_y = -1;
-
-            for (int y = 0; y < 4; y++) {
-                if (y == cur) continue;
-                double dz = compute_delta_z(q, y, seq_bases, A_p, N, L);
-                if (dz < best_dz) {
-                    best_dz = dz;
-                    best_y = y;
-                }
+            if (std::isnan(par.first_pos)) {
+                result.best_edit_index = top.q;
+                result.best_pos = edit_position(top.q, top.y, par.bases, par.A, N, L, direction);
+            } else {
+                result.best_pos = par.first_pos;
             }
-
-            if (best_y >= 0 && best_dz < 0.0) {
-                stored_dz[q] = best_dz;
-                heap.push({best_dz, q, best_y});
-            }
+            return result;
         }
 
-        while (F > T && !heap.empty() && k < max_k) {
-            MinHeapEntry top = heap.top();
-            heap.pop();
-
-            int q = top.pos;
-
-            // Stale-key check: recompute DeltaZ
-            int cur = seq_bases[q];
-            double best_dz = std::numeric_limits<double>::infinity();
-            int best_y = -1;
-
-            for (int y = 0; y < 4; y++) {
-                if (y == cur) continue;
-                double dz = compute_delta_z(q, y, seq_bases, A_p, N, L);
-                if (dz < best_dz) {
-                    best_dz = dz;
-                    best_y = y;
-                }
-            }
-
-            if (best_dz >= 0.0) {
-                continue;  // No score decrease possible at this position
-            }
-
-            // Check if key is stale (recomputed value significantly different)
-            if (best_dz > top.delta_z + 1e-10 && !heap.empty() && best_dz > heap.top().delta_z) {
-                stored_dz[q] = best_dz;
-                heap.push({best_dz, q, best_y});
-                continue;
-            }
-
-            // Apply edit (its reported position is taken before: it depends on the weights it changes)
-            if (first_greedy_edit_pos < 0) {
-                first_greedy_edit_pos = q;
-                first_greedy_edit_value = edit_position(q, best_y, seq_bases, A_p, N, L, direction);
-            }
-            apply_edit(q, best_y, seq_bases, S_p, A_p, Z, m, N, L);
-            F = std::log(Z) + m;
-            k++;
-
-            // Recompute DeltaZ in the (2L-1)-wide diamond around q
-            int q_lo = std::max(0, q - L + 1);
-            int q_hi = std::min(R - 1, q + L - 1);
-
-            for (int qp = q_lo; qp <= q_hi; qp++) {
-                int curp = seq_bases[qp];
-                double best_dzp = std::numeric_limits<double>::infinity();
-                int best_yp = -1;
-
-                for (int y = 0; y < 4; y++) {
-                    if (y == curp) continue;
-                    double dz = compute_delta_z(qp, y, seq_bases, A_p, N, L);
-                    if (dz < best_dzp) {
-                        best_dzp = dz;
-                        best_yp = y;
-                    }
-                }
-
-                if (best_yp >= 0 && best_dzp < 0.0) {
-                    stored_dz[qp] = best_dzp;
-                    heap.push({best_dzp, qp, best_yp});
-                }
-            }
+        // Stop when the best set has not moved F towards the threshold for L more edits: no window holds
+        // more than L bases, so a run that long without progress is past what the search can still cross
+        if (top.key > best_key + 1e-12) {
+            best_key = top.key;
+            last_improved = d;
+        } else if (d - last_improved >= L) {
+            break;
         }
 
-        if (F <= T) {
-            result.min_edits = static_cast<float>(k);
-            int report_pos = (first_edit_pos >= 0) ? first_edit_pos : first_greedy_edit_pos;
-            if (report_pos >= 0) {
-                result.best_edit_index = report_pos;
-                result.best_edit_direction = direction;
-                result.best_pos = report_pos == first_greedy_edit_pos && first_edit_pos < 0
-                                      ? first_greedy_edit_value
-                                      : encode_position(static_cast<size_t>(report_pos),
-                                                        target_length, motif_length, direction);
+        // Next beam: the best distinct sets
+        std::vector<State> next;
+        next.reserve(BEAM_WIDTH);
+        std::vector<uint64_t> seen;
+        for (size_t ci = 0; ci < children.size() && static_cast<int>(next.size()) < BEAM_WIDTH; ci++) {
+            if (ci == n_top) {
+                // more duplicates than expected: order the rest too
+                std::sort(children.begin() + n_top, children.end(), by_key);
+                n_top = children.size();
             }
+            const Child& c = children[ci];
+            if (std::find(seen.begin(), seen.end(), c.hash) != seen.end()) continue;
+            seen.push_back(c.hash);
+            const State& par = beam[c.parent];
+            State st = par;
+            if (std::isnan(st.first_pos)) {
+                st.first_pos = edit_position(c.q, c.y, par.bases, par.A, N, L, direction);
+            }
+            const double m_before = st.m;
+            apply_edit(c.q, c.y, st.bases, st.S, st.A, st.Z, st.m, N, L);
+            st.hash = c.hash;
+            // apply_edit may rescale every weight (a new shift m); the inherited dz scale with them
+            if (st.m != m_before) {
+                const double scale = std::exp(m_before - st.m);
+                for (double& v : st.dz) v *= scale;
+            }
+            const int q_lo = std::max(0, c.q - L + 1);
+            const int q_hi = std::min(R - 1, c.q + L - 1);
+            for (int q = q_lo; q <= q_hi; q++) fill_dz(st, q);
+            next.push_back(std::move(st));
         }
-    } else {
-        // ABOVE direction: use a max-heap (original logic)
-        struct HeapEntry {
-            double delta_z;
-            int pos;
-            int best_base;
-            bool operator<(const HeapEntry& o) const { return delta_z < o.delta_z; }
-        };
-
-        std::priority_queue<HeapEntry> heap;
-        std::vector<double> stored_dz(R, 0.0);
-
-        for (int q = 0; q < R; q++) {
-            int cur = seq_bases[q];
-            double best_dz = -std::numeric_limits<double>::infinity();
-            int best_y = -1;
-
-            for (int y = 0; y < 4; y++) {
-                if (y == cur) continue;
-                double dz = compute_delta_z(q, y, seq_bases, A_p, N, L);
-                if (dz > best_dz) {
-                    best_dz = dz;
-                    best_y = y;
-                }
-            }
-
-            if (best_y >= 0 && best_dz > 0.0) {
-                stored_dz[q] = best_dz;
-                heap.push({best_dz, q, best_y});
-            }
-        }
-
-        while (F < T && !heap.empty() && k < max_k) {
-            HeapEntry top = heap.top();
-            heap.pop();
-
-            int q = top.pos;
-
-            // Stale-key check: recompute DeltaZ
-            int cur = seq_bases[q];
-            double best_dz = -std::numeric_limits<double>::infinity();
-            int best_y = -1;
-
-            for (int y = 0; y < 4; y++) {
-                if (y == cur) continue;
-                double dz = compute_delta_z(q, y, seq_bases, A_p, N, L);
-                if (dz > best_dz) {
-                    best_dz = dz;
-                    best_y = y;
-                }
-            }
-
-            if (best_dz <= 0.0) {
-                continue;  // No improvement possible at this position
-            }
-
-            // Check if key is stale (recomputed value significantly different)
-            if (best_dz < top.delta_z - 1e-10 && !heap.empty() && best_dz < heap.top().delta_z) {
-                // Push back with updated key
-                stored_dz[q] = best_dz;
-                heap.push({best_dz, q, best_y});
-                continue;
-            }
-
-            // Apply edit (its reported position is taken before: it depends on the weights it changes)
-            if (first_greedy_edit_pos < 0) {
-                first_greedy_edit_pos = q;
-                first_greedy_edit_value = edit_position(q, best_y, seq_bases, A_p, N, L, direction);
-            }
-            apply_edit(q, best_y, seq_bases, S_p, A_p, Z, m, N, L);
-            F = std::log(Z) + m;
-            k++;
-
-            // Recompute DeltaZ in the (2L-1)-wide diamond around q
-            int q_lo = std::max(0, q - L + 1);
-            int q_hi = std::min(R - 1, q + L - 1);
-
-            for (int qp = q_lo; qp <= q_hi; qp++) {
-                int curp = seq_bases[qp];
-                double best_dzp = -std::numeric_limits<double>::infinity();
-                int best_yp = -1;
-
-                for (int y = 0; y < 4; y++) {
-                    if (y == curp) continue;
-                    double dz = compute_delta_z(qp, y, seq_bases, A_p, N, L);
-                    if (dz > best_dzp) {
-                        best_dzp = dz;
-                        best_yp = y;
-                    }
-                }
-
-                if (best_yp >= 0 && best_dzp > 0.0) {
-                    stored_dz[qp] = best_dzp;
-                    heap.push({best_dzp, qp, best_yp});
-                }
-            }
-        }
-
-        if (F >= T) {
-            result.min_edits = static_cast<float>(k);
-            // Position: report the first edit position
-            int report_pos = (first_edit_pos >= 0) ? first_edit_pos : first_greedy_edit_pos;
-            if (report_pos >= 0) {
-                result.best_edit_index = report_pos;
-                result.best_edit_direction = direction;
-                result.best_pos = report_pos == first_greedy_edit_pos && first_edit_pos < 0
-                                      ? first_greedy_edit_value
-                                      : encode_position(static_cast<size_t>(report_pos),
-                                                        target_length, motif_length, direction);
-            }
-        }
+        beam.swap(next);
     }
 
     return result;
@@ -775,26 +666,22 @@ PWMLseEditDistanceScorer::compute_lse_edit_distance(const std::string& seq,
         return result;
     }
 
-    // Quick unreachability check
+    // Quick unreachability check. Under any substitutions every scorable window scores between S_min and
+    // S_max, and a window holding a non-ACGT base keeps weight 0, so with n scorable windows
+    // F = log(sum(exp(S_p))) lies in [S_min + log(n), S_max + log(n)].
+    int n_scorable = 0;
+    for (double sp : S_p) {
+        if (std::isfinite(sp)) n_scorable++;
+    }
+    const double log_n = std::log(static_cast<double>(n_scorable));
     if (is_below) {
-        // For BELOW: minimum possible F uses worst base at every position
-        // F_min = log(sum(exp(S_p_min))) where S_p_min uses col_min at each column
-        // Lower bound: F_min >= S_min + log(N) is NOT correct (that's for max).
-        // Actually: F_min = log(N) + S_min only if all starts have same score S_min,
-        // but starts overlap so S_p_min varies. Conservative lower bound:
-        // The minimum F is at least S_min_single (the min single-window score)
-        // since log(sum(exp(S_p))) >= max(S_p) >= min(S_p) >= S_min.
-        // Actually log(sum(exp(S_p))) >= max(S_p), so even with all worst bases,
-        // the min of max(S_p) across all possible sequences is S_min (sum of col minima).
-        // So F >= S_min. If T < S_min, it's unreachable.
-        double min_possible_F = static_cast<double>(m_S_min);
-        if (T < min_possible_F - 1e-9) {
-            return result;  // Unreachable: F can never go below S_min
+        double min_possible_F = static_cast<double>(m_S_min) + log_n;
+        if (T < min_possible_F - 1e-6) {
+            return result;  // Unreachable: F can never go below S_min + log(n)
         }
     } else {
-        // For ABOVE: S_max + log(N) is the maximum possible F
-        double max_possible_F = static_cast<double>(m_S_max) + std::log(static_cast<double>(m_ndirs * N));
-        if (T > max_possible_F + 1e-9) {
+        double max_possible_F = static_cast<double>(m_S_max) + log_n;
+        if (T > max_possible_F + 1e-6) {
             return result;  // Unreachable even with all bases optimal
         }
     }
@@ -826,22 +713,7 @@ PWMLseEditDistanceScorer::compute_lse_edit_distance(const std::string& seq,
         return result;  // Only 2 edits allowed
     }
 
-    // For k >= 3, use greedy heuristic
-    // We need to find the best pair of first two edits to seed the greedy.
-    // The greedy starts from scratch (no prior exhaustive edits applied),
-    // since the exhaustive search for k=2 already failed.
-
-    // Make copies for greedy (it modifies state)
-    std::vector<int> seq_bases_copy = seq_bases;
-    std::vector<double> S_p_copy = S_p;
-    std::vector<double> A_p_copy = A_p;
-    double Z_copy = Z, m_copy = m, F_copy = F;
-
-    LseResult greedy = greedy_search(seq_bases_copy, S_p_copy, A_p_copy,
-                                      Z_copy, m_copy, F_copy,
-                                      N, L, R,
-                                      -1, -1, -1, -1, 0,
-                                      target_length, L, direction);
-
-    return greedy;
+    // For k >= 3, a beam search over edit sets (heuristic: the count is an upper bound on the minimum,
+    // and NaN means it found no solution)
+    return beam_search(seq_bases, S_p, A_p, Z, m, N, L, R, direction);
 }
