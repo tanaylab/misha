@@ -20,7 +20,6 @@
 #include <strings.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
-#include <system_error>
 #include <thread>
 #include <unistd.h>
 #include <vector>
@@ -36,6 +35,7 @@
 #include "TrackExpressionFixedRectIterator.h"
 #include "TrackExpressionIntervals1DIterator.h"
 #include "TrackExpressionSparseIterator.h"
+#include "WorkerThreads.h"
 #include "TGLException.h"
 
 // Optional profiling for gextract_multitask hot path.
@@ -252,9 +252,19 @@ static unsigned pick_gather_threads(IntervUtils &iu, R_xlen_t nrows, int n_in)
 	return n == 0 ? 1 : n;
 }
 
-// Gather a single column from `_intervals` (`in_col`) into `dst_col`, using
-// 1-based indices in `id_p`. Pure C++ data movement - safe to run from a
-// non-main thread. Callers must validate id_p range upfront.
+// One column of the intervals_join gather: its type and the data of the source column of
+// `_intervals` and of the destination column, fetched on the calling thread - the worker
+// threads must not call the R API (INTEGER() and the like may allocate, for one on an ALTREP
+// column).
+struct GatherColumn {
+	int         type;
+	const void *src;
+	void       *dst;
+};
+
+// Gather a single column into its destination, using 1-based indices in `id_p`. Pure C++
+// data movement - safe to run from a non-main thread. Callers must validate id_p range
+// upfront.
 //
 // For STRSXP we bypass SET_STRING_ELT and write the SEXP* slots directly.
 // This is safe because:
@@ -265,35 +275,28 @@ static unsigned pick_gather_threads(IntervUtils &iu, R_xlen_t nrows, int n_in)
 //     argument stack throughout the call, so they cannot be reclaimed.
 //   - We do not touch any R API from worker threads, so no GC can fire mid
 //     loop.
-static void gather_one_column(SEXP in_col, SEXP dst_col,
-                              const int *id_p, R_xlen_t nrows)
+static void gather_one_column(const GatherColumn &col, const int *id_p, R_xlen_t nrows)
 {
-	switch (TYPEOF(in_col)) {
-		case INTSXP: {
-			const int *src = INTEGER(in_col);
-			int *dst = INTEGER(dst_col);
+	switch (col.type) {
+		case INTSXP:
+		case LGLSXP: {
+			const int *src = (const int *)col.src;
+			int *dst = (int *)col.dst;
 			for (R_xlen_t i = 0; i < nrows; ++i)
 				dst[i] = src[id_p[i] - 1];
 			break;
 		}
 		case REALSXP: {
-			const double *src = REAL(in_col);
-			double *dst = REAL(dst_col);
-			for (R_xlen_t i = 0; i < nrows; ++i)
-				dst[i] = src[id_p[i] - 1];
-			break;
-		}
-		case LGLSXP: {
-			const int *src = LOGICAL(in_col);
-			int *dst = LOGICAL(dst_col);
+			const double *src = (const double *)col.src;
+			double *dst = (double *)col.dst;
 			for (R_xlen_t i = 0; i < nrows; ++i)
 				dst[i] = src[id_p[i] - 1];
 			break;
 		}
 		case STRSXP: {
 			// Direct pointer writes; see contract above.
-			const SEXP *src = STRING_PTR_RO(in_col);
-			SEXP *dst = (SEXP *)STRING_PTR_RO(dst_col);
+			const SEXP *src = (const SEXP *)col.src;
+			SEXP *dst = (SEXP *)col.dst;
 			for (R_xlen_t i = 0; i < nrows; ++i)
 				dst[i] = src[id_p[i] - 1];
 			break;
@@ -460,32 +463,40 @@ static SEXP transform_intervals_join(SEXP answer, SEXP _intervals,
 	}
 
 	// Parallel column gather. Workers steal columns via an atomic counter.
-	unsigned nworkers = pick_gather_threads(iu, nrows, n_in);
-	if (nworkers <= 1) {
-		for (int j = 0; j < n_in; ++j)
-			gather_one_column(VECTOR_ELT(_intervals, j),
-			                  VECTOR_ELT(out, n_keep + j),
-			                  id_p, nrows);
-	} else {
-		std::atomic<int> next{0};
-		auto worker = [&]() {
-			for (;;) {
-				int j = next.fetch_add(1, std::memory_order_relaxed);
-				if (j >= n_in)
-					return;
-				gather_one_column(VECTOR_ELT(_intervals, j),
-				                  VECTOR_ELT(out, n_keep + j),
-				                  id_p, nrows);
-			}
-		};
-		std::vector<std::thread> threads;
-		threads.reserve(nworkers - 1);
-		for (unsigned t = 0; t < nworkers - 1; ++t)
-			threads.emplace_back(worker);
-		worker();
-		for (auto &th : threads)
-			th.join();
+	vector<GatherColumn> cols(n_in);
+	for (int j = 0; j < n_in; ++j) {
+		SEXP in_col = VECTOR_ELT(_intervals, j);
+		SEXP dst_col = VECTOR_ELT(out, n_keep + j);
+
+		cols[j].type = TYPEOF(in_col);
+		switch (cols[j].type) {
+			case INTSXP:
+				cols[j].src = INTEGER(in_col);
+				cols[j].dst = INTEGER(dst_col);
+				break;
+			case LGLSXP:
+				cols[j].src = LOGICAL(in_col);
+				cols[j].dst = LOGICAL(dst_col);
+				break;
+			case REALSXP:
+				cols[j].src = REAL(in_col);
+				cols[j].dst = REAL(dst_col);
+				break;
+			case STRSXP:
+				cols[j].src = STRING_PTR_RO(in_col);
+				cols[j].dst = (void *)STRING_PTR_RO(dst_col);
+				break;
+			default:
+				cols[j].src = cols[j].dst = NULL;
+				break;
+		}
 	}
+
+	std::atomic<int> next{0};
+	run_in_threads(pick_gather_threads(iu, nrows, n_in), [&]() {
+		for (int j; (j = next.fetch_add(1, std::memory_order_relaxed)) < n_in; )
+			gather_one_column(cols[j], id_p, nrows);
+	});
 
 	Rf_setAttrib(out, R_NamesSymbol, out_names);
 	Rf_setAttrib(out, R_RowNamesSymbol, Rf_getAttrib(answer, R_RowNamesSymbol));
@@ -639,22 +650,11 @@ static SEXP build_answer_from_kids(IntervUtils &iu, bool is_1d, unsigned num_exp
 		}
 	};
 
-	unsigned num_threads = pick_gather_threads(iu, (R_xlen_t)total_intervals, nkids);
 	std::atomic<int> next_kid{0};
-	auto worker = [&]() {
+	run_in_threads(pick_gather_threads(iu, (R_xlen_t)total_intervals, nkids), [&]() {
 		for (int i; (i = next_kid.fetch_add(1)) < nkids; )
 			copy_kid(i);
-	};
-	vector<std::thread> threads;
-	try {
-		for (unsigned t = 1; t < num_threads; ++t)
-			threads.emplace_back(worker);
-	} catch (const std::system_error &) {
-		// could not start a thread: the ones running and this one share the work
-	}
-	worker();
-	for (auto &t : threads)
-		t.join();
+	});
 
 	// factor levels: as convert_intervs() sets them
 	for (unsigned icol : chrom_col_idx) {

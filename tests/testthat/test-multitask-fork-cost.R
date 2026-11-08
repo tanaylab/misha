@@ -3,9 +3,9 @@
 # seconds per call, so misha warns once per session (rdb::warn_if_forks_are_slow).
 #
 # Once per session means once per R process, so each case runs in a fresh one. The
-# environment variable MISHA_TEST_FORK_4K_BYTES stands in for the bytes the session holds
-# in 4 KB pages: forcing the real condition takes GB of memory and a host whose kernel
-# gives R no huge pages.
+# environment variable MISHA_TEST_FORK_4K_BYTES stands in for the memory of the session:
+# "A" for A bytes in 4 KB pages, "A,H" for A bytes of which H are in huge pages. Forcing
+# the real condition takes GB of memory and a host whose kernel gives R no huge pages.
 
 run_in_fresh_r <- function(lines, env = character()) {
     script <- withr::local_tempfile(fileext = ".R")
@@ -63,4 +63,34 @@ test_that("no fork-cost warning for a small session, few GB, or no multitasking"
         env = "MISHA_TEST_FORK_4K_BYTES=64000000000"
     )
     expect_equal(counts(out, "N"), 0L)
+})
+
+test_that("a fork-cost warning dropped with a failed call is shown by the next call", {
+    skip_if(parallel::detectCores() < 2L, "Multitasking test needs at least 2 cores")
+    # the expression fails in the kid that scans past 200 Mb of chr1, after the forks
+    failing <- "if (any(misha:::.misha$GITERATOR.INTERVALS$start > 2e8)) stop('boom') else test.fixedbin"
+    out <- run_in_fresh_r(c(
+        sprintf("res <- tryCatch(fork_warnings(gsummary(%s, gintervals(c(1, 2, 3, 4)))), error = function(e) conditionMessage(e))", deparse(failing)),
+        "cat('FAILED', grepl('boom', res), '\\n')",
+        "cat('FIRST', fork_warnings(gsummary('test.fixedbin', gintervals(c(1, 2, 3, 4)))), '\\n')",
+        "cat('SECOND', fork_warnings(gsummary('test.fixedbin', gintervals(c(1, 2, 3, 4)))), '\\n')"
+    ), env = "MISHA_TEST_FORK_4K_BYTES=64000000000")
+    expect_true(any(grepl("^FAILED TRUE", out)), info = paste(out, collapse = "\n"))
+    expect_equal(counts(out, "FIRST"), 1L, info = paste(out, collapse = "\n"))
+    expect_equal(counts(out, "SECOND"), 0L)
+})
+
+test_that("a session checked with few processes is checked again with more", {
+    skip_if(parallel::detectCores() < 2L, "Multitasking test needs at least 2 cores")
+    # 50 GB of anonymous memory, 30 GB of it in huge pages: 20 GB in 4 KB pages, below the
+    # threshold (GB x processes of 128) with 4 processes and above it with 8. The first call
+    # reads how much is in huge pages; the second must not reuse its verdict.
+    out <- run_in_fresh_r(c(
+        "cat('FEW', fork_warnings(gsummary('test.fixedbin', gintervals(1:8))), '\\n')",
+        "options(gmax.processes = 8L)",
+        "cat('MORE', fork_warnings(gsummary('test.fixedbin', gintervals(1:8))), '\\n')"
+    ), env = "MISHA_TEST_FORK_4K_BYTES=50000000000,30000000000")
+    expect_equal(counts(out, "FEW"), 0L, info = paste(out, collapse = "\n"))
+    expect_equal(counts(out, "MORE"), 1L, info = paste(out, collapse = "\n"))
+    expect_match(grep("^TEXT ", out, value = TRUE), "holds 20.0 GB of memory in 4 KB pages", fixed = TRUE)
 })
