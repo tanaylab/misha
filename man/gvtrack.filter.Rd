@@ -43,7 +43,8 @@ Filters are applied \emph{after} iterator modifiers (sshift/eshift/dim). The ord
 
 \strong{Semantics by function type:}
 \itemize{
-  \item \strong{Aggregations over values:} a bin or interval of the source that overlaps an unmasked region counts once, even when the mask splits it. \code{avg}, \code{sum}, \code{size}, \code{lse}, \code{min}, \code{max}, \code{quantile} and \code{stddev} (the sample standard deviation) reduce over those values, for a track as for a value-based virtual track.
+  \item \strong{Aggregations over values:} a bin or interval of the source that overlaps an unmasked region counts once, even when the mask splits it. \code{avg}, \code{sum}, \code{size}, \code{lse}, \code{min}, \code{max}, \code{quantile} and \code{stddev} (the sample standard deviation) reduce over those values, for a track as for a value-based virtual track. \code{size} and \code{exists} give 0 when the unmasked regions hold no value.
+  \item \strong{first, last, sample, nearest:} \code{first} and \code{last} (and their positions) are the first and last unmasked values; \code{sample} (and \code{sample.pos.*}) draws one of the unmasked values, each with the same chance; \code{nearest} is the average of the unmasked values when there are any; when there are none, it is the value of a sparse, array or value-based source whose unmasked stretch is nearest to the unmasked regions of the interval (of two at the same distance, the one on the left, as without a filter), and \code{NA} when the chromosome holds no unmasked value. On a dense track \code{nearest} does not look outside the interval, with or without a filter.
   \item \strong{coverage:} Returns (covered length in unmasked region) / (total unmasked length)
   \item \strong{distance/distance.center:} Unaffected by mask (pure geometry)
   \item \strong{PWM/kmer/potts:} Masked bases act as hard boundaries; matches cannot span masked regions.

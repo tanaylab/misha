@@ -1558,6 +1558,8 @@ TrackExpressionVars::Value_var &TrackExpressionVars::add_vtrack_var_src_value(SE
 			break;
 		case Value_var::NEAREST:
 			var.track->register_function(GenomeTrack1D::NEAREST);
+			// with a filter the parts' means are merged through their value counts
+			var.track->register_function(GenomeTrack1D::SIZE);
 			break;
 		case Value_var::EXISTS:
 			var.track->register_function(GenomeTrack1D::EXISTS);
@@ -1573,6 +1575,8 @@ TrackExpressionVars::Value_var &TrackExpressionVars::add_vtrack_var_src_value(SE
 			break;
 		case Value_var::SAMPLE:
 			var.track->register_function(GenomeTrack1D::SAMPLE);
+			// with a filter one part's draw is kept with chance proportional to the part's value count
+			var.track->register_function(GenomeTrack1D::SIZE);
 			break;
 		case Value_var::FIRST_POS_ABS:
 		case Value_var::FIRST_POS_REL:
@@ -1585,6 +1589,7 @@ TrackExpressionVars::Value_var &TrackExpressionVars::add_vtrack_var_src_value(SE
 		case Value_var::SAMPLE_POS_ABS:
 		case Value_var::SAMPLE_POS_REL:
 			var.track->register_function(GenomeTrack1D::SAMPLE_POS);
+			var.track->register_function(GenomeTrack1D::SIZE);
 			break;
 		case Value_var::MIN_POS_ABS:
 		case Value_var::MIN_POS_REL:
@@ -1655,6 +1660,11 @@ void TrackExpressionVars::register_track_functions()
 			break;
 		case Track_var::REG_NEAREST:
 			track1d->register_function(GenomeTrack1D::NEAREST);
+			// with a filter the parts' means are merged through their value counts
+			if (ivar->filter) {
+				track1d->register_function(GenomeTrack1D::AVG);
+				track1d->register_function(GenomeTrack1D::SIZE);
+			}
 			break;
 		case Track_var::STDDEV:
 			track1d->register_function(GenomeTrack1D::STDDEV);
@@ -1695,12 +1705,17 @@ void TrackExpressionVars::register_track_functions()
 			if (!track1d)
 				verror("vtrack function 'sample' can only be used on 1D tracks");
 			track1d->register_function(GenomeTrack1D::SAMPLE);
+			// with a filter one part's draw is kept with chance proportional to the part's value count
+			if (ivar->filter)
+				track1d->register_function(GenomeTrack1D::SIZE);
 			break;
 		case Track_var::SAMPLE_POS_ABS:
 		case Track_var::SAMPLE_POS_REL:
 			if (!track1d)
 				verror("vtrack functions 'sample.pos.abs' and 'sample.pos.relative' can only be used on 1D tracks");
 			track1d->register_function(GenomeTrack1D::SAMPLE_POS);
+			if (ivar->filter)
+				track1d->register_function(GenomeTrack1D::SIZE);
 			break;
 		case Track_var::FIRST:
 			if (!track1d)

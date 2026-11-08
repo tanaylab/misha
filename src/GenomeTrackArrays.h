@@ -97,6 +97,9 @@ public:
 	}
 	void get_sliced_vals(GIntervals::const_iterator iinterval, vector<float> &vals, unsigned numcols);
 
+	// The value of the idx-th interval after the slice function
+	float get_sliced_val(uint64_t idx);
+
 protected:
 	void init_read_once(const char *filename, int chromid);
 
@@ -137,7 +140,6 @@ protected:
 	void fail_writing();  // always throws TGLException
 	void read_array_vals(uint64_t idx);
 	float get_array_val(uint64_t islice);
-	float get_sliced_val(uint64_t idx);
 	void calc_vals(const GInterval &interval);
 	bool check_first_overlap(const GIntervals::const_iterator &iinterval1, const GInterval &interval2);
 };

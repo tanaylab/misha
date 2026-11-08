@@ -26,6 +26,15 @@ public:
 	static double aggregate_quantile_with_filter(GenomeTrack1D &track, const std::vector<GInterval> &parts, double percentile,
 	                                             rdb::IntervUtils &iu);
 
+	// A value (pos = false) or its position (pos = true) drawn uniformly from the values of the filter's unmasked
+	// parts, each value once; the track must compute SIZE (shared with the value-based vtracks)
+	static double aggregate_sample_with_filter(GenomeTrack1D &track, const std::vector<GInterval> &parts, bool pos);
+
+	// "nearest" when the filter's unmasked parts hold no value: the value of the sparse, array or value-based track
+	// whose unmasked stretch is nearest to the parts, the left one of two at the same distance; NaN if the
+	// chromosome has no such value and for a dense track (shared with the value-based vtracks)
+	static double nearest_unmasked_value(GenomeTrack1D &track, const Genome1DFilter &filter, const std::vector<GInterval> &parts);
+
 private:
 	rdb::IntervUtils &m_iu;
 
@@ -61,9 +70,8 @@ private:
 	double aggregate_stddev_with_filter(GenomeTrack1D &track, const std::vector<GInterval> &parts);
 	double aggregate_exists_with_filter(GenomeTrack1D &track, const std::vector<GInterval> &parts);
 	double aggregate_size_with_filter(GenomeTrack1D &track, const std::vector<GInterval> &parts);
-	double aggregate_sample_with_filter(GenomeTrack1D &track, const std::vector<GInterval> &parts);
-	double aggregate_sample_pos_abs_with_filter(GenomeTrack1D &track, const std::vector<GInterval> &parts);
-	double aggregate_sample_pos_rel_with_filter(GenomeTrack1D &track, const std::vector<GInterval> &parts, int64_t base_start);
+	double aggregate_first_with_filter(GenomeTrack1D &track, const std::vector<GInterval> &parts, bool pos);
+	double aggregate_last_with_filter(GenomeTrack1D &track, const std::vector<GInterval> &parts, bool pos);
 	double aggregate_lse_with_filter(GenomeTrack1D &track, const std::vector<GInterval> &parts);
 };
 
