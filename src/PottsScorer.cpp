@@ -82,6 +82,44 @@ double PottsScorer::anchor_value(size_t i, bool union_max, int &dir) const
     return r;
 }
 
+void PottsScorer::anchor_values4(size_t i, bool union_max, double u[4], int dir[4]) const
+{
+    // anchor_value() for the anchors i .. i + 3, every window scorable.
+    const int8_t *c = m_c + i;
+    const int8_t *bc = m_bc + i;
+    const bool check_fwd = m_bidirect || m_strand != -1;
+    const bool check_rev = m_bidirect || m_strand == -1;
+
+    double f[4], r[4];
+    if (check_fwd)
+        (m_strand == -1 ? m_rc : m_model).score_codes4(c, bc, f);
+    if (check_rev)
+        (m_strand == -1 ? m_model : m_rc).score_codes4(c, bc, r);
+
+    for (int k = 0; k < 4; ++k) {
+        dir[k] = 1;
+        if (check_fwd && check_rev) {
+            if (union_max) {
+                if (r[k] > f[k]) {
+                    dir[k] = -1;
+                    u[k] = r[k];
+                } else {
+                    u[k] = f[k];
+                }
+            } else {
+                double x = f[k];
+                log_sum_log(x, r[k]);
+                u[k] = x;
+            }
+        } else if (check_fwd) {
+            u[k] = f[k];
+        } else {
+            dir[k] = -1;
+            u[k] = r[k];
+        }
+    }
+}
+
 double PottsScorer::compute_position_result(size_t index, size_t target_length,
                                            size_t motif_length, int direction) const
 {
@@ -168,14 +206,8 @@ double PottsScorer::score_direct(size_t i_min, size_t i_max, size_t motif_len, s
         }
     }
 
-    for (size_t i = i_min; i <= i_max; ++i) {
-        // A Potts has no prior, so an ambiguous base leaves the anchor
-        // unscorable rather than charged some fallback energy. The prefix
-        // sum makes that an O(1) test.
-        if (m_nb[i + motif_len] - m_nb[i] != 0)
-            continue;
-        int dir = 1;
-        const double u = anchor_value(i, union_max, dir);
+    // Everything one scorable anchor contributes, in anchor order.
+    auto consume = [&](size_t i, double u, int dir) {
         const size_t s = (m_strand == -1) ? (i_max - i) : (i - i_min);
         if (u > best)
             best = u;
@@ -215,6 +247,29 @@ double PottsScorer::score_direct(size_t i_min, size_t i_max, size_t motif_len, s
                     m_win_dir[s] = (int8_t)dir;
             }
         }
+    };
+
+    for (size_t i = i_min; i <= i_max; ++i) {
+        // A Potts has no prior, so an ambiguous base leaves the anchor
+        // unscorable rather than charged some fallback energy. The prefix
+        // sum makes that an O(1) test.
+        if (m_nb[i + motif_len] - m_nb[i] != 0)
+            continue;
+        // Four anchors at once where all four windows are scorable (one prefix
+        // count covers them): anchor_values4() gives the values four
+        // anchor_value() calls would, and consume() takes them in order.
+        if (i + 3 <= i_max && m_nb[i + 3 + motif_len] - m_nb[i] == 0) {
+            double u4[4];
+            int d4[4];
+            anchor_values4(i, union_max, u4, d4);
+            for (int k = 0; k < 4; ++k)
+                consume(i + k, u4[k], d4[k]);
+            i += 3;
+            continue;
+        }
+        int dir = 1;
+        const double u = anchor_value(i, union_max, dir); // sets dir: not in consume()'s arguments
+        consume(i, u, dir);
     }
 
     // Not for MOTIF_COUNT: PottsScorer.h promises it is left at -inf there,
@@ -261,6 +316,30 @@ double PottsScorer::score_one_edit(size_t i_min, size_t i_max, size_t motif_len)
     const int W = (int)motif_len;
     double best = -std::numeric_limits<double>::infinity();
     bool any = false;
+
+    if (!(check_fwd && check_rev)) {
+        // One strand: the best substitution is the anchor's score plus its
+        // largest delta, and PottsModel::best_delta() returns exactly the
+        // largest delta_codes() the loop below would find, so this is the same
+        // number, without a combine() and a branch per pair per substitution.
+        const PottsModel &mm = check_fwd ? mf : mr;
+        for (size_t i = i_min; i <= i_max; ++i) {
+            if (m_nb[i + motif_len] - m_nb[i] != 0)
+                continue;
+            const int8_t *c = m_c + i;
+            double a = mm.score_codes(c, m_bc + i);
+            const double u = a + mm.best_delta(c);
+            if (u > a)
+                a = u;
+            if (a > best)
+                best = a;
+            any = true;
+        }
+        if (any)
+            m_last_max_score = best;
+        return any ? (float)best : std::numeric_limits<float>::quiet_NaN();
+    }
+
     for (size_t i = i_min; i <= i_max; ++i) {
         if (m_nb[i + motif_len] - m_nb[i] != 0)
             continue;

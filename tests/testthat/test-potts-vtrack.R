@@ -1188,3 +1188,41 @@ test_that("a per-base scan scores from the encoded chunk exactly as from one fet
         gvtrack.rm("pchunk")
     }
 })
+
+test_that("a window's potts.max and potts.count are those of its anchors one by one, exactly", {
+    # A window of many anchors is scored four anchors at a time
+    # (PottsModel::score_codes4); a 1 bp bin scores its one anchor alone. The
+    # window's maximum is the largest of its anchors' values and its count their
+    # sum, bit for bit, on both strands and both orientations, across the edges
+    # of the run of N at chr1 [167280, 217280).
+    regions <- gintervals(1, c(167000, 217000), c(167600, 217600))
+    K <- 30L
+    configs <- list(
+        list(W = 20L, mode = "full", p = list(bidirect = FALSE, strand = 1L)),
+        list(W = 20L, mode = "full", p = list(bidirect = FALSE, strand = -1L)),
+        list(W = 41L, mode = "sparse", p = list(bidirect = TRUE)),
+        list(W = 7L, mode = "none", p = list(bidirect = FALSE, strand = -1L)),
+        list(W = 9L, mode = "sparse", p = list(bidirect = TRUE))
+    )
+    for (k in seq_along(configs)) {
+        cf <- configs[[k]]
+        m <- potts_ref_model(W = cf$W, npair_mode = cf$mode, seed = 400L + k)
+        gvtrack.create("pwin", NULL, "potts.max", params = c(m, cf$p))
+        gvtrack.create("pwinc", NULL, "potts.count", params = c(m, cf$p, list(score.thresh = 0)))
+        win <- gextract(c("pwin", "pwinc"), regions, iterator = K)
+        one <- gextract(c("pwin", "pwinc"), regions, iterator = 1)
+        # the K bp bin of each 1 bp bin: bins sit at multiples of K, the first
+        # one of a region cut at its start
+        r0 <- regions$start[one$intervalID]
+        bin <- sprintf("%d:%d", one$intervalID, as.integer(pmax(r0, one$start %/% K * K)))
+        agg_max <- tapply(one$pwin, bin, function(v) if (all(is.na(v))) NaN else max(v, na.rm = TRUE))
+        agg_cnt <- tapply(one$pwinc, bin, sum)
+        key <- sprintf("%d:%d", win$intervalID, as.integer(win$start))
+        expect_true(all(key %in% names(agg_max)))
+        expect_identical(win$pwin, as.vector(agg_max[key]), info = sprintf("config %d, max", k))
+        expect_identical(win$pwinc, as.vector(agg_cnt[key]), info = sprintf("config %d, count", k))
+        expect_true(any(is.na(win$pwin)) && any(!is.na(win$pwin)), info = sprintf("config %d reaches the N run", k))
+        gvtrack.rm("pwin")
+        gvtrack.rm("pwinc")
+    }
+})

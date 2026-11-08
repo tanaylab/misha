@@ -78,6 +78,10 @@ private:
     // float this returns through and -inf out of the aggregators below can
     // only mean "no scorable anchor".
     double anchor_value(size_t i, bool union_max, int &dir) const;
+    // anchor_value() of the anchors i .. i + 3, all four windows scorable,
+    // through PottsModel::score_codes4(): the same four values, computed side
+    // by side.
+    void anchor_values4(size_t i, bool union_max, double u[4], int dir[4]) const;
 
     // max_edits = 1: the best anchor score reachable with at most one
     // substitution. Max over substitutions and max over anchors commute, and a
@@ -243,8 +247,9 @@ private:
     static constexpr size_t CHUNK_MAX_LEN = 1 << 18;
     SeqChunk m_chunk;
     // Points m_c / m_nb / m_bc at the chunk's copy of `expanded`, building or
-    // refilling the chunk as needed; false (nothing changed) when the call
-    // should fetch instead.
+    // refilling the chunk as needed; false when the call should fetch instead
+    // (the pointers are left as they were; the forward-step record is updated
+    // either way).
     bool target_from_chunk(const GInterval &expanded, const GenomeChromKey &chromkey);
 
     SlideCache m_slide;
