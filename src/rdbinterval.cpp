@@ -924,6 +924,8 @@ bool IntervUtils::distribute_task(uint64_t res_const_size,    // data size in by
 		rdb::prepare4multitasking(res_const_size, res_record_size, ram_shm_size, get_max_mem_usage(), m_num_planned_kids, true);
 	}
 
+	rdb::warn_if_forks_are_slow(m_envir, m_kids_intervals1d.size() + m_kids_intervals2d.size());
+
 	for (vector<GIntervalsFetcher1D *>::const_iterator ikid_intervs = m_kids_intervals1d.begin(); ikid_intervs != m_kids_intervals1d.end(); ++ikid_intervs) {
 		if (!launch_process())
 			return true;
