@@ -734,6 +734,7 @@ private:
 	static void    prepare4multitasking(uint64_t res_const_size, uint64_t res_var_size, uint64_t max_res_size, uint64_t max_mem_usage, unsigned num_planned_kids, bool res_size_from_ram = false);
 	static pid_t   launch_process();
     static void    check_kids_state(bool ignore_errors);
+	static void    forget_reaped_kids();
 	static void    wait_for_kids(rdb::IntervUtils &iu);
 	static int64_t update_kids_mem_usage();
 	static int     get_num_kids() { return s_kid_index; }
