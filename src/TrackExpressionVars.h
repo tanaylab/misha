@@ -361,6 +361,12 @@ private:
 	std::unique_ptr<ValueVarProcessor>       m_value_processor;
 	std::unique_ptr<SequenceVarProcessor>    m_sequence_processor;
 
+	// Set by init(): whether any track variable is sequence based (PWM, k-mer, ...) and
+	// whether any is not. set_vars() runs for every iterator interval, so it skips the
+	// processors that have nothing to do.
+	bool                                     m_has_sequence_vars{true};
+	bool                                     m_has_track_vars{true};
+
 	void                 parse_imdf(SEXP rvtrack, const string &vtrack, Iterator_modifier1D *imdf1d, Iterator_modifier2D *imdf2d);
 	Iterator_modifier1D *add_imdf(const Iterator_modifier1D &imdf1d);
 	Iterator_modifier2D *add_imdf(const Iterator_modifier2D &imdf2d);
