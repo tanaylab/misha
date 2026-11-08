@@ -222,25 +222,17 @@ double TrackVarProcessor::aggregate_multi_value(
 	case TrackExpressionVars::Track_var::SAMPLE_POS_REL:
 		return aggregate_sample_pos_rel_with_filter(track, parts, base_start);
 	case TrackExpressionVars::Track_var::FIRST:
-		// For first, use the first unmasked part
-		track.read_interval(parts[0]);
-		return track.last_first();
+		return aggregate_first_with_filter(track, parts, false);
 	case TrackExpressionVars::Track_var::FIRST_POS_ABS:
-		track.read_interval(parts[0]);
-		return track.last_first_pos();
+		return aggregate_first_with_filter(track, parts, true);
 	case TrackExpressionVars::Track_var::FIRST_POS_REL:
-		track.read_interval(parts[0]);
-		return track.last_first_pos() - base_start;
+		return aggregate_first_with_filter(track, parts, true) - base_start;
 	case TrackExpressionVars::Track_var::LAST:
-		// For last, use the last unmasked part
-		track.read_interval(parts.back());
-		return track.last_last();
+		return aggregate_last_with_filter(track, parts, false);
 	case TrackExpressionVars::Track_var::LAST_POS_ABS:
-		track.read_interval(parts.back());
-		return track.last_last_pos();
+		return aggregate_last_with_filter(track, parts, true);
 	case TrackExpressionVars::Track_var::LAST_POS_REL:
-		track.read_interval(parts.back());
-		return track.last_last_pos() - base_start;
+		return aggregate_last_with_filter(track, parts, true) - base_start;
 	default:
 		if (!TrackExpressionVars::is_sequence_based_function(var.val_func))
 			verror("Internal error: unsupported function %d", var.val_func);
@@ -576,6 +568,30 @@ double TrackVarProcessor::aggregate_sample_pos_rel_with_filter(GenomeTrack1D &tr
 		return abs_pos;
 	}
 	return abs_pos - base_start;
+}
+
+double TrackVarProcessor::aggregate_first_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts, bool pos)
+{
+	// The first part that holds a value has the first value
+	for (const auto &part : parts) {
+		track.read_interval(part);
+		const double v = pos ? track.last_first_pos() : (double)track.last_first();
+		if (!std::isnan(v))
+			return v;
+	}
+	return numeric_limits<double>::quiet_NaN();
+}
+
+double TrackVarProcessor::aggregate_last_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts, bool pos)
+{
+	// The last part that holds a value has the last value
+	for (auto ipart = parts.rbegin(); ipart != parts.rend(); ++ipart) {
+		track.read_interval(*ipart);
+		const double v = pos ? track.last_last_pos() : (double)track.last_last();
+		if (!std::isnan(v))
+			return v;
+	}
+	return numeric_limits<double>::quiet_NaN();
 }
 
 double TrackVarProcessor::aggregate_lse_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts)

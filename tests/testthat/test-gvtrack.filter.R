@@ -1063,3 +1063,57 @@ test_that("gvtrack.filter works with gvtrack.create", {
     # The result should NOT be NA for the unmasked interval
     expect_false(is.na(result_uncovered$test_filter[1]))
 })
+
+# Blocks of 400 bp on chr1, each with the values 1, 2 and 6 at [0,50), [100,150) and [250,300) of the block
+vf_blocks <- function(nblocks) {
+    off <- rep((seq_len(nblocks) - 1) * 400, each = 3)
+    data.frame(chrom = "chr1", start = off + c(0, 100, 250), end = off + c(50, 150, 300), score = rep(c(1, 2, 6), nblocks))
+}
+
+# A sparse, a dense (50 bp bins, the bins between the values hold none) and an array track of the values of vv,
+# in a new database; returns the sources to compare, the value-based vtrack included
+vf_sources <- function(vv, env = parent.frame()) {
+    set.seed(1)
+    s1 <- paste(sample(c("A", "C", "G", "T"), max(vv$end) + 1000, TRUE), collapse = "")
+    setup_db(list(sprintf(">chr1\n%s\n", s1), ">chr2\nACGTACGTACGT\n"))
+    gtrack.create_sparse("vf_sp", "x", vv[, 1:3], vv$score)
+    gtrack.create_dense("vf_dn", "x", vv[, 1:3], vv$score, 50, NaN)
+    f <- tempfile(fileext = ".tsv")
+    write.table(setNames(vv, c("chrom", "start", "end", "a")), f, sep = "\t", quote = FALSE, row.names = FALSE)
+    suppressMessages(gtrack.array.import("vf_arr", "x", f))
+    unlink(f)
+    withr::defer(
+        {
+            gvtrack.clear()
+            for (tr in c("vf_sp", "vf_dn", "vf_arr")) gtrack.rm(tr, force = TRUE)
+        },
+        envir = env
+    )
+    list(sp = "vf_sp", dn = "vf_dn", arr = "vf_arr", vv = vv)
+}
+
+test_that("with a filter, first and last and their positions skip unmasked parts that hold no value", {
+    local_db_state()
+    srcs <- vf_sources(vf_blocks(2))
+    iv <- gintervals("chr1", 400, 800)
+    # parts [460,470) and [480,800): the first part holds no value
+    m_first <- gintervals("chr1", c(400, 470), c(460, 480))
+    # parts [400,550), [560,720) and [730,800): the last part holds no value
+    m_last <- gintervals("chr1", c(550, 720), c(560, 730))
+    expected <- list(
+        first = list(m_first, 2), first.pos.abs = list(m_first, 500), first.pos.relative = list(m_first, 100),
+        last = list(m_last, 6), last.pos.abs = list(m_last, 650), last.pos.relative = list(m_last, 250)
+    )
+    check <- function(label) {
+        for (f in names(expected)) {
+            for (s in names(srcs)) {
+                gvtrack.create("vf", srcs[[s]], f, filter = expected[[f]][[1]])
+                expect_equal(gextract("vf", iv, iterator = iv)$vf, expected[[f]][[2]], info = paste(label, s, f))
+            }
+        }
+    }
+    check("per-chromosome")
+    withr::with_options(list(gshared.track.backend = TRUE), check("shared backend"))
+    for (tr in c("vf_sp", "vf_dn", "vf_arr")) suppressMessages(gtrack.convert_to_indexed(tr))
+    check("indexed")
+})
