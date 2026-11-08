@@ -46,6 +46,10 @@ public:
 
     void invalidate_cache();
 
+    // Frees the encoded stretch of the chromosome (target_from_chunk()); for a
+    // scan that moves to another chromosome.
+    void release_chunk();
+
     // The best per-anchor score from the last score_interval() call, or -inf if
     // it scored nothing. SequenceVarProcessor::score_potts_var() (in
     // SequenceVarProcessor.cpp) calls this to aggregate MAX_LIKELIHOOD_POS
@@ -235,7 +239,8 @@ private:
     // rather than encode bases no call reads. Never built while a substitution
     // is set on the shared GenomeSeqFetch (gextract.variants), whose reads it
     // would not see. It starts at CHUNK_MIN_LEN bases and doubles per refill up
-    // to CHUNK_MAX_LEN.
+    // to CHUNK_MAX_LEN (6 bytes a base: 192 KB), and release_chunk() frees it
+    // when the scan moves to another chromosome.
     struct SeqChunk {
         int chromid = -1;
         int64_t start = 0; // genomic [start, end), forward coordinates
@@ -252,7 +257,7 @@ private:
     static constexpr int64_t CHUNK_MAX_TARGET = 4096;   // longer targets take the fetch path
     static constexpr int CHUNK_MIN_RUN = 16;
     static constexpr size_t CHUNK_MIN_LEN = 256;
-    static constexpr size_t CHUNK_MAX_LEN = 1 << 18;
+    static constexpr size_t CHUNK_MAX_LEN = 1 << 15;
     SeqChunk m_chunk;
     // Points m_c / m_nb / m_bc at the chunk's copy of `expanded`, building or
     // refilling the chunk as needed; false when the call should fetch instead

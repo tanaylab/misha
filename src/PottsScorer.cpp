@@ -681,6 +681,17 @@ double PottsScorer::score_with_sliding_window(const GInterval &original_interval
                                motif_len, tlen, populate);
 }
 
+void PottsScorer::release_chunk()
+{
+    SeqChunk &ch = m_chunk;
+    ch.chromid = -1;
+    ch.run = 0;
+    ch.next_len = CHUNK_MIN_LEN;
+    std::vector<int8_t>().swap(ch.codes);
+    std::vector<int32_t>().swap(ch.nbad);
+    std::vector<int8_t>().swap(ch.block_codes);
+}
+
 void PottsScorer::block_codes_for(size_t lo, size_t hi)
 {
     if (m_bc_ready)

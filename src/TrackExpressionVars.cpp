@@ -2055,10 +2055,12 @@ void TrackExpressionVars::start_chrom(const GInterval &interval)
 		}
 	}
 
-	// Invalidate Potts scorer caches on chromosome change
+	// Invalidate Potts scorer caches on chromosome change, and free their
+	// encoded stretch of the previous chromosome
 	for (Track_vars::iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ++ivar) {
 		if (ivar->potts_scorer) {
 			ivar->potts_scorer->invalidate_cache();
+			ivar->potts_scorer->release_chunk();
 		}
 	}
 }
@@ -2181,10 +2183,12 @@ void TrackExpressionVars::start_chrom(const GInterval2D &interval)
 		}
 	}
 
-	// Invalidate Potts scorer caches on chromosome change
+	// Invalidate Potts scorer caches on chromosome change, and free their
+	// encoded stretch of the previous chromosome
 	for (Track_vars::iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ++ivar) {
 		if (ivar->potts_scorer) {
 			ivar->potts_scorer->invalidate_cache();
+			ivar->potts_scorer->release_chunk();
 		}
 	}
 }
