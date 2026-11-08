@@ -195,6 +195,83 @@ test_that("gquantiles on dense full chr1 stays fast", {
     expect_perf_baseline(measured, "gquantiles dense full-chr", baseline_ms = 429)
 })
 
+test_that("a sum window slides when the iterator is not a multiple of the bin size", {
+    # A 60 bp iterator over 50 bp bins with a 10075 bp reach (201.5 bins) gives windows of 202
+    # and 203 bins. The window used to be read afresh whenever its size changed (2 steps in 5),
+    # ~200 reads per row instead of ~1; at a 50 bp iterator (one window size) it slid as now.
+    # Streaming reduction, full chr1.
+    skip_unless_perf()
+    fix <- .perf_setup(n_dense_tracks = 1)
+    on.exit(.perf_cleanup(fix), add = TRUE)
+    on.exit(try(gvtrack.rm("v_sum_wide"), silent = TRUE), add = TRUE)
+
+    gvtrack.create("v_sum_wide", fix$dense_tracks[1], func = "sum")
+    gvtrack.iterator("v_sum_wide", sshift = -5000, eshift = 5015)
+
+    t50 <- time_op(gquantiles("v_sum_wide", percentiles = 0.5, intervals = fix$full_chr1, iterator = 50))
+    t60 <- time_op(gquantiles("v_sum_wide", percentiles = 0.5, intervals = fix$full_chr1, iterator = 60))
+    # 60 bp has 5/6 of the rows; the old code took several times longer
+    expect_lt(t60 / t50, 1.5)
+})
+
+test_that("gquantiles finds a high percentile without walking every rank below it", {
+    # The parent used to merge the kids' sorted values one by one up to the largest percentile
+    # asked for (2.6e9 steps for a 1 bp genome): percentile 0.999 cost the whole merge, 0.001
+    # almost none. Exact (unsampled) multitask path: 4 chromosomes (several processes; one
+    # chromosome may run in one), 20 bp iterator, ~44M values.
+    skip_unless_perf()
+    fix <- .perf_setup(n_dense_tracks = 1)
+    on.exit(.perf_cleanup(fix), add = TRUE)
+    withr::local_options(gmax.data.size = 1e10, gmultitasking = TRUE)
+    scope <- gintervals(c(1, 2, 3, 4))
+
+    low <- time_op(gquantiles(fix$dense_tracks[1], percentiles = 0.001, intervals = scope, iterator = 20))
+    high <- time_op(gquantiles(fix$dense_tracks[1], percentiles = 0.999, intervals = scope, iterator = 20))
+    expect_lt(high / low, 1.3)
+})
+
+test_that("gtrack.create_dense from intervals on its bin grid skips the per-bin aggregation", {
+    # One sorted interval per bin (what gextract returns) used to go through an index sort and
+    # an aggregation with two vector allocations per bin. An extra NaN interval off the grid on
+    # each chromosome, which changes no value, sends it down that path still.
+    skip_unless_perf()
+    fix <- .perf_setup(n_dense_tracks = 1)
+    on.exit(.perf_cleanup(fix), add = TRUE)
+    grid <- gextract(fix$dense_tracks[1], fix$full_chr1, colnames = "v")
+    all <- gintervals.all()
+    off <- rbind(grid, data.frame(chrom = all$chrom, start = 3, end = 4, v = NaN, intervalID = 1L))
+    on.exit(for (t in c("test.perf_on_grid", "test.perf_off_grid")) try(gtrack.rm(t, force = TRUE), silent = TRUE), add = TRUE)
+    create <- function(track, iv) {
+        try(gtrack.rm(track, force = TRUE), silent = TRUE)
+        gtrack.create_dense(track, "perf", iv[, c("chrom", "start", "end")], iv$v, 50, NaN)
+    }
+    on_grid <- time_op(create("test.perf_on_grid", grid))
+    off_grid <- time_op(create("test.perf_off_grid", off))
+    expect_lt(on_grid / off_grid, 0.7)
+})
+
+test_that("a small gextract costs about the same with 50,000 tracks in the database", {
+    # Each track expression was searched for every track name (a string and a substring search
+    # per name, ~7 ms per call in a 146k-track database); the names are now looked up by the
+    # expression's identifiers in an index of GTRACKS kept between calls.
+    skip_unless_perf()
+    local_db_state()
+    db <- withr::local_tempdir()
+    create_test_db(db, chrom_sizes = data.frame(chrom = "chr1", size = 100000L))
+    suppressMessages(gsetroot(db))
+    gtrack.create_dense("real", "x", gintervals("chr1", 0, 100000), 1, 100, 0)
+    iv <- gintervals("chr1", 0, 1000)
+    calls <- function() for (i in 1:50) gextract("real", iv)
+    few <- time_op(calls())
+    for (d in sprintf("d%02d", 0:49)) {
+        for (t in sprintf("t%04d.track", 0:999)) dir.create(file.path(db, "tracks", d, t), recursive = TRUE)
+    }
+    suppressMessages(gdb.reload())
+    expect_gte(length(gtrack.ls()), 50000)
+    many <- time_op(calls())
+    expect_lt(many / few, 1.5)
+})
+
 test_that("2D gextract on rect track full chr1xchr1 stays fast", {
     # 2D path is independent of the 1D hot paths above. The perf audit
     # touched StatQuadTree (uint8_t instead of bool) — that would show up here.
