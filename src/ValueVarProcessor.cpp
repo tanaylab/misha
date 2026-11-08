@@ -48,6 +48,7 @@ void ValueVarProcessor::process_single_value_var(
 			case TrackExpressionVars::Value_var::AVG:
 			case TrackExpressionVars::Value_var::STDDEV:
 			case TrackExpressionVars::Value_var::QUANTILE:
+			case TrackExpressionVars::Value_var::NEAREST:
 				eval_intervals = var.track->parts_reading_items_once(eval_intervals);
 				break;
 			default:
@@ -74,7 +75,6 @@ void ValueVarProcessor::process_single_value_var(
 			double max_pos = numeric_limits<double>::quiet_NaN();
 			double first_pos = numeric_limits<double>::quiet_NaN();
 			double last_pos = numeric_limits<double>::quiet_NaN();
-			double nearest_val = numeric_limits<double>::quiet_NaN();
 			double lse_val = -numeric_limits<double>::infinity();
 			bool exists = false;
 			bool has_value = false;
@@ -95,7 +95,6 @@ void ValueVarProcessor::process_single_value_var(
 				double part_max_pos = track.last_max_pos();
 				double part_first_pos = track.last_first_pos();
 				double part_last_pos = track.last_last_pos();
-				double part_nearest = track.last_nearest();
 				double part_exists = track.last_exists();
 
 				if (part_size > 0) {
@@ -136,9 +135,6 @@ void ValueVarProcessor::process_single_value_var(
 					first_pos = part_first_pos;
 				if (!std::isnan(part_last_pos))
 					last_pos = part_last_pos;
-
-				if (!std::isnan(part_nearest) && std::isnan(nearest_val))
-					nearest_val = part_nearest;
 
 				exists = exists || (!std::isnan(part_exists) && part_exists != 0);
 				has_value = true;
@@ -222,7 +218,8 @@ void ValueVarProcessor::process_single_value_var(
 					var.var[idx] = std::isnan(agg.max_pos) ? numeric_limits<double>::quiet_NaN() : agg.max_pos - eval_interval.start;
 					break;
 				case TrackExpressionVars::Value_var::NEAREST:
-					var.var[idx] = agg.nearest_val;
+					// the average of the unmasked values, as "nearest" is the average when the interval holds values
+					var.var[idx] = agg.total_size > 0 ? agg.total_sum / agg.total_size : numeric_limits<double>::quiet_NaN();
 					break;
 				case TrackExpressionVars::Value_var::QUANTILE:
 					var.var[idx] = TrackVarProcessor::aggregate_quantile_with_filter(*var.track, eval_intervals, var.percentile, m_iu);

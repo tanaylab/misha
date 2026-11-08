@@ -1558,6 +1558,8 @@ TrackExpressionVars::Value_var &TrackExpressionVars::add_vtrack_var_src_value(SE
 			break;
 		case Value_var::NEAREST:
 			var.track->register_function(GenomeTrack1D::NEAREST);
+			// with a filter the parts' means are merged through their value counts
+			var.track->register_function(GenomeTrack1D::SIZE);
 			break;
 		case Value_var::EXISTS:
 			var.track->register_function(GenomeTrack1D::EXISTS);
@@ -1658,6 +1660,11 @@ void TrackExpressionVars::register_track_functions()
 			break;
 		case Track_var::REG_NEAREST:
 			track1d->register_function(GenomeTrack1D::NEAREST);
+			// with a filter the parts' means are merged through their value counts
+			if (ivar->filter) {
+				track1d->register_function(GenomeTrack1D::AVG);
+				track1d->register_function(GenomeTrack1D::SIZE);
+			}
 			break;
 		case Track_var::STDDEV:
 			track1d->register_function(GenomeTrack1D::STDDEV);

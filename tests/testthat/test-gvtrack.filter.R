@@ -1118,6 +1118,23 @@ test_that("with a filter, first and last and their positions skip unmasked parts
     check("indexed")
 })
 
+test_that("with a filter, nearest is the average of the unmasked values, each counted once", {
+    local_db_state()
+    srcs <- vf_sources(vf_blocks(2))
+    iv <- gintervals("chr1", 400, 800)
+    # [420,430) splits the first value; [460,470) falls between the first two
+    for (mask in list(gintervals("chr1", 420, 430), gintervals("chr1", 460, 470))) {
+        for (s in names(srcs)) {
+            gvtrack.create("vf", srcs[[s]], "nearest", filter = mask)
+            expect_equal(gextract("vf", iv, iterator = iv)$vf, mean(c(1, 2, 6)), info = paste(s, mask$start))
+            withr::with_options(
+                list(gshared.track.backend = TRUE),
+                expect_equal(gextract("vf", iv, iterator = iv)$vf, mean(c(1, 2, 6)), info = paste(s, mask$start, "shared"))
+            )
+        }
+    }
+})
+
 test_that("with a filter, sample draws each unmasked value with the same chance", {
     local_db_state()
     nblocks <- 1200

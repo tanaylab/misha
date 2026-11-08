@@ -205,10 +205,15 @@ double TrackVarProcessor::aggregate_multi_value(
 		return aggregate_min_pos_abs_with_filter(track, parts);
 	case TrackExpressionVars::Track_var::MIN_POS_REL:
 		return aggregate_min_pos_rel_with_filter(track, parts, base_start);
-	case TrackExpressionVars::Track_var::REG_NEAREST:
-		// For nearest, use the first unmasked part (closest to start)
+	case TrackExpressionVars::Track_var::REG_NEAREST: {
+		// The average of the unmasked values, as "nearest" is the average when the interval holds values
+		const double avg = aggregate_avg_with_filter(track, parts);
+		if (!std::isnan(avg))
+			return avg;
+		// No unmasked value: the value nearest to the first unmasked part
 		track.read_interval(parts[0]);
 		return track.last_nearest();
+	}
 	case TrackExpressionVars::Track_var::QUANTILE:
 		return aggregate_quantile_with_filter(track, track.parts_reading_items_once(parts), var.percentile, m_iu);
 	case TrackExpressionVars::Track_var::EXISTS:
