@@ -282,3 +282,74 @@ test_that(".gsynth_process_parallel respects gmax.processes option", {
 
     options(gmax.processes = old_option)
 })
+
+# Lowers the size above which gsynth.random and gsynth.replace_kmer process the intervals in
+# parallel chunks (1e9 bp), so that small intervals reach that path.
+local_gsynth_chunk_size <- function(size, env = parent.frame()) {
+    ns <- asNamespace("misha")
+    old <- get(".GSYNTH_MAX_CHUNK_SIZE", envir = ns)
+    unlockBinding(".GSYNTH_MAX_CHUNK_SIZE", ns)
+    assign(".GSYNTH_MAX_CHUNK_SIZE", size, envir = ns)
+    withr::defer(
+        {
+            assign(".GSYNTH_MAX_CHUNK_SIZE", old, envir = ns)
+            lockBinding(".GSYNTH_MAX_CHUNK_SIZE", ns)
+        },
+        envir = env
+    )
+}
+
+test_that("a row larger than the chunk size is processed in one call", {
+    gdb.init_examples()
+    iv <- gintervals(1, 0, 20000)
+    expected_random <- gsynth.random(intervals = iv, output_format = "vector", seed = 3)
+    expected_replace <- gsynth.replace_kmer("CG", "GC", intervals = iv, output_format = "vector")
+
+    local_gsynth_chunk_size(1e4)
+    # each used to call itself on the same row until the C stack overflowed
+    expect_identical(gsynth.random(intervals = iv, output_format = "vector", seed = 3), expected_random)
+    expect_identical(gsynth.replace_kmer("CG", "GC", intervals = iv, output_format = "vector"), expected_replace)
+
+    # rows larger than the chunk size among others
+    ivs <- gintervals(c(1, 1, 2), c(0, 20000, 0), c(20000, 25000, 15000))
+    expect_equal(nchar(gsynth.random(intervals = ivs, output_format = "vector", seed = 3)), c(20000, 5000, 15000))
+})
+
+test_that("parallel FASTA output gets a .fai and leaves no chunk files behind", {
+    gdb.init_examples()
+    ivs <- gintervals(c(1, 1, 2), c(0, 9000, 0), c(9000, 18000, 5000))
+    serial <- c(random = tempfile(fileext = ".fa"), replace = tempfile(fileext = ".fa"))
+    parallel <- c(random = tempfile(fileext = ".fa"), replace = tempfile(fileext = ".fa"))
+    withr::defer(unlink(c(serial, parallel, paste0(c(serial, parallel), ".fai"))))
+    gsynth.random(intervals = ivs, output_path = serial[["random"]], output_format = "fasta", seed = 3)
+    gsynth.replace_kmer("CG", "GC", intervals = ivs, output_path = serial[["replace"]], output_format = "fasta")
+
+    local_gsynth_chunk_size(1e4)
+    before <- list.files(tempdir())
+    gsynth.random(intervals = ivs, output_path = parallel[["random"]], output_format = "fasta", seed = 3)
+    gsynth.replace_kmer("CG", "GC", intervals = ivs, output_path = parallel[["replace"]], output_format = "fasta")
+    # gsynth.replace_kmer writes no .fai, in one call or in chunks
+    expect_setequal(setdiff(list.files(tempdir()), before), basename(c(parallel, paste0(parallel[["random"]], ".fai"))))
+
+    # the chunks are joined byte for byte
+    expect_identical(readBin(parallel[["replace"]], "raw", 1e6), readBin(serial[["replace"]], "raw", 1e6))
+
+    # the chunks hold the sequences the vector output gives with the same seed
+    fa <- parallel[["random"]]
+    l <- readLines(fa)
+    is_header <- startsWith(l, ">")
+    records <- vapply(split(l[!is_header], cumsum(is_header)[!is_header]), paste, character(1), collapse = "")
+    expect_equal(unname(records), gsynth.random(intervals = ivs, output_format = "vector", seed = 3))
+
+    # the same records, lengths and layout as the serial output: the same index
+    expect_equal(readLines(paste0(fa, ".fai")), readLines(paste0(serial[["random"]], ".fai")))
+    # each offset points at the first base of its record
+    fai <- utils::read.table(paste0(fa, ".fai"), sep = "\t")
+    con <- file(fa, "rb")
+    first_lines <- vapply(seq_len(nrow(fai)), function(i) {
+        seek(con, fai$V3[i])
+        readChar(con, fai$V4[i])
+    }, character(1))
+    close(con)
+    expect_equal(first_lines, l[which(is_header) + 1])
+})

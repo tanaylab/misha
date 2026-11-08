@@ -33,6 +33,33 @@
 # Default chunk size threshold for parallel processing (1 billion bases)
 .GSYNTH_MAX_CHUNK_SIZE <- 1e9
 
+# TRUE when .gsynth_process_parallel processes the intervals: more than max_chunk_size bases
+# in more than one row. A single row is processed in one call whatever its size (a chunk is a
+# row, so a large row would only reach this function again).
+.gsynth_use_parallel <- function(intervals, max_chunk_size = .GSYNTH_MAX_CHUNK_SIZE) {
+    nrow(intervals) > 1 && sum(intervals$end - intervals$start) > max_chunk_size
+}
+
+# Intervals as a data frame (an intervals set name is loaded)
+.gsynth_intervals_df <- function(intervals) {
+    if (is.character(intervals)) {
+        intervals <- gintervals.load(intervals)
+    }
+    intervals
+}
+
+# The iterator of a model, for gsynth.sample and gsynth.score
+.gsynth_model_iterator <- function(model, hint = NULL) {
+    if (is.null(model$iterator)) {
+        stop(paste0(
+            "The model has no iterator: it was trained without an explicit iterator, or saved by ",
+            "a version of gsynth.save that did not store it. Set it to the iterator used in ",
+            "gsynth.train (e.g. model$iterator <- 200)", hint, "."
+        ), call. = FALSE)
+    }
+    model$iterator
+}
+
 #' Process large genomes in parallel chunks
 #'
 #' Internal helper function that extracts the common parallel processing pattern
@@ -54,8 +81,9 @@
 #' @param seed Optional seed for reproducible chunk seeds
 #' @param ... Additional arguments passed to process_chunk_fn
 #'
-#' @return NULL if parallel processing not needed (genome too small).
-#'         For file output: invisible(NULL) after writing combined file.
+#' @return NULL if parallel processing not needed (see .gsynth_use_parallel).
+#'         For file output: invisible(NULL) after writing combined file (and, for
+#'         FASTA, its .fai index when every chunk wrote one).
 #'         For vector output: Character vector of combined results.
 #'
 #' @noRd
@@ -66,13 +94,11 @@
                                      max_chunk_size = .GSYNTH_MAX_CHUNK_SIZE,
                                      seed = NULL,
                                      ...) {
-    # Calculate total bases
-    total_bases <- sum(intervals$end - intervals$start)
-
     # Return NULL if genome is small enough to process normally
-    if (total_bases <= max_chunk_size) {
+    if (!.gsynth_use_parallel(intervals, max_chunk_size)) {
         return(NULL)
     }
+    total_bases <- sum(intervals$end - intervals$start)
 
     # Number of chunks = number of intervals (one per row)
     n_chunks <- nrow(intervals)
@@ -135,36 +161,48 @@
         ))
     }, mc.cores = n_cores, mc.preschedule = FALSE)
 
-    # Combine results in order
-    message("Combining results...")
+    # Remove the chunk files, and the .fai index the FASTA writer puts next to each, however
+    # this ends
+    chunk_files <- unlist(temp_files[vapply(temp_files, function(f) is.character(f) && !inherits(f, "try-error"), logical(1))])
+    on.exit(unlink(c(chunk_files, paste0(chunk_files, ".fai"))), add = TRUE)
 
     for (i in seq_along(temp_files)) {
         temp_file <- temp_files[[i]]
-
-        if (!file.exists(temp_file)) {
-            stop(sprintf("Failed to generate chunk %d", i), call. = FALSE)
+        if (inherits(temp_file, "try-error") || !is.character(temp_file) || length(temp_file) != 1 || !file.exists(temp_file)) {
+            why <- if (inherits(temp_file, "try-error")) paste(":", conditionMessage(attr(temp_file, "condition"))) else ""
+            stop(sprintf("Failed to generate chunk %d%s", i, why), call. = FALSE)
         }
+    }
 
-        if (i == 1) {
-            # First chunk: copy to output
-            file.copy(temp_file, output_path, overwrite = TRUE)
-        } else {
-            # Subsequent chunks: append
-            if (output_format == "fasta") {
-                # Text mode: read lines and append
-                temp_content <- readLines(temp_file)
-                cat(temp_content, file = output_path, sep = "\n", append = TRUE)
+    # Combine results in order, byte for byte
+    message("Combining results...")
+    if (!file.create(output_path)) {
+        stop(sprintf("Failed to create %s", output_path), call. = FALSE)
+    }
+    fai_lines <- character(0)
+    has_fai <- output_format == "fasta"
+    unlink(paste0(output_path, ".fai"))
+    offset <- 0
+    for (temp_file in chunk_files) {
+        if (has_fai) {
+            chunk_fai <- paste0(temp_file, ".fai")
+            if (file.exists(chunk_fai)) {
+                # the offset of each record moves by the bytes written before its chunk
+                fields <- strsplit(readLines(chunk_fai), "\t", fixed = TRUE)
+                fai_lines <- c(fai_lines, vapply(fields, function(f) {
+                    paste(c(f[1], f[2], sprintf("%.0f", as.numeric(f[3]) + offset), f[4:5]), collapse = "\t")
+                }, character(1)))
             } else {
-                # Binary mode (misha): read raw and append
-                temp_content <- readBin(temp_file, "raw", n = file.info(temp_file)$size)
-                con <- file(output_path, "ab")
-                writeBin(temp_content, con)
-                close(con)
+                has_fai <- FALSE
             }
         }
-
-        # Clean up temp file
-        unlink(temp_file)
+        if (!file.append(output_path, temp_file)) {
+            stop(sprintf("Failed to append chunk %s to %s", temp_file, output_path), call. = FALSE)
+        }
+        offset <- offset + file.size(temp_file)
+    }
+    if (has_fai) {
+        writeLines(fai_lines, paste0(output_path, ".fai"))
     }
 
     invisible(NULL)
@@ -1297,6 +1335,8 @@ print.gsynth.model <- function(x, ...) {
 #' Saves a trained Markov model in the cross-platform .gsm format, which
 #' consists of a metadata YAML file and raw binary arrays for counts and CDFs.
 #' The .gsm format can be stored as a directory (default) or a ZIP archive.
+#' The model's iterator (\code{model$iterator}), which \code{\link{gsynth.sample}}
+#' and \code{\link{gsynth.score}} use, is saved when it is a bin size.
 #'
 #' @param model A gsynth.model object from \code{\link{gsynth.train}}
 #' @param file Path to save the model (directory or .zip file)
@@ -1375,6 +1415,19 @@ gsynth.save <- function(model, file, compress = FALSE) {
         )
     )
 
+    # The iterator sets the stratification windows of gsynth.sample and gsynth.score. Only a
+    # bin size can be stored (the format, shared with pymisha, holds a number).
+    iterator <- model$iterator
+    if (is.numeric(iterator) && length(iterator) == 1L && !is.na(iterator) && iterator > 0) {
+        metadata$iterator <- if (iterator == round(iterator) && iterator <= .Machine$integer.max) {
+            as.integer(iterator)
+        } else {
+            as.numeric(iterator)
+        }
+    } else if (!is.null(iterator)) {
+        warning("The model's iterator is not a bin size and is not saved; set model$iterator after gsynth.load", call. = FALSE)
+    }
+
     # Helper to write binary data for a list of num_kmers x 4 matrices in row-major order
     .write_bin_matrices <- function(mat_list, filepath) {
         con <- file(filepath, "wb")
@@ -1428,6 +1481,12 @@ gsynth.save <- function(model, file, compress = FALSE) {
 #'   \item If \code{file} is a file, tries ZIP .gsm format first, then
 #'         falls back to legacy RDS format
 #' }
+#'
+#' A .gsm model saved by a misha version whose \code{gsynth.save} did not
+#' store the iterator has none: before \code{\link{gsynth.sample}} or
+#' \code{\link{gsynth.score}} can use a stratified model, set
+#' \code{model$iterator} to the iterator used in \code{\link{gsynth.train}}.
+#' An unstratified model samples without it.
 #'
 #' @param file Path to the saved model (directory, .gsm zip, or legacy .rds)
 #'
@@ -1634,7 +1693,8 @@ gsynth.convert <- function(input_file, output_file, compress = FALSE) {
         pseudocount = pseudocount,
         prior_mode = prior_mode,
         prior = prior_mat,
-        iterator = NULL,
+        # NULL in a model saved before gsynth.save stored the iterator
+        iterator = if (!is.null(metadata$iterator)) as.numeric(metadata$iterator) else NULL,
         min_obs = min_obs,
         sparse_bins = sparse_bins
     )
@@ -1844,12 +1904,7 @@ gsynth.sample <- function(model,
     if (is.null(intervals)) {
         intervals <- gintervals.all()
     }
-
-    # Get iterator from model (with validation)
-    .iterator <- model$iterator
-    if (is.null(.iterator)) {
-        stop("Model iterator is NULL. The model may be corrupted or from an incompatible version.", call. = FALSE)
-    }
+    intervals <- .gsynth_intervals_df(intervals)
 
     n_dims <- model$n_dims
     dim_sizes <- model$dim_sizes
@@ -1857,29 +1912,15 @@ gsynth.sample <- function(model,
     message("Extracting track values for sampling...")
 
     if (n_dims == 0) {
-        # Zero-dimensional model: all positions use bin 1 (R 1-based)
-
-        # Still need iterator info to know positions
-        iter_info <- gextract("1", intervals = intervals, iterator = .iterator)
-
-        if (is.null(iter_info) || nrow(iter_info) == 0) {
-            stop("No positions extracted. Check that intervals are valid.", call. = FALSE)
-        }
-
-        n_positions <- nrow(iter_info)
-
-        # All positions map to bin 1 in R (will be converted to 0-based for C++)
-        flat_indices <- rep(1L, n_positions)
-
-        # Get chromosome info. Use levels() (full chromkey order) rather than
-        # chrom_sizes$chrom (only chroms present in the input) so chromids match
-        # misha's internal chromkey.
-        chrom_sizes <- gintervals.chrom_sizes(intervals)
-        chrom_key <- levels(chrom_sizes$chrom)
-        iter_chroms <- match(as.character(iter_info$chrom), chrom_key) - 1L
-        iter_starts <- as.integer(iter_info$start)
+        # Zero-dimensional model: every position is in the single bin, whatever the
+        # iterator, so each interval is one bin (index 1 in R, 0-based for C++)
+        flat_indices <- rep(1L, nrow(intervals))
+        iter_starts <- as.integer(intervals$start)
+        iter_ends <- as.integer(intervals$end)
+        iter_ivids <- seq_len(nrow(intervals)) - 1L
     } else {
         # Multi-dimensional model: extract track values and compute bins
+        .iterator <- .gsynth_model_iterator(model)
 
         # Extract track values for all dimensions
         exprs <- sapply(model$dim_specs, function(d) d$expr)
@@ -1953,11 +1994,11 @@ gsynth.sample <- function(model,
         # Compute flat bin indices using vectorized helper
         flat_indices <- .compute_flat_indices(per_dim_indices, dim_sizes)
 
-        # Get chromosome info. See note above re: levels() vs chrom_sizes$chrom.
-        chrom_sizes <- gintervals.chrom_sizes(intervals)
-        chrom_key <- levels(chrom_sizes$chrom)
-        iter_chroms <- match(as.character(track_data$chrom), chrom_key) - 1L
+        # Each iterator interval with the row of `intervals` it belongs to: a position
+        # takes its bin from its own interval's iterator intervals only
         iter_starts <- as.integer(track_data$start)
+        iter_ends <- as.integer(track_data$end)
+        iter_ivids <- as.integer(track_data$intervalID) - 1L
     }
 
     # Handle NA flat indices (convert to -1 for C++)
@@ -2071,15 +2112,16 @@ gsynth.sample <- function(model,
         as.numeric(dummy_breaks),
         flat_indices,
         iter_starts,
-        iter_chroms,
+        iter_ends,
+        iter_ivids,
         intervals,
         mask_copy,
         output_path_str,
         output_format_int,
         n_samples,
         as.integer(k),
-        as.integer(model$iterator),
         as.logical(preserve_n),
+        NULL, # bases without a valid context or bin are drawn uniformly
         .misha_env()
     )
 
@@ -2118,11 +2160,15 @@ gsynth.sample <- function(model,
 #' @param track       Name of the misha track to create.
 #' @param description Optional track description.
 #' @param intervals   Intervals to score. Defaults to
-#'                    \code{gintervals.all()}. Best results when interval
-#'                    starts are aligned to multiples of
-#'                    \code{model$iterator}; otherwise the first stratum
-#'                    window is shorter than \code{model$iterator} and
-#'                    its bin label may differ from training.
+#'                    \code{gintervals.all()}. Overlapping intervals are
+#'                    unified first, so each position is scored once. The
+#'                    stratum of a position comes from the iterator windows
+#'                    of its own interval, extended upstream by one
+#'                    \code{model$iterator}: a window cut by the interval
+#'                    end (or by the start of the extension) is evaluated on
+#'                    its part inside, so its bin may differ from the one
+#'                    training saw on the whole window. Intervals aligned to
+#'                    multiples of \code{model$iterator} avoid this.
 #' @param mask        Optional intervals to NA-out in the output (e.g.
 #'                    repeats). Intersects with \code{intervals} per bp;
 #'                    every output bin containing a masked bp becomes
@@ -2168,7 +2214,8 @@ gsynth.score <- function(model,
         stop("track is required (single non-empty string)", call. = FALSE)
     }
     if (is.null(resolution)) {
-        resolution <- as.integer(model$iterator)
+        # an unstratified model needs no iterator otherwise
+        resolution <- as.integer(.gsynth_model_iterator(model, hint = if (identical(as.integer(model$n_dims), 0L)) ", or pass resolution"))
     }
     if (!is.numeric(resolution) || length(resolution) != 1L ||
         is.na(resolution) || resolution != as.integer(resolution) ||
@@ -2183,42 +2230,37 @@ gsynth.score <- function(model,
     if (is.null(intervals)) {
         intervals <- gintervals.all()
     }
+    # A position covered by several intervals is scored once
+    intervals <- gintervals.canonic(intervals, unify_touching_intervals = FALSE)
 
     # ---- stratum extraction (mirrors gsynth.sample) ----
-    .iterator <- model$iterator
-    if (is.null(.iterator)) {
-        stop("Model iterator is NULL. Model may be corrupted.", call. = FALSE)
-    }
     n_dims <- model$n_dims
     dim_sizes <- model$dim_sizes
-
-    # Bin lookup queries pos - k (the leftmost base of the (k+1)-mer
-    # context) to match training. Extend gextract upstream by one
-    # iter_size so the first k bp of every interval get bin info from
-    # the prior iter window — matching what training saw on the same
-    # genome. Clamped to chromosome start.
     .k <- as.integer(model$k)
-    strata_intervals <- intervals
-    if (is.numeric(.iterator) && length(.iterator) == 1L && .iterator > 0L) {
-        strata_intervals$start <- as.integer(pmax(
-            0L, as.integer(strata_intervals$start) - as.integer(.iterator)
-        ))
-    }
+
+    # chrom_key: levels() (full chromkey order) so chromids match misha's chromkey
+    chrom_key <- levels(gintervals.chrom_sizes(intervals)$chrom)
 
     if (n_dims == 0) {
-        iter_info <- gextract("1",
-            intervals = strata_intervals, iterator = .iterator
-        )
-        if (is.null(iter_info) || nrow(iter_info) == 0) {
-            stop("No positions extracted. Check intervals.", call. = FALSE)
-        }
-        n_positions <- nrow(iter_info)
-        flat_indices <- rep(1L, n_positions)
-        chrom_sizes <- gintervals.chrom_sizes(intervals)
-        chrom_key <- levels(chrom_sizes$chrom)
-        iter_chroms <- match(as.character(iter_info$chrom), chrom_key) - 1L
-        iter_starts <- as.integer(iter_info$start)
+        # Every position is in the single stratum, whatever the iterator: each interval,
+        # from k bp upstream (bin lookup is at pos - k), is one bin
+        flat_indices <- rep(1L, nrow(intervals))
+        iter_starts <- as.integer(pmax(0, intervals$start - .k))
+        iter_ends <- as.integer(intervals$end)
+        iter_ivids <- seq_len(nrow(intervals)) - 1L
     } else {
+        .iterator <- .gsynth_model_iterator(model)
+
+        # Bin lookup queries pos - k (the leftmost base of the (k+1)-mer
+        # context) to match training. Extend gextract upstream by one
+        # iter_size (at least k) so the first k bp of every interval get bin info
+        # from the prior iter window — matching what training saw on the same
+        # genome. Clamped to chromosome start.
+        strata_intervals <- intervals
+        if (is.numeric(.iterator) && length(.iterator) == 1L && .iterator > 0L) {
+            strata_intervals$start <- pmax(0, strata_intervals$start - max(as.integer(.iterator), .k))
+        }
+
         exprs <- sapply(model$dim_specs, function(d) d$expr)
         track_data <- gextract(exprs,
             intervals = strata_intervals, iterator = .iterator
@@ -2239,10 +2281,10 @@ gsynth.score <- function(model,
             per_dim_indices[, d] <- bi
         }
         flat_indices <- .compute_flat_indices(per_dim_indices, dim_sizes)
-        chrom_sizes <- gintervals.chrom_sizes(intervals)
-        chrom_key <- levels(chrom_sizes$chrom)
-        iter_chroms <- match(as.character(track_data$chrom), chrom_key) - 1L
+        # each strata interval is the interval of the same row, extended upstream
         iter_starts <- as.integer(track_data$start)
+        iter_ends <- as.integer(track_data$end)
+        iter_ivids <- as.integer(track_data$intervalID) - 1L
     }
 
     flat_indices[is.na(flat_indices)] <- 0L
@@ -2295,13 +2337,13 @@ gsynth.score <- function(model,
                     log_p_list,
                     flat_indices,
                     iter_starts,
-                    iter_chroms,
+                    iter_ends,
+                    iter_ivids,
                     intervals,
                     track,
                     all_chromids,
                     as.integer(resolution),
                     as.integer(model$k),
-                    as.integer(.iterator),
                     n_policy_int,
                     sparse_policy_int,
                     mask,
@@ -2321,13 +2363,13 @@ gsynth.score <- function(model,
                                 log_p_list,
                                 flat_indices,
                                 iter_starts,
-                                iter_chroms,
+                                iter_ends,
+                                iter_ivids,
                                 intervals,
                                 track,
                                 as.integer(cids),
                                 as.integer(resolution),
                                 as.integer(model$k),
-                                as.integer(.iterator),
                                 n_policy_int,
                                 sparse_policy_int,
                                 mask,
@@ -2429,9 +2471,8 @@ gsynth.score <- function(model,
 #'        intervals take precedence.
 #' @param seed Random seed for reproducibility. If NULL, uses current random state.
 #' @param n_samples Number of samples to generate per interval. Default is 1.
-#' @param iterator Iterator for position resolution. Default is 1 (base-pair resolution).
-#'        Larger values may speed up processing but are typically not needed for
-#'        random sampling.
+#' @param iterator Not used: every base is drawn independently of its position.
+#'        Kept for compatibility.
 #'
 #' @details
 #' Unlike \code{\link{gsynth.sample}} which uses a trained Markov model to generate
@@ -2539,6 +2580,7 @@ gsynth.random <- function(intervals = NULL,
     if (is.null(intervals)) {
         intervals <- gintervals.all()
     }
+    intervals <- .gsynth_intervals_df(intervals)
 
     # Check if we need to process in chunks for large genomes
     # Define chunk processor for parallel execution
@@ -2583,49 +2625,28 @@ gsynth.random <- function(intervals = NULL,
     }
 
     # Try parallel processing for large genomes
-    parallel_result <- .gsynth_process_parallel(
-        intervals = intervals,
-        output_format = output_format,
-        output_path = output_path,
-        process_chunk_fn = .process_random_chunk,
-        max_chunk_size = .GSYNTH_MAX_CHUNK_SIZE,
-        seed = seed
-    )
-
-    # If parallel processing handled it, return the result
-    if (!is.null(parallel_result)) {
-        message(sprintf("Generated %d random sequence(s)", length(parallel_result)))
-        return(parallel_result)
-    }
-    if (is.null(parallel_result) && sum(intervals$end - intervals$start) > .GSYNTH_MAX_CHUNK_SIZE) {
-        # File output was written by parallel processing
+    if (.gsynth_use_parallel(intervals)) {
+        parallel_result <- .gsynth_process_parallel(
+            intervals = intervals,
+            output_format = output_format,
+            output_path = output_path,
+            process_chunk_fn = .process_random_chunk,
+            max_chunk_size = .GSYNTH_MAX_CHUNK_SIZE,
+            seed = seed
+        )
+        if (output_format == "vector") {
+            message(sprintf("Generated %d random sequence(s)", length(parallel_result)))
+            return(parallel_result)
+        }
         message(sprintf("Random sequences written to: %s", output_path))
         return(invisible(NULL))
     }
 
-    # Set up iterator
-    .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
-
-    # Get position info using gextract
-    message("Setting up random sampling positions...")
-    iter_info <- gextract("1", intervals = intervals, iterator = .iterator)
-
-    if (is.null(iter_info) || nrow(iter_info) == 0) {
-        stop("No positions extracted. Check that intervals are valid.", call. = FALSE)
-    }
-
-    n_positions <- nrow(iter_info)
-
-    # All positions map to bin 0 (single bin)
-    flat_indices <- rep(0L, n_positions)
-
-    # Get chromosome info. Use levels() (full chromkey order) rather than
-    # chrom_sizes$chrom (only chroms present in the input) so chromids match
-    # misha's internal chromkey.
-    chrom_sizes <- gintervals.chrom_sizes(intervals)
-    chrom_key <- levels(chrom_sizes$chrom)
-    iter_chroms <- match(as.character(iter_info$chrom), chrom_key) - 1L
-    iter_starts <- as.integer(iter_info$start)
+    # Every position is in the single bin: each interval is one bin (0-based)
+    flat_indices <- rep(0L, nrow(intervals))
+    iter_starts <- as.integer(intervals$start)
+    iter_ends <- as.integer(intervals$end)
+    iter_ivids <- seq_len(nrow(intervals)) - 1L
 
     # Create CDF from probabilities: [P(A), P(A)+P(C), P(A)+P(C)+P(G), 1]
     # Order is A=0, C=1, G=2, T=3 (same as C++ code)
@@ -2659,33 +2680,24 @@ gsynth.random <- function(intervals = NULL,
     # Create dummy breaks for single bin
     dummy_breaks <- c(0, 1)
 
-    # Derive iter_size for C_gsynth_sample. For gsynth.random all positions
-    # map to the single bin (index 0), so iter_size only controls whether a
-    # position inside an interval counts as bin-covered. For numeric iterators
-    # this is just the iterator itself; for track/intervals iterators the bin
-    # extent isn't fixed, so pass .Machine$integer.max to mark every position
-    # inside any interval as bin-covered (preserves pre-fix behavior).
-    iter_size_int <- if (is.numeric(.iterator) && length(.iterator) == 1 && .iterator > 0) {
-        as.integer(.iterator)
-    } else {
-        .Machine$integer.max
-    }
-
+    # The bases the Markov sampler fills without a context (the first k of an interval,
+    # those after an N) are drawn from nuc_probs too
     result <- .gcall(
         "C_gsynth_sample",
         cdf_list,
         as.numeric(dummy_breaks),
         flat_indices,
         iter_starts,
-        iter_chroms,
+        iter_ends,
+        iter_ivids,
         intervals,
         mask_copy,
         output_path_str,
         output_format_int,
         n_samples,
         as.integer(random_k),
-        iter_size_int,
         as.logical(preserve_n),
+        cdf_row,
         .misha_env()
     )
 
@@ -2791,76 +2803,45 @@ gsynth.replace_kmer <- function(target,
     if (is.null(intervals)) {
         intervals <- gintervals.all()
     }
+    intervals <- .gsynth_intervals_df(intervals)
 
     # Check if we need to process in chunks for large genomes
     # Define chunk processor for parallel execution
     # Captures target, replacement, output_format from enclosing scope
     .process_replace_chunk <- function(chunk_interval, chunk_index, chunk_seed = NULL, ...) {
+        # a FASTA header has the interval coordinates when its chromosome has more than one
+        # interval in the whole call, not in the chunk
+        coords_in_headers <- sum(as.character(intervals$chrom) == as.character(chunk_interval$chrom[1])) > 1
         if (output_format == "vector") {
             # Vector mode: return sequences directly
-            gsynth.replace_kmer(
-                target = target,
-                replacement = replacement,
-                output_path = NULL,
-                output_format = "vector",
-                intervals = chunk_interval,
-                check_composition = FALSE # Already checked above
-            )
+            .gsynth_replace_kmer_run(target, replacement, chunk_interval, NULL, "vector", coords_in_headers)
         } else {
             # File mode: write to temp file and return path
             temp_file <- tempfile(fileext = if (output_format == "fasta") ".fa" else ".seq")
-            gsynth.replace_kmer(
-                target = target,
-                replacement = replacement,
-                output_path = temp_file,
-                output_format = output_format,
-                intervals = chunk_interval,
-                check_composition = FALSE
-            )
+            .gsynth_replace_kmer_run(target, replacement, chunk_interval, temp_file, output_format, coords_in_headers)
             temp_file
         }
     }
 
     # Try parallel processing for large genomes
-    parallel_result <- .gsynth_process_parallel(
-        intervals = intervals,
-        output_format = output_format,
-        output_path = output_path,
-        process_chunk_fn = .process_replace_chunk,
-        max_chunk_size = .GSYNTH_MAX_CHUNK_SIZE
-    )
-
-    # If parallel processing handled it, return the result
-    if (!is.null(parallel_result)) {
-        return(parallel_result)
-    }
-    if (is.null(parallel_result) && sum(intervals$end - intervals$start) > .GSYNTH_MAX_CHUNK_SIZE) {
-        # File output was written by parallel processing
+    if (.gsynth_use_parallel(intervals)) {
+        parallel_result <- .gsynth_process_parallel(
+            intervals = intervals,
+            output_format = output_format,
+            output_path = output_path,
+            process_chunk_fn = .process_replace_chunk,
+            max_chunk_size = .GSYNTH_MAX_CHUNK_SIZE
+        )
+        if (output_format == "vector") {
+            return(parallel_result)
+        }
         message(sprintf("Modified genome written to: %s", output_path))
         return(invisible(NULL))
     }
 
-    # Map format to integer for C++
-    fmt_int <- switch(output_format,
-        misha = 0L,
-        fasta = 1L,
-        vector = 2L
-    )
-
-    # Handle NULL path for vector output
-    path_str <- if (is.null(output_path)) "" else as.character(output_path)
-
     message(sprintf("Iteratively replacing '%s' with '%s'...", target, replacement))
 
-    res <- .gcall(
-        "C_gsynth_replace_kmer",
-        as.character(target),
-        as.character(replacement),
-        intervals,
-        path_str,
-        fmt_int,
-        .misha_env()
-    )
+    res <- .gsynth_replace_kmer_run(target, replacement, intervals, output_path, output_format)
 
     if (output_format == "vector") {
         return(res)
@@ -2868,4 +2849,28 @@ gsynth.replace_kmer <- function(target,
 
     message(sprintf("Modified genome written to: %s", output_path))
     invisible(NULL)
+}
+
+# Runs C_gsynth_replace_kmer on the intervals. coords_in_headers: whether FASTA headers name
+# the interval (chrom_start_end) or only the chromosome; NA = when the chromosome has more than
+# one interval among `intervals`.
+.gsynth_replace_kmer_run <- function(target, replacement, intervals, output_path, output_format, coords_in_headers = NA) {
+    fmt_int <- switch(output_format,
+        misha = 0L,
+        fasta = 1L,
+        vector = 2L
+    )
+    # Handle NULL path for vector output
+    path_str <- if (is.null(output_path)) "" else as.character(output_path)
+
+    .gcall(
+        "C_gsynth_replace_kmer",
+        as.character(target),
+        as.character(replacement),
+        intervals,
+        path_str,
+        fmt_int,
+        as.logical(coords_in_headers),
+        .misha_env()
+    )
 }

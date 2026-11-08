@@ -2723,6 +2723,22 @@ test_that("gsynth.random error handling", {
     )
 })
 
+test_that("gsynth.random draws every base from nuc_probs, the first bases of an interval and those after an N too", {
+    gdb.init_examples()
+    only_a <- c(A = 1, C = 0, G = 0, T = 0)
+    seqs <- gsynth.random(
+        intervals = gintervals(1, seq(0, 9000, 1000), seq(20, 9020, 1000)),
+        output_format = "vector", nuc_probs = only_a, seed = 1
+    )
+    expect_equal(seqs, rep(strrep("A", 20), 10))
+
+    # around the N run at chr1:167280-217280, which preserve_n keeps
+    iv <- gintervals(1, 167200, 217400)
+    s <- gsynth.random(intervals = iv, output_format = "vector", nuc_probs = only_a, seed = 1)
+    expect_equal(s, gsub("[^Nn]", "A", gseq.extract(iv)))
+    expect_true(grepl("N", s))
+})
+
 test_that("gsynth.random produces uniform distribution with default probs", {
     gdb.init_examples()
 

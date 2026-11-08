@@ -471,3 +471,101 @@ test_that("sparse bins are preserved in .gsm round-trip", {
     gvtrack.rm("g_frac")
     gvtrack.rm("c_frac")
 })
+
+test_that("a loaded model samples and scores like the model it was saved from", {
+    gdb.init_examples()
+    if ("g_frac_it" %in% gvtrack.ls()) gvtrack.rm("g_frac_it")
+    gvtrack.create("g_frac_it", NULL, "kmer.frac", kmer = "G")
+    withr::defer({
+        gvtrack.rm("g_frac_it")
+        for (tr in c("zz_gsm_score_a", "zz_gsm_score_b")) {
+            if (gtrack.exists(tr)) gtrack.rm(tr, force = TRUE)
+        }
+    })
+
+    model <- gsynth.train(
+        list(expr = "g_frac_it", breaks = c(0, 0.2, 0.25, 0.3, 1)),
+        intervals = gintervals(1, 0, 50000),
+        iterator = 500,
+        k = 3
+    )
+
+    paths <- file.path(tempdir(), c("test_gsm_iter", "test_gsm_iter.zip"))
+    withr::defer(unlink(paths, recursive = TRUE))
+    for (compress in c(FALSE, TRUE)) {
+        f <- paths[compress + 1]
+        gsynth.save(model, f, compress = compress)
+        loaded <- gsynth.load(f)
+        expect_equal(loaded$iterator, 500)
+
+        iv <- gintervals(1, 1234, 9876)
+        expect_identical(
+            gsynth.sample(loaded, output_format = "vector", intervals = iv, seed = 17),
+            gsynth.sample(model, output_format = "vector", intervals = iv, seed = 17)
+        )
+    }
+
+    iv <- gintervals(1, 1000, 6000)
+    gsynth.score(model, "zz_gsm_score_a", intervals = iv, resolution = 100)
+    gsynth.score(loaded, "zz_gsm_score_b", intervals = iv, resolution = 100)
+    a <- gextract("zz_gsm_score_a", intervals = iv, iterator = 100)$zz_gsm_score_a
+    b <- gextract("zz_gsm_score_b", intervals = iv, iterator = 100)$zz_gsm_score_b
+    expect_true(any(is.finite(a)))
+    expect_identical(a, b)
+
+    # pymisha writes the iterator under the same key
+    meta <- yaml::read_yaml(file.path(paths[1], "metadata.yaml"))
+    expect_equal(meta$iterator, 500L)
+})
+
+test_that("a model saved without its iterator asks for it, and an unstratified one samples", {
+    gdb.init_examples()
+    if ("g_frac_noit" %in% gvtrack.ls()) gvtrack.rm("g_frac_noit")
+    gvtrack.create("g_frac_noit", NULL, "kmer.frac", kmer = "G")
+    withr::defer(gvtrack.rm("g_frac_noit"))
+
+    # a .gsm written by a gsynth.save that did not store the iterator
+    old_save <- function(model, f) {
+        gsynth.save(model, f)
+        meta <- yaml::read_yaml(file.path(f, "metadata.yaml"))
+        meta$iterator <- NULL
+        yaml::write_yaml(meta, file.path(f, "metadata.yaml"), precision = 15)
+    }
+
+    model <- gsynth.train(
+        list(expr = "g_frac_noit", breaks = c(0, 0.25, 1)),
+        intervals = gintervals(1, 0, 20000),
+        iterator = 200,
+        k = 2
+    )
+    f <- file.path(tempdir(), "test_gsm_noiter")
+    withr::defer(unlink(f, recursive = TRUE))
+    old_save(model, f)
+    loaded <- gsynth.load(f)
+    expect_null(loaded$iterator)
+    iv <- gintervals(1, 0, 1000)
+    expect_error(
+        gsynth.sample(loaded, output_format = "vector", intervals = iv, seed = 1),
+        "model\\$iterator <- "
+    )
+    expect_error(gsynth.score(loaded, "zz_gsm_noiter", intervals = iv), "model\\$iterator <- ")
+    expect_false(gtrack.exists("zz_gsm_noiter"))
+    loaded$iterator <- 200
+    expect_identical(
+        gsynth.sample(loaded, output_format = "vector", intervals = iv, seed = 1),
+        gsynth.sample(model, output_format = "vector", intervals = iv, seed = 1)
+    )
+
+    # every position of an unstratified model is in its single bin, whatever the iterator
+    model0 <- gsynth.train(intervals = gintervals(1, 0, 20000), iterator = 200, k = 2)
+    f0 <- file.path(tempdir(), "test_gsm_noiter0")
+    withr::defer(unlink(f0, recursive = TRUE))
+    old_save(model0, f0)
+    loaded0 <- gsynth.load(f0)
+    expect_null(loaded0$iterator)
+    expect_identical(
+        gsynth.sample(loaded0, output_format = "vector", intervals = iv, seed = 1),
+        gsynth.sample(model0, output_format = "vector", intervals = iv, seed = 1)
+    )
+    expect_error(gsynth.score(loaded0, "zz_gsm_noiter0", intervals = iv), "or pass resolution")
+})

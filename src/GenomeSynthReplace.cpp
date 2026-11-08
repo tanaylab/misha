@@ -124,12 +124,16 @@ extern "C" {
  * @param _intervals R intervals object for regions to process
  * @param _output_path Output file path (ignored if output_format = 2)
  * @param _output_format Integer: 0 = misha .seq, 1 = FASTA, 2 = return vector
+ * @param _coords_in_headers Logical: whether a FASTA header names the interval
+ *        (chrom_start_end) or only the chromosome; NA = when the chromosome has
+ *        more than one interval in _intervals
  * @param _envir R environment
  *
  * @return R_NilValue for file output, or character vector for output_format = 2
  */
 SEXP C_gsynth_replace_kmer(SEXP _target, SEXP _replacement, SEXP _intervals,
-                            SEXP _output_path, SEXP _output_format, SEXP _envir) {
+                            SEXP _output_path, SEXP _output_format,
+                            SEXP _coords_in_headers, SEXP _envir) {
     try {
         RdbInitializer rdb_init;
         IntervUtils iu(_envir);
@@ -250,7 +254,8 @@ SEXP C_gsynth_replace_kmer(SEXP _target, SEXP _replacement, SEXP _intervals,
                 } else if (output_format == 1) {
                     // FASTA mode
                     string header = chrom_name;
-                    if (intervals.size() > 1) {
+                    int coords_in_headers = Rf_asLogical(_coords_in_headers);
+                    if (coords_in_headers == NA_LOGICAL ? intervals.size() > 1 : coords_in_headers) {
                         header += "_" + to_string(interval_start) + "_" + to_string(interval_end);
                     }
                     write_fasta(fasta_ofs, header, seq);
