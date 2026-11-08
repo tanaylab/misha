@@ -354,7 +354,7 @@ void ParquetImport::write_bins(int chromid, const ChromRows &rows, int col, vect
 			float v = vals[i];
 
 			if (!std::isnan(v)) {
-				sum += v * len;  // a float product, as in gtrackimportwig
+				sum += (double)v * len;  // in double, as in gtrackimportwig: a float product can overflow
 				covered_bases += len;
 			}
 			bins[starts[i] / m_binsize] = bin_value(sum, covered_bases, len, m_defval);
@@ -378,7 +378,7 @@ void ParquetImport::write_bins(int chromid, const ChromRows &rows, int col, vect
 					float v = vals[order[c]];
 					if (!std::isnan(v)) {
 						uint64_t overlap_len = overlap_end - overlap_start;
-						sum += v * overlap_len;
+						sum += (double)v * overlap_len;
 						covered_bases += overlap_len;
 					}
 				}

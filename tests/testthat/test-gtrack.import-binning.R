@@ -73,3 +73,21 @@ test_that("bigWig import bins are the defval-filled mean of the records", {
         suppressMessages(check_import_bins(bw, bg[bg$chrom %in% names(sizes), ], sizes))
     })
 })
+
+test_that("a value near the float limit survives binning", {
+    local_db_state()
+    withr::with_tempdir({
+        create_test_db("binning_db", chrom_sizes = data.frame(chrom = "chr1", size = 1000))
+        gdb.init("binning_db")
+        f <- file.path(getwd(), "big.bedGraph")
+        writeLines(c("chr1\t0\t32\t3.4e38", "chr1\t32\t64\t1e37", "chr1\t64\t96\t1"), f)
+        # a float product value * 32 would overflow to Inf, which reads back as NaN
+        float32 <- function(x) readBin(writeBin(x, raw(), size = 4), "numeric", size = 4, n = length(x))
+        for (binsize in c(1, 32)) {
+            gtrack.import("big", "", f, binsize = binsize)
+            got <- gextract("big", gintervals("chr1", 0, 96), iterator = 32)$big
+            expect_identical(got, float32(c(3.4e38, 1e37, 1)), label = paste("binsize", binsize))
+            gtrack.rm("big", force = TRUE)
+        }
+    })
+})

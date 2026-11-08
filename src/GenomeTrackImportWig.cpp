@@ -144,7 +144,8 @@ public:
 			uint64_t overlap_len = min(end, bin_end) - max(start, m_bin_start);
 
 			if (!std::isnan(v)) {
-				m_sum += v * overlap_len;
+				// in double: a float product overflows to Inf for a value above FLT_MAX / overlap_len
+				m_sum += (double)v * overlap_len;
 				m_covered += overlap_len;
 			}
 			if (end <= bin_end)

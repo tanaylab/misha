@@ -388,8 +388,8 @@ test_that("tsv output unchanged", {
 # - iterator = 50 over 6 x 1,300,000 bp: four ranges that cut chromosomes
 
 # chr1..chr6 of the given sizes; dense track six (binsize 50) = start / 50 + chrom index / 8,
-# so the fraction tells the chromosome. The values are small enough for gtrack.import_parquet
-# to read them back exactly: it averages with float products, as gtrackimportwig does.
+# so the fraction tells the chromosome. gtrack.import_parquet reads them back as the float values
+# a track holds.
 local_six_chrom_db <- function(sizes = rep(200000, 6), env = parent.frame()) {
     chroms <- paste0("chr", 1:6)
     local_pq_db(stats::setNames(sizes, chroms), env)

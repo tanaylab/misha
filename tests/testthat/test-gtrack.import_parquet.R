@@ -206,6 +206,17 @@ test_that("unsupported files error and create nothing", {
     expect_error(gtrack.import_parquet("test", pq_fixture("no_such_*.parquet"), 32), "No files")
 })
 
+test_that("a value near the float limit survives binning", {
+    db <- local_pq_db()
+    f <- file.path(withr::local_tempdir(), "big.parquet")
+    gtrack.create_dense("one", "", gintervals.all(), c(1, 1), 32)
+    gextract("one * 3.4e38", gintervals.all(), iterator = 32, colnames = "v", file = f)
+    gtrack.import_parquet("test", f, 32, track.prefix = "big_")
+    # a float product value * 32 would overflow to Inf, which reads back as NaN
+    float32 <- function(x) readBin(writeBin(x, raw(), size = 4), "numeric", size = 4, n = length(x))
+    expect_identical(track_values("big_v"), rep(float32(3.4e38), 51))
+})
+
 test_that("arguments are checked before anything is read", {
     db <- local_pq_db()
     pq_path <- pq_fixture("pandas_default.parquet")
