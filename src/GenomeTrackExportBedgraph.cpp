@@ -3,7 +3,8 @@
  *
  * gtrack.export_bedgraph: the data lines of a bedGraph file. They are formatted as the R code
  * formatted them, paste(chrom, sprintf("%.0f", start), sprintf("%.0f", end), value, sep = "\t"),
- * so the files are the same byte for byte; building 85M strings in R took minutes.
+ * so the files are the same byte for byte; building 85M strings in R took minutes. Rows are formatted
+ * in threads.
  */
 
 #include <cfloat>
@@ -12,8 +13,10 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <thread>
 #include <vector>
 
+#include "rdbinterval.h"
 #include "rdbutils.h"
 
 using namespace std;
@@ -200,16 +203,68 @@ void append_coord(string &out, double x)
 	}
 }
 
+// The lines of rows [begin, end) of order (or of the data, without order) whose value is not
+// NaN, appended to out. Pure C++ on the vectors' data: safe in a thread. Sets bad_row on a row
+// number out of range.
+struct BedgraphRows {
+	R_xlen_t                n;
+	const int              *order;
+	const int              *chrom_codes;   // a factor's codes, or NULL
+	SEXP                    chrom_strings; // a character vector, read only by the calling thread
+	const vector<string>   *levels;
+	const double           *start_real;
+	const int              *start_int;
+	const double           *end_real;
+	const int              *end_int;
+	const double           *value;
+	int                     scipen;
+	const string           *dec;
+
+	void append(string &out, R_xlen_t begin, R_xlen_t end, bool &bad_row) const
+	{
+		for (R_xlen_t i = begin; i < end; ++i) {
+			R_xlen_t row = order ? (R_xlen_t)order[i] - 1 : i;
+
+			if (row < 0 || row >= n) {
+				bad_row = true;
+				return;
+			}
+
+			double v = value[row];
+			if (std::isnan(v) && !R_IsNA(v))
+				continue;
+
+			if (chrom_codes) {
+				int code = chrom_codes[row];
+				if (code == NA_INTEGER || code < 1 || code > (int)levels->size())
+					out += "NA";
+				else
+					out += (*levels)[code - 1];
+			} else {
+				SEXP s = STRING_ELT(chrom_strings, row);
+				out += s == NA_STRING ? "NA" : CHAR(s);
+			}
+			out += '\t';
+			append_coord(out, start_real ? start_real[row] : start_int[row] == NA_INTEGER ? NA_REAL : (double)start_int[row]);
+			out += '\t';
+			append_coord(out, end_real ? end_real[row] : end_int[row] == NA_INTEGER ? NA_REAL : (double)end_int[row]);
+			out += '\t';
+			append_value(out, v, scipen, *dec);
+			out += '\n';
+		}
+	}
+};
+
 }
 
 extern "C" {
 
-// The bedGraph lines of the rows order[from - 1], order[from], ... (1-based row numbers; NULL
-// order: the rows in order) whose value is not NaN (NA is written as "NA", as paste() writes it),
-// until the text exceeds max_bytes. chrom is a factor or a character vector, start and end
-// numeric. Returns list(text, next): next is the 1-based position in order to continue from,
-// length + 1 when done.
-SEXP gtrack_bedgraph_lines(SEXP _chrom, SEXP _start, SEXP _end, SEXP _value, SEXP _order, SEXP _from, SEXP _max_bytes,
+// The bedGraph lines of the rows order[from - 1], ..., order[from + max_rows - 2] (1-based row
+// numbers; NULL order: the rows in order) whose value is not NaN (NA is written as "NA", as
+// paste() writes it). chrom is a factor or a character vector, start and end numeric. Returns
+// list(text, next): next is the 1-based position in order to continue from, length + 1 when
+// done. The rows of a factor chrom are formatted in threads (at most gmax.processes and 8).
+SEXP gtrack_bedgraph_lines(SEXP _chrom, SEXP _start, SEXP _end, SEXP _value, SEXP _order, SEXP _from, SEXP _max_rows,
                            SEXP _scipen, SEXP _dec, SEXP _envir)
 {
 	try {
@@ -228,23 +283,23 @@ SEXP gtrack_bedgraph_lines(SEXP _chrom, SEXP _start, SEXP _end, SEXP _value, SEX
 			verror("start and end must be numeric");
 		if (!Rf_isNull(_order) && !Rf_isInteger(_order))
 			verror("order must be an integer vector or NULL");
-		if (!Rf_isReal(_from) || Rf_length(_from) != 1 || !Rf_isReal(_max_bytes) || Rf_length(_max_bytes) != 1)
-			verror("from and max_bytes must be numbers");
+		if (!Rf_isReal(_from) || Rf_length(_from) != 1 || !Rf_isReal(_max_rows) || Rf_length(_max_rows) != 1)
+			verror("from and max_rows must be numbers");
 		if (!Rf_isInteger(_scipen) || Rf_length(_scipen) != 1 || !Rf_isString(_dec) || Rf_length(_dec) != 1)
 			verror("scipen must be an integer and dec a string");
 
 		R_xlen_t num_rows = Rf_isNull(_order) ? n : Rf_xlength(_order);
-		const int *order = Rf_isNull(_order) ? NULL : INTEGER(_order);
 		R_xlen_t from = (R_xlen_t)REAL(_from)[0];
-		uint64_t max_bytes = (uint64_t)REAL(_max_bytes)[0];
-		int scipen = INTEGER(_scipen)[0];
+		double max_rows = REAL(_max_rows)[0];
 		string dec = CHAR(STRING_ELT(_dec, 0));
-		const double *value = REAL(_value);
 
-		if (from < 1)
-			verror("from must be >= 1");
-		if (scipen == NA_INTEGER)
-			scipen = 0;
+		if (from < 1 || !(max_rows >= 1))
+			verror("from and max_rows must be >= 1");
+
+		R_xlen_t begin = from - 1;
+		R_xlen_t end = begin + (R_xlen_t)min(max_rows, (double)(num_rows - begin));
+		if (end < begin)
+			end = begin;
 
 		vector<string> levels;
 		if (chrom_is_factor) {
@@ -253,57 +308,71 @@ SEXP gtrack_bedgraph_lines(SEXP _chrom, SEXP _start, SEXP _end, SEXP _value, SEX
 				levels.push_back(CHAR(STRING_ELT(lv, i)));
 		}
 
-		auto coord = [](SEXP v, R_xlen_t i) -> double {
-			if (Rf_isReal(v))
-				return REAL(v)[i];
-			int x = INTEGER(v)[i];
-			return x == NA_INTEGER ? NA_REAL : (double)x;
-		};
+		BedgraphRows rows;
+		rows.n = n;
+		rows.order = Rf_isNull(_order) ? NULL : INTEGER(_order);
+		rows.chrom_codes = chrom_is_factor ? INTEGER(_chrom) : NULL;
+		rows.chrom_strings = _chrom;
+		rows.levels = &levels;
+		rows.start_real = Rf_isReal(_start) ? REAL(_start) : NULL;
+		rows.start_int = Rf_isReal(_start) ? NULL : INTEGER(_start);
+		rows.end_real = Rf_isReal(_end) ? REAL(_end) : NULL;
+		rows.end_int = Rf_isReal(_end) ? NULL : INTEGER(_end);
+		rows.value = REAL(_value);
+		rows.scipen = INTEGER(_scipen)[0] == NA_INTEGER ? 0 : INTEGER(_scipen)[0];
+		rows.dec = &dec;
 
-		string out;
-		out.reserve(max_bytes + 1024);
-
-		R_xlen_t i;
-		for (i = from - 1; i < num_rows && out.size() < max_bytes; ++i) {
-			R_xlen_t row = order ? (R_xlen_t)order[i] - 1 : i;
-
-			if (row < 0 || row >= n)
-				verror("order holds a row out of range");
-
-			double v = value[row];
-			if (std::isnan(v) && !R_IsNA(v))
-				continue;
-
-			if (chrom_is_factor) {
-				int code = INTEGER(_chrom)[row];
-				if (code == NA_INTEGER || code < 1 || code > (int)levels.size())
-					out += "NA";
-				else
-					out += levels[code - 1];
-			} else {
-				SEXP s = STRING_ELT(_chrom, row);
-				out += s == NA_STRING ? "NA" : CHAR(s);
-			}
-			out += '\t';
-			append_coord(out, coord(_start, row));
-			out += '\t';
-			append_coord(out, coord(_end, row));
-			out += '\t';
-			append_value(out, v, scipen, dec);
-			out += '\n';
-
-			if (!(i % 1000000))
-				check_interrupt();
+		// Threads only when the rows hold no R strings: STRING_ELT is not for threads
+		unsigned num_threads = 1;
+		if (chrom_is_factor && end - begin >= 200000) {
+			IntervUtils iu(_envir);
+			unsigned hw = std::thread::hardware_concurrency();
+			num_threads = min<unsigned>({ hw ? hw : 1, (unsigned)max<uint64_t>(iu.get_max_processes(), 1), 8 });
 		}
 
-		if (out.size() > INT_MAX)
-			verror("A bedGraph chunk of %llu bytes is too long for an R string", (unsigned long long)out.size());
+		vector<string> parts(num_threads);
+		vector<char> bad(num_threads, 0);
+		auto work = [&](unsigned t) {
+			R_xlen_t b = begin + (end - begin) * t / num_threads;
+			R_xlen_t e = begin + (end - begin) * (t + 1) / num_threads;
+			bool bad_row = false;
+			parts[t].reserve((e - b) * 40);
+			rows.append(parts[t], b, e, bad_row);
+			bad[t] = bad_row;
+		};
+
+		if (num_threads == 1)
+			work(0);
+		else {
+			vector<thread> threads;
+			for (unsigned t = 1; t < num_threads; ++t)
+				threads.emplace_back(work, t);
+			work(0);
+			for (thread &th : threads)
+				th.join();
+		}
+
+		uint64_t size = 0;
+		for (unsigned t = 0; t < num_threads; ++t) {
+			if (bad[t])
+				verror("order holds a row out of range");
+			size += parts[t].size();
+		}
+		if (size > INT_MAX)
+			verror("A bedGraph chunk of %llu bytes is too long for an R string", (unsigned long long)size);
+
+		string out;
+		out.reserve(size);
+		for (string &part : parts) {
+			out += part;
+			string().swap(part);
+		}
 
 		SEXP answer = rprotect_ptr(RSaneAllocVector(VECSXP, 2));
 		SEXP text = rprotect_ptr(RSaneAllocVector(STRSXP, 1));
 		SET_STRING_ELT(text, 0, RSaneMkCharLenCE(out.data(), (int)out.size(), CE_NATIVE));
 		SEXP next = rprotect_ptr(RSaneAllocVector(REALSXP, 1));
-		REAL(next)[0] = (double)i + 1;
+		REAL(next)[0] = (double)end + 1;
 		SET_VECTOR_ELT(answer, 0, text);
 		SET_VECTOR_ELT(answer, 1, next);
 		return answer;

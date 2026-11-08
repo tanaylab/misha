@@ -235,6 +235,29 @@ test_that("C++ formats doubles as as.character() does", {
     }
 })
 
+test_that("C++ formats rows in threads as in one thread, in the order given", {
+    withr::local_options(gmax.processes = 4)
+    set.seed(3)
+    n <- 300000
+    vals <- c(runif(n / 2) * 1e3, rep(NaN, 1000), round(runif(n / 2 - 1000), 3))
+    chrom <- factor(rep(c("chr1", "chr2"), each = n / 2))
+    start <- seq_len(n) * 10
+    ord <- sample(n)
+    fmt <- .gbedgraph_format_options()
+    got <- character()
+    from <- 1
+    # 250,000 rows in threads, then 50,000 in one
+    while (from <= n) {
+        res <- .gcall("gtrack_bedgraph_lines", chrom, start, start + 10, vals, ord, from, 250000, fmt$scipen, fmt$dec, .misha_env())
+        got <- c(got, res[[1]])
+        from <- res[[2]]
+    }
+    expect_length(got, 2)
+    keep <- ord[!is.nan(vals[ord])]
+    expected <- paste0(paste(chrom[keep], sprintf("%.0f", start[keep]), sprintf("%.0f", start[keep] + 10), vals[keep], sep = "\t"), "\n", collapse = "")
+    expect_identical(paste(got, collapse = ""), expected)
+})
+
 test_that("bedGraph export over intervals with no values writes the header only", {
     outfile <- tempfile(fileext = ".bedgraph")
     withr::defer(unlink(outfile))

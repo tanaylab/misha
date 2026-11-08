@@ -205,8 +205,8 @@ gtrack.export_bedgraph <- function(track, file, intervals = NULL, iterator = NUL
 }
 
 # Writes the bedGraph lines of the rows ord (NULL: all of them, in order) whose value is not NaN
-# to con. C++ builds them as R would, in chunks of about 64 MB, unless it does not format
-# doubles as this R session does; then R builds them.
+# to con. C++ builds them as R would, 2^20 rows at a time, unless it does not format doubles as
+# this R session does; then R builds them.
 .gtrack_write_bedgraph_lines <- function(con, chrom, start, end, value, ord) {
     fmt <- .gbedgraph_format_options()
     if (.gbedgraph_cpp_matches_r(fmt)) {
@@ -215,7 +215,7 @@ gtrack.export_bedgraph <- function(track, file, intervals = NULL, iterator = NUL
         while (from <= num_rows) {
             res <- .gcall(
                 "gtrack_bedgraph_lines", chrom, start, end, as.numeric(value), ord,
-                from, 64 * 1024^2, fmt$scipen, fmt$dec, .misha_env()
+                from, 2^20, fmt$scipen, fmt$dec, .misha_env()
             )
             writeLines(res[[1]], con, sep = "")
             from <- res[[2]]
