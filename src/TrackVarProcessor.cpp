@@ -141,6 +141,8 @@ double TrackVarProcessor::extract_single_value(
 		return track.last_stddev();
 	case TrackExpressionVars::Track_var::SUM:
 		return track.last_sum();
+	case TrackExpressionVars::Track_var::WEIGHTED_SUM:
+		return track.last_weighted_sum();
 	case TrackExpressionVars::Track_var::LSE:
 		return track.last_lse();
 	case TrackExpressionVars::Track_var::QUANTILE:
@@ -191,6 +193,9 @@ double TrackVarProcessor::aggregate_multi_value(
 		return aggregate_sum_with_filter(track, track.parts_reading_items_once(parts));
 	case TrackExpressionVars::Track_var::LSE:
 		return aggregate_lse_with_filter(track, track.parts_reading_items_once(parts));
+	// The parts do not overlap, so each unmasked bp of an item counts once
+	case TrackExpressionVars::Track_var::WEIGHTED_SUM:
+		return aggregate_weighted_sum_with_filter(track, parts);
 	case TrackExpressionVars::Track_var::REG_MIN:
 	case TrackExpressionVars::Track_var::PV_MIN:
 		return aggregate_min_with_filter(track, parts);
@@ -593,4 +598,21 @@ double TrackVarProcessor::aggregate_lse_with_filter(GenomeTrack1D &track, const 
 	}
 
 	return has_value ? lse : numeric_limits<double>::quiet_NaN();
+}
+
+double TrackVarProcessor::aggregate_weighted_sum_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts)
+{
+	double total = 0;
+	bool has_value = false;
+
+	for (const auto &part : parts) {
+		track.read_interval(part);
+		const double part_wsum = track.last_weighted_sum();
+		if (!std::isnan(part_wsum)) {
+			total += part_wsum;
+			has_value = true;
+		}
+	}
+
+	return has_value ? total : numeric_limits<double>::quiet_NaN();
 }

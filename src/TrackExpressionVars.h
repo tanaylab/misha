@@ -238,6 +238,7 @@ public:
             SAMPLE_POS_ABS, SAMPLE_POS_REL,
             MIN_POS_ABS, MIN_POS_REL,
             MAX_POS_ABS, MAX_POS_REL,
+            WEIGHTED_SUM,
             NUM_FUNCS
         };
 

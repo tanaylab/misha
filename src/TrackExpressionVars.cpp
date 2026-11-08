@@ -83,7 +83,8 @@ const char *TrackExpressionVars::Value_var::FUNC_NAMES[TrackExpressionVars::Valu
 	"last.pos.abs", "last.pos.relative",
 	"sample.pos.abs", "sample.pos.relative",
 	"min.pos.abs", "min.pos.relative",
-	"max.pos.abs", "max.pos.relative"
+	"max.pos.abs", "max.pos.relative",
+	"weighted.sum"
 };
 
 using namespace rdb;
@@ -1186,7 +1187,7 @@ TrackExpressionVars::Track_var &TrackExpressionVars::add_vtrack_var_src_track(SE
 	int ifunc;
 	for (ifunc = 0; ifunc < Track_var::NUM_FUNCS; ++ifunc) {
 		if (!strcmp(func.c_str(), Track_var::FUNC_NAMES[ifunc])) {
-			if ((GenomeTrack::is_1d(track_type) && (ifunc == Track_var::WEIGHTED_SUM || ifunc == Track_var::OCCUPIED_AREA)) ||
+			if ((GenomeTrack::is_1d(track_type) && ifunc == Track_var::OCCUPIED_AREA) ||
 					(GenomeTrack::is_2d(track_type) && (ifunc == Track_var::REG_NEAREST || ifunc == Track_var::STDDEV || ifunc == Track_var::SUM || ifunc == Track_var::LSE || ifunc == Track_var::QUANTILE)) ||
 					(track_type != GenomeTrack::FIXED_BIN && (ifunc == Track_var::PV || ifunc == Track_var::PV_MIN || ifunc == Track_var::PV_MAX)))
 				verror("Virtual track %s: function %s is not supported by %s tracks", vtrack.c_str(), func.c_str(), GenomeTrack::TYPE_NAMES[track_type]);
@@ -1594,6 +1595,9 @@ TrackExpressionVars::Value_var &TrackExpressionVars::add_vtrack_var_src_value(SE
 		case Value_var::MAX_POS_REL:
 			var.track->register_function(GenomeTrack1D::MAX_POS);
 			break;
+		case Value_var::WEIGHTED_SUM:
+			var.track->register_function(GenomeTrack1D::WEIGHTED_SUM);
+			break;
 		case Value_var::NUM_FUNCS:
 		default:
 			// NUM_FUNCS is a sentinel value, not a valid function type
@@ -1676,7 +1680,10 @@ void TrackExpressionVars::register_track_functions()
 			track1d->register_quantile(m_iu.get_max_data_size(), m_iu.get_quantile_edge_data_size(), m_iu.get_quantile_edge_data_size());
 			break;
 		case Track_var::WEIGHTED_SUM:
-			track2d->register_function(GenomeTrack2D::WEIGHTED_SUM);
+			if (track1d)
+				track1d->register_function(GenomeTrack1D::WEIGHTED_SUM);
+			else
+				track2d->register_function(GenomeTrack2D::WEIGHTED_SUM);
 			break;
 		case Track_var::OCCUPIED_AREA:
 			track2d->register_function(GenomeTrack2D::OCCUPIED_AREA);

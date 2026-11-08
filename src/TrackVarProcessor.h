@@ -22,6 +22,9 @@ public:
 		unsigned idx
 	);
 
+	// Weighted sum over the filter's unmasked parts (shared with the value-based vtracks)
+	static double aggregate_weighted_sum_with_filter(GenomeTrack1D &track, const std::vector<GInterval> &parts);
+
 	// Quantile over the filter's unmasked parts (shared with the value-based vtracks)
 	static double aggregate_quantile_with_filter(GenomeTrack1D &track, const std::vector<GInterval> &parts, double percentile,
 	                                             rdb::IntervUtils &iu);

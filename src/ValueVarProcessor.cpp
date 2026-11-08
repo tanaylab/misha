@@ -36,7 +36,12 @@ void ValueVarProcessor::process_single_value_var(
 	}
 
 	// Apply filter if present
-	if (var.filter) {
+	if (var.filter && var.val_func == TrackExpressionVars::Value_var::WEIGHTED_SUM) {
+		// the unmasked parts do not overlap, so each unmasked bp of an interval counts once
+		std::vector<GInterval> parts;
+		var.filter->subtract(eval_interval, parts);
+		var.var[idx] = TrackVarProcessor::aggregate_weighted_sum_with_filter(*var.track, parts);
+	} else if (var.filter) {
 		std::vector<GInterval> eval_intervals;
 		var.filter->subtract(eval_interval, eval_intervals);
 		// The counting reductions read each value once even when the filter splits its interval;
@@ -258,6 +263,9 @@ void ValueVarProcessor::process_single_value_var(
 				break;
 			case TrackExpressionVars::Value_var::SUM:
 				var.var[idx] = var.track->last_sum();
+				break;
+			case TrackExpressionVars::Value_var::WEIGHTED_SUM:
+				var.var[idx] = var.track->last_weighted_sum();
 				break;
 			case TrackExpressionVars::Value_var::LSE:
 				var.var[idx] = var.track->last_lse();

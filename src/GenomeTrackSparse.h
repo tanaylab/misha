@@ -153,6 +153,7 @@ inline void GenomeTrackSparse::calc_vals(const GInterval &interval)
 	double stddev_mean = 0;
 	double stddev_m2 = 0;
 	double sum_accum = 0;
+	double wsum_accum = 0;
 	float v;
 
 	// For sampling, collect all values/positions
@@ -179,6 +180,8 @@ inline void GenomeTrackSparse::calc_vals(const GInterval &interval)
 		v = m_vals[iinterv - m_intervals.begin()];
 		if (!std::isnan(v)) {
 			sum_accum += v;
+			if (has_function(WEIGHTED_SUM))
+				wsum_accum += (double)v * (std::min(iinterv->end, interval.end) - std::max(iinterv->start, interval.start));
 			if (v < m_last_min) {
 				m_last_min = v;
 				if (has_function(MIN_POS))
@@ -259,6 +262,8 @@ inline void GenomeTrackSparse::calc_vals(const GInterval &interval)
 		if (has_function(MIN_POS))
 			m_last_min_pos = numeric_limits<double>::quiet_NaN();
 	}
+	if (has_function(WEIGHTED_SUM))
+		m_last_weighted_sum = num_vs > 0 ? wsum_accum : numeric_limits<double>::quiet_NaN();
 
 	// Unbiased sample standard deviation via Welford's stable algorithm.
 	if (has_function(STDDEV))
