@@ -36,8 +36,8 @@ public:
 	uint64_t get_num_matched_chroms() const;
 
 	// Records read by get_data() that ran past the end of their chromosome: clipped to it, or
-	// dropped when they start at or past it; and the first of them, "line N: (chrom, start, end),
-	// chromosome size N" ("" if none)
+	// dropped when they start at or past it; and the first of them in the file, "line N: (chrom,
+	// start, end), chromosome size N" ("" if none)
 	uint64_t get_num_clipped() const { return m_num_clipped; }
 	uint64_t get_num_dropped() const { return m_num_dropped; }
 	const string &get_first_clipped() const { return m_first_clipped; }
@@ -113,6 +113,7 @@ private:
 	uint64_t        m_num_clipped{0};
 	uint64_t        m_num_dropped{0};
 	string          m_first_clipped;
+	int64_t         m_first_clipped_line{-1};
 
 	// Notes a record that runs past the end of the chromosome; returns true if it is to be dropped
 	bool clip(int chromid, int64_t start, int64_t end, int64_t lineno);

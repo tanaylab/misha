@@ -98,6 +98,22 @@ test_that("bedGraph records past the database chromosome end are clipped or drop
     })
 })
 
+test_that("the bigWig record past the chromosome end that the warning names is the first in the file", {
+    local_db_state()
+    paths <- sapply(c("bg.bw", "bg.bedGraph"), bigwig_fixture)
+    withr::with_tempdir({
+        # chr2 first in the database, chr1 first in the files; both end inside a record
+        create_test_db("rev_db", chrom_sizes = data.frame(chrom = c("chr2", "chr1"), size = c(9900, 9900)))
+        writeLines(c("chr2\t9900", "chr1\t9900"), file.path("rev_db", "chrom_sizes.txt"))
+        gdb.init("rev_db")
+        skip_if_not(identical(as.character(gintervals.all()$chrom), c("chr2", "chr1")), "the database sorts its chromosomes")
+        for (p in paths) {
+            suppressMessages(expect_warning(gtrack.import("first", "", p, binsize = 0), "the first: (line [0-9]+: )?\\(chr1, 9888, 9925\\)", label = basename(p)))
+            gtrack.rm("first", force = TRUE)
+        }
+    })
+})
+
 test_that("bigWig values keep full float precision and zero-length records are skipped", {
     local_db_state()
     bw <- bigwig_fixture("edge.bw")

@@ -138,6 +138,7 @@ void Wig::init(const GenomeChromKey &chromkey, const string &filename, bool igno
 	m_unknown_chroms.clear();
 	m_num_clipped = m_num_dropped = 0;
 	m_first_clipped.clear();
+	m_first_clipped_line = -1;
 
 	// read the file to determine the positions of first chrom appearences
 	int last_chromid = -1;
@@ -211,7 +212,9 @@ bool Wig::clip(int chromid, int64_t start, int64_t end, int64_t lineno)
 {
 	int64_t chromsize = m_chromkey->get_chrom_size(chromid);
 
-	if (m_first_clipped.empty()) {
+	// get_data() reads the chromosomes in database order: the first is the one of the lowest line
+	if (m_first_clipped_line < 0 || lineno < m_first_clipped_line) {
+		m_first_clipped_line = lineno;
 		char buf[1000];
 		snprintf(buf, sizeof(buf), "line %lld: (%s, %lld, %lld), chromosome size %lld", (long long)lineno,
 		         m_chromkey->id2chrom(chromid).c_str(), (long long)start, (long long)end, (long long)chromsize);

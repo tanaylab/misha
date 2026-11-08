@@ -195,3 +195,32 @@ test_that("WIG records at coordinates near 2^63 are dropped like any record past
         }
     })
 })
+
+test_that("the record past the chromosome end that the warning names is the first in the file", {
+    local_db_state()
+    withr::with_tempdir({
+        sizes <- c(chr1 = 1000, chr2 = 600)
+        create_test_db("first_db", chrom_sizes = data.frame(chrom = names(sizes), size = unname(sizes)))
+        gdb.init("first_db")
+        # chr2 comes first in the files, after chr1 in the database
+        files <- list(
+            bedGraph = c("chr2\t576\t608\t1", "chr1\t992\t1024\t2"),
+            tab = c("chrom\tstart\tend\tvalue", "chr2\t576\t608\t1", "chr1\t992\t1024\t2"),
+            fixedStep = c("fixedStep chrom=chr2 start=577 step=32 span=32", "1", "fixedStep chrom=chr1 start=993 step=32 span=32", "2")
+        )
+        first <- c(bedGraph = "line 1: (chr2, 576, 608)", tab = "line 2: (chr2, 576, 608)", fixedStep = "line 2: (chr2, 576, 608)")
+        for (fmt in names(files)) {
+            f <- file.path(getwd(), paste0(fmt, ".txt"))
+            writeLines(files[[fmt]], f)
+            expect_warning(gtrack.import("first", "", f, binsize = 32), paste0("the first: ", first[[fmt]]), fixed = TRUE, label = fmt)
+            gtrack.rm("first", force = TRUE)
+        }
+
+        # several array files: the first file with such a record, and its first line
+        a1 <- file.path(getwd(), "a1.tsv")
+        a2 <- file.path(getwd(), "a2.tsv")
+        writeLines(c("chrom\tstart\tend\tx", "chr1\t0\t10\t1"), a1)
+        writeLines(c("chrom\tstart\tend\ty", "chr2\t576\t608\t1", "chr1\t992\t1024\t2"), a2)
+        expect_warning(gtrack.array.import("first_arr", "", a1, a2), paste0("the first: file ", a2, ", line 2: (chr2, 576, 608)"), fixed = TRUE)
+    })
+})

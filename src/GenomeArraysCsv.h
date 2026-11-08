@@ -33,8 +33,8 @@ public:
 	// Number of database chromosomes for which the file contains data.
 	uint64_t get_num_matched_chroms() const;
 
-	// The records get_intervals() clipped and dropped, and the first of them, "line N: (chrom,
-	// start, end), chromosome size N" ("" if none)
+	// The records get_intervals() clipped and dropped, and the first of them in the file, "line N:
+	// (chrom, start, end), chromosome size N" ("" if none)
 	uint64_t get_num_clipped() const { return m_num_clipped; }
 	uint64_t get_num_dropped() const { return m_num_dropped; }
 	const string &get_first_clipped() const { return m_first_clipped; }
@@ -62,6 +62,7 @@ protected:
 	uint64_t              m_num_clipped{0};
 	uint64_t              m_num_dropped{0};
 	string                m_first_clipped;
+	long                  m_first_clipped_line{-1};
 
 	int read_fields(const Position &pos);
 };

@@ -11,6 +11,7 @@ void GenomeArraysCsv::init(const char *filename, const GenomeChromKey &chromkey,
 	m_clip_to_chroms = clip_to_chroms;
 	m_num_clipped = m_num_dropped = 0;
 	m_first_clipped.clear();
+	m_first_clipped_line = -1;
 	m_bfile.close();
 	m_chroms_positions.clear();
 	m_colnames.clear();
@@ -96,7 +97,9 @@ const GIntervals &GenomeArraysCsv::get_intervals(int chromid)
 		if (end > chromsize) {
 			if (!m_clip_to_chroms)
 				TGLError<GenomeArraysCsv>(FORMAT_ERROR, "File %s, line %ld: end coordinate exceeds chromosome's size", m_bfile.file_name().c_str(), lineno);
-			if (m_first_clipped.empty()) {
+			// the chromosomes are read in database order: the first is the one of the lowest line
+			if (m_first_clipped_line < 0 || lineno < m_first_clipped_line) {
+				m_first_clipped_line = lineno;
 				char buf[1000];
 				snprintf(buf, sizeof(buf), "line %ld: (%s, %lld, %lld), chromosome size %lld", lineno, m_chromkey->id2chrom(chromid).c_str(),
 				         (long long)start, (long long)end, (long long)chromsize);
