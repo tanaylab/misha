@@ -205,6 +205,103 @@ void GenomeTrackFixedBin::reset_sliding_window_state()
 	m_running_lse_initialized = false;
 }
 
+// The sliding window state covers the previous window [m_lse_prev_sbin, m_lse_prev_ebin). It moves
+// to [sbin, ebin) by dropping `drop` = sbin - m_lse_prev_sbin bins at the front and adding `add` =
+// ebin - m_lse_prev_ebin at the back. The two counts may differ (a 32 bp iterator over 20 bp bins
+// alternates 16- and 17-bin windows) unless `same_size`. The window may only move forward and not
+// past its own end. (slide_window decides whether a window of another size is slid.)
+bool GenomeTrackFixedBin::sliding_step(int64_t sbin, int64_t ebin, bool same_size, int64_t &drop, int64_t &add) const
+{
+	const int64_t prev_window = m_lse_prev_ebin - m_lse_prev_sbin;
+	drop = sbin - m_lse_prev_sbin;
+	add = ebin - m_lse_prev_ebin;
+	return drop >= 0 && add >= 0 && drop + add > 0 && drop <= prev_window && (!same_size || drop == add) &&
+		(int64_t)m_lse_window_bins.size() == prev_window;
+}
+
+// Widens [lo_bit, hi_bit] to the exponents of the lowest and the highest set bit of v (a float,
+// not NaN or infinite; zero has none).
+void GenomeTrackFixedBin::add_to_bit_range(float v, int &lo_bit, int &hi_bit)
+{
+	uint32_t u;
+	memcpy(&u, &v, sizeof(u));
+	uint32_t mant = u & 0x7fffffu;
+	int exp = (int)((u >> 23) & 0xffu);
+	if (exp)
+		mant |= 0x800000u;
+	if (!mant)
+		return;
+	int base = exp ? exp - 150 : -149;
+	lo_bit = std::min(lo_bit, base + __builtin_ctz(mant));
+	hi_bit = std::max(hi_bit, base + 31 - __builtin_clz(mant));
+}
+
+// Whether every sum of up to num_vals values within [lo_bit, hi_bit] (as add_to_bit_range gives
+// it) is a double: such a sum is a multiple of 2^lo_bit below num_vals * 2^(hi_bit + 1), so it is
+// when that spans at most 53 bits. Then every addition and subtraction of the sliding sum is
+// exact, whatever their order.
+bool GenomeTrackFixedBin::sums_exact(int lo_bit, int hi_bit, int64_t num_vals)
+{
+	if (lo_bit > hi_bit)
+		return true;
+	int log2n = 0;
+	while (log2n < 63 && ((int64_t)1 << log2n) < num_vals)
+		++log2n;
+	return (int64_t)hi_bit + 1 + log2n - lo_bit <= 53;
+}
+
+// Moves the sliding state (window bins, sum, count and, if need_lse, the running LSE) by `drop`
+// bins at the front and `add` bins read from m_lse_prev_ebin on. The old bins leave before the new
+// ones come in. Returns false, with the state untouched, if fewer than `add` bins can be read.
+//
+// A window of another size than the last was read afresh before, and is slid only where that
+// gives the same values to the bit (otherwise false is returned too): the count of values always;
+// the sum (need_exact_sum) only while every sum of the values since it was last computed afresh
+// is exact (sums_exact), as both are then the exact sum; the running LSE (need_lse) never, as it
+// is rounded otherwise when slid than when computed afresh.
+bool GenomeTrackFixedBin::slide_window(int64_t drop, int64_t add, bool need_lse, bool need_exact_sum)
+{
+	m_scratch_bin_vals.clear();
+	if (add && read_bins_bulk(m_lse_prev_ebin, add, m_scratch_bin_vals) != add)
+		return false;
+
+	int lo_bit = m_sum_lo_bit;
+	int hi_bit = m_sum_hi_bit;
+	for (int64_t i = 0; i < add; ++i) {
+		if (!std::isnan(m_scratch_bin_vals[i]))
+			add_to_bit_range(m_scratch_bin_vals[i], lo_bit, hi_bit);
+	}
+	const bool exact = m_sum_exact && sums_exact(lo_bit, hi_bit, (int64_t)m_lse_window_bins.size() + add);
+	if (drop != add && (need_lse || (need_exact_sum && !exact)))
+		return false;
+	m_sum_lo_bit = lo_bit;
+	m_sum_hi_bit = hi_bit;
+	m_sum_exact = exact;
+
+	for (int64_t i = 0; i < drop; ++i) {
+		float old_val = m_lse_window_bins.front();
+		m_lse_window_bins.pop_front();
+		if (!std::isnan(old_val)) {
+			kahan_sub_from_sliding_sum(old_val);
+			--m_sliding_num_vs;
+			if (need_lse)
+				m_running_lse.pop_front();
+		}
+	}
+
+	for (int64_t i = 0; i < add; ++i) {
+		float new_val = m_scratch_bin_vals[i];
+		m_lse_window_bins.push_back(new_val);
+		if (!std::isnan(new_val)) {
+			kahan_add_to_sliding_sum(new_val);
+			++m_sliding_num_vs;
+			if (need_lse)
+				m_running_lse.push(new_val);
+		}
+	}
+	return true;
+}
+
 void GenomeTrackFixedBin::read_interval_reducers_only(const GInterval &interval)
 {
 	const bool need_sum = (m_fast_reducer_bits & RBIT_SUM) != 0;
@@ -297,77 +394,17 @@ void GenomeTrackFixedBin::read_interval_reducers_only(const GInterval &interval)
 
 	const int64_t window_size = ebin - sbin;
 
-	// Sliding reducers update when window shifts forward by <= previous window.
-	if (m_lse_sliding_valid && window_size > 0 && (!need_lse || m_running_lse_initialized)) {
-		int64_t step = sbin - m_lse_prev_sbin;
-		int64_t prev_window = m_lse_prev_ebin - m_lse_prev_sbin;
-		if (step > 0 && step <= prev_window && window_size == prev_window &&
-			(int64_t)m_lse_window_bins.size() == prev_window) {
-			int64_t appended = 0;
-
-			if (step == 1) {
-				float new_val = numeric_limits<float>::quiet_NaN();
-				if (m_cur_coord != m_lse_prev_ebin * m_bin_size)
-					goto_bin(m_lse_prev_ebin);
-				if (read_next_bin(new_val) && !m_lse_window_bins.empty()) {
-					float old_val = m_lse_window_bins.front();
-					m_lse_window_bins.pop_front();
-					if (!std::isnan(old_val)) {
-						kahan_sub_from_sliding_sum(old_val);
-						--m_sliding_num_vs;
-						if (need_lse)
-							m_running_lse.pop_front();
-					}
-
-					m_lse_window_bins.push_back(new_val);
-					if (!std::isnan(new_val)) {
-						kahan_add_to_sliding_sum(new_val);
-						++m_sliding_num_vs;
-						if (need_lse)
-							m_running_lse.push(new_val);
-					}
-					appended = 1;
-				}
-			} else {
-				m_scratch_bin_vals.clear();
-				appended = read_bins_bulk(m_lse_prev_ebin, step, m_scratch_bin_vals);
-				auto& new_vals = m_scratch_bin_vals;
-				if (appended == step) {
-					for (int64_t i = 0; i < step && !m_lse_window_bins.empty(); ++i) {
-						float old_val = m_lse_window_bins.front();
-						m_lse_window_bins.pop_front();
-						if (!std::isnan(old_val)) {
-							kahan_sub_from_sliding_sum(old_val);
-							--m_sliding_num_vs;
-							if (need_lse)
-								m_running_lse.pop_front();
-						}
-					}
-
-					for (int64_t i = 0; i < step; ++i) {
-						float new_val = new_vals[i];
-						m_lse_window_bins.push_back(new_val);
-						if (!std::isnan(new_val)) {
-							kahan_add_to_sliding_sum(new_val);
-							++m_sliding_num_vs;
-							if (need_lse)
-								m_running_lse.push(new_val);
-						}
-					}
-				}
-			}
-
-			if (appended == step) {
-				assign_from_state();
-				m_lse_prev_sbin = sbin;
-				m_lse_prev_ebin = ebin;
-				m_lse_sliding_valid = true;
-				m_cached_bin_idx = ebin - 1;
-				m_cached_bin_val = m_lse_window_bins.back();
-				m_cache_valid = true;
-				return;
-			}
-		}
+	int64_t drop, add;
+	if (m_lse_sliding_valid && window_size > 0 && (!need_lse || m_running_lse_initialized) &&
+		sliding_step(sbin, ebin, false, drop, add) && slide_window(drop, add, need_lse, need_sum)) {
+		assign_from_state();
+		m_lse_prev_sbin = sbin;
+		m_lse_prev_ebin = ebin;
+		m_lse_sliding_valid = true;
+		m_cached_bin_idx = ebin - 1;
+		m_cached_bin_val = m_lse_window_bins.back();
+		m_cache_valid = true;
+		return;
 	}
 
 	// Fallback: full window read.
@@ -381,16 +418,19 @@ void GenomeTrackFixedBin::read_interval_reducers_only(const GInterval &interval)
 	m_sliding_sum_comp = 0;
 	m_sliding_num_vs = 0;
 	m_lse_window_bins.clear();
+	start_sum_range();
 	for (int64_t i = 0; i < bins_read; ++i) {
 		float v = bin_vals[i];
 		m_lse_window_bins.push_back(v);
 		if (!std::isnan(v)) {
 			kahan_add_to_sliding_sum(v);
+			add_to_bit_range(v, m_sum_lo_bit, m_sum_hi_bit);
 			++m_sliding_num_vs;
 			if (need_lse)
 				m_running_lse.push(v);
 		}
 	}
+	m_sum_exact = sums_exact(m_sum_lo_bit, m_sum_hi_bit, bins_read);
 	m_running_lse_initialized = need_lse;
 
 	if (bins_read > 0) {
@@ -751,100 +791,43 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 			m_last_lse = -numeric_limits<float>::infinity();
 
 		bool simple_sliding_used = false;
+		int64_t drop, add;
 
 		if (simple_sliding_compatible && m_lse_sliding_valid && window_size > 0 &&
-			(!has_function(LSE) || m_running_lse_initialized)) {
-			int64_t step = sbin - m_lse_prev_sbin;
-			int64_t prev_window = m_lse_prev_ebin - m_lse_prev_sbin;
-
-				if (step > 0 && step <= prev_window && window_size == prev_window &&
-					(int64_t)m_lse_window_bins.size() == prev_window) {
-					int64_t appended = 0;
-					if (step == 1) {
-						float new_val = numeric_limits<float>::quiet_NaN();
-					if (m_cur_coord != m_lse_prev_ebin * m_bin_size)
-						goto_bin(m_lse_prev_ebin);
-					appended = read_next_bin(new_val) ? 1 : 0;
-					if (appended == 1 && !m_lse_window_bins.empty()) {
-						float old_val = m_lse_window_bins.front();
-						m_lse_window_bins.pop_front();
-						if (!std::isnan(old_val)) {
-							kahan_sub_from_sliding_sum(old_val);
-							--m_sliding_num_vs;
-							if (has_function(LSE))
-								m_running_lse.pop_front();
-						}
-
-						m_lse_window_bins.push_back(new_val);
-							if (!std::isnan(new_val)) {
-								kahan_add_to_sliding_sum(new_val);
-								++m_sliding_num_vs;
-								if (has_function(LSE))
-									m_running_lse.push(new_val);
-							}
-						}
-					} else {
-						vector<float> new_vals;
-						appended = read_bins_bulk(m_lse_prev_ebin, step, new_vals);
-						if (appended == step) {
-							for (int64_t i = 0; i < step && !m_lse_window_bins.empty(); ++i) {
-								float old_val = m_lse_window_bins.front();
-								m_lse_window_bins.pop_front();
-								if (!std::isnan(old_val)) {
-									kahan_sub_from_sliding_sum(old_val);
-									--m_sliding_num_vs;
-									if (has_function(LSE))
-										m_running_lse.pop_front();
-								}
-							}
-							for (int64_t i = 0; i < appended; ++i) {
-								float new_val = new_vals[i];
-								m_lse_window_bins.push_back(new_val);
-							if (!std::isnan(new_val)) {
-								kahan_add_to_sliding_sum(new_val);
-								++m_sliding_num_vs;
-								if (has_function(LSE))
-									m_running_lse.push(new_val);
-								}
-							}
-						}
-					}
-
-				if (appended == step) {
-					if (!m_lse_window_bins.empty()) {
-						m_cached_bin_idx = ebin - 1;
-						m_cached_bin_val = m_lse_window_bins.back();
-						m_cache_valid = true;
-					}
-
-					if (m_sliding_num_vs > 0) {
-						m_last_sum = (float)m_sliding_sum;
-						if (has_function(AVG) || has_function(NEAREST))
-							m_last_avg = m_last_nearest = (float)(m_sliding_sum / m_sliding_num_vs);
-						if (has_function(LSE))
-							m_last_lse = m_running_lse.window.empty()
-								? numeric_limits<float>::quiet_NaN()
-								: (float)m_running_lse.value();
-						if (has_function(EXISTS))
-							m_last_exists = 1;
-					} else {
-						m_last_sum = numeric_limits<float>::quiet_NaN();
-						if (has_function(AVG) || has_function(NEAREST))
-							m_last_avg = m_last_nearest = numeric_limits<float>::quiet_NaN();
-						if (has_function(LSE))
-							m_last_lse = numeric_limits<float>::quiet_NaN();
-						if (has_function(EXISTS))
-							m_last_exists = 0;
-					}
-					if (has_function(SIZE))
-						m_last_size = m_sliding_num_vs;
-
-					m_lse_prev_sbin = sbin;
-					m_lse_prev_ebin = ebin;
-					m_lse_sliding_valid = true;
-					simple_sliding_used = true;
-				}
+			(!has_function(LSE) || m_running_lse_initialized) &&
+			sliding_step(sbin, ebin, false, drop, add) && slide_window(drop, add, has_function(LSE), true)) {
+			if (!m_lse_window_bins.empty()) {
+				m_cached_bin_idx = ebin - 1;
+				m_cached_bin_val = m_lse_window_bins.back();
+				m_cache_valid = true;
 			}
+
+			if (m_sliding_num_vs > 0) {
+				m_last_sum = (float)m_sliding_sum;
+				if (has_function(AVG) || has_function(NEAREST))
+					m_last_avg = m_last_nearest = (float)(m_sliding_sum / m_sliding_num_vs);
+				if (has_function(LSE))
+					m_last_lse = m_running_lse.window.empty()
+						? numeric_limits<float>::quiet_NaN()
+						: (float)m_running_lse.value();
+				if (has_function(EXISTS))
+					m_last_exists = 1;
+			} else {
+				m_last_sum = numeric_limits<float>::quiet_NaN();
+				if (has_function(AVG) || has_function(NEAREST))
+					m_last_avg = m_last_nearest = numeric_limits<float>::quiet_NaN();
+				if (has_function(LSE))
+					m_last_lse = numeric_limits<float>::quiet_NaN();
+				if (has_function(EXISTS))
+					m_last_exists = 0;
+			}
+			if (has_function(SIZE))
+				m_last_size = m_sliding_num_vs;
+
+			m_lse_prev_sbin = sbin;
+			m_lse_prev_ebin = ebin;
+			m_lse_sliding_valid = true;
+			simple_sliding_used = true;
 		}
 
 		if (!simple_sliding_used) {
@@ -856,20 +839,16 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 
 			if (has_function(LSE) && m_lse_sliding_valid && bins_read > 0 &&
 				m_running_lse_initialized && !simple_sliding_compatible) {
-				int64_t step = sbin - m_lse_prev_sbin;
-				int64_t prev_window = m_lse_prev_ebin - m_lse_prev_sbin;
-
-				if (step > 0 && step <= prev_window && window_size == prev_window &&
-					bins_read == window_size) {
-					// Pop 'step' old bins from front
-					for (int64_t i = 0; i < step && !m_lse_window_bins.empty(); i++) {
+				// the whole window is read already: the running LSE drops the bins that left it and
+				// adds the last `add` ones (between windows of one size: see slide_window)
+				if (sliding_step(sbin, ebin, true, drop, add) && bins_read == window_size) {
+					for (int64_t i = 0; i < drop; i++) {
 						float old_val = m_lse_window_bins.front();
 						m_lse_window_bins.pop_front();
 						if (!std::isnan(old_val))
 							m_running_lse.pop_front();
 					}
-					// Push 'step' new bins at back
-					for (int64_t i = bins_read - step; i < bins_read; i++) {
+					for (int64_t i = bins_read - add; i < bins_read; i++) {
 						float new_val = bin_vals[i];
 						m_lse_window_bins.push_back(new_val);
 						if (!std::isnan(new_val))
@@ -999,15 +978,18 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 					m_sliding_sum = 0;
 					m_sliding_sum_comp = 0;
 					m_sliding_num_vs = 0;
+					start_sum_range();
 					for (int64_t i = 0; i < bins_read; i++) {
 						m_lse_window_bins.push_back(bin_vals[i]);
 						if (!std::isnan(bin_vals[i])) {
 							kahan_add_to_sliding_sum(bin_vals[i]);
+							add_to_bit_range(bin_vals[i], m_sum_lo_bit, m_sum_hi_bit);
 							++m_sliding_num_vs;
 							if (has_function(LSE))
 								m_running_lse.push(bin_vals[i]);
 						}
 					}
+					m_sum_exact = sums_exact(m_sum_lo_bit, m_sum_hi_bit, bins_read);
 					m_running_lse_initialized = has_function(LSE);
 				}
 				m_lse_prev_sbin = sbin;
