@@ -58,7 +58,11 @@ skipped when a filter is set.}
 Default NULL (no filter). Same score as \code{score.min}.}
 
 \item{extend}{logical or integer; extend sequence for boundary motifs.
-Default TRUE.}
+Default TRUE. For interval input it means what it means for the
+\code{pwm.edit_distance} virtual track: \code{TRUE} or a positive integer
+lets a window start at every position of the interval and read bases past
+its end; \code{FALSE} or 0 keeps every window (deletions included) inside
+the interval.}
 
 \item{strand}{integer; which strand to scan when \code{bidirect=FALSE}.
 1=forward, -1=reverse. Default 1.}

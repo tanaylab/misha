@@ -952,3 +952,41 @@ test_that("gseq.pwm_edits refuses a bidirect that is not TRUE or FALSE", {
         )
     }
 })
+
+test_that("gseq.pwm_edits on intervals scans the vtrack's windows for every extend value", {
+    gdb.init_examples()
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    # With extend = FALSE and max_indels > 0 windows used to start up to
+    # length - (L - max_indels), past the vtrack's last start (length - L), and
+    # an integer extend was read as a number of extra bases where the vtrack
+    # reads any positive value as TRUE.
+    set.seed(808)
+    L <- 8
+    pssm <- matrix(rgamma(4 * L, 0.4), L)
+    pssm <- pssm / rowSums(pssm)
+    colnames(pssm) <- c("A", "C", "G", "T")
+    starts <- sort(sample(seq(1000, 150000, 50), 120))
+    iv <- gintervals(1, starts, starts + sample(5:40, 120, TRUE))
+    for (ext in list(TRUE, FALSE, 3L, 0L)) {
+        for (d in 0:3) {
+            for (direction in c("above", "below")) {
+                thr <- if (direction == "above") -8 else -14
+                va <- list(pssm = pssm, score.thresh = thr, extend = ext, direction = direction)
+                if (d > 0) va$max_indels <- d
+                gvtrack.create("ed_ext", NULL, "pwm.edit_distance", params = va)
+                v <- gextract("ed_ext", iv, iterator = iv)
+                v <- v$ed_ext[order(v$intervalID)]
+                g <- gseq.pwm_edits(iv, pssm,
+                    score.thresh = thr, max_indels = if (d > 0) d else NULL,
+                    extend = ext, direction = direction
+                )
+                n <- rep(NA_real_, nrow(iv))
+                n[g$seq_idx] <- g$n_edits
+                expect_equal(n, v, info = sprintf("extend=%s D=%d %s", format(ext), d, direction))
+                gvtrack.rm("ed_ext")
+            }
+        }
+    }
+})
