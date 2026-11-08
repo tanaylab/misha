@@ -636,7 +636,11 @@ gseq.potts <- function(seqs, model, mode = c("lse", "max", "pos", "count"),
 #' @param score.max numeric or NULL; skip windows with PWM score above this.
 #'   Default NULL (no filter). Same score as \code{score.min}.
 #' @param extend logical or integer; extend sequence for boundary motifs.
-#'   Default TRUE.
+#'   Default TRUE. For interval input it means what it means for the
+#'   \code{pwm.edit_distance} virtual track: \code{TRUE} or a positive integer
+#'   lets a window start at every position of the interval and read bases past
+#'   its end; \code{FALSE} or 0 keeps every window (deletions included) inside
+#'   the interval.
 #' @param strand integer; which strand to scan when \code{bidirect=FALSE}.
 #'   1=forward, -1=reverse. Default 1.
 #' @param direction character; direction of the edit distance query.
@@ -716,18 +720,19 @@ gseq.pwm_edits <- function(seqs,
     intervals_df <- NULL
     if (is_intervals) {
         intervals_df <- seqs
-        # Extend END only — matching vtrack's calculate_expanded_interval.
-        # The motif window starts within the interval and extends rightward,
-        # so we need extra sequence after the interval end.
-        # With this extension, the valid window starts are exactly
-        # offsets 0..(interval_length-1) in the extracted sequence.
-        # When indels are enabled, deletions produce windows of length
-        # L + max_indels, so we need max_indels additional bases beyond
-        # the standard extension (matching PWMEditDistanceScorer which
-        # calls calculate_expanded_interval with motif_len + max_indels).
+        # The windows scanned are the pwm.edit_distance vtrack's for the same
+        # interval and extend value. The vtrack reads extend = TRUE or a
+        # positive integer as TRUE: the sequence is padded at the END by
+        # (motif length + max_indels - 1), clipped at the chromosome end, and a
+        # window starts at every interval position. With extend = FALSE or 0
+        # nothing is padded and a window must fit in the interval: the last
+        # start is interval length - motif length, and with indels a deletion
+        # window may not run past the interval end either.
         w <- nrow(pssm)
         indel_extra <- if (!is.null(max_indels)) as.integer(max_indels) else 0L
-        ext <- if (isTRUE(extend)) w - 1L + indel_extra else if (isFALSE(extend)) 0L else as.integer(extend) + indel_extra
+        ext_flag <- isTRUE(extend) ||
+            (is.numeric(extend) && length(extend) == 1 && !is.na(extend) && extend > 0)
+        ext <- if (ext_flag) w - 1L + indel_extra else 0L
         extended_intervals <- intervals_df
         # A strand column is ignored, as the vtrack ignores it: gseq.extract()
         # would return strand = -1 rows reverse-complemented, and the scan
@@ -742,27 +747,16 @@ gseq.pwm_edits <- function(seqs,
         keep <- !is.na(max_end)
         extended_intervals$end[keep] <- pmin(extended_intervals$end[keep], max_end[keep])
         seqs <- gseq.extract(extended_intervals)
-        # Without indels: the extended sequence has length
-        # interval_length + w - 1, and C++ scans positions 0..(seqlen-w)
-        # = 0..(interval_length-1), giving exactly interval_length windows.
-        # No ROI constraint needed.
-        #
-        # With indels: we extend by an extra indel_extra bases so that
-        # deletion windows (length up to w + max_indels) at the last
-        # interval position have enough sequence. But without ROI, the
-        # C++ would scan extra window starts beyond the interval.
-        # We constrain via ROI so that valid window starts are exactly
-        # 0..(interval_length-1), matching the vtrack behavior.
-        # ROI is 1-based: roi_end = interval_length + w - 1 means
-        # the last valid start is roi_end - w = interval_length - 1.
-        if (indel_extra > 0L) {
-            interval_lengths <- intervals_df$end - intervals_df$start
-            roi_start <- rep(1L, length(seqs))
-            roi_end <- as.integer(interval_lengths + w - 1L)
-        } else {
-            roi_start <- NULL
-            roi_end <- NULL
-        }
+        # Window starts are limited through the ROI (1-based; C++ lets a window
+        # start up to roi_end - w, and no later than where fewer than the
+        # shortest window's bases remain). Padded: roi_end = length + w - 1, so
+        # the last start is length - 1; where the padding was clipped at the
+        # chromosome end, windows of fewer than w bases (indels) start there as
+        # in the vtrack. Not padded: roi_end = length, so the last start is
+        # length - w.
+        interval_lengths <- intervals_df$end - intervals_df$start
+        roi_start <- rep(1L, length(seqs))
+        roi_end <- as.integer(if (ext_flag) interval_lengths + w - 1L else interval_lengths)
     } else {
         seqs <- as.character(seqs)
         roi_start <- NULL
