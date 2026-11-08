@@ -293,33 +293,25 @@ gintervals.2d.all <- function() {
 
     # Check if 2D is deferred and generate on demand
     if (.is_2d_deferred(intervals2d)) {
-        mode <- getOption("gmulticontig.2d.mode", "diagonal")
-        n_contigs <- attr(intervals2d, "n_contigs")
+        mode <- getOption("gmulticontig.2d.mode")
+        if (is.null(mode)) {
+            # the cis pairs, not kept: they are not the whole-genome scope
+            warning(sprintf(
+                "The database has more than getOption(\"gmulticontig.2d.threshold\") (%d) contigs: gintervals.2d.all() returns the cis chromosome pairs only. Set options(gmulticontig.2d.mode = \"full\") for all chromosome pairs.",
+                getOption("gmulticontig.2d.threshold", 100)
+            ), call. = FALSE)
+            return(.generate_2d_on_demand(get("ALLGENOME", envir = .misha)[[1]], "diagonal"))
+        }
 
-        if (mode == "full") {
+        if (identical(mode, "full") && is.null(.gintervals.2d.kept(mode))) {
+            n_contigs <- attr(intervals2d, "n_contigs")
             warning(sprintf(
                 "Generating full 2D genome with %d contigs (%d pairs). This may take time and use significant memory.",
                 n_contigs, n_contigs * n_contigs
             ))
         }
-
-        intervals <- get("ALLGENOME", envir = .misha)[[1]]
-        if (is.null(getOption("gmulticontig.2d.mode"))) {
-            warning(sprintf(
-                "The database has more than getOption(\"gmulticontig.2d.threshold\") (%d) contigs: gintervals.2d.all() returns the cis chromosome pairs only. Set options(gmulticontig.2d.mode = \"full\") for all chromosome pairs.",
-                getOption("gmulticontig.2d.threshold", 100)
-            ), call. = FALSE)
-        }
-        intervals2d <- .generate_2d_on_demand(intervals, mode)
-
-        # Cache if requested (built in a mode that was asked for: the cis pairs of the default mode
-        # are not the whole-genome scope)
-        if (getOption("gmulticontig.2d.cache", FALSE) && !is.null(getOption("gmulticontig.2d.mode"))) {
-            allgenome <- get("ALLGENOME", envir = .misha)
-            # with the mode it was built in: .gintervals.2d.whole_genome() reuses it in that mode
-            allgenome[[2]] <- structure(intervals2d, mode = mode)
-            assign("ALLGENOME", allgenome, envir = .misha)
-        }
+        # kept with options(gmulticontig.2d.cache), under its mode
+        intervals2d <- .gintervals.2d.build(mode)
     }
 
     intervals2d

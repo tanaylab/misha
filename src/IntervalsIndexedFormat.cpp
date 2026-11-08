@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <errno.h>
 #include <fcntl.h>
+#include <memory>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -38,6 +39,11 @@ static int flush_sync_close(FILE *fp)
         err = errno;
     return err;
 }
+
+// A file written here, closed when an error unwinds. RdbInitializer closes the descriptor of a FILE
+// left open, not the FILE: its buffered bytes stay, and exit() writes them to whatever file holds
+// that descriptor number then.
+typedef std::unique_ptr<FILE, int (*)(FILE *)> OutFile;
 
 // Offset to checksum field in 1D index header
 static const size_t IDX_1D_HEADER_SIZE_TO_CHECKSUM =
@@ -196,19 +202,18 @@ SEXP ginterv_convert(SEXP _intervset, SEXP _remove_old, SEXP _envir) {
         string idx_path = intervset_dir + "/intervals.idx";
 
         // Open temporary files
-        FILE *dat_fp = fopen(dat_path_tmp.c_str(), "wb");
+        OutFile dat_fp(fopen(dat_path_tmp.c_str(), "wb"), &fclose);
         if (!dat_fp) {
             TGLError("Failed to create %s: %s", dat_path_tmp.c_str(), strerror(errno));
         }
 
-        FILE *idx_fp = fopen(idx_path_tmp.c_str(), "wb");
+        OutFile idx_fp(fopen(idx_path_tmp.c_str(), "wb"), &fclose);
         if (!idx_fp) {
-            fclose(dat_fp);
             TGLError("Failed to create %s: %s", idx_path_tmp.c_str(), strerror(errno));
         }
 
         // Write index header (checksum=0 for now)
-        write_1d_index_header(idx_fp, chromkey.get_num_chroms(), 0);
+        write_1d_index_header(idx_fp.get(), chromkey.get_num_chroms(), 0);
 
         // Collect entries and concatenate files
         vector<IntervalsContigEntry> entries;
@@ -226,7 +231,7 @@ SEXP ginterv_convert(SEXP _intervset, SEXP _remove_old, SEXP _envir) {
             entry.reserved = 0;
 
             uint64_t bytes_written = 0;
-            if (found && copy_file_contents(chr_file, dat_fp, bytes_written)) {
+            if (found && copy_file_contents(chr_file, dat_fp.get(), bytes_written)) {
                 entry.length = bytes_written;
                 current_offset += bytes_written;
             }
@@ -246,9 +251,7 @@ SEXP ginterv_convert(SEXP _intervset, SEXP _remove_old, SEXP _envir) {
             disk_entry.length = entry.length;
             disk_entry.reserved = entry.reserved;
 
-            if (fwrite(&disk_entry, sizeof(disk_entry), 1, idx_fp) != 1) {
-                fclose(dat_fp);
-                fclose(idx_fp);
+            if (fwrite(&disk_entry, sizeof(disk_entry), 1, idx_fp.get()) != 1) {
                 TGLError("Failed to write index entry for chromosome %s", chrom_name.c_str());
             }
 
@@ -269,20 +272,16 @@ SEXP ginterv_convert(SEXP _intervset, SEXP _remove_old, SEXP _envir) {
         checksum = crc64.finalize_incremental(checksum);
 
         // Update checksum in index header (seek to checksum position)
-        if (fseek(idx_fp, IDX_1D_HEADER_SIZE_TO_CHECKSUM, SEEK_SET) != 0) {
-            fclose(dat_fp);
-            fclose(idx_fp);
+        if (fseek(idx_fp.get(), IDX_1D_HEADER_SIZE_TO_CHECKSUM, SEEK_SET) != 0) {
             TGLError("Failed to seek to checksum position in 1D index");
         }
-        if (fwrite(&checksum, sizeof(checksum), 1, idx_fp) != 1) {
-            fclose(dat_fp);
-            fclose(idx_fp);
+        if (fwrite(&checksum, sizeof(checksum), 1, idx_fp.get()) != 1) {
             TGLError("Failed to update checksum in index");
         }
 
         // Flush and sync both files; neither is renamed into place (nor the old files removed) unless both are complete
-        int dat_err = flush_sync_close(dat_fp);
-        int idx_err = flush_sync_close(idx_fp);
+        int dat_err = flush_sync_close(dat_fp.release());
+        int idx_err = flush_sync_close(idx_fp.release());
         if (dat_err)
             TGLError("Failed to write %s: %s", dat_path_tmp.c_str(), strerror(dat_err));
         if (idx_err)
@@ -376,19 +375,18 @@ SEXP ginterv2d_convert(SEXP _intervset, SEXP _remove_old, SEXP _envir) {
         string idx_path = intervset_dir + "/intervals2d.idx";
 
         // Open temporary files
-        FILE *dat_fp = fopen(dat_path_tmp.c_str(), "wb");
+        OutFile dat_fp(fopen(dat_path_tmp.c_str(), "wb"), &fclose);
         if (!dat_fp) {
             TGLError("Failed to create %s: %s", dat_path_tmp.c_str(), strerror(errno));
         }
 
-        FILE *idx_fp = fopen(idx_path_tmp.c_str(), "wb");
+        OutFile idx_fp(fopen(idx_path_tmp.c_str(), "wb"), &fclose);
         if (!idx_fp) {
-            fclose(dat_fp);
             TGLError("Failed to create %s: %s", idx_path_tmp.c_str(), strerror(errno));
         }
 
         // Write index header (checksum=0 for now)
-        write_2d_index_header(idx_fp, chrom_pairs.size(), 0);
+        write_2d_index_header(idx_fp.get(), chrom_pairs.size(), 0);
 
         // Collect entries and concatenate files
         vector<IntervalsPairEntry> entries;
@@ -408,7 +406,7 @@ SEXP ginterv2d_convert(SEXP _intervset, SEXP _remove_old, SEXP _envir) {
             entry.reserved = 0;
 
             uint64_t bytes_written = 0;
-            if (copy_file_contents(pair_file, dat_fp, bytes_written)) {
+            if (copy_file_contents(pair_file, dat_fp.get(), bytes_written)) {
                 entry.length = bytes_written;
                 current_offset += bytes_written;
             }
@@ -430,9 +428,7 @@ SEXP ginterv2d_convert(SEXP _intervset, SEXP _remove_old, SEXP _envir) {
             disk_entry.length = entry.length;
             disk_entry.reserved = entry.reserved;
 
-            if (fwrite(&disk_entry, sizeof(disk_entry), 1, idx_fp) != 1) {
-                fclose(dat_fp);
-                fclose(idx_fp);
+            if (fwrite(&disk_entry, sizeof(disk_entry), 1, idx_fp.get()) != 1) {
                 TGLError("Failed to write index entry for pair %s", filename.c_str());
             }
 
@@ -455,20 +451,16 @@ SEXP ginterv2d_convert(SEXP _intervset, SEXP _remove_old, SEXP _envir) {
         checksum = crc64.finalize_incremental(checksum);
 
         // Update checksum in index header (seek to checksum position)
-        if (fseek(idx_fp, IDX_2D_HEADER_SIZE_TO_CHECKSUM, SEEK_SET) != 0) {
-            fclose(dat_fp);
-            fclose(idx_fp);
+        if (fseek(idx_fp.get(), IDX_2D_HEADER_SIZE_TO_CHECKSUM, SEEK_SET) != 0) {
             TGLError("Failed to seek to checksum position in 2D index");
         }
-        if (fwrite(&checksum, sizeof(checksum), 1, idx_fp) != 1) {
-            fclose(dat_fp);
-            fclose(idx_fp);
+        if (fwrite(&checksum, sizeof(checksum), 1, idx_fp.get()) != 1) {
             TGLError("Failed to update checksum in index");
         }
 
         // Flush and sync both files; neither is renamed into place (nor the old files removed) unless both are complete
-        int dat_err = flush_sync_close(dat_fp);
-        int idx_err = flush_sync_close(idx_fp);
+        int dat_err = flush_sync_close(dat_fp.release());
+        int idx_err = flush_sync_close(idx_fp.release());
         if (dat_err)
             TGLError("Failed to write %s: %s", dat_path_tmp.c_str(), strerror(dat_err));
         if (idx_err)
@@ -546,19 +538,22 @@ SEXP gbigintervs_indexed_create(SEXP _intervset_path, SEXP _num_chroms, SEXP _en
         string dat_path = intervset_path + "/intervals.dat.tmp";
         string idx_path = intervset_path + "/intervals.idx.tmp";
 
-        FILE *dat_fp = fopen(dat_path.c_str(), "wb");
+        OutFile dat_fp(fopen(dat_path.c_str(), "wb"), &fclose);
         if (!dat_fp) {
             verror("Cannot create %s: %s", dat_path.c_str(), strerror(errno));
         }
 
-        FILE *idx_fp = fopen(idx_path.c_str(), "wb");
+        OutFile idx_fp(fopen(idx_path.c_str(), "wb"), &fclose);
         if (!idx_fp) {
-            fclose(dat_fp);
             verror("Cannot create %s: %s", idx_path.c_str(), strerror(errno));
         }
 
         // Write index header with placeholder checksum
-        write_1d_index_header(idx_fp, num_chroms, 0);
+        write_1d_index_header(idx_fp.get(), num_chroms, 0);
+
+        // closed before the result is built: an R error there would not unwind
+        fclose(dat_fp.release());
+        fclose(idx_fp.release());
 
         // Return a list with file paths and current offset
         // We'll track state in R and pass it back to subsequent calls
@@ -577,9 +572,6 @@ SEXP gbigintervs_indexed_create(SEXP _intervset_path, SEXP _num_chroms, SEXP _en
         SET_VECTOR_ELT(result, 1, Rf_mkString(idx_path.c_str()));
         SET_VECTOR_ELT(result, 2, Rf_mkString(intervset_path.c_str()));
         SET_VECTOR_ELT(result, 3, Rf_ScalarInteger(num_chroms));
-
-        fclose(dat_fp);
-        fclose(idx_fp);
 
         UNPROTECT(2);
         return result;
@@ -603,30 +595,28 @@ SEXP gbigintervs_indexed_write_chrom(SEXP _dat_path, SEXP _intervals, SEXP _envi
         string dat_path = CHAR(STRING_ELT(_dat_path, 0));
 
         // Open dat file in append mode
-        FILE *dat_fp = fopen(dat_path.c_str(), "ab");
+        OutFile dat_fp(fopen(dat_path.c_str(), "ab"), &fclose);
         if (!dat_fp) {
             verror("Cannot open %s for appending: %s", dat_path.c_str(), strerror(errno));
         }
 
         // Get current position (will be the offset for this chromosome)
-        long offset = ftell(dat_fp);
+        long offset = ftell(dat_fp.get());
         if (offset < 0) {
-            fclose(dat_fp);
             verror("Failed to get file position: %s", strerror(errno));
         }
 
-        // Serialize the intervals dataframe
-        RSaneSerialize(_intervals, dat_fp);
+        // Serialize the intervals dataframe (an R error in it unwinds here)
+        RSaneSerialize(_intervals, dat_fp.get());
 
         // Get new position to calculate length
-        long new_pos = ftell(dat_fp);
+        long new_pos = ftell(dat_fp.get());
         if (new_pos < 0) {
-            fclose(dat_fp);
             verror("Failed to get file position after write: %s", strerror(errno));
         }
 
-        bool write_failed = ferror(dat_fp);
-        if (fclose(dat_fp) || write_failed)
+        bool write_failed = ferror(dat_fp.get());
+        if (fclose(dat_fp.release()) || write_failed)
             verror("Failed to write %s: %s", dat_path.c_str(), write_failed ? "write error" : strerror(errno));
 
         uint64_t length = new_pos - offset;
@@ -792,22 +782,21 @@ SEXP gbigintervs_2d_indexed_create(SEXP _intervset_path, SEXP _num_pairs, SEXP _
         string dat_path = intervset_path + "/intervals2d.dat.tmp";
         string idx_path = intervset_path + "/intervals2d.idx.tmp";
 
-        FILE *dat_fp = fopen(dat_path.c_str(), "wb");
+        OutFile dat_fp(fopen(dat_path.c_str(), "wb"), &fclose);
         if (!dat_fp) {
             verror("Cannot create %s: %s", dat_path.c_str(), strerror(errno));
         }
 
-        FILE *idx_fp = fopen(idx_path.c_str(), "wb");
+        OutFile idx_fp(fopen(idx_path.c_str(), "wb"), &fclose);
         if (!idx_fp) {
-            fclose(dat_fp);
             verror("Cannot create %s: %s", idx_path.c_str(), strerror(errno));
         }
 
         // Write index header with placeholder checksum
-        write_2d_index_header(idx_fp, num_pairs, 0);
+        write_2d_index_header(idx_fp.get(), num_pairs, 0);
 
-        fclose(dat_fp);
-        fclose(idx_fp);
+        fclose(dat_fp.release());
+        fclose(idx_fp.release());
 
         // Return paths
         SEXP result;

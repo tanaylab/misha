@@ -263,6 +263,15 @@
     invisible(TRUE)
 }
 
+# The precedence of a database for a name that more than one loaded database holds, as in
+# gdb.reload() and gdataset.load(): the working database wins, then the dataset loaded last.
+.gdb.db_precedence <- function(db) {
+    if (identical(db, get("GROOT", envir = .misha))) {
+        return(Inf)
+    }
+    match(db, get("GDATASETS", envir = .misha), nomatch = 0L)
+}
+
 .gdb.add_track <- function(track, db = NULL) {
     .gcheckroot()
 
@@ -319,8 +328,12 @@
         if (is.null(track_db)) {
             track_db <- character(0)
         }
-        track_db[[track]] <- db
-        assign("GTRACK_DATASET", track_db, envir = .misha)
+        # A name that another loaded database holds too stays where gdb.reload() would map it
+        # (gtrack.copy(db = <a dataset>) of a name of the working database)
+        if (!(track %in% names(track_db)) || .gdb.db_precedence(db) >= .gdb.db_precedence(track_db[[track]])) {
+            track_db[[track]] <- db
+            assign("GTRACK_DATASET", track_db, envir = .misha)
+        }
 
         .gdb.cache_update_lists(db, track, "tracks", add = TRUE)
     }
