@@ -48,6 +48,10 @@ static void log_gextract_timing(const char *label, double ms) {
 using namespace std;
 using namespace rdb;
 
+// The first suggestion of the error about a result over gmax.data.size: a file output is not limited
+static const char *GEXTRACT_FILE_SUGGESTION =
+	"  - Write the result to a file, which gmax.data.size does not limit: gextract(..., file = \"x.tsv\") or file = \"x.parquet\"\n";
+
 static uint64_t estimate_records_for_expr(
 	IntervUtils &iu,
 	SEXP exprs,
@@ -954,7 +958,7 @@ SEXP C_gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_pol
 					interv_ids.push_back(iu.get_orig_interv_idx(scanner.last_scope_interval2d()) + 1);
 				}
 
-				iu.verify_max_data_size(values[0].size(), "Result");
+				iu.verify_max_data_size(values[0].size(), "Result", true, GEXTRACT_FILE_SUGGESTION, "rows");
 				check_interrupt();
 			}
 
@@ -1166,7 +1170,7 @@ SEXP C_gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_pol
 				p_row_names[row] = (int)(row + 1);
 				row++;
 
-				iu.verify_max_data_size(row, "Result");
+				iu.verify_max_data_size(row, "Result", true, GEXTRACT_FILE_SUGGESTION, "rows");
 				check_interrupt();
 			}
 
@@ -1234,7 +1238,7 @@ SEXP C_gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_pol
 				p_row_names[row] = (int)(row + 1);
 				row++;
 
-				iu.verify_max_data_size(row, "Result");
+				iu.verify_max_data_size(row, "Result", true, GEXTRACT_FILE_SUGGESTION, "rows");
 				check_interrupt();
 			}
 
@@ -1698,7 +1702,7 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 					interv_ids.push_back(iu.get_orig_interv_idx(scanner.last_scope_interval2d()) + 1);
 				}
 			
-				iu.verify_max_data_size(values[0].size(), "Result");
+				iu.verify_max_data_size(values[0].size(), "Result", true, GEXTRACT_FILE_SUGGESTION, "rows");
 			}
 			
 			// now we finally know the result size => pack the result into shared memory

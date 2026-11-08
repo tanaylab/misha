@@ -405,3 +405,13 @@ test_that("a numeric chrom of -0 is chromosome 0, as as.character(-0) is \"0\"",
         }
     })
 })
+
+test_that("a gextract result over gmax.data.size is reported in rows, with file = suggested", {
+    withr::local_options(gmax.data.size = 100, gmultitasking = FALSE)
+    # test.fixedbin has 50 bp bins: 2000 rows
+    err <- tryCatch(gextract("test.fixedbin", gintervals(1, 0, 1e5)), error = conditionMessage)
+    expect_match(err, "Result size (at least 101 rows) exceeded the maximum allowed (100 rows, set by gmax.data.size)", fixed = TRUE)
+    expect_match(err, 'gextract(..., file = "x.tsv") or file = "x.parquet"', fixed = TRUE)
+    expect_match(err, "options(gmax.data.size = <a larger number of rows>), or Inf for no limit", fixed = TRUE)
+    expect_false(grepl("MB|GB|bytes", err))
+})
