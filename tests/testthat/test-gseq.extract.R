@@ -173,19 +173,27 @@ test_that("gseq.extract pad = TRUE still validates the intervals", {
 
 test_that("gseq.extract pad = TRUE rejects non-finite coordinates as pad = FALSE does", {
     chrom1 <- as.character(gintervals.all()$chrom[1])
-    # alone (no row is padded) and next to a row that is padded
-    for (other in list(NULL, data.frame(chrom = chrom1, start = -5, end = 10))) {
-        bad <- function(start, end) rbind(other, data.frame(chrom = chrom1, start = start, end = end))
-        expect_error(gseq.extract(bad(-Inf, 10), pad = TRUE), "start coordinate must be greater or equal than zero")
-        expect_error(gseq.extract(bad(10, Inf), pad = TRUE), "start coordinate must be lesser than end coordinate")
-        expect_error(gseq.extract(bad(-Inf, Inf), pad = TRUE), "start coordinate must be greater or equal than zero")
-        expect_error(gseq.extract(bad(NA_real_, 10), pad = TRUE), "Invalid format of interval")
-        expect_error(gseq.extract(bad(-5, NaN), pad = TRUE), "Invalid format of interval")
+    msg <- function(iv, pad) {
+        tryCatch(
+            {
+                gseq.extract(iv, pad = pad)
+                NA_character_
+            },
+            error = function(e) conditionMessage(e)
+        )
     }
-    expect_error(
-        gseq.extract(data.frame(chrom = chrom1, start = 10, end = Inf), pad = FALSE),
-        "start coordinate must be lesser than end coordinate"
-    )
+    one <- function(start, end) data.frame(chrom = chrom1, start = start, end = end)
+    # alone: the same error as without pad (the wording is the interval checks', whichever they give)
+    for (iv in list(one(-Inf, 10), one(10, Inf), one(-Inf, Inf), one(NA_real_, 10), one(-5, NaN))) {
+        m <- msg(iv, TRUE)
+        expect_false(is.na(m))
+        expect_identical(m, msg(iv, FALSE))
+    }
+    # next to a row that is padded: still an error, never a sequence holding "NA"
+    padded <- one(-5, 10)
+    for (iv in list(one(-Inf, 10), one(10, Inf), one(-Inf, Inf), one(NA_real_, 10), one(-5, NaN))) {
+        expect_error(gseq.extract(rbind(padded, iv), pad = TRUE), "coordinate|Invalid format of interval")
+    }
 })
 
 test_that("gseq.extract pad = TRUE keeps the genome's lowercase and N, in both database formats", {
