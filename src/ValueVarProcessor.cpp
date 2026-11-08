@@ -39,6 +39,10 @@ void ValueVarProcessor::process_single_value_var(
 	if (var.filter) {
 		std::vector<GInterval> eval_intervals;
 		var.filter->subtract(eval_interval, eval_intervals);
+		// "nearest" without a value in the parts falls back to an unmasked value outside them
+		std::vector<GInterval> nearest_parts;
+		if (var.val_func == TrackExpressionVars::Value_var::NEAREST)
+			nearest_parts = eval_intervals;
 		// The counting reductions read each value once even when the filter splits its interval;
 		// the other functions (min, max, positions, ...) read the parts as they are
 		switch (var.val_func) {
@@ -151,6 +155,8 @@ void ValueVarProcessor::process_single_value_var(
 			// No unmasked value: size and exists count none, the other functions have nothing to report
 			if (var.val_func == TrackExpressionVars::Value_var::SIZE || var.val_func == TrackExpressionVars::Value_var::EXISTS)
 				var.var[idx] = 0;
+			else if (var.val_func == TrackExpressionVars::Value_var::NEAREST)
+				var.var[idx] = TrackVarProcessor::nearest_unmasked_value(*var.track, *var.filter, nearest_parts);
 			else
 				var.var[idx] = numeric_limits<double>::quiet_NaN();
 		} else {

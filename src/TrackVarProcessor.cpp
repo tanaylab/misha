@@ -9,6 +9,10 @@
 #include "GenomeTrack.h"
 #include "GenomeTrack1D.h"
 #include "GenomeTrack2D.h"
+#include "GenomeTrackArrays.h"
+#include "GenomeTrackInMemory.h"
+#include "GenomeTrackSparse.h"
+#include "Filter.h"
 #include "StreamPercentiler.h"
 #include "rdbutils.h"
 
@@ -75,7 +79,9 @@ void TrackVarProcessor::process_single_track_var_1d(
 		}
 	}
 
-	if (has_filter && unmasked_parts.size() > 1) {
+	// "nearest" with a filter is never read from a single part alone: without a value in the parts it falls back to
+	// an unmasked value outside them
+	if (has_filter && (unmasked_parts.size() > 1 || var.val_func == TrackExpressionVars::Track_var::REG_NEAREST)) {
 		// Multiple unmasked parts - aggregate across them
 		var.var[idx] = aggregate_multi_value(var, track, unmasked_parts, base_start);
 
@@ -210,9 +216,7 @@ double TrackVarProcessor::aggregate_multi_value(
 		const double avg = aggregate_avg_with_filter(track, parts);
 		if (!std::isnan(avg))
 			return avg;
-		// No unmasked value: the value nearest to the first unmasked part
-		track.read_interval(parts[0]);
-		return track.last_nearest();
+		return nearest_unmasked_value(track, *var.filter, parts);
 	}
 	case TrackExpressionVars::Track_var::QUANTILE:
 		return aggregate_quantile_with_filter(track, track.parts_reading_items_once(parts), var.percentile, m_iu);
@@ -551,6 +555,83 @@ double TrackVarProcessor::aggregate_sample_with_filter(GenomeTrack1D &track, con
 		u -= counts[i];
 	}
 	return draws.back();
+}
+
+double TrackVarProcessor::nearest_unmasked_value(GenomeTrack1D &track, const Genome1DFilter &filter, const vector<GInterval> &parts)
+{
+	// The sorted, non-overlapping intervals of the chromosome that the track holds, [begin, end) of items, and
+	// their values; a dense track has none ("nearest" on a dense track is the average inside the interval only)
+	const GIntervals *items = nullptr;
+	size_t begin = 0, end = 0;
+	const vector<float> *vals = nullptr;
+	GenomeTrackArrays *arrays = nullptr;
+
+	if (GenomeTrackSparse *sparse = dynamic_cast<GenomeTrackSparse *>(&track)) {
+		items = &sparse->get_intervals();
+		vals = &sparse->get_vals();
+		end = items->size();
+	} else if ((arrays = dynamic_cast<GenomeTrackArrays *>(&track))) {
+		items = &arrays->get_intervals();
+		end = items->size();
+	} else if (GenomeTrackInMemory *inmem = dynamic_cast<GenomeTrackInMemory *>(&track)) {
+		items = &inmem->get_intervals();
+		vals = &inmem->get_vals();
+		inmem->chrom_range(parts.front().chromid, begin, end);
+	} else
+		return numeric_limits<double>::quiet_NaN();
+
+	auto value = [&](size_t i) { return vals ? (*vals)[i] : arrays->get_sliced_val(i); };
+	const int chromid = parts.front().chromid;
+	const int64_t first_start = parts.front().start;
+	const int64_t last_end = parts.back().end;
+	vector<GInterval> stretches;
+
+	// Left: the last value with an unmasked stretch before the first part (the parts themselves hold no value)
+	bool has_left = false;
+	float left_val = 0;
+	int64_t left_dist = 0;
+	auto ileft = std::upper_bound(items->begin() + begin, items->begin() + end, first_start,
+	                              [](int64_t coord, const GInterval &item) { return coord < item.start; });
+	for (size_t i = ileft - items->begin(); i-- > begin; ) {
+		const GInterval &item = (*items)[i];
+		const float v = value(i);
+		if (std::isnan(v))
+			continue;
+		filter.subtract(GInterval(chromid, item.start, std::min(item.end, first_start), 0), stretches);
+		if (!stretches.empty()) {
+			has_left = true;
+			left_val = v;
+			left_dist = first_start - stretches.back().end;
+			break;
+		}
+	}
+
+	// Right: the first value with an unmasked stretch after the last part
+	bool has_right = false;
+	float right_val = 0;
+	int64_t right_dist = 0;
+	auto iright = std::lower_bound(items->begin() + begin, items->begin() + end, last_end,
+	                               [](const GInterval &item, int64_t coord) { return item.end <= coord; });
+	for (size_t i = iright - items->begin(); i < end; ++i) {
+		const GInterval &item = (*items)[i];
+		const float v = value(i);
+		if (std::isnan(v))
+			continue;
+		filter.subtract(GInterval(chromid, std::max(item.start, last_end), item.end, 0), stretches);
+		if (!stretches.empty()) {
+			has_right = true;
+			right_val = v;
+			right_dist = stretches.front().start - last_end;
+			break;
+		}
+	}
+
+	// At the same distance the left value wins, as without a filter
+	if (has_left && (!has_right || left_dist <= right_dist))
+		return left_val;
+	if (has_right)
+		return right_val;
+	return numeric_limits<double>::quiet_NaN();
 }
 
 double TrackVarProcessor::aggregate_first_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts, bool pos)

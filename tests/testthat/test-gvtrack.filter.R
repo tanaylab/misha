@@ -1148,6 +1148,43 @@ test_that("with a filter, nearest is the average of the unmasked values, each co
     }
 })
 
+test_that("with a filter, nearest without an unmasked value in the interval is the nearest unmasked value", {
+    local_db_state()
+    vv <- vf_blocks(2)
+    srcs <- vf_sources(vv)
+    # the values: 1 at [0,50), 2 at [100,150), 6 at [250,300), and the same again 400 bp later
+    cases <- list(
+        # the mask leaves [100,140) of the value 2, 20 bp from the interval; 6 is 10 bp away
+        list(gintervals("chr1", 160, 240), gintervals("chr1", 140, 155), 6),
+        # the value 2 lies inside the mask, not a candidate
+        list(gintervals("chr1", 80, 240), gintervals("chr1", 80, 160), 6),
+        # 1 and 2 both 10 bp away: the left one, as without a filter
+        list(gintervals("chr1", 60, 90), gintervals("chr1", 1500, 1510), 1),
+        # distances are from the nearest unmasked part: [170,195) to 2 is 20 bp, [205,240) to 6 is 10 bp
+        list(gintervals("chr1", 160, 240), gintervals("chr1", c(160, 195), c(170, 205)), 6),
+        # every value of the chromosome is masked
+        list(gintervals("chr1", 160, 240), rbind(vv[, 1:3], gintervals("chr1", 170, 180)), NA_real_),
+        # the chromosome holds no value
+        list(gintervals("chr2", 0, 12), gintervals("chr2", 3, 5), NA_real_)
+    )
+    check <- function(label) {
+        for (k in seq_along(cases)) {
+            for (s in names(srcs)) {
+                gvtrack.create("vf", srcs[[s]], "nearest", filter = cases[[k]][[2]])
+                # nearest on a dense track does not look outside the interval, with or without a filter
+                expected <- if (s == "dn") NA_real_ else cases[[k]][[3]]
+                iv <- cases[[k]][[1]]
+                expect_equal(gextract("vf", iv, iterator = iv)$vf, expected, info = paste(label, s, "case", k))
+            }
+        }
+    }
+    check("per-chromosome")
+    withr::with_options(list(gshared.track.backend = TRUE), check("shared backend"))
+    for (tr in c("vf_sp", "vf_dn", "vf_arr")) suppressMessages(gtrack.convert_to_indexed(tr))
+    check("indexed")
+    withr::with_options(list(gshared.track.backend = TRUE), check("indexed, shared backend"))
+})
+
 test_that("with a filter, sample draws each unmasked value with the same chance", {
     local_db_state()
     nblocks <- 1200
