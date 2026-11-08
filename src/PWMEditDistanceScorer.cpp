@@ -1634,7 +1634,9 @@ float PWMEditDistanceScorer::compute_min_edits_from_gains(double aligned_score,
 float PWMEditDistanceScorer::compute_with_one_indel(const int* bidx_arr, int seq_len, bool reverse)
 {
     const int L = m_pssm.length();
-    if (L == 0) {
+    // L <= 0, not L == 0: with the fallback below this keeps L in [1, MAX_MOTIF_LEN_OPT], the bound of
+    // the stack arrays and of the memsets that clear them
+    if (L <= 0) {
         return std::numeric_limits<float>::quiet_NaN();
     }
 
@@ -1898,7 +1900,9 @@ float PWMEditDistanceScorer::compute_with_one_indel(const int* bidx_arr, int seq
 float PWMEditDistanceScorer::compute_with_two_indels(const int* bidx_arr, int seq_len, bool reverse)
 {
     const int L = m_pssm.length();
-    if (L == 0) {
+    // L <= 0, not L == 0: with the fallback below this keeps L in [1, MAX_MOTIF_LEN_OPT], the bound of
+    // the stack arrays and of the memsets that clear them
+    if (L <= 0) {
         return std::numeric_limits<float>::quiet_NaN();
     }
 
