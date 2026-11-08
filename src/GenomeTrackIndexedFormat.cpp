@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <errno.h>
 #include <fcntl.h>
+#include <memory>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -135,22 +136,23 @@ SEXP gtrack_convert_to_indexed_format(SEXP _track, SEXP _remove_old, SEXP _envir
         string dat_path = track_dir + "/track.dat";
         string idx_path = track_dir + "/track.idx";
 
-        // Open temporary files
-        FILE *dat_fp = fopen(dat_path_tmp.c_str(), "wb");
+        // Open temporary files, closed when an error (or an interrupt) unwinds. RdbInitializer closes
+        // the descriptor of a FILE left open, not the FILE: its buffered bytes stay, and exit() writes
+        // them to whatever file holds that descriptor number then.
+        std::unique_ptr<FILE, int (*)(FILE *)> dat_fp(fopen(dat_path_tmp.c_str(), "wb"), &fclose);
         if (!dat_fp) {
             TGLError<GenomeTrack>("Failed to create %s: %s", dat_path_tmp.c_str(), strerror(errno));
         }
 
-        FILE *idx_fp = fopen(idx_path_tmp.c_str(), "wb");
+        std::unique_ptr<FILE, int (*)(FILE *)> idx_fp(fopen(idx_path_tmp.c_str(), "wb"), &fclose);
         if (!idx_fp) {
-            fclose(dat_fp);
             TGLError<GenomeTrack>("Failed to create %s: %s", idx_path_tmp.c_str(), strerror(errno));
         }
 
         // Write index header (checksum=0 for now; patched at end via
         // TrackIndexWriter::finalize_checksum). Shared format definition
         // lives in TrackIndexWriter / TrackIndex.h.
-        TrackIndexWriter::write_header(idx_fp, track_type, chromkey.get_num_chroms());
+        TrackIndexWriter::write_header(idx_fp.get(), track_type, chromkey.get_num_chroms());
 
         // Collect entries and concatenate files
         vector<TrackContigEntry> entries;
@@ -170,17 +172,15 @@ SEXP gtrack_convert_to_indexed_format(SEXP _track, SEXP _remove_old, SEXP _envir
             entry.reserved = 0;
 
             uint64_t bytes_written = 0;
-            if (found && copy_file_contents(chr_file, dat_fp, bytes_written)) {
+            if (found && copy_file_contents(chr_file, dat_fp.get(), bytes_written)) {
                 entry.length = bytes_written;
                 current_offset += bytes_written;
             }
 
             // Write entry to index via shared writer.
             try {
-                TrackIndexWriter::write_entry(idx_fp, entry);
+                TrackIndexWriter::write_entry(idx_fp.get(), entry);
             } catch (TGLException &) {
-                fclose(dat_fp);
-                fclose(idx_fp);
                 TGLError<GenomeTrack>("Failed to write index entry for chromosome %s", chrom_name.c_str());
             }
 
@@ -188,18 +188,12 @@ SEXP gtrack_convert_to_indexed_format(SEXP _track, SEXP _remove_old, SEXP _envir
         }
 
         // Compute and patch checksum via shared writer.
-        try {
-            TrackIndexWriter::finalize_checksum(idx_fp, entries);
-        } catch (TGLException &) {
-            fclose(dat_fp);
-            fclose(idx_fp);
-            throw;
-        }
+        TrackIndexWriter::finalize_checksum(idx_fp.get(), entries);
 
         // Check the writes and the size of track.dat while they are still in the temporary files: once
         // they are renamed into place, the per-chromosome files are removed.
-        int dat_err = fclose_synced(dat_fp);
-        int idx_err = fclose_synced(idx_fp);
+        int dat_err = fclose_synced(dat_fp.release());
+        int idx_err = fclose_synced(idx_fp.release());
 
         if (dat_err || idx_err) {
             TGLError<GenomeTrack>("Failed to write %s: %s", (dat_err ? dat_path_tmp : idx_path_tmp).c_str(),

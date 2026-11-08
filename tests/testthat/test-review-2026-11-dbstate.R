@@ -1132,28 +1132,30 @@ test_that("a rescan removes a legacy flag it could not read", {
     expect_false(.gdb.cache_is_dirty(db))
 })
 
-test_that("a failed conversion of an interval set to the indexed format leaves no file behind to flush at exit", {
+test_that("a failed conversion to the indexed format leaves no file behind to flush at exit", {
     skip_on_os("windows")
     skip_if(Sys.info()[["user"]] == "root")
     # the session below loads the installed package, so it has to be the one under test
     skip_if_not(file.exists(system.file("Meta", "package.rds", package = "misha")), "misha is not loaded from an installed library")
     local_db_state()
     dir <- withr::local_tempdir()
-    db <- review_db(dir)
+    db <- normalizePath(create_test_db(file.path(dir, "db")))
+    suppressMessages(gsetroot(db))
     withr::with_options(list(gmulticontig.indexed_format = FALSE, gmax.data.size = 10), {
         starts <- rep(seq(0, 1900, 100), 2)
         chroms <- rep(c("chr1", "chr2"), each = 20)
         gintervals.save("pc1d", gintervals(chroms, starts, starts + 50))
         gintervals.save("pc2d", gintervals.2d(chroms, starts, starts + 50, chroms, 0, 100))
+        gtrack.create_sparse("pctrack", "", gintervals(c("chr1", "chr2"), 0, 10), 1:2)
     })
     # the second chromosome (pair) cannot be read: the conversion stops after writing the first
-    unreadable <- c(file.path(db, "tracks", "pc1d.interv", "chr2"), file.path(db, "tracks", "pc2d.interv", "chr2-chr2"))
+    unreadable <- file.path(db, "tracks", c("pc1d.interv/chr2", "pc2d.interv/chr2-chr2", "pctrack.track/chr2"))
     expect_true(all(file.exists(unreadable)))
     Sys.chmod(unreadable, "000")
     withr::defer(Sys.chmod(unreadable, "644"))
 
     # In a session of its own, which ends after the failed conversions with files it wrote still open:
-    # a FILE of the conversion left unclosed would write its buffer into one of them at exit
+    # a FILE of a conversion left unclosed would write its buffer into one of them at exit
     user_files <- file.path(dir, sprintf("user%d.txt", 1:8))
     script <- file.path(dir, "convert.R")
     writeLines(c(
@@ -1161,6 +1163,7 @@ test_that("a failed conversion of an interval set to the indexed format leaves n
         sprintf("suppressMessages(gsetroot('%s'))", db),
         "stopifnot(inherits(try(gintervals.convert_to_indexed('pc1d'), silent = TRUE), 'try-error'))",
         "stopifnot(inherits(try(gintervals.2d.convert_to_indexed('pc2d'), silent = TRUE), 'try-error'))",
+        "stopifnot(inherits(try(gtrack.convert_to_indexed('pctrack'), silent = TRUE), 'try-error'))",
         sprintf("cons <- lapply(c(%s), function(f) { con <- file(f, 'w'); writeLines('user line', con); con })", paste0("'", user_files, "'", collapse = ", "))
     ), script)
     out <- system2(file.path(R.home("bin"), "R"), c("--no-echo", "-f", script), stdout = TRUE, stderr = TRUE)
