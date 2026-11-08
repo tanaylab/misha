@@ -8,6 +8,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <limits>
+#include <utility>
 #include "rdbinterval.h"
 #include "rdbprogress.h"
 #include "rdbutils.h"
@@ -67,6 +69,128 @@ struct IntervNeighbor2D {
 		if (end2 != o.end2)
 			return end2 < o.end2;
 		return id2 < o.id2;
+	}
+};
+
+// The intervals2 of one chromosome at distance 0 from a query - those that overlap or touch it,
+// start <= query end and end >= query start - in the order neighbors are kept: (start, end, row).
+// A query that overlaps K of them would otherwise walk all K in the nearest-neighbor iterator to
+// choose the maxneighbors with the smallest coordinates; here each one kept costs O(log n), through
+// a tree of the largest end over the sorted intervals.
+class ZeroDistNeighbors {
+public:
+	struct Item {
+		int64_t start;
+		int64_t end;
+		int64_t row;
+		bool operator<(const Item &o) const {
+			return start < o.start || (start == o.start && (end < o.end || (end == o.end && row < o.row)));
+		}
+	};
+
+	void clear() { m_items.clear(); m_maxend.clear(); m_cap = 0; }
+	bool empty() const { return m_items.empty() && !m_cap; }
+
+	void build(vector<Item> &&items) {
+		m_items = std::move(items);
+		sort(m_items.begin(), m_items.end());
+		m_cap = 1;
+		while (m_cap < m_items.size())
+			m_cap *= 2;
+		m_maxend.assign(2 * m_cap, numeric_limits<int64_t>::min());
+		for (size_t i = 0; i < m_items.size(); ++i)
+			m_maxend[m_cap + i] = m_items[i].end;
+		for (size_t i = m_cap - 1; i > 0; --i)
+			m_maxend[i] = max(m_maxend[2 * i], m_maxend[2 * i + 1]);
+	}
+
+	// Calls take(item) for the first n intervals at distance 0 from [qstart, qend), in order
+	template <class F> void first(int64_t qstart, int64_t qend, int n, F take) const {
+		for (size_t i = find(1, 0, m_cap, 0, qstart); n > 0 && i < m_items.size() && m_items[i].start <= qend; i = find(1, 0, m_cap, i + 1, qstart), --n)
+			take(m_items[i]);
+	}
+
+private:
+	vector<Item>    m_items;
+	vector<int64_t> m_maxend;
+	size_t          m_cap = 0;
+
+	// the first index >= from whose end is >= qstart, or the number of items
+	size_t find(size_t node, size_t lo, size_t hi, size_t from, int64_t qstart) const {
+		if (hi <= from || m_maxend[node] < qstart)
+			return m_items.size();
+		if (hi - lo == 1)
+			return lo;
+		size_t mid = lo + (hi - lo) / 2;
+		size_t res = find(2 * node, lo, mid, from, qstart);
+		return res < m_items.size() ? res : find(2 * node + 1, mid, hi, from, qstart);
+	}
+};
+
+// The same for the intervals2 of one chromosome pair: those at dist1 = dist2 = 0 from a query
+// (overlapping or touching it on both axes), in the order (start1, end1, start2, end2, row). The
+// tree holds, for each run of the sorted rectangles, the largest end1, the smallest start2 and the
+// largest end2, and a run that cannot hold a match is skipped whole. The rectangles do not overlap
+// (verify_no_overlaps), so the runs a query does not prune are mostly ones that it overlaps.
+class ZeroDistNeighbors2D {
+public:
+	struct Item {
+		int64_t start1, end1, start2, end2;
+		int64_t row;
+		bool operator<(const Item &o) const {
+			if (start1 != o.start1) return start1 < o.start1;
+			if (end1 != o.end1) return end1 < o.end1;
+			if (start2 != o.start2) return start2 < o.start2;
+			if (end2 != o.end2) return end2 < o.end2;
+			return row < o.row;
+		}
+	};
+
+	void clear() { m_items.clear(); m_nodes.clear(); m_cap = 0; }
+	bool empty() const { return m_items.empty() && !m_cap; }
+
+	void build(vector<Item> &&items) {
+		m_items = std::move(items);
+		sort(m_items.begin(), m_items.end());
+		m_cap = 1;
+		while (m_cap < m_items.size())
+			m_cap *= 2;
+		m_nodes.assign(2 * m_cap, Node());
+		for (size_t i = 0; i < m_items.size(); ++i)
+			m_nodes[m_cap + i] = Node{m_items[i].end1, m_items[i].start2, m_items[i].end2};
+		for (size_t i = m_cap - 1; i > 0; --i) {
+			const Node &l = m_nodes[2 * i], &r = m_nodes[2 * i + 1];
+			m_nodes[i] = Node{max(l.max_end1, r.max_end1), min(l.min_start2, r.min_start2), max(l.max_end2, r.max_end2)};
+		}
+	}
+
+	// Calls take(item) for the first n rectangles at distance 0 from the query, in order
+	template <class F> void first(const Rectangle &q, int n, F take) const {
+		for (size_t i = find(1, 0, m_cap, 0, q); n > 0 && i < m_items.size(); i = find(1, 0, m_cap, i + 1, q), --n)
+			take(m_items[i]);
+	}
+
+private:
+	struct Node {
+		int64_t max_end1 = numeric_limits<int64_t>::min();
+		int64_t min_start2 = numeric_limits<int64_t>::max();
+		int64_t max_end2 = numeric_limits<int64_t>::min();
+	};
+
+	vector<Item> m_items;
+	vector<Node> m_nodes;
+	size_t       m_cap = 0;
+
+	// the first index >= from of a rectangle at distance 0 from q, or the number of items
+	size_t find(size_t node, size_t lo, size_t hi, size_t from, const Rectangle &q) const {
+		const Node &nd = m_nodes[node];
+		if (hi <= from || lo >= m_items.size() || m_items[lo].start1 > q.x2 || nd.max_end1 < q.x1 || nd.min_start2 > q.y2 || nd.max_end2 < q.y1)
+			return m_items.size();
+		if (hi - lo == 1)
+			return lo;
+		size_t mid = lo + (hi - lo) / 2;
+		size_t res = find(2 * node, lo, mid, from, q);
+		return res < m_items.size() ? res : find(2 * node + 1, mid, hi, from, q);
 	}
 };
 
@@ -239,6 +363,7 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 			int chromid = -1;
 			SegmentFinder<GInterval> segment_finder;
 			SegmentFinder<GInterval>::NNIterator inn(&segment_finder);
+			ZeroDistNeighbors zero_dist;  // built for chromid when a query first needs it
 
 			if (LOGICAL(_report_progress)[0])
 				progress.init(intervals1d[0].size(), 100);
@@ -259,6 +384,7 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 						const GInterval &interv = intervals1d[1].cur_interval();
 						segment_finder.insert(interv);
 					}
+					zero_dist.clear();
 				}
 
 				if ((distance_start > 0 && distance_end > 0) || (distance_start < 0 && distance_end < 0)) {
@@ -270,6 +396,7 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 				int num_neighbors = 0;
 				int64_t cutoff = 0;  // |dist| of the maxneighbors-th neighbor found
 				size_t first = result.size();
+				bool zero_dist_ties = false;
 				while (!inn.is_end()) {
 					int64_t dist;
 					
@@ -293,8 +420,34 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 							cutoff = llabs(dist);
 						// the rows kept: tied candidates beyond maxneighbors are cut below
 						iu.verify_max_data_size(first + min(num_neighbors, maxneighbors));
+						// maxneighbors at distance 0: the ties can be all the intervals2 that overlap
+						// the query, taken below in their order instead of walked here
+						if (num_neighbors == maxneighbors && cutoff == 0) {
+							zero_dist_ties = true;
+							break;
+						}
 					}
 					inn.next();
+				}
+
+				// Distance 0 is in [mindist, maxdist] here (it was reached), so every interval at
+				// distance 0 is a candidate, and the ones kept are the first maxneighbors in
+				// (start, end, row) order. Their distance is 0 with any strand.
+				if (zero_dist_ties) {
+					if (zero_dist.empty()) {
+						vector<ZeroDistNeighbors::Item> items;
+						for (intervals1d[1].begin_chrom_iter(chromid); !intervals1d[1].isend_chrom(); intervals1d[1].next_in_chrom()) {
+							const GInterval &interv = intervals1d[1].cur_interval();
+							items.push_back({interv.start, interv.end, (int64_t)iu.get_orig_interv_idx(interv)});
+						}
+						zero_dist.build(std::move(items));
+					}
+					result.erase(result.begin() + first, result.end());
+					int64_t id1 = iu.get_orig_interv_idx(*iinterv);
+					zero_dist.first(iinterv->start, iinterv->end, maxneighbors, [&](const ZeroDistNeighbors::Item &item) {
+						result.push_back(IntervNeighbor(id1, item.row, 0, item.start, item.end));
+						iu.verify_max_data_size(result.size());
+					});
 				}
 
 				// neighbors tied at the cutoff distance: keep those with the smallest coordinates
@@ -384,6 +537,7 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 			int chromid2 = -1;
 			StatQuadTree<Rectangle_val<uint64_t>, uint64_t> qtree;
 			StatQuadTree<Rectangle_val<uint64_t>, uint64_t>::NNIterator inn(&qtree);
+			ZeroDistNeighbors2D zero_dist;  // built for the chromosome pair when a query first needs it
 
 			if (LOGICAL(_report_progress)[0])
 				progress.init(intervals2d[0].size(), 100);
@@ -399,6 +553,7 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 						StatQuadTree<Rectangle_val<uint64_t>, uint64_t>::ValueType rect(interv, iu.get_orig_interv_idx(interv));
 						qtree.insert(rect);
 					}
+					zero_dist.clear();
 				}
 
 				if (distance_start1 > 0 && distance_start2 > 0) {
@@ -411,6 +566,7 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 				int num_neighbors = 0;
 				int64_t cutoff = 0;  // the largest dist1 + dist2 of the first maxneighbors neighbors found
 				size_t first = result.size();
+				bool zero_dist_ties = false;
 				while (!inn.is_end()) {
 					int64_t dist1 = iinterv->xdist(*inn);
 					int64_t dist2 = iinterv->ydist(*inn);
@@ -433,9 +589,33 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 						num_neighbors++;
 						// the rows kept: candidates beyond maxneighbors are cut below
 						iu.verify_max_data_size(first + min(num_neighbors, maxneighbors));
+						// maxneighbors at distance 0: taken below in their order, see the 1D case
+						if (num_neighbors == maxneighbors && cutoff == 0) {
+							zero_dist_ties = true;
+							break;
+						}
 					}
 
 					inn.next();
+				}
+
+				// Distance 0 on both axes is in range here (it was reached), so every rectangle at it
+				// is a candidate, and the ones kept are the first maxneighbors in their order
+				if (zero_dist_ties) {
+					if (zero_dist.empty()) {
+						vector<ZeroDistNeighbors2D::Item> items;
+						for (intervals2d[1].begin_chrom_iter(chromid1, chromid2); !intervals2d[1].isend_chrom(); intervals2d[1].next_in_chrom()) {
+							const GInterval2D &interv = intervals2d[1].cur_interval();
+							items.push_back({interv.x1, interv.x2, interv.y1, interv.y2, (int64_t)iu.get_orig_interv_idx(interv)});
+						}
+						zero_dist.build(std::move(items));
+					}
+					result.erase(result.begin() + first, result.end());
+					int64_t id1 = iu.get_orig_interv_idx(*iinterv);
+					zero_dist.first(*iinterv, maxneighbors, [&](const ZeroDistNeighbors2D::Item &item) {
+						result.push_back(IntervNeighbor2D(id1, item.row, 0, 0, Rectangle(item.start1, item.start2, item.end1, item.end2)));
+						iu.verify_max_data_size(result.size());
+					});
 				}
 
 				// keep the maxneighbors nearest by dist1 + dist2, ties by the smallest coordinates
