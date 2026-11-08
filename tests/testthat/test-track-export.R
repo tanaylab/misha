@@ -238,8 +238,8 @@ test_that("C++ formats doubles as as.character() does", {
 test_that("bedGraph export over intervals with no values writes the header only", {
     outfile <- tempfile(fileext = ".bedgraph")
     withr::defer(unlink(outfile))
-    # sparse_track has no values there
-    empty <- gintervals(1, 0, 10)
+    # sparse_track has no values there (its first two intervals are chr1:0-50 and chr1:100-150)
+    empty <- gintervals(1, 60, 90)
     expect_null(gextract("sparse_track", intervals = empty))
     expect_warning(gtrack.export_bedgraph("sparse_track", outfile, intervals = empty), "no values in the intervals")
     expect_identical(readLines(outfile), 'track type=bedGraph name="sparse_track"')
