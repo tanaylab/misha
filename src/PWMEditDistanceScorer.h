@@ -225,6 +225,8 @@ private:
     inline char complement_base(char base) const;
     inline float compute_window_edits(const int* bidx, int seq_avail, bool reverse);
     float compute_n_mutations(const int* bidx, bool reverse);
+    // n_mutations of one window over both strands: substitutions after which both strands satisfy the threshold
+    float compute_n_mutations_both(const int* fwd_bidx, const int* rev_bidx);
 
     /**
      * Get the effective PSSM score and gain for a motif position aligned with a sequence base.

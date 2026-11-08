@@ -767,6 +767,53 @@ float PWMEditDistanceScorer::compute_n_mutations(const int* bidx, bool reverse) 
     return (count > 0) ? static_cast<float>(count) : std::numeric_limits<float>::quiet_NaN();
 }
 
+float PWMEditDistanceScorer::compute_n_mutations_both(const int* fwd_bidx, const int* rev_bidx) {
+    // Both strands of one window, as one genomic substitution changes both: the forward strand reads
+    // window base i in column i, the reverse strand reads its complement (3 - b) in column L - 1 - i.
+    const int L = m_pssm.length();
+
+    double fwd_score = 0;
+    double rev_score = 0;
+    for (int i = 0; i < L; i++) {
+        fwd_score += m_score_table[i][fwd_bidx[i]];
+        rev_score += m_score_table[L - 1 - i][rev_bidx[i]];
+    }
+
+    if (threshold_satisfied(fwd_score) && threshold_satisfied(rev_score)) return 0.0f;
+
+    // A strand already past the threshold has a deficit <= 0: a substitution may move it by as much
+    // and no further back
+    const double fwd_deficit = compute_deficit(fwd_score);
+    const double rev_deficit = compute_deficit(rev_score);
+
+    int count = 0;
+    for (int i = 0; i < L; i++) {
+        const int fcur = fwd_bidx[i];
+        const int rcur = rev_bidx[i];
+        if (fcur >= 4 || rcur >= 4) continue; // skip N bases
+        const int fcol = i;
+        const int rcol = L - 1 - i;
+
+        for (int b = 0; b < 4; b++) {
+            if (b == fcur) continue;
+            const int rb = 3 - b;
+
+            double fwd_delta, rev_delta;
+            if (is_below()) {
+                fwd_delta = m_score_table[fcol][fcur] - m_score_table[fcol][b];
+                rev_delta = m_score_table[rcol][rcur] - m_score_table[rcol][rb];
+            } else {
+                fwd_delta = m_score_table[fcol][b] - m_score_table[fcol][fcur];
+                rev_delta = m_score_table[rcol][rb] - m_score_table[rcol][rcur];
+            }
+
+            if (fwd_delta >= fwd_deficit && rev_delta >= rev_deficit) count++;
+        }
+    }
+
+    return (count > 0) ? static_cast<float>(count) : std::numeric_limits<float>::quiet_NaN();
+}
+
 PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const std::string& seq,
                                                                            size_t interval_length)
 {
@@ -897,102 +944,46 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
         // for the 90%+ of windows that get rejected. For subs-only, shift is always 0,
         // so the inner loop is tight: just B bidx lookups + 1 viable table read per block.
         if (below_bidirect) {
-            // direction=BELOW + bidirectional: compute both strands, take max
+            // direction=BELOW + bidirectional: both strands must end up below the threshold, so every strand
+            // the score filter keeps decides. A strand the filter removes (it is not a current match) is left
+            // out; a kept strand that cannot be brought below (NaN: unreachable, or more than max_edits) makes
+            // the window NaN rather than handing the answer to the other strand.
             // (prefilter is always off for BELOW, so no pigeonhole check needed)
-            if (need_min) {
+            const bool fwd_kept = passes_score_filter(window_start, seq_avail, /*reverse=*/false);
+            const bool rev_kept = passes_score_filter(window_start, seq_avail, /*reverse=*/true);
+            if (need_min && (fwd_kept || rev_kept)) {
                 float fwd_edits = std::numeric_limits<float>::quiet_NaN();
-                {
-                    bool pass_score_filter = true;
-                    if (apply_score_filter) {
-                        float logp = compute_window_pwm_score(window_start, /*reverse=*/false);
-                        if (has_score_min && logp < m_score_min) pass_score_filter = false;
-                        if (has_score_max && logp > m_score_max) pass_score_filter = false;
-                    }
-                    if (pass_score_filter) {
-                        fwd_edits = compute_window_edits(fwd_bidx.data() + offset, seq_avail, /*reverse=*/false);
-                    }
-                }
-
                 float rev_edits = std::numeric_limits<float>::quiet_NaN();
-                {
-                    bool pass_score_filter = true;
-                    if (apply_score_filter) {
-                        float logp = compute_window_pwm_score(window_start, /*reverse=*/true);
-                        if (has_score_min && logp < m_score_min) pass_score_filter = false;
-                        if (has_score_max && logp > m_score_max) pass_score_filter = false;
-                    }
-                    if (pass_score_filter) {
-                        rev_edits = compute_window_edits(rev_bidx.data() + offset, seq_avail, /*reverse=*/true);
-                    }
+                bool failed = false;
+                if (fwd_kept) {
+                    fwd_edits = compute_window_edits(fwd_bidx.data() + offset, seq_avail, /*reverse=*/false);
+                    failed = std::isnan(fwd_edits);
                 }
-
-                // Combine: max of non-NaN values (NaN = strand filtered out / no match)
-                bool have_fwd = !std::isnan(fwd_edits);
-                bool have_rev = !std::isnan(rev_edits);
-                if (have_fwd || have_rev) {
-                    float combined;
-                    int combined_dir;
-                    if (have_fwd && have_rev) {
-                        // Both strands have matches — take the harder one to disrupt
-                        if (fwd_edits >= rev_edits) {
-                            combined = fwd_edits;
-                            combined_dir = +1;
-                        } else {
-                            combined = rev_edits;
-                            combined_dir = -1;
-                        }
-                    } else if (have_fwd) {
-                        combined = fwd_edits;
-                        combined_dir = +1;
+                if (!failed && rev_kept) {
+                    rev_edits = compute_window_edits(rev_bidx.data() + offset, seq_avail, /*reverse=*/true);
+                    failed = std::isnan(rev_edits);
+                }
+                if (!failed) {
+                    // The harder strand decides; a tie goes to the forward strand
+                    if (!rev_kept || (fwd_kept && fwd_edits >= rev_edits)) {
+                        maybe_update_min(fwd_edits, offset, +1);
                     } else {
-                        combined = rev_edits;
-                        combined_dir = -1;
+                        maybe_update_min(rev_edits, offset, -1);
                     }
-                    maybe_update_min(combined, offset, combined_dir);
                 }
             }
-            if (need_n_mutations) {
-                // N_MUTATIONS + BELOW + bidirect: compute both strands, take max across strands
-                float fwd_nmut = std::numeric_limits<float>::quiet_NaN();
-                {
-                    bool pass_score_filter = true;
-                    if (apply_score_filter) {
-                        float logp = compute_window_pwm_score(window_start, /*reverse=*/false);
-                        if (has_score_min && logp < m_score_min) pass_score_filter = false;
-                        if (has_score_max && logp > m_score_max) pass_score_filter = false;
-                    }
-                    if (pass_score_filter) {
-                        fwd_nmut = compute_n_mutations(fwd_bidx.data() + offset, /*reverse=*/false);
-                    }
+            if (need_n_mutations && (fwd_kept || rev_kept)) {
+                // One substitution changes both strands: with both kept, count the substitutions that leave
+                // both at or below the threshold; with one kept, that strand's own count.
+                float nmut;
+                if (fwd_kept && rev_kept) {
+                    nmut = compute_n_mutations_both(fwd_bidx.data() + offset, rev_bidx.data() + offset);
+                } else if (fwd_kept) {
+                    nmut = compute_n_mutations(fwd_bidx.data() + offset, /*reverse=*/false);
+                } else {
+                    nmut = compute_n_mutations(rev_bidx.data() + offset, /*reverse=*/true);
                 }
-
-                float rev_nmut = std::numeric_limits<float>::quiet_NaN();
-                {
-                    bool pass_score_filter = true;
-                    if (apply_score_filter) {
-                        float logp = compute_window_pwm_score(window_start, /*reverse=*/true);
-                        if (has_score_min && logp < m_score_min) pass_score_filter = false;
-                        if (has_score_max && logp > m_score_max) pass_score_filter = false;
-                    }
-                    if (pass_score_filter) {
-                        rev_nmut = compute_n_mutations(rev_bidx.data() + offset, /*reverse=*/true);
-                    }
-                }
-
-                // Combine: max of non-NaN values across strands
-                bool have_fwd = !std::isnan(fwd_nmut);
-                bool have_rev = !std::isnan(rev_nmut);
-                if (have_fwd || have_rev) {
-                    float combined;
-                    if (have_fwd && have_rev) {
-                        combined = std::max(fwd_nmut, rev_nmut);
-                    } else if (have_fwd) {
-                        combined = fwd_nmut;
-                    } else {
-                        combined = rev_nmut;
-                    }
-                    maybe_update_n_mutations(combined);
-                }
+                maybe_update_n_mutations(nmut);
             }
         } else if (scan_forward || scan_reverse) {
             if (scan_forward) {
