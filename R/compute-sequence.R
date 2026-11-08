@@ -54,13 +54,10 @@
                     fasta <- fasta.unzipped
                 }
 
-                # Output without forcing chr prefix - use chromosome name as-is
-                seq <- sprintf("%s/seq/%s.seq", groot, chrom)
-
+                # Output without forcing chr prefix - use chromosome name as-is. A file of
+                # several records gives a chromosome per record, named after its header.
                 message(sprintf("%s", chrom))
-                .gcall("gseqimport", fasta, seq, .misha_env())
-
-                chroms <- c(chroms, chrom)
+                chroms <- c(chroms, .gcall("gseqimport", fasta, file.path(groot, "seq"), chrom, .misha_env()))
             }
         },
         finally = {

@@ -486,6 +486,38 @@ test_that("per-chromosome format option disables indexed format", {
     expect_false(file.exists(file.path(test_db, "seq", "genome.seq")))
 })
 
+test_that("per-chromosome format gives each record of a multi-FASTA file a chromosome of its own", {
+    local_db_state()
+    multi <- tempfile(fileext = ".fasta")
+    cat(">chrX1 first record\nACGTACGTAC\n>chrX2\nGGGG\nCCCC\n", file = multi)
+    single <- file.path(tempdir(), "chrS.fa")
+    cat(">a header the per-chromosome format does not use\nTTTTAAAA\n", file = single)
+    test_db <- tempfile()
+    withr::defer(unlink(c(test_db, multi, single), recursive = TRUE))
+
+    gdb.create(groot = test_db, fasta = c(multi, single), format = "per-chromosome")
+
+    sizes <- utils::read.table(file.path(test_db, "chrom_sizes.txt"), col.names = c("chrom", "size"))
+    expect_equal(sizes$chrom, c("chrX1", "chrX2", "chrS"))
+    expect_equal(sizes$size, c(10, 8, 8))
+    expect_setequal(list.files(file.path(test_db, "seq"), all.files = TRUE, no.. = TRUE), c("chrX1.seq", "chrX2.seq", "chrS.seq"))
+    gsetroot(test_db)
+    expect_equal(
+        gseq.extract(gintervals(c("chrX1", "chrX2", "chrS"), 0, c(10, 8, 8))),
+        c("ACGTACGTAC", "GGGGCCCC", "TTTTAAAA")
+    )
+})
+
+test_that("per-chromosome format refuses a multi-FASTA file with repeated record names", {
+    local_db_state()
+    dup <- tempfile(fileext = ".fasta")
+    cat(">a\nACGT\n>b\nGG\n>a\nTTTT\n", file = dup)
+    test_db <- tempfile()
+    withr::defer(unlink(c(test_db, dup), recursive = TRUE))
+    expect_error(gdb.create(groot = test_db, fasta = dup, format = "per-chromosome"), "Duplicate contig name 'a'")
+    expect_false(dir.exists(test_db))
+})
+
 test_that("multi-FASTA with multiple files falls back to per-chromosome", {
     local_db_state()
     test_fasta1 <- tempfile(fileext = ".fasta")

@@ -155,6 +155,15 @@ bool once_per_call(const char *key);
 // True inside a multitasking child process launched by distribute_task().
 bool is_kid();
 
+// R's uniform random number generator, for the C++ code of a misha function: draw through it
+// rather than through unif_rand(). The first draw of a call loads R's generator state from
+// .Random.seed (GetRNGstate()), and .gcall() saves the state back (PutRNGstate(), in
+// C_save_rng_state) when the call returns. Without that a set or restored .Random.seed would be
+// ignored, and R would hand the numbers the call drew out again. A forked kid inherits its
+// parent's state, so before its first draw it reseeds R's generator from a draw of that state and
+// its kid index; otherwise every kid would draw the same numbers.
+double r_unif_rand();
+
 // Use rprotect instead of PROTECT!
 SEXP rprotect(SEXP &expr);
 

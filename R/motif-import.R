@@ -1,6 +1,10 @@
 # Internal helpers for motif import functions
 
 #' De-duplicate motif IDs by appending .1, .2, etc.
+#'
+#' Every copy of a repeated ID gets a suffix. A suffixed name that is already
+#' taken (by another ID of the input, or by an earlier suffix) is skipped, so
+#' the result is unique: ACGT, ACGT, ACGT.1 -> ACGT.2, ACGT.3, ACGT.1.
 #' @noRd
 .dedup_motif_ids <- function(ids) {
     if (length(ids) == 0) {
@@ -11,11 +15,21 @@
         return(ids)
     }
     warning("Duplicate motif IDs found; appending numeric suffixes to disambiguate")
-    tab <- table(ids)
-    dup_names <- names(tab[tab > 1])
+    dup_names <- unique(ids[dupes])
+    taken <- unique(ids)
     for (nm in dup_names) {
         idx <- which(ids == nm)
-        ids[idx] <- paste0(nm, ".", seq_along(idx))
+        new_names <- character(0)
+        suffix <- 0L
+        while (length(new_names) < length(idx)) {
+            suffix <- suffix + 1L
+            candidate <- paste0(nm, ".", suffix)
+            if (!(candidate %in% taken)) {
+                new_names <- c(new_names, candidate)
+                taken <- c(taken, candidate)
+            }
+        }
+        ids[idx] <- new_names
     }
     ids
 }

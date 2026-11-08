@@ -485,3 +485,43 @@ test_that("gsynth.score: sub-chrom interval gets bin info upstream (no NA at sta
     )
     expect_true(all(is.finite(vals$v)))
 })
+
+test_that("gsynth.score scores a position covered by overlapping intervals once", {
+    gdb.init_examples()
+    withr::defer(for (tr in c("zz_ovl_a", "zz_ovl_b")) if (gtrack.exists(tr)) gtrack.rm(tr, force = TRUE))
+    model <- gsynth.train(intervals = gintervals(1, 0, 50000), iterator = 200, k = 2L)
+    iv <- gintervals(1, 1000, 1300)
+    gsynth.score(model, "zz_ovl_a", intervals = iv, resolution = 1)
+    gsynth.score(model, "zz_ovl_b", intervals = rbind(iv, gintervals(1, 1200, 1300)), resolution = 1)
+    a <- gextract("zz_ovl_a", intervals = iv, iterator = 1)$zz_ovl_a
+    expect_true(all(is.finite(a)))
+    expect_identical(gextract("zz_ovl_b", intervals = iv, iterator = 1)$zz_ovl_b, a)
+})
+
+test_that("gsynth.score of an interval does not depend on the other intervals scored with it", {
+    gdb.init_examples()
+    if ("g_frac_nb" %in% gvtrack.ls()) gvtrack.rm("g_frac_nb")
+    gvtrack.create("g_frac_nb", NULL, "kmer.frac", kmer = "G")
+    withr::defer({
+        gvtrack.rm("g_frac_nb")
+        for (tr in c("zz_nb_a", "zz_nb_b")) if (gtrack.exists(tr)) gtrack.rm(tr, force = TRUE)
+    })
+    iv <- gintervals(1, 1000, 1300)
+    v1 <- gextract("g_frac_nb", iv, iterator = 500)$g_frac_nb
+    # A neighbor at 1400-1500 has, extended upstream by an iterator, a stratum window at
+    # 1000-1500. Stratify so that this window falls in a higher bin than the window of iv at
+    # 1000-1300: the two windows start at the same position.
+    neighbor <- gintervals(1, 1400, 1500)
+    v2 <- gextract("g_frac_nb", gintervals(1, 1000, 1500), iterator = 500)$g_frac_nb
+    skip_if(v1 == v2, "the two windows have the same G fraction")
+    sgn <- if (v2 > v1) 1 else -1
+    model <- gsynth.train(
+        list(expr = if (sgn > 0) "g_frac_nb" else "-g_frac_nb", breaks = sort(sgn * c(0, (v1 + v2) / 2, 1))),
+        intervals = gintervals(1, 0, 50000), iterator = 500, k = 2L
+    )
+    gsynth.score(model, "zz_nb_a", intervals = iv, resolution = 1)
+    gsynth.score(model, "zz_nb_b", intervals = rbind(iv, neighbor), resolution = 1)
+    a <- gextract("zz_nb_a", intervals = iv, iterator = 1)$zz_nb_a
+    expect_true(all(is.finite(a)))
+    expect_identical(gextract("zz_nb_b", intervals = iv, iterator = 1)$zz_nb_b, a)
+})

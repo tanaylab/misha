@@ -52,7 +52,7 @@ extern "C" {
     extern SEXP C_gscreen(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gscreen_multitask(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gsegment(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
-    extern SEXP gseqimport(SEXP, SEXP, SEXP);
+    extern SEXP gseqimport(SEXP, SEXP, SEXP, SEXP);
     extern SEXP gseq_multifasta_import(SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gseqread(SEXP, SEXP);
     extern SEXP gseq_validate_index(SEXP, SEXP);
@@ -122,8 +122,9 @@ extern "C" {
     extern SEXP C_potts_score_codes_cmp(SEXP, SEXP);
     extern SEXP C_gseq_kmer(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gsynth_train(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
-    extern SEXP C_gsynth_sample(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
-    extern SEXP C_gsynth_replace_kmer(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP C_gsynth_sample(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP C_gsynth_implicit_binsize(SEXP, SEXP, SEXP);
+    extern SEXP C_gsynth_replace_kmer(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gsynth_score(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP,
                                 SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gseq_kmer_dist(SEXP, SEXP, SEXP, SEXP);
@@ -134,6 +135,7 @@ extern "C" {
     extern SEXP C_lifetime_counters(void);
     extern SEXP C_test_file_size_limit(SEXP);
     extern SEXP C_take_write_error(SEXP);
+    extern SEXP C_save_rng_state();
 }
 
 static const R_CallMethodDef CallEntries[] = {
@@ -181,7 +183,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"C_gscreen", (DL_FUNC)&C_gscreen, 6},
     {"gscreen_multitask", (DL_FUNC)&gscreen_multitask, 6},
     {"C_gsegment", (DL_FUNC)&C_gsegment, 8},
-    {"gseqimport", (DL_FUNC)&gseqimport, 3},
+    {"gseqimport", (DL_FUNC)&gseqimport, 4},
     {"gseq_multifasta_import", (DL_FUNC)&gseq_multifasta_import, 5},
     {"gseqread", (DL_FUNC)&gseqread, 2},
     {"gseq_validate_index", (DL_FUNC)&gseq_validate_index, 2},
@@ -251,8 +253,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"C_potts_score_codes_cmp", (DL_FUNC)&C_potts_score_codes_cmp, 2},
     {"C_gseq_kmer", (DL_FUNC)&C_gseq_kmer, 9},
     {"C_gsynth_train", (DL_FUNC)&C_gsynth_train, 15},
-    {"C_gsynth_sample", (DL_FUNC)&C_gsynth_sample, 14},
-    {"C_gsynth_replace_kmer", (DL_FUNC)&C_gsynth_replace_kmer, 6},
+    {"C_gsynth_sample", (DL_FUNC)&C_gsynth_sample, 15},
+    {"C_gsynth_implicit_binsize", (DL_FUNC)&C_gsynth_implicit_binsize, 3},
+    {"C_gsynth_replace_kmer", (DL_FUNC)&C_gsynth_replace_kmer, 7},
     {"C_gsynth_score", (DL_FUNC)&C_gsynth_score, 14},
     {"C_gseq_kmer_dist", (DL_FUNC)&C_gseq_kmer_dist, 4},
     {"C_ggenome_implant", (DL_FUNC)&C_ggenome_implant, 7},
@@ -262,6 +265,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"C_lifetime_counters", (DL_FUNC)&C_lifetime_counters, 0},
     {"C_test_file_size_limit", (DL_FUNC)&C_test_file_size_limit, 1},
     {"C_take_write_error", (DL_FUNC)&C_take_write_error, 1},
+    {"C_save_rng_state", (DL_FUNC)&C_save_rng_state, 0},
     {NULL, NULL, 0}
 };
 

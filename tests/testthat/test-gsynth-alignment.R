@@ -142,3 +142,29 @@ test_that("gsynth.sample errors clearly on non-positive model$iterator", {
 
     gvtrack.rm("test_vt")
 })
+
+test_that("gsynth.sample takes the bins of an interval from its own iterator windows", {
+    gdb.init_examples()
+    if ("g_frac_own" %in% gvtrack.ls()) gvtrack.rm("g_frac_own")
+    gvtrack.create("g_frac_own", NULL, "kmer.frac", kmer = "G")
+    withr::defer(gvtrack.rm("g_frac_own"))
+
+    iv1 <- gintervals(1, 250, 1250)
+    iv2 <- gintervals(1, 1100, 1400)
+    # the window of iv1 at 1000-1250 and that of iv2 at 1100-1400 fall in different bins
+    v1 <- gextract("g_frac_own", gintervals(1, 1000, 1250), iterator = 500)$g_frac_own
+    v2 <- gextract("g_frac_own", iv2, iterator = 500)$g_frac_own
+    skip_if(v1 == v2, "the two windows have the same G fraction")
+    model <- gsynth.train(
+        list(expr = "g_frac_own", breaks = c(0, (v1 + v2) / 2, 1)),
+        intervals = gintervals(1, 0, 50000), iterator = 500, k = 2
+    )
+    # bin 1 emits only A, bin 2 only C, so the output shows the bin of each position
+    model$model_data$cdf[[1]][] <- 1
+    model$model_data$cdf[[2]][] <- rep(c(0, 1, 1, 1), each = 16)
+
+    alone <- gsynth.sample(model, output_format = "vector", intervals = iv1, seed = 1)
+    # iv1 is sampled first, so it draws the same random numbers
+    with_iv2 <- gsynth.sample(model, output_format = "vector", intervals = rbind(iv2, iv1), seed = 1)
+    expect_identical(with_iv2[1], alone)
+})

@@ -48,7 +48,7 @@ SEXP C_gsample(SEXP _expr, SEXP _num_samples, SEXP _intervals, SEXP _iterator_po
 		StreamSampler<double> sampler(num_samples, true);
 
 		for (scanner.begin(_expr, intervals1d, intervals2d, _iterator_policy, _band); !scanner.isend(); scanner.next()) {
-			sampler.add(scanner.last_real(0), unif_rand);
+			sampler.add(scanner.last_real(0), r_unif_rand);
 			iu.verify_max_data_size(sampler.samples().size(), "Result");
 		}
 
@@ -66,7 +66,7 @@ SEXP C_gsample(SEXP _expr, SEXP _num_samples, SEXP _intervals, SEXP _iterator_po
 		}
 
 		// The samples need to be reshuffled since sampler does not guarantee random order.
-        tgs_random_shuffle(REAL(answer), REAL(answer) + sampler.samples().size(), unif_rand);
+        tgs_random_shuffle(REAL(answer), REAL(answer) + sampler.samples().size(), r_unif_rand);
 
 		runprotect(1);
 		return answer;
