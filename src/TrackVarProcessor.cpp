@@ -216,11 +216,11 @@ double TrackVarProcessor::aggregate_multi_value(
 	case TrackExpressionVars::Track_var::SIZE:
 		return aggregate_size_with_filter(track, track.parts_reading_items_once(parts));
 	case TrackExpressionVars::Track_var::SAMPLE:
-		return aggregate_sample_with_filter(track, parts);
+		return aggregate_sample_with_filter(track, parts, false);
 	case TrackExpressionVars::Track_var::SAMPLE_POS_ABS:
-		return aggregate_sample_pos_abs_with_filter(track, parts);
+		return aggregate_sample_with_filter(track, parts, true);
 	case TrackExpressionVars::Track_var::SAMPLE_POS_REL:
-		return aggregate_sample_pos_rel_with_filter(track, parts, base_start);
+		return aggregate_sample_with_filter(track, parts, true) - base_start;
 	case TrackExpressionVars::Track_var::FIRST:
 		return aggregate_first_with_filter(track, parts, false);
 	case TrackExpressionVars::Track_var::FIRST_POS_ABS:
@@ -513,61 +513,39 @@ double TrackVarProcessor::aggregate_size_with_filter(GenomeTrack1D &track, const
 	return total_size;
 }
 
-double TrackVarProcessor::aggregate_sample_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts)
+double TrackVarProcessor::aggregate_sample_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts, bool pos)
 {
-	// Collect all non-NaN values from all parts and sample one
-	vector<float> all_values;
-	for (const auto& part : parts) {
+	// A uniform draw over the values the parts hold, each value once: each part draws one of its values
+	// uniformly, and one of these draws is kept with chance proportional to its part's value count
+	vector<double> draws;
+	vector<double> counts;
+	double total = 0;
+
+	for (const auto &part : track.parts_reading_items_once(parts)) {
 		track.read_interval(part);
-		float val = track.last_sample();
-		if (!std::isnan(val)) {
-			all_values.push_back(val);
-		}
+		const double part_n = track.last_size();
+		const double draw = pos ? track.last_sample_pos() : (double)track.last_sample();
+		if (!(part_n > 0) || std::isnan(draw))
+			continue;
+		draws.push_back(draw);
+		counts.push_back(part_n);
+		total += part_n;
 	}
 
-	if (all_values.empty()) {
+	if (draws.empty())
 		return numeric_limits<double>::quiet_NaN();
-	}
 
 	// Use R's random number generator for reproducibility
 	GetRNGstate();
-	int idx = (int)(unif_rand() * all_values.size());
+	double u = unif_rand() * total;
 	PutRNGstate();
 
-	return all_values[idx];
-}
-
-double TrackVarProcessor::aggregate_sample_pos_abs_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts)
-{
-	// Collect all non-NaN positions from all parts and sample one
-	vector<double> all_positions;
-	for (const auto& part : parts) {
-		track.read_interval(part);
-		double pos = track.last_sample_pos();
-		if (!std::isnan(pos)) {
-			all_positions.push_back(pos);
-		}
+	for (size_t i = 0; i < draws.size(); ++i) {
+		if (u < counts[i])
+			return draws[i];
+		u -= counts[i];
 	}
-
-	if (all_positions.empty()) {
-		return numeric_limits<double>::quiet_NaN();
-	}
-
-	// Use R's random number generator for reproducibility
-	GetRNGstate();
-	int idx = (int)(unif_rand() * all_positions.size());
-	PutRNGstate();
-
-	return all_positions[idx];
-}
-
-double TrackVarProcessor::aggregate_sample_pos_rel_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts, int64_t base_start)
-{
-	double abs_pos = aggregate_sample_pos_abs_with_filter(track, parts);
-	if (std::isnan(abs_pos)) {
-		return abs_pos;
-	}
-	return abs_pos - base_start;
+	return draws.back();
 }
 
 double TrackVarProcessor::aggregate_first_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts, bool pos)

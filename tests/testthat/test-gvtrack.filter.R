@@ -1117,3 +1117,30 @@ test_that("with a filter, first and last and their positions skip unmasked parts
     for (tr in c("vf_sp", "vf_dn", "vf_arr")) suppressMessages(gtrack.convert_to_indexed(tr))
     check("indexed")
 })
+
+test_that("with a filter, sample draws each unmasked value with the same chance", {
+    local_db_state()
+    nblocks <- 1200
+    srcs <- vf_sources(vf_blocks(nblocks))
+    starts <- (seq_len(nblocks) - 1) * 400
+    iv <- gintervals("chr1", starts, starts + 400)
+    set.seed(11)
+    # [150,160) leaves two values in the first part and one in the second; [120,130) splits the second value,
+    # which is still one value
+    for (cut in list(c(150, 160), c(120, 130))) {
+        mask <- gintervals("chr1", starts + cut[1], starts + cut[2])
+        for (s in names(srcs)) {
+            gvtrack.create("vf", srcs[[s]], "sample", filter = mask)
+            gvtrack.create("vf_pos", srcs[[s]], "sample.pos.relative", filter = mask)
+            for (shared in c(FALSE, TRUE)) {
+                r <- withr::with_options(list(gshared.track.backend = shared), gextract(c("vf", "vf_pos"), iv, iterator = iv))
+                expect_equal(nrow(r), nblocks)
+                # with 1200 draws the standard error of each share is about 0.014
+                share <- as.numeric(table(factor(r$vf, levels = c(1, 2, 6)))) / nblocks
+                expect_true(all(abs(share - 1 / 3) < 0.06), info = paste(s, cut[1], shared, toString(round(share, 3))))
+                share <- as.numeric(table(factor(r$vf_pos, levels = c(0, 100, 250)))) / nblocks
+                expect_true(all(abs(share - 1 / 3) < 0.06), info = paste(s, cut[1], shared, "pos", toString(round(share, 3))))
+            }
+        }
+    }
+})

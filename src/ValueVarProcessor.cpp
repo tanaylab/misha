@@ -70,12 +70,10 @@ void ValueVarProcessor::process_single_value_var(
 			double max_val = numeric_limits<double>::quiet_NaN();
 			double first_val = numeric_limits<double>::quiet_NaN();
 			double last_val = numeric_limits<double>::quiet_NaN();
-			double sample_val = numeric_limits<double>::quiet_NaN();
 			double min_pos = numeric_limits<double>::quiet_NaN();
 			double max_pos = numeric_limits<double>::quiet_NaN();
 			double first_pos = numeric_limits<double>::quiet_NaN();
 			double last_pos = numeric_limits<double>::quiet_NaN();
-			double sample_pos = numeric_limits<double>::quiet_NaN();
 			double nearest_val = numeric_limits<double>::quiet_NaN();
 			double lse_val = -numeric_limits<double>::infinity();
 			bool exists = false;
@@ -93,12 +91,10 @@ void ValueVarProcessor::process_single_value_var(
 				double part_max = track.last_max();
 				double part_first = track.last_first();
 				double part_last = track.last_last();
-				double part_sample = track.last_sample();
 				double part_min_pos = track.last_min_pos();
 				double part_max_pos = track.last_max_pos();
 				double part_first_pos = track.last_first_pos();
 				double part_last_pos = track.last_last_pos();
-				double part_sample_pos = track.last_sample_pos();
 				double part_nearest = track.last_nearest();
 				double part_exists = track.last_exists();
 
@@ -136,15 +132,10 @@ void ValueVarProcessor::process_single_value_var(
 				if (!std::isnan(part_last))
 					last_val = part_last;
 
-				if (!std::isnan(part_sample) && std::isnan(sample_val))
-					sample_val = part_sample;
 				if (!std::isnan(part_first_pos) && std::isnan(first_pos))
 					first_pos = part_first_pos;
 				if (!std::isnan(part_last_pos))
 					last_pos = part_last_pos;
-
-				if (!std::isnan(part_sample_pos) && std::isnan(sample_pos))
-					sample_pos = part_sample_pos;
 
 				if (!std::isnan(part_nearest) && std::isnan(nearest_val))
 					nearest_val = part_nearest;
@@ -198,7 +189,7 @@ void ValueVarProcessor::process_single_value_var(
 					var.var[idx] = agg.last_val;
 					break;
 				case TrackExpressionVars::Value_var::SAMPLE:
-					var.var[idx] = agg.sample_val;
+					var.var[idx] = TrackVarProcessor::aggregate_sample_with_filter(*var.track, eval_intervals, false);
 					break;
 				case TrackExpressionVars::Value_var::FIRST_POS_ABS:
 					var.var[idx] = agg.first_pos;
@@ -213,10 +204,10 @@ void ValueVarProcessor::process_single_value_var(
 					var.var[idx] = std::isnan(agg.last_pos) ? numeric_limits<double>::quiet_NaN() : agg.last_pos - eval_interval.start;
 					break;
 				case TrackExpressionVars::Value_var::SAMPLE_POS_ABS:
-					var.var[idx] = agg.sample_pos;
+					var.var[idx] = TrackVarProcessor::aggregate_sample_with_filter(*var.track, eval_intervals, true);
 					break;
 				case TrackExpressionVars::Value_var::SAMPLE_POS_REL:
-					var.var[idx] = std::isnan(agg.sample_pos) ? numeric_limits<double>::quiet_NaN() : agg.sample_pos - eval_interval.start;
+					var.var[idx] = TrackVarProcessor::aggregate_sample_with_filter(*var.track, eval_intervals, true) - eval_interval.start;
 					break;
 				case TrackExpressionVars::Value_var::MIN_POS_ABS:
 					var.var[idx] = agg.min_pos;
