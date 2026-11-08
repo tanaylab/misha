@@ -705,6 +705,37 @@ test_that("a stale .db.cache lock is broken, and a held one makes a writer mark 
     unlink(lock)
 })
 
+test_that("a stale .db.cache lock that cannot be read is broken by its age", {
+    skip_on_os("windows")
+    skip_if(Sys.info()[["user"]] == "root")
+    local_db_state()
+    db <- review_db(withr::local_tempdir())
+    lock <- file.path(db, ".db.cache.lock")
+    lock_files <- function() list.files(db, pattern = "^\\.db\\.cache\\.lock", all.files = TRUE)
+
+    # left two hours ago by a killed session whose umask kept it from this user
+    writeLines("n0 1 dead", lock)
+    Sys.setFileTime(lock, Sys.time() - 7200)
+    Sys.chmod(lock, "000")
+    withr::defer(if (file.exists(lock)) Sys.chmod(lock, "644"))
+    gtrack.create_sparse("after_unreadable", "", gintervals("chr1", 0, 10), 1)
+    expect_equal(lock_files(), character(0))
+    expect_true("after_unreadable" %in% read_cache(db)[[1]])
+    expect_false(.gdb.cache_is_dirty(db))
+
+    # a fresh one is held
+    writeLines("n0 2 alive", lock)
+    Sys.chmod(lock, "000")
+    expect_null(.gdb.cache_lock(db, wait = 0.2))
+    expect_equal(lock_files(), ".db.cache.lock")
+    # and one taken after the stale lock was judged stale is put back
+    expect_false(.gdb.cache_break_lock(lock, Sys.time() - 7200))
+    expect_equal(lock_files(), ".db.cache.lock")
+    Sys.chmod(lock, "644")
+    expect_equal(readLines(lock), "n0 2 alive")
+    unlink(lock)
+})
+
 # Replaces a base function for the duration of the calling test
 mock_base <- function(name, fun, env = parent.frame()) {
     real <- get(name, envir = baseenv())
@@ -849,8 +880,8 @@ test_that("an unbreakable stale lock or a root that cannot be written does not m
     lock <- file.path(db, ".db.cache.lock")
     writeLines("n0 1 dead", lock)
     Sys.setFileTime(lock, Sys.time() - 60)
-    Sys.chmod(lock, "000")
-    withr::defer(Sys.chmod(lock, "644"))
+    # a stale lock that cannot be renamed away (another user's, in a directory with the sticky bit)
+    local_mocked_bindings(.gdb.cache_break_lock = function(...) FALSE)
     # in a forked child, given 60 s (it hung, busy-waiting)
     job <- parallel::mcparallel(withr::with_options(list(gmultitasking = FALSE), {
         gtrack.create_sparse("t7", "", gintervals("chr1", 0, 10), 1)
@@ -865,7 +896,6 @@ test_that("an unbreakable stale lock or a root that cannot be written does not m
     expect_true(.gdb.cache_is_dirty(db))
 
     # a root that cannot be written (tracks/ can): no lock, no flag, no warning
-    Sys.chmod(lock, "644")
     unlink(lock)
     unlink(list.files(db, pattern = "^\\.db\\.cache\\.dirty", all.files = TRUE, full.names = TRUE))
     Sys.chmod(db, "555")
