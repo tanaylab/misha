@@ -141,6 +141,7 @@ private:
 	void define_r_vars(unsigned eval_buf_limit);
 	static unsigned get_eval_buf_size();
 
+	bool next_batch();
 	bool eval_next();
 	void fill_slot1d(unsigned idx);
 	bool can_fill_bins_bulk() const;
@@ -158,6 +159,18 @@ private:
 
 
 //------------------------------ IMPLEMENTATION ----------------------------------------
+
+// A step to the next interval of the evaluated batch is inline, the rest is next_batch(): a scan
+// of a 1 bp track takes a step per base pair.
+inline bool TrackExprScanner::next()
+{
+	if (!m_isend && m_eval_buf_idx + 1 < m_eval_buf_size) {
+		monitor_memusage();
+		++m_eval_buf_idx;
+		return true;
+	}
+	return next_batch();
+}
 
 inline double TrackExprScanner::last_real(int idx) const
 {

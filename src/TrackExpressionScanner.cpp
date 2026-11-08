@@ -309,7 +309,7 @@ bool TrackExprScanner::begin(const vector<string> &track_exprs, GIntervalsFetche
 	return next();
 }
 
-bool TrackExprScanner::next()
+bool TrackExprScanner::next_batch()
 {
 	monitor_memusage();
 
