@@ -216,11 +216,14 @@ test_that("the record past the chromosome end that the warning names is the firs
             gtrack.rm("first", force = TRUE)
         }
 
-        # several array files: the first file with such a record, and its first line
+        # an array import of several files: the first such record of the first file that has one
         a1 <- file.path(getwd(), "a1.tsv")
         a2 <- file.path(getwd(), "a2.tsv")
+        a3 <- file.path(getwd(), "a3.tsv")
         writeLines(c("chrom\tstart\tend\tx", "chr1\t0\t10\t1"), a1)
         writeLines(c("chrom\tstart\tend\ty", "chr2\t576\t608\t1", "chr1\t992\t1024\t2"), a2)
-        expect_warning(gtrack.array.import("first_arr", "", a1, a2), paste0("the first: file ", a2, ", line 2: (chr2, 576, 608)"), fixed = TRUE)
+        writeLines(c("chrom\tstart\tend\tz", "chr1\t992\t1024\t3"), a3)
+        expect_warning(gtrack.array.import("first_arr", "", a1, a2), paste0("File ", a2, ": 2 record(s) running past the end of their chromosome were clipped to it, and 0 record(s) starting at or past the chromosome end were dropped; the first: line 2: (chr2, 576, 608)"), fixed = TRUE)
+        expect_warning(gtrack.array.import("first_arr3", "", a1, a2, a3), paste0("Files ", a2, ", ", a3, ": 3 record(s) running past the end of their chromosome were clipped to it, and 0 record(s) starting at or past the chromosome end were dropped; the first: file ", a2, ", line 2: (chr2, 576, 608)"), fixed = TRUE)
     })
 })

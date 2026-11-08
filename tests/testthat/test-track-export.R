@@ -262,8 +262,8 @@ test_that("bedGraph lines whose threads cannot start are formatted in the callin
     skip_on_cran()
     skip_if_not(identical(Sys.info()[["sysname"]], "Linux"), "uses prlimit and ps -L")
     skip_if(!nzchar(Sys.which("prlimit")) || !nzchar(Sys.which("ps")), "prlimit or ps is not available")
-    # in a child R that may not start more threads (RLIMIT_NPROC counts the threads of the user):
-    # a thread that cannot start used to abort R
+    # in a child R that may not start more threads (RLIMIT_NPROC counts the threads of the user, and
+    # the limit is set to half of those running): a thread that cannot start used to abort R
     script <- tempfile(fileext = ".R")
     out <- tempfile()
     withr::defer(unlink(c(script, out)))
@@ -277,13 +277,15 @@ test_that("bedGraph lines whose threads cannot start are formatted in the callin
         "start <- seq_len(n) * 10",
         "vals <- seq_len(n) / 7",
         "expected <- paste0(paste(chrom, sprintf('%.0f', start), sprintf('%.0f', start + 10), vals, sep = '\\t'), '\\n', collapse = '')",
-        "num <- as.integer(system('ps -L -u $(id -un) --no-headers | wc -l', intern = TRUE))",
+        "num <- as.integer(system('ps -L -u $(id -un) --no-headers | wc -l', intern = TRUE)) %/% 2",
         "system(sprintf('prlimit --pid %d --nproc=%d:%d', Sys.getpid(), num, num))",
         "res <- misha:::.gcall('gtrack_bedgraph_lines', chrom, start, start + 10, vals, NULL, 1, n, 0L, '.', misha:::.misha_env())",
         sprintf("writeLines(as.character(identical(res[[1]], expected)), %s)", deparse(out))
     ), script)
-    r <- shQuote(file.path(R.home("bin"), "R"))
-    status <- suppressWarnings(system2(r, c("--no-echo", "--no-restore", "-f", shQuote(script)), stdout = FALSE, stderr = FALSE, env = "R_TESTS="))
+    # system2() quotes the command itself
+    status <- suppressWarnings(system2(file.path(R.home("bin"), "R"), c("--no-echo", "--no-restore", "-f", shQuote(script)),
+        stdout = FALSE, stderr = FALSE, env = "R_TESTS="
+    ))
     expect_identical(status, 0L)
     expect_identical(readLines(out), "TRUE")
 })
