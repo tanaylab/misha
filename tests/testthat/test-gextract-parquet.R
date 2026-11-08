@@ -291,7 +291,10 @@ test_that("track attributes travel as field metadata, and gtrack.import_parquet 
     expect_identical(back[["model"]], model)
     expect_identical(back[["description"]], "pq")
     expect_match(back[["created.by"]], "gtrack.import_parquet", fixed = TRUE)
-    expect_identical(sort(names(back)), sort(names(track_attrs("pq"))))
+    # type and binsize describe how pq is stored (gtrack.create_dense sets them): not carried over
+    expect_true(all(c("type", "binsize") %in% names(track_attrs("pq"))))
+    expect_false(any(c("type", "binsize") %in% names(back)))
+    expect_identical(sort(names(back)), sort(setdiff(names(track_attrs("pq")), c("type", "binsize"))))
     for (track in c("back_bare", "back_twice")) {
         expect_identical(sort(names(track_attrs(track))), c("created.by", "created.date", "created.user"), label = track)
     }

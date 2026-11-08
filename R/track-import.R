@@ -730,11 +730,13 @@ gtrack.import_set <- function(description = NULL, path = NULL, binsize = NULL, t
 }
 
 
-# Sets the attributes of a track gtrack.import_parquet created from md, the field metadata of its
-# column (a named character vector), except those the import sets: created.by, created.date,
-# created.user, and description unless the description given is empty
-.gtrack_restore_parquet_attrs <- function(track, md, description) {
-    skip <- c("created.by", "created.date", "created.user", if (nzchar(description)) "description")
+# Sets the attributes of a track created from a Parquet column from md, the column's field
+# metadata (a named character vector), except those the import sets or that describe how the
+# source track was stored: created.by, created.date, created.user, type and binsize (set by
+# gtrack.create_dense and gsynth), description unless the description given is empty, and the
+# names in keep (attributes the caller set)
+.gtrack_restore_parquet_attrs <- function(track, md, description, keep = NULL) {
+    skip <- c("created.by", "created.date", "created.user", "type", "binsize", if (nzchar(description)) "description", keep)
     md <- md[!is.na(names(md)) & nzchar(names(md)) & !names(md) %in% skip & !is.na(md) & nzchar(md)]
     md <- md[!duplicated(names(md))]
     if (length(md)) {
@@ -789,7 +791,8 @@ gtrack.import_set <- function(description = NULL, path = NULL, binsize = NULL, t
 #' \code{\link{gextract}} writes the attributes of a track column, or as
 #' pyarrow writes 'pa.field(name, type, metadata = ...)') becomes attributes
 #' of its track, except 'created.by', 'created.date' and 'created.user', which
-#' the import sets, and 'description' unless the 'description' argument is an
+#' the import sets, 'type' and 'binsize', which describe how the source track
+#' was stored, and 'description' unless the 'description' argument is an
 #' empty string. A file without field metadata imports with only those
 #' attributes. See \code{\link{gtrack.attr.set}} for the attributes of model
 #' predictions.
