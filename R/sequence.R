@@ -684,6 +684,14 @@ gseq.pwm_edits <- function(seqs,
                            extend = TRUE,
                            strand = 1L,
                            direction = "above") {
+    # Validate PSSM
+    pssm <- .coerce_pssm_matrix(
+        pssm,
+        numeric_msg = "pssm must be a numeric matrix or data frame with numeric columns",
+        ncol_msg = "pssm must have columns named A, C, G, T",
+        colnames_msg = "pssm must have columns named A, C, G, T"
+    )
+
     # Handle interval input: extract sequences
     is_intervals <- is.data.frame(seqs) &&
         all(c("chrom", "start", "end") %in% colnames(seqs))
@@ -738,14 +746,6 @@ gseq.pwm_edits <- function(seqs,
         roi_start <- NULL
         roi_end <- NULL
     }
-
-    # Validate PSSM
-    pssm <- .coerce_pssm_matrix(
-        pssm,
-        numeric_msg = "pssm must be a numeric matrix or data frame with numeric columns",
-        ncol_msg = "pssm must have columns named A, C, G, T",
-        colnames_msg = "pssm must have columns named A, C, G, T"
-    )
 
     # Validate parameters
     # Same contract as the pwm.edit_distance vtracks and pwm.count: one value,
