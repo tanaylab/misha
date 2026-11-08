@@ -938,3 +938,17 @@ test_that("gseq.pwm_edits ignores a strand column, as the vtrack does", {
         gvtrack.rm("ed_strandcol")
     }
 })
+
+test_that("gseq.pwm_edits refuses a bidirect that is not TRUE or FALSE", {
+    pssm <- matrix(c(0.7, 0.1, 0.1, 0.1, 0.1, 0.7, 0.1, 0.1), 2,
+        byrow = TRUE,
+        dimnames = list(NULL, c("A", "C", "G", "T"))
+    )
+    for (b in list(NA, c(TRUE, FALSE), logical(0), "TRUE")) {
+        expect_error(
+            gseq.pwm_edits("GTGT", pssm, score.thresh = -1, prior = 0, bidirect = b),
+            "bidirect must be TRUE or FALSE",
+            info = deparse(b)
+        )
+    }
+})
