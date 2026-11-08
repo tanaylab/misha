@@ -121,6 +121,7 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
 
     # Clear all state
     assign("ALLGENOME", NULL, envir = .misha)
+    assign("ALLGENOME_2D_BUILT", NULL, envir = .misha)
     assign("GROOT", NULL, envir = .misha)
     assign("CHROM_ALIAS", NULL, envir = .misha)
     .refresh_chrom_alias_env()
@@ -260,6 +261,7 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
         finally = {
             if (!success) {
                 assign("ALLGENOME", NULL, envir = .misha)
+                assign("ALLGENOME_2D_BUILT", NULL, envir = .misha)
                 assign("GROOT", NULL, envir = .misha)
                 assign("GWD", NULL, envir = .misha)
                 assign("CHROM_ALIAS", NULL, envir = .misha)
@@ -318,7 +320,7 @@ gdb.unload <- function() {
     }
 
     session_vars <- c(
-        "GROOT", "GWD", "ALLGENOME", "GINTERVID", "GITERATOR.INTERVALS",
+        "GROOT", "GWD", "ALLGENOME", "ALLGENOME_2D_BUILT", "GINTERVID", "GITERATOR.INTERVALS",
         "GVTRACKS", "GDATASETS", "GDATASET_CHROMS", "GTRACK_DATASET", "GINTERVALS_DATASET", "GTRACKS_SRC",
         "CHROM_ALIAS", "DB_IS_PER_CHROMOSOME"
     )

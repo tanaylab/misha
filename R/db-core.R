@@ -643,16 +643,33 @@
     if (is.null(mode)) {
         return(NULL)
     }
-    allgenome <- get("ALLGENOME", envir = .misha)
-    # built already in this mode and kept (options(gmulticontig.2d.cache), as gintervals.2d.all())
-    if (!.is_2d_deferred(allgenome[[2]]) && identical(attr(allgenome[[2]], "mode"), mode)) {
-        return(allgenome[[2]])
+    .gintervals.2d.build(mode)
+}
+
+# The whole-genome 2D intervals built in `mode` and kept in this session (.gintervals.2d.build), or
+# NULL.
+.gintervals.2d.kept <- function(mode) {
+    kept <- get0("ALLGENOME_2D_BUILT", envir = .misha, inherits = FALSE)
+    if (is.character(mode) && length(mode) == 1 && mode %in% names(kept)) kept[[mode]] else NULL
+}
+
+# The whole-genome 2D intervals of a genome above gmulticontig.2d.threshold contigs, in `mode`. With
+# options(gmulticontig.2d.cache) they are kept in .misha$ALLGENOME_2D_BUILT under their mode and reused
+# in that mode only. .misha$ALLGENOME[[2]] stays the placeholder (it is what C++ and .gscope_expand_2d
+# test for), so every use of the whole-genome 2D scope comes here and gets the current mode's pairs.
+.gintervals.2d.build <- function(mode) {
+    intervals2d <- .gintervals.2d.kept(mode)
+    if (!is.null(intervals2d)) {
+        return(intervals2d)
     }
-    intervals2d <- .generate_2d_on_demand(allgenome[[1]], mode)
+    intervals2d <- .generate_2d_on_demand(get("ALLGENOME", envir = .misha)[[1]], mode)
     if (getOption("gmulticontig.2d.cache", FALSE)) {
-        attr(intervals2d, "mode") <- mode
-        allgenome[[2]] <- intervals2d
-        assign("ALLGENOME", allgenome, envir = .misha)
+        kept <- get0("ALLGENOME_2D_BUILT", envir = .misha, inherits = FALSE)
+        if (is.null(kept)) {
+            kept <- list()
+        }
+        kept[[mode]] <- intervals2d
+        assign("ALLGENOME_2D_BUILT", kept, envir = .misha)
     }
     intervals2d
 }

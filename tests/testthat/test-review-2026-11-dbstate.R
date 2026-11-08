@@ -1045,7 +1045,38 @@ test_that("the whole-genome 2D scope built in C++ is kept with options(gmulticon
     s2 <- suppressWarnings(gsummary("rt"))
     expect_equal(s1, s2)
     expect_equal(built, 1)
-    expect_equal(attr(.misha$ALLGENOME[[2]], "mode"), "full")
+    expect_equal(names(.misha$ALLGENOME_2D_BUILT), "full")
+    # the placeholder stays, so that a later change of gmulticontig.2d.mode is seen
+    expect_equal(NROW(.misha$ALLGENOME[[2]]), 0)
+})
+
+test_that("a change of gmulticontig.2d.mode is honoured with options(gmulticontig.2d.cache)", {
+    local_db_state()
+    withr::local_options(list(gmulticontig.2d.threshold = 2, gmulticontig.2d.cache = TRUE))
+    db <- deferred_2d_db(withr::local_tempdir())
+    # "rt" has a cis rectangle (value 1) and a trans one (value 2)
+    for (mt in c(FALSE, TRUE)) {
+        withr::with_options(list(gmultitasking = mt, gmulticontig.2d.mode = "diagonal"), {
+            suppressMessages(gsetroot(db))
+            expect_null(.misha$ALLGENOME_2D_BUILT)
+            expect_equal(gsummary("rt")[["Total intervals"]], 1)
+            expect_equal(nrow(gintervals.2d.all()), 3)
+
+            options(gmulticontig.2d.mode = "full")
+            expect_equal(gsummary("rt")[["Total intervals"]], 2, label = paste("full, multitasking", mt))
+            expect_equal(unname(gquantiles("rt", 1)), 2)
+            expect_equal(nrow(gextract("rt", .misha$ALLGENOME)), 2)
+            expect_equal(nrow(suppressWarnings(gintervals.2d.all())), 9)
+
+            options(gmulticontig.2d.mode = "diagonal")
+            expect_equal(gsummary("rt")[["Total intervals"]], 1)
+            expect_equal(nrow(gintervals.2d.all()), 3)
+            expect_setequal(names(.misha$ALLGENOME_2D_BUILT), c("diagonal", "full"))
+
+            options(gmulticontig.2d.mode = NULL)
+            expect_error(gsummary("rt"), "gmulticontig.2d.mode", fixed = TRUE)
+        })
+    }
 })
 
 test_that("gintervals.save of the deferred 2D whole-genome intervals builds them or stops", {
