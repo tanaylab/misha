@@ -262,7 +262,9 @@ SEXP C_gquantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _iterator
 		for (vector<Percentile>::const_iterator ip = percentiles.begin(); ip != percentiles.end(); ++ip) {
 			char buf[100];
 
-			REAL(answer)[ip->index] = medians[ip->index];
+			// 0.0 for a zero of either sign: which zero a rank holds is arbitrary when the values
+			// hold both, and differs between the single-process and the multitask paths
+			REAL(answer)[ip->index] = medians[ip->index] == 0 ? 0. : medians[ip->index];
 
 			format_percentile(buf, sizeof(buf), ip->percentile);
 			SET_STRING_ELT(colnames, ip->index, Rf_mkChar(buf));
@@ -474,17 +476,9 @@ SEXP gquantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 								else
 									lo = mid + 1;
 							}
-							// the value as stored: -0.0 comes before 0.0 in the bit order but compares
-							// equal to it, so the bisection can end on -0.0 for a 0.0
-							double v = val_of(lo);
-							for (const Run &rn : runs) {
-								const double *it = lower_bound(rn.cur, rn.end, v);
-								if (it != rn.end && *it == v) {
-									v = *it;
-									break;
-								}
-							}
-							values_at_targets.push_back(v);
+							// (a zero rank comes out as -0.0, which precedes 0.0 in the bit order; the
+							// answer gives every zero as 0.0)
+							values_at_targets.push_back(val_of(lo));
 						}
 					}
 
@@ -620,7 +614,9 @@ SEXP gquantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 		for (vector<Percentile>::const_iterator ip = percentiles.begin(); ip != percentiles.end(); ++ip) {
 			char buf[100];
 
-			REAL(answer)[ip->index] = medians[ip->index];
+			// 0.0 for a zero of either sign: which zero a rank holds is arbitrary when the values
+			// hold both, and differs between the single-process and the multitask paths
+			REAL(answer)[ip->index] = medians[ip->index] == 0 ? 0. : medians[ip->index];
 
 			format_percentile(buf, sizeof(buf), ip->percentile);
 			SET_STRING_ELT(colnames, ip->index, Rf_mkChar(buf));
