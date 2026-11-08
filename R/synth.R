@@ -2706,8 +2706,10 @@ gsynth.random <- function(intervals = NULL,
 #' with specific motifs removed (e.g., creating a CpG-null genome by iteratively
 #' swapping CG to GC).
 #'
-#' @param target The k-mer sequence to remove (e.g., "CG").
-#' @param replacement The replacement sequence (e.g., "GC").
+#' @param target The k-mer sequence to remove (e.g., "CG"). Case is ignored.
+#' @param replacement The replacement sequence (e.g., "GC"), of the same length
+#'        as \code{target} and different from it (ignoring case). It is
+#'        written in upper case.
 #' @param output_path Path to the output file (ignored when output_format = "vector").
 #' @param output_format Output format:
 #'   \itemize{
@@ -2762,8 +2764,11 @@ gsynth.replace_kmer <- function(target,
     if (!is.character(replacement) || length(replacement) != 1 || nchar(replacement) == 0) {
         stop("replacement must be a non-empty string", call. = FALSE)
     }
+    # The sequence is matched and rewritten in upper case
+    target <- toupper(target)
+    replacement <- toupper(replacement)
     if (target == replacement) {
-        stop("target and replacement cannot be identical", call. = FALSE)
+        stop("target and replacement cannot be identical (the comparison ignores case)", call. = FALSE)
     }
 
     # Composition check for robustness

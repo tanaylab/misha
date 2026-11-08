@@ -14,9 +14,11 @@ gsynth.replace_kmer(
 )
 }
 \arguments{
-\item{target}{The k-mer sequence to remove (e.g., "CG").}
+\item{target}{The k-mer sequence to remove (e.g., "CG"). Case is ignored.}
 
-\item{replacement}{The replacement sequence (e.g., "GC").}
+\item{replacement}{The replacement sequence (e.g., "GC"), of the same length
+as \code{target} and different from it (ignoring case). It is
+written in upper case.}
 
 \item{output_path}{Path to the output file (ignored when output_format = "vector").}
 

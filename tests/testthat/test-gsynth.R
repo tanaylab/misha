@@ -3007,6 +3007,20 @@ test_that("gsynth.replace_kmer validates inputs correctly", {
     )
 })
 
+test_that("gsynth.replace_kmer refuses a replacement equal to the target in another case", {
+    gdb.init_examples()
+    # used to replace every CG by CG forever
+    expect_error(
+        gsynth.replace_kmer("cg", "CG", output_format = "vector", intervals = gintervals(1, 0, 200), check_composition = FALSE),
+        "cannot be identical"
+    )
+    # the composition check ignores case too
+    expect_equal(
+        gsynth.replace_kmer("cg", "GC", output_format = "vector", intervals = gintervals(1, 0, 2000)),
+        gsynth.replace_kmer("CG", "GC", output_format = "vector", intervals = gintervals(1, 0, 2000))
+    )
+})
+
 test_that("gsynth.replace_kmer preserves sequence length", {
     gdb.init_examples()
 
