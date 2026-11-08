@@ -855,6 +855,68 @@ bool rdb::is_kid()
 	return RdbInitializer::is_kid();
 }
 
+// A fork copies the page tables of the parent's anonymous memory, one entry per page: the
+// cost grows with the memory the R session holds in 4 KB pages, and is paid once per kid.
+// Memory in 2 MB transparent huge pages costs 512 times fewer entries. Measured on CentOS 7
+// (Linux 3.10, whose R heap got no huge pages) with 32 kids, a gsummary over chr1 and chr2 of
+// mm10: 0.67 s, 11.5 s with 10 GB held, 28 s with 20 GB, 22-25 s of it in the forks, about
+// 0.035 s per GB per kid. On AlmaLinux 8, the same 20 GB in huge pages: 0.68 s.
+//
+// The warning comes when the forks of this call would take about 4.5 s or more: GB in 4 KB
+// pages times kids of 128 or more (4 GB with 32 kids, 8 GB with 16, 32 GB with 4).
+//
+// The check is cheap on every call: the anonymous resident size comes from /proc/self/statm.
+// Only when that alone is large enough does it read how much of it is in huge pages
+// (/proc/self/smaps_rollup, or /proc/self/smaps before Linux 4.14, which walk the page tables
+// of the session). A session found mostly in huge pages is not read again until its
+// anonymous memory has grown by a quarter.
+//
+// MISHA_TEST_FORK_4K_BYTES, an environment variable for the tests, stands in for the bytes
+// held in 4 KB pages.
+static const double FORK_COST_GB_KIDS = 128;
+static bool s_fork_cost_warned = false;
+static uint64_t s_fork_cost_checked_anon = 0;
+
+void rdb::warn_if_forks_are_slow(SEXP envir, unsigned num_kids)
+{
+	if (s_fork_cost_warned || RdbInitializer::is_kid() || num_kids < 2)
+		return;
+
+	const double GB = 1e9;
+	uint64_t small_pages;
+	const char *test_bytes = getenv("MISHA_TEST_FORK_4K_BYTES");
+
+	if (test_bytes)
+		small_pages = strtoull(test_bytes, NULL, 10);
+	else {
+		uint64_t anon = get_anon_resident_mem_usage(getpid());
+
+		if (anon / GB * num_kids < FORK_COST_GB_KIDS || anon < s_fork_cost_checked_anon + s_fork_cost_checked_anon / 4)
+			return;
+
+		uint64_t huge = get_anon_huge_pages(getpid());
+
+		small_pages = anon > huge ? anon - huge : 0;
+		if (small_pages / GB * num_kids < FORK_COST_GB_KIDS)
+			s_fork_cost_checked_anon = anon;
+	}
+
+	if (small_pages / GB * num_kids < FORK_COST_GB_KIDS)
+		return;
+
+	char msg[1000];
+	snprintf(msg, sizeof(msg),
+			 "This R session holds %.1f GB of memory in 4 KB pages (not in transparent huge pages). "
+			 "Each of the %u processes misha starts for this call is a fork of the session, and every fork "
+			 "copies the page tables of that memory: this can add seconds, up to tens of seconds, to every "
+			 "multitasking call, however small. Lower options(gmax.processes), free large objects (rm(), then "
+			 "gc()), or run on a host whose kernel keeps R's memory in transparent huge pages (such as "
+			 "RHEL 8 and its clones). This warning is shown once per session.",
+			 small_pages / GB, num_kids);
+	add_pending_diagnostic(envir, "warning", msg);
+	s_fork_cost_warned = true;
+}
+
 bool rdb::once_per_call(const char *key)
 {
 	// A child process either loses its warnings or repeats them once per fork,

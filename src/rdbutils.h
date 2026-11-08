@@ -155,6 +155,11 @@ bool once_per_call(const char *key);
 // True inside a multitasking child process launched by distribute_task().
 bool is_kid();
 
+// Called by the parent before it forks num_kids processes. Once per R session, queues a
+// warning (see add_pending_diagnostic) when the session holds so much memory in 4 KB pages
+// that the forks alone will take seconds; see the definition.
+void warn_if_forks_are_slow(SEXP envir, unsigned num_kids);
+
 // Use rprotect instead of PROTECT!
 SEXP rprotect(SEXP &expr);
 

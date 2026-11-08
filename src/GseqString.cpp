@@ -1064,6 +1064,7 @@ SEXP C_gseq_pwm_multitask(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect
         // limit has nothing to guard - R is already holding every input sequence.
         rdb::prepare4multitasking(kid_res_size, 0, kid_res_size * num_processes,
                                   iu.get_max_mem_usage(), num_processes);
+        rdb::warn_if_forks_are_slow(iu.get_env(), num_processes);
 
         for (int proc_id = 0; proc_id < num_processes; ++proc_id) {
             if (!rdb::launch_process()) {  // child process: score our chunk into shared memory

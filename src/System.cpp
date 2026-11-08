@@ -65,3 +65,45 @@ uint64_t get_resident_mem_usage(pid_t pid)
 		return 0;
 	return (uint64_t)resident * (uint64_t)page_size;
 }
+
+uint64_t get_anon_resident_mem_usage(pid_t pid)
+{
+	char filename[100];
+	snprintf(filename, sizeof(filename), "/proc/%ld/statm", (long)pid);
+
+	FILE *fp = fopen(filename, "r");
+	if (!fp)
+		return 0;
+
+	unsigned long size = 0, resident = 0, shared = 0;
+	int n = fscanf(fp, "%lu %lu %lu", &size, &resident, &shared);
+	fclose(fp);
+
+	long page_size = sysconf(_SC_PAGESIZE);
+	if (n != 3 || page_size <= 0 || resident < shared)
+		return 0;
+	return (uint64_t)(resident - shared) * (uint64_t)page_size;
+}
+
+uint64_t get_anon_huge_pages(pid_t pid)
+{
+	char filename[100];
+	char line[256];
+	uint64_t kb = 0;
+
+	snprintf(filename, sizeof(filename), "/proc/%ld/smaps_rollup", (long)pid);
+	FILE *fp = fopen(filename, "r");
+	if (!fp) {
+		snprintf(filename, sizeof(filename), "/proc/%ld/smaps", (long)pid);
+		fp = fopen(filename, "r");
+		if (!fp)
+			return 0;
+	}
+
+	while (fgets(line, sizeof(line), fp)) {
+		if (!strncmp(line, "AnonHugePages:", 14))
+			kb += strtoull(line + 14, NULL, 10);
+	}
+	fclose(fp);
+	return kb * 1024;
+}
