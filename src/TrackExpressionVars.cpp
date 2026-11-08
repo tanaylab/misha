@@ -241,8 +241,9 @@ void TrackExpressionVars::parse_exprs(const vector<string> &track_exprs)
     // objects of its own that must outlive this function.
     runprotect(gwds);
 
-	// The names each expression holds, in the order of GTRACKS and then of the virtual tracks
-	const TrackNameIndex &track_index = TrackNameIndex::gtracks(rtracknames[TRACK]);
+	// The names each expression holds, in the order of GTRACKS and then of the virtual tracks. The
+	// GTRACKS index is held here: add_*_var() may ask for it again.
+	const shared_ptr<const TrackNameIndex> track_index = TrackNameIndex::gtracks(rtracknames[TRACK]);
 	unique_ptr<TrackNameIndex> vtrack_index;
 	if (Rf_isString(rtracknames[VTRACK]))
 		vtrack_index.reset(new TrackNameIndex(rtracknames[VTRACK]));
@@ -253,7 +254,7 @@ void TrackExpressionVars::parse_exprs(const vector<string> &track_exprs)
 			if (!Rf_isString(rtracknames[var_type]))
 				continue;
 
-			(var_type == TRACK ? track_index : *vtrack_index).find_names(*iexpr, rtracknames[var_type], found);
+			(var_type == TRACK ? *track_index : *vtrack_index).find_names(*iexpr, rtracknames[var_type], found);
 			for (int itrack : found) {
 				string track = CHAR(STRING_ELT(rtracknames[var_type], itrack));
 				if (var_type == TRACK)
@@ -967,7 +968,7 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
     {
         string track(CHAR(STRING_ELT(rsrc, 0)));
 
-        if (TrackNameIndex::gtracks(find_in_misha(m_iu.get_env(), "GTRACKS")).find(track))
+        if (TrackNameIndex::gtracks(find_in_misha(m_iu.get_env(), "GTRACKS"))->find(track))
         {
             add_vtrack_var_src_track(rvtrack, vtrack, track);
             return;

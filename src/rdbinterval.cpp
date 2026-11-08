@@ -195,7 +195,7 @@ const GenomeTrack::ChromFiles &IntervUtils::get_chrom_files(const string &dir) c
 
 bool IntervUtils::track_exists(const char *track_name)
 {
-	return TrackNameIndex::gtracks(find_in_misha(get_env(), "GTRACKS")).find(track_name) != NULL;
+	return TrackNameIndex::gtracks(find_in_misha(get_env(), "GTRACKS"))->find(track_name) != NULL;
 }
 
 // Process-wide cache for the genome interval lists. Keyed on the SEXP
