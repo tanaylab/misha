@@ -114,6 +114,16 @@ SEXP gseqread(SEXP _intervals, SEXP _envir)
 		// Only in-memory interval sets are distributed; big sets stay on the serial path.
 		GIntervals *plain_intervals = dynamic_cast<GIntervals *>(intervals);
 
+		// The size of the whole result, checked before any read on either path: a sequence is never
+		// longer than its interval. (Read up to the limit first, the call took seconds to fail and
+		// named the size read so far.)
+		if (plain_intervals) {
+			uint64_t max_seqlen = 0;
+			for (GIntervals::const_iterator iinterv = plain_intervals->begin(); iinterv != plain_intervals->end(); ++iinterv)
+				max_seqlen += (uint64_t)iinterv->range();
+			iu.verify_max_data_size(max_seqlen, "Result sequence");
+		}
+
 		// A kid must not fork again: the nested distribute_task would find the outer job's shared
 		// memory already mapped and reuse its record size and offsets.
 		if (iu.get_multitasking() && !RdbInitializer::is_kid() &&
@@ -175,19 +185,13 @@ SEXP gseqread(SEXP _intervals, SEXP _envir)
 		if (num_kids > 1) {
 			uint64_t num_distributed = num_intervs - num_probed;
 
-			// A sequence is never longer than its interval, so this bounds the shared memory.
+			// A sequence is never longer than its interval, so this bounds the shared memory. (The
+			// sequences themselves were checked against gmax.data.size above, before the per-record
+			// headers, which would otherwise push an over-budget call past the limit only once the
+			// kids have done all the I/O, with the generic shared-memory message.)
 			uint64_t max_res_bytes = num_distributed * SEQ_REC_HEADER;
-			uint64_t max_seqlen = seqlen;
-			for (GIntervals::const_iterator iinterv = plain_intervals->begin() + num_probed; iinterv != plain_intervals->end(); ++iinterv) {
+			for (GIntervals::const_iterator iinterv = plain_intervals->begin() + num_probed; iinterv != plain_intervals->end(); ++iinterv)
 				max_res_bytes += (uint64_t)iinterv->range();
-				max_seqlen += (uint64_t)iinterv->range();
-			}
-
-			// Check the same quantity the sequential path checks, up front. Otherwise the per-record
-			// headers push an over-budget call past the limit only once the kids have already done
-			// all the I/O, and it reports the generic shared-memory message instead of the one
-			// naming the sizes and gmax.data.size.
-			iu.verify_max_data_size(max_seqlen, "Result sequence");
 
 			// Shared memory big enough for the whole result may not be available even though the
 			// sequential path would have coped; fall through to it rather than failing outright,

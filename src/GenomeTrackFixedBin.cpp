@@ -205,12 +205,20 @@ void GenomeTrackFixedBin::reset_sliding_window_state()
 	m_running_lse_initialized = false;
 }
 
+// The sliding helpers below run once per iterator step and are used only in this file: inlined, as
+// the code they replace was.
+#if defined(__GNUC__) || defined(__clang__)
+#define MISHA_SLIDE_INLINE inline __attribute__((always_inline))
+#else
+#define MISHA_SLIDE_INLINE inline
+#endif
+
 // The sliding window state covers the previous window [m_lse_prev_sbin, m_lse_prev_ebin). It moves
 // to [sbin, ebin) by dropping `drop` = sbin - m_lse_prev_sbin bins at the front and adding `add` =
 // ebin - m_lse_prev_ebin at the back. The two counts may differ (a 32 bp iterator over 20 bp bins
 // alternates 16- and 17-bin windows) unless `same_size`. The window may only move forward and not
 // past its own end. (slide_window decides whether a window of another size is slid.)
-bool GenomeTrackFixedBin::sliding_step(int64_t sbin, int64_t ebin, bool same_size, int64_t &drop, int64_t &add) const
+MISHA_SLIDE_INLINE bool GenomeTrackFixedBin::sliding_step(int64_t sbin, int64_t ebin, bool same_size, int64_t &drop, int64_t &add) const
 {
 	const int64_t prev_window = m_lse_prev_ebin - m_lse_prev_sbin;
 	drop = sbin - m_lse_prev_sbin;
@@ -219,35 +227,34 @@ bool GenomeTrackFixedBin::sliding_step(int64_t sbin, int64_t ebin, bool same_siz
 		(int64_t)m_lse_window_bins.size() == prev_window;
 }
 
-// Widens [lo_bit, hi_bit] to the exponents of the lowest and the highest set bit of v (a float,
-// not NaN or infinite; zero has none).
-void GenomeTrackFixedBin::add_to_bit_range(float v, int &lo_bit, int &hi_bit)
+// Widens [lo_exp, hi_exp] to the exponent field of v (a subnormal counts as 1; NaN and zero add
+// nothing). Returns whether it widened.
+MISHA_SLIDE_INLINE bool GenomeTrackFixedBin::add_to_exp_range(float v, int &lo_exp, int &hi_exp)
 {
 	uint32_t u;
 	memcpy(&u, &v, sizeof(u));
-	uint32_t mant = u & 0x7fffffu;
 	int exp = (int)((u >> 23) & 0xffu);
-	if (exp)
-		mant |= 0x800000u;
-	if (!mant)
-		return;
-	int base = exp ? exp - 150 : -149;
-	lo_bit = std::min(lo_bit, base + __builtin_ctz(mant));
-	hi_bit = std::max(hi_bit, base + 31 - __builtin_clz(mant));
+	if (exp == 0xff || !(u << 1))
+		return false;
+	exp += !exp;
+	if (exp >= lo_exp && exp <= hi_exp)
+		return false;
+	lo_exp = std::min(lo_exp, exp);
+	hi_exp = std::max(hi_exp, exp);
+	return true;
 }
 
-// Whether every sum of up to num_vals values within [lo_bit, hi_bit] (as add_to_bit_range gives
-// it) is a double: such a sum is a multiple of 2^lo_bit below num_vals * 2^(hi_bit + 1), so it is
-// when that spans at most 53 bits. Then every addition and subtraction of the sliding sum is
-// exact, whatever their order.
-bool GenomeTrackFixedBin::sums_exact(int lo_bit, int hi_bit, int64_t num_vals)
+// Whether every sum of up to num_vals floats with exponent fields in [lo_exp, hi_exp] is a double.
+// Such a float is a multiple of its unit in the last place, 2^(lo_exp - 150) at least, and below
+// 2^(hi_exp - 126), so the sum is a multiple of 2^(lo_exp - 150) below num_vals * 2^(hi_exp - 126):
+// a double when that spans at most 53 bits. Then every addition and subtraction of the sliding sum
+// is exact, whatever their order.
+MISHA_SLIDE_INLINE bool GenomeTrackFixedBin::sums_exact(int lo_exp, int hi_exp, int64_t num_vals)
 {
-	if (lo_bit > hi_bit)
+	if (lo_exp > hi_exp)
 		return true;
-	int log2n = 0;
-	while (log2n < 63 && ((int64_t)1 << log2n) < num_vals)
-		++log2n;
-	return (int64_t)hi_bit + 1 + log2n - lo_bit <= 53;
+	const int log2n = num_vals > 1 ? 64 - __builtin_clzll((unsigned long long)(num_vals - 1)) : 0;
+	return (int64_t)hi_exp - lo_exp + 24 + log2n <= 53;
 }
 
 // Moves the sliding state (window bins, sum, count and, if need_lse, the running LSE) by `drop`
@@ -258,25 +265,45 @@ bool GenomeTrackFixedBin::sums_exact(int lo_bit, int hi_bit, int64_t num_vals)
 // gives the same values to the bit (otherwise false is returned too): the count of values always;
 // the sum (need_exact_sum) only while every sum of the values since it was last computed afresh
 // is exact (sums_exact), as both are then the exact sum; the running LSE (need_lse) never, as it
-// rounds differently slid than computed afresh.
-bool GenomeTrackFixedBin::slide_window(int64_t drop, int64_t add, bool need_lse, bool need_exact_sum)
+// rounds differently slid than computed afresh. The exponent range is kept only while a sum is asked
+// for and still exact.
+MISHA_SLIDE_INLINE bool GenomeTrackFixedBin::slide_window(int64_t drop, int64_t add, bool need_lse, bool need_exact_sum)
 {
-	m_scratch_bin_vals.clear();
-	if (add && read_bins_bulk(m_lse_prev_ebin, add, m_scratch_bin_vals) != add)
+	if (drop != add && (need_lse || (need_exact_sum && !m_sum_exact)))
 		return false;
 
-	int lo_bit = m_sum_lo_bit;
-	int hi_bit = m_sum_hi_bit;
-	for (int64_t i = 0; i < add; ++i) {
-		if (!std::isnan(m_scratch_bin_vals[i]))
-			add_to_bit_range(m_scratch_bin_vals[i], lo_bit, hi_bit);
+	// the common step of one bin is read as read_next_bin reads it, the others in bulk
+	float one_val;
+	const float *new_vals = &one_val;
+	if (add == 1) {
+		if (m_cur_coord != m_lse_prev_ebin * m_bin_size)
+			goto_bin(m_lse_prev_ebin);
+		if (!read_next_bin(one_val))
+			return false;
+	} else if (add) {
+		m_scratch_bin_vals.clear();
+		if (read_bins_bulk(m_lse_prev_ebin, add, m_scratch_bin_vals) != add)
+			return false;
+		new_vals = m_scratch_bin_vals.data();
 	}
-	const bool exact = m_sum_exact && sums_exact(lo_bit, hi_bit, (int64_t)m_lse_window_bins.size() + add);
-	if (drop != add && (need_lse || (need_exact_sum && !exact)))
-		return false;
-	m_sum_lo_bit = lo_bit;
-	m_sum_hi_bit = hi_bit;
-	m_sum_exact = exact;
+
+	if (need_exact_sum && m_sum_exact) {
+		int lo_exp = m_sum_lo_exp;
+		int hi_exp = m_sum_hi_exp;
+		bool widened = false;
+		for (int64_t i = 0; i < add; ++i)
+			widened |= add_to_exp_range(new_vals[i], lo_exp, hi_exp);
+		// m_sum_exact covers up to twice the window's values, all that a step between windows of
+		// its size holds: such a step needs a new check only if the range widens
+		const int64_t window = m_lse_prev_ebin - m_lse_prev_sbin;
+		if (drop != add) {
+			if (!sums_exact(lo_exp, hi_exp, std::max(window + add, 2 * (window - drop + add))))
+				return false;
+		} else if (widened)
+			m_sum_exact = sums_exact(lo_exp, hi_exp, 2 * window);
+		m_sum_lo_exp = lo_exp;
+		m_sum_hi_exp = hi_exp;
+	}
 
 	for (int64_t i = 0; i < drop; ++i) {
 		float old_val = m_lse_window_bins.front();
@@ -290,7 +317,7 @@ bool GenomeTrackFixedBin::slide_window(int64_t drop, int64_t add, bool need_lse,
 	}
 
 	for (int64_t i = 0; i < add; ++i) {
-		float new_val = m_scratch_bin_vals[i];
+		float new_val = new_vals[i];
 		m_lse_window_bins.push_back(new_val);
 		if (!std::isnan(new_val)) {
 			kahan_add_to_sliding_sum(new_val);
@@ -424,13 +451,14 @@ void GenomeTrackFixedBin::read_interval_reducers_only(const GInterval &interval)
 		m_lse_window_bins.push_back(v);
 		if (!std::isnan(v)) {
 			kahan_add_to_sliding_sum(v);
-			add_to_bit_range(v, m_sum_lo_bit, m_sum_hi_bit);
+			if (need_sum)
+				add_to_exp_range(v, m_sum_lo_exp, m_sum_hi_exp);
 			++m_sliding_num_vs;
 			if (need_lse)
 				m_running_lse.push(v);
 		}
 	}
-	m_sum_exact = sums_exact(m_sum_lo_bit, m_sum_hi_bit, bins_read);
+	m_sum_exact = need_sum && sums_exact(m_sum_lo_exp, m_sum_hi_exp, 2 * bins_read);
 	m_running_lse_initialized = need_lse;
 
 	if (bins_read > 0) {
@@ -983,13 +1011,15 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 						m_lse_window_bins.push_back(bin_vals[i]);
 						if (!std::isnan(bin_vals[i])) {
 							kahan_add_to_sliding_sum(bin_vals[i]);
-							add_to_bit_range(bin_vals[i], m_sum_lo_bit, m_sum_hi_bit);
+							if (simple_sliding_compatible)
+								add_to_exp_range(bin_vals[i], m_sum_lo_exp, m_sum_hi_exp);
 							++m_sliding_num_vs;
 							if (has_function(LSE))
 								m_running_lse.push(bin_vals[i]);
 						}
 					}
-					m_sum_exact = sums_exact(m_sum_lo_bit, m_sum_hi_bit, bins_read);
+					// (only the simple sliding above slides the sum)
+					m_sum_exact = simple_sliding_compatible && sums_exact(m_sum_lo_exp, m_sum_hi_exp, 2 * bins_read);
 					m_running_lse_initialized = has_function(LSE);
 				}
 				m_lse_prev_sbin = sbin;

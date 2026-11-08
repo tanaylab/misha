@@ -1,6 +1,7 @@
 #ifndef TRACKNAMEINDEX_H_
 #define TRACKNAMEINDEX_H_
 
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -21,8 +22,9 @@ public:
 	explicit TrackNameIndex(SEXP names);
 
 	// The index of GTRACKS `gtracks`, kept between calls: rebuilt only when GTRACKS is another
-	// vector than the one indexed (it is replaced, not modified, when the track list changes).
-	static const TrackNameIndex &gtracks(SEXP gtracks);
+	// vector than the one indexed (it is replaced, not modified, when the track list changes). A
+	// caller that keeps the index while other code may ask for it again holds the pointer.
+	static std::shared_ptr<const TrackNameIndex> gtracks(SEXP gtracks);
 
 	// Positions (0-based) of `name` in the vector, or NULL
 	const std::vector<int> *find(const std::string &name) const;

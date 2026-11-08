@@ -77,3 +77,13 @@ test_that("gbins.summary keeps every bin pair when expr is named (2 dimensions)"
     expect_equal(dim(s_named), dim(s_positional))
     expect_equal(s_named, s_positional)
 })
+
+test_that("gbins.quantiles returns 0, not -0, for a zero quantile", {
+    res <- gbins.quantiles("test.fixedbin", c(0, 0.1, 0.2, 0.5, 1),
+        "as.numeric(ifelse(test.fixedbin > 0.1, -0, 0))",
+        percentiles = c(0, 0.5, 1), intervals = gintervals(c(1, 2), 0, 1e7)
+    )
+    vals <- as.vector(res)
+    expect_gt(sum(vals == 0, na.rm = TRUE), 0)
+    expect_true(all(1 / vals[vals == 0 & !is.na(vals)] == Inf))
+})

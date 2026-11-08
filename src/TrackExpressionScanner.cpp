@@ -1189,7 +1189,7 @@ for (unsigned ivar = 0; ivar < vars.get_num_track_vars(); ++ivar) {
 		if (find(track_names.begin(), track_names.end(), iter_val) == track_names.end()) {
 			if (Rf_isString(giterator)) {
 				SEXP all_track_names = find_in_misha(m_iu.get_env(), "GTRACKS");
-				if (Rf_isString(all_track_names) && !TrackNameIndex::gtracks(all_track_names).find(iter_val))
+				if (Rf_isString(all_track_names) && !TrackNameIndex::gtracks(all_track_names)->find(iter_val))
 					verror("Invalid iterator: %s is neither a name of a track nor a name of an intervals set", iter_val.c_str());
 			}
 			track_names.push_back(iter_val);

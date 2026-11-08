@@ -153,9 +153,12 @@ test_that("multitasking gquantiles matches the single process with ties, infinit
         "test.fixedbin * 0 + 2",
         "-test.fixedbin"
     )
-    for (e in exprs) {
+    for (e in c(exprs, "as.numeric(ifelse(test.fixedbin > 0.1, -0, 0))")) {
         serial <- withr::with_options(list(gmultitasking = FALSE), gquantiles(e, pcts, iv))
         parallel <- withr::with_options(list(gmultitasking = TRUE, gmax.processes = 8), gquantiles(e, pcts, iv))
-        expect_equal(unname(parallel), unname(serial), label = e)
+        # bit for bit: identical() alone takes -0 and 0 as equal
+        expect_true(identical(parallel, serial, num.eq = FALSE), label = e)
+        # a zero quantile is 0, not -0, whichever zeros the values hold
+        expect_true(all(1 / parallel[parallel == 0 & !is.na(parallel)] == Inf), label = e)
     }
 })

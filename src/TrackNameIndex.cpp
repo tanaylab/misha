@@ -24,25 +24,25 @@ TrackNameIndex::TrackNameIndex(SEXP names)
 	}
 }
 
-const TrackNameIndex &TrackNameIndex::gtracks(SEXP gtracks)
+shared_ptr<const TrackNameIndex> TrackNameIndex::gtracks(SEXP gtracks)
 {
 	// The indexed vector is kept from the GC while it is cached, so that another vector cannot be
 	// allocated at its address. R code does not modify it in place: find_in_misha() marks what it
 	// returns as not mutable.
-	static unique_ptr<TrackNameIndex> s_index;
+	static shared_ptr<const TrackNameIndex> s_index;
 	static SEXP s_indexed = NULL;
-	static const TrackNameIndex s_no_names(R_NilValue);
+	static const shared_ptr<const TrackNameIndex> s_no_names = make_shared<const TrackNameIndex>(R_NilValue);
 
 	if (!Rf_isString(gtracks))
 		return s_no_names;
 	if (!s_index || s_indexed != gtracks) {
-		s_index.reset(new TrackNameIndex(gtracks));
+		s_index = make_shared<const TrackNameIndex>(gtracks);
 		if (s_indexed)
 			R_ReleaseObject(s_indexed);
 		R_PreserveObject(gtracks);
 		s_indexed = gtracks;
 	}
-	return *s_index;
+	return s_index;
 }
 
 const vector<int> *TrackNameIndex::find(const string &name) const
