@@ -230,10 +230,9 @@
     "pymisha": "2e762e6a6a764b98"
   },
   "Parquet.cpp": {
-    "identical": false,
+    "identical": true,
     "misha": "d659cabf2cffeb71",
-    "needs_port": true,
-    "pymisha": "d8dfde4f082e5bf2"
+    "pymisha": "d659cabf2cffeb71"
   },
   "Parquet.h": {
     "identical": true,
