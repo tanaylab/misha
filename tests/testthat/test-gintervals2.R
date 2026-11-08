@@ -317,3 +317,25 @@ test_that("gintervals.load(chrom =) and gintervals.update() take a factor chrom 
     gintervals.update(set2, d2, chrom1 = "chr1", chrom2 = "chr2")
     expect_equal(gintervals.load(set2, chrom1 = "chr1", chrom2 = "chr2")$start1, 1)
 })
+
+test_that("gintervals.rbind keeps ordered and binds an all-NA logical column as rbind does", {
+    x <- data.frame(chrom = "chr1", start = 0, end = 10, v = ordered("p", levels = c("q", "p")))
+    y <- data.frame(chrom = "chr1", start = 20, end = 30, v = factor(NA))
+    expect_rbind_like_base(x, y)
+    expect_true(is.ordered(gintervals.rbind(x, y)$v))
+
+    # a column of NAs only (logical, as data.frame(v = NA) makes it) takes the other column's type
+    n <- data.frame(chrom = "chr1", start = 40, end = 50, v = NA)
+    for (other in list(factor("a"), "a", 5L, 2.5, as.Date("2020-01-01"), ordered("p", levels = c("q", "p")))) {
+        o <- data.frame(chrom = "chr1", start = 0, end = 10)
+        o$v <- other
+        expect_rbind_like_base(o, n)
+    }
+    r <- gintervals.rbind(n, data.frame(chrom = "chr1", start = 0, end = 10, v = factor("a")))
+    expect_equal(as.character(r$v), c(NA, "a"))
+    r <- gintervals.rbind(n, data.frame(chrom = "chr1", start = 0, end = 10, v = as.Date("2020-01-01")))
+    expect_equal(r$v, as.Date(c(NA, "2020-01-01")))
+    # a logical column with values is not untyped
+    l <- data.frame(chrom = "chr1", start = 40, end = 50, v = TRUE)
+    expect_error(gintervals.rbind(data.frame(chrom = "chr1", start = 0, end = 10, v = "a"), l), "column 'v'")
+})

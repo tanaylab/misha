@@ -358,6 +358,24 @@
         return(cols)
     }
     first <- cols[[1]]
+
+    # A column of NAs only, logical as R makes it (data.frame(x = NA)), takes the type of the
+    # others, as it does in rbind() after a typed first column
+    na_lgl <- vapply(cols, function(x) is.logical(x) && is.null(oldClass(x)) && all(is.na(x)), logical(1))
+    if (any(na_lgl) && !all(na_lgl)) {
+        typed <- cols[!na_lgl]
+        first <- typed[[1]]
+        if (any(vapply(typed, function(x) is.factor(x) || is.character(x), logical(1)))) {
+            cols[na_lgl] <- lapply(cols[na_lgl], as.character)
+        } else {
+            unified <- .grbind_unify_col(typed, idx[!na_lgl], name)
+            res <- vector("list", length(cols))
+            res[!na_lgl] <- unified
+            res[na_lgl] <- lapply(cols[na_lgl], function(x) unified[[1]][rep(NA_integer_, length(x))])
+            return(res)
+        }
+    }
+
     is_fac <- vapply(cols, is.factor, logical(1))
     is_chr <- vapply(cols, is.character, logical(1))
 
@@ -367,7 +385,10 @@
         if (!na_level) {
             levs <- levs[!is.na(levs)]
         }
-        cls <- if (all(vapply(cols[is_fac], is.ordered, logical(1)))) c("ordered", "factor") else "factor"
+        # ordered as rbind() makes it: the first factor and every other one that has levels
+        with_levels <- cols[is_fac][vapply(cols[is_fac], function(x) length(levels(x)) > 0, logical(1))]
+        ordered <- is.ordered(first) && all(vapply(with_levels, is.ordered, logical(1)))
+        cls <- if (ordered) c("ordered", "factor") else "factor"
         return(lapply(cols, function(x) {
             if (is.factor(x)) {
                 codes <- match(levels(x), levs)[unclass(x)]
@@ -396,10 +417,11 @@
     }
 
     describe <- function(x) if (is.factor(x)) "a factor" else if (is.object(x)) sprintf("%s (%s)", class(x)[1], typeof(x)) else class(x)[1]
-    other <- which(!vapply(cols, function(x) identical(class(x), class(first)) && typeof(x) == typeof(first), logical(1)))[1]
+    first_i <- which(!na_lgl)[1]
+    other <- which(!na_lgl & !vapply(cols, function(x) identical(class(x), class(first)) && typeof(x) == typeof(first), logical(1)))[1]
     stop(sprintf(
         "Cannot rbind objects: column '%s' is %s in object %d and %s in object %d",
-        name, describe(first), idx[1], describe(cols[[other]]), idx[other]
+        name, describe(first), idx[first_i], describe(cols[[other]]), idx[other]
     ), call. = FALSE)
 }
 
