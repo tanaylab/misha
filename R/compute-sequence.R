@@ -261,8 +261,8 @@ gseq.extract <- function(intervals = NULL, pad = FALSE) {
     ulens <- allgenome$end[match(as.character(.gchroms(uchroms)), as.character(allgenome$chrom))]
     chrom_lens <- ulens[match(chroms, uchroms)]
 
-    # rows with NA coordinates are left to gseqread, which rejects them
-    idx <- which(!is.na(starts) & !is.na(ends) & (starts < 0 | ends > chrom_lens))
+    # rows with NA, NaN or infinite coordinates are left to gseqread, which rejects them
+    idx <- which(is.finite(starts) & is.finite(ends) & (starts < 0 | ends > chrom_lens))
     if (!length(idx)) {
         return(.gcall("gseqread", intervals, .misha_env()))
     }

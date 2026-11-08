@@ -171,6 +171,23 @@ test_that("gseq.extract pad = TRUE still validates the intervals", {
     expect_error(gseq.extract(data.frame(chrom = chrom1, start = 0, end = 5), pad = "yes"), "pad must be TRUE or FALSE")
 })
 
+test_that("gseq.extract pad = TRUE rejects non-finite coordinates as pad = FALSE does", {
+    chrom1 <- as.character(gintervals.all()$chrom[1])
+    # alone (no row is padded) and next to a row that is padded
+    for (other in list(NULL, data.frame(chrom = chrom1, start = -5, end = 10))) {
+        bad <- function(start, end) rbind(other, data.frame(chrom = chrom1, start = start, end = end))
+        expect_error(gseq.extract(bad(-Inf, 10), pad = TRUE), "start coordinate must be greater or equal than zero")
+        expect_error(gseq.extract(bad(10, Inf), pad = TRUE), "start coordinate must be lesser than end coordinate")
+        expect_error(gseq.extract(bad(-Inf, Inf), pad = TRUE), "start coordinate must be greater or equal than zero")
+        expect_error(gseq.extract(bad(NA_real_, 10), pad = TRUE), "Invalid format of interval")
+        expect_error(gseq.extract(bad(-5, NaN), pad = TRUE), "Invalid format of interval")
+    }
+    expect_error(
+        gseq.extract(data.frame(chrom = chrom1, start = 10, end = Inf), pad = FALSE),
+        "start coordinate must be lesser than end coordinate"
+    )
+})
+
 test_that("gseq.extract pad = TRUE keeps the genome's lowercase and N, in both database formats", {
     local_db_state()
     # one FASTA per chromosome, named after it, as the per-chromosome format needs
