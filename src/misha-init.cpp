@@ -52,7 +52,7 @@ extern "C" {
     extern SEXP C_gscreen(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gscreen_multitask(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gsegment(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
-    extern SEXP gseqimport(SEXP, SEXP, SEXP);
+    extern SEXP gseqimport(SEXP, SEXP, SEXP, SEXP);
     extern SEXP gseq_multifasta_import(SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gseqread(SEXP, SEXP);
     extern SEXP gseq_validate_index(SEXP, SEXP);
@@ -182,7 +182,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"C_gscreen", (DL_FUNC)&C_gscreen, 6},
     {"gscreen_multitask", (DL_FUNC)&gscreen_multitask, 6},
     {"C_gsegment", (DL_FUNC)&C_gsegment, 8},
-    {"gseqimport", (DL_FUNC)&gseqimport, 3},
+    {"gseqimport", (DL_FUNC)&gseqimport, 4},
     {"gseq_multifasta_import", (DL_FUNC)&gseq_multifasta_import, 5},
     {"gseqread", (DL_FUNC)&gseqread, 2},
     {"gseq_validate_index", (DL_FUNC)&gseq_validate_index, 2},
