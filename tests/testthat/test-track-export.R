@@ -258,6 +258,36 @@ test_that("C++ formats rows in threads as in one thread, in the order given", {
     expect_identical(paste(got, collapse = ""), expected)
 })
 
+test_that("bedGraph lines whose threads cannot start are formatted in the calling thread", {
+    skip_on_cran()
+    skip_if_not(identical(Sys.info()[["sysname"]], "Linux"), "uses prlimit and ps -L")
+    skip_if(!nzchar(Sys.which("prlimit")) || !nzchar(Sys.which("ps")), "prlimit or ps is not available")
+    # in a child R that may not start more threads (RLIMIT_NPROC counts the threads of the user):
+    # a thread that cannot start used to abort R
+    script <- tempfile(fileext = ".R")
+    out <- tempfile()
+    withr::defer(unlink(c(script, out)))
+    writeLines(c(
+        sprintf(".libPaths(%s)", paste(deparse(.libPaths()), collapse = "")),
+        "suppressMessages(library(misha))",
+        "suppressMessages(gdb.init_examples())",
+        "options(gmax.processes = 8)",
+        "n <- 300000",
+        "chrom <- factor(rep(c('chr1', 'chr2'), each = n / 2))",
+        "start <- seq_len(n) * 10",
+        "vals <- seq_len(n) / 7",
+        "expected <- paste0(paste(chrom, sprintf('%.0f', start), sprintf('%.0f', start + 10), vals, sep = '\\t'), '\\n', collapse = '')",
+        "num <- as.integer(system('ps -L -u $(id -un) --no-headers | wc -l', intern = TRUE))",
+        "system(sprintf('prlimit --pid %d --nproc=%d:%d', Sys.getpid(), num, num))",
+        "res <- misha:::.gcall('gtrack_bedgraph_lines', chrom, start, start + 10, vals, NULL, 1, n, 0L, '.', misha:::.misha_env())",
+        sprintf("writeLines(as.character(identical(res[[1]], expected)), %s)", deparse(out))
+    ), script)
+    r <- shQuote(file.path(R.home("bin"), "R"))
+    status <- suppressWarnings(system2(r, c("--no-echo", "--no-restore", "-f", shQuote(script)), stdout = FALSE, stderr = FALSE, env = "R_TESTS="))
+    expect_identical(status, 0L)
+    expect_identical(readLines(out), "TRUE")
+})
+
 test_that("bedGraph export over intervals with no values writes the header only", {
     outfile <- tempfile(fileext = ".bedgraph")
     withr::defer(unlink(outfile))

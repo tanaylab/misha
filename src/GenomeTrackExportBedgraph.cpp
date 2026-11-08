@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <exception>
 #include <string>
 #include <thread>
 #include <vector>
@@ -361,30 +362,44 @@ SEXP gtrack_bedgraph_lines(SEXP _chrom, SEXP _start, SEXP _end, SEXP _value, SEX
 			num_threads = min<unsigned>({ hw ? hw : 1, (unsigned)max<uint64_t>(iu.get_max_processes(), 1), 8 });
 		}
 
+		// A part's exception (bad_alloc, say) is kept and raised here once every thread is joined:
+		// one escaping a thread, or a joinable thread destroyed while unwinding, would abort R
 		vector<string> parts(num_threads);
 		vector<char> bad(num_threads, 0);
+		vector<exception_ptr> errors(num_threads);
 		auto work = [&](unsigned t) {
-			R_xlen_t b = begin + (end - begin) * t / num_threads;
-			R_xlen_t e = begin + (end - begin) * (t + 1) / num_threads;
-			bool bad_row = false;
-			parts[t].reserve((e - b) * 40);
-			rows.append(parts[t], b, e, bad_row);
-			bad[t] = bad_row;
+			try {
+				R_xlen_t b = begin + (end - begin) * t / num_threads;
+				R_xlen_t e = begin + (end - begin) * (t + 1) / num_threads;
+				bool bad_row = false;
+				parts[t].reserve((e - b) * 40);
+				rows.append(parts[t], b, e, bad_row);
+				bad[t] = bad_row;
+			} catch (...) {
+				errors[t] = current_exception();
+			}
 		};
 
-		if (num_threads == 1)
-			work(0);
-		else {
-			vector<thread> threads;
+		// Parts 1.. in threads, as many as start (none if the process may not start more, e.g.
+		// under a limit of processes); this thread takes part 0 and the parts of the threads that
+		// did not start
+		vector<thread> threads;
+		try {
+			threads.reserve(num_threads - 1);
 			for (unsigned t = 1; t < num_threads; ++t)
 				threads.emplace_back(work, t);
-			work(0);
-			for (thread &th : threads)
-				th.join();
+		} catch (...) {
 		}
+		work(0);
+		for (unsigned t = threads.size() + 1; t < num_threads; ++t)
+			work(t);
+		for (thread &th : threads)
+			th.join();
 
 		uint64_t size = 0;
 		for (unsigned t = 0; t < num_threads; ++t) {
+			if (errors[t])
+				rethrow_exception(errors[t]);
 			if (bad[t])
 				verror("order holds a row out of range");
 			size += parts[t].size();
