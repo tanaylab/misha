@@ -1015,6 +1015,10 @@ double GenomeTrackFixedBin::last_min_pos() const
 
 int64_t GenomeTrackFixedBin::read_bins_bulk(int64_t start_bin, int64_t num_bins, std::vector<float> &vals)
 {
+	// a dependent object reads through its master and has no data of its own
+	if (m_master_obj)
+		return m_master_obj->read_bins_bulk(start_bin, num_bins, vals);
+
 	if (num_bins <= 0) {
 		vals.clear();
 		return 0;

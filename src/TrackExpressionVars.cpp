@@ -2268,6 +2268,50 @@ void TrackExpressionVars::set_vars(unsigned idx)
 }
 
 
+bool TrackExpressionVars::dense_tracks_only() const
+{
+	if (!m_interv_vars.empty() || !m_value_vars.empty())
+		return false;
+
+	for (const Track_var &var : m_track_vars) {
+		if (var.val_func != Track_var::REG || var.requires_pv || var.filter)
+			return false;
+
+		const Track_n_imdf &track_n_imdf = *var.track_n_imdf;
+		if (var.var_name != track_n_imdf.name || track_n_imdf.type != GenomeTrack::FIXED_BIN ||
+			track_n_imdf.imdf1d || track_n_imdf.imdf2d || !track_n_imdf.slice.empty())
+			return false;
+	}
+	return true;
+}
+
+void TrackExpressionVars::set_vars_bins(const GInterval &interval, int64_t first_bin, unsigned num_bins, unsigned idx)
+{
+	if (m_interval1d.chromid != interval.chromid)
+		start_chrom(interval);
+
+	m_interval1d = interval;
+
+	for (Track_var &var : m_track_vars) {
+		int64_t num_read = 0;
+
+		try {
+			num_read = ((GenomeTrackFixedBin *)var.track_n_imdf->track.get())->read_bins_bulk(first_bin, num_bins, m_bin_vals);
+		} catch (TGLException &e) {
+			verror("%s", e.msg());
+		}
+
+		// The value read_interval() gives for one bin (read_interval_single_function, AVG) is
+		// (float)(0. + v): NaN for a stored NaN or inf, and -0 becomes 0. A bin past the end of
+		// the data is NaN.
+		double *vals = var.var + idx;
+		for (int64_t i = 0; i < num_read; ++i)
+			vals[i] = std::isnan(m_bin_vals[i]) ? numeric_limits<float>::quiet_NaN() : 0. + m_bin_vals[i];
+		for (int64_t i = num_read; i < (int64_t)num_bins; ++i)
+			vals[i] = numeric_limits<float>::quiet_NaN();
+	}
+}
+
 std::vector<std::pair<int64_t, int64_t>> TrackExpressionVars::seq_read_offsets() const
 {
 	std::vector<std::pair<int64_t, int64_t>> offs;

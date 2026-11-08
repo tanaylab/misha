@@ -304,6 +304,7 @@ bool TrackExprScanner::begin(const vector<string> &track_exprs, GIntervalsFetche
 	m_eval_buf_size = 0;
 	m_expr_itr_scope_idx.resize(m_eval_buf_limit, -1);
 	m_expr_itr_scope_chrom_idx.resize(m_eval_buf_limit, -1);
+	m_bulk_bins = can_fill_bins_bulk();
 
 	return next();
 }
@@ -341,33 +342,18 @@ bool TrackExprScanner::eval_next()
 	if (m_eval_buf_idx >= m_eval_buf_limit) {
 		m_eval_buf_idx = 0;
 		if (m_expr_itr->is_1d()) {
-			for (m_eval_buf_size = 0; m_eval_buf_size < m_eval_buf_limit; ++m_eval_buf_size) {
-                if (m_expr_itr->isend()) {
-					// Pad the remainder with sentinel values so R-side vectors remain valid
-					for (unsigned i = m_eval_buf_size; i < m_eval_buf_limit; ++i) {
-                        m_1d.expr_itr_intervals_chroms[i] = 1;
-                        m_1d.expr_itr_intervals_starts[i] = -1.;
-                        m_1d.expr_itr_intervals_ends[i] = -1.;
-                    }
-                    break;
-                }
+			if (m_bulk_bins)
+				fill_bins_bulk();
+			else {
+				for (m_eval_buf_size = 0; m_eval_buf_size < m_eval_buf_limit && !m_expr_itr->isend(); ++m_eval_buf_size)
+					fill_slot1d(m_eval_buf_size);
+			}
 
-                const GInterval &interval = ((TrackExpression1DIterator *)m_expr_itr)->last_interval();
-
-                m_1d.expr_itr_intervals[m_eval_buf_size] = interval;
-                m_1d.expr_itr_scope_intervals[m_eval_buf_size] = ((TrackExpression1DIterator *)m_expr_itr)->last_scope_interval();
-                m_1d.expr_itr_intervals_chroms[m_eval_buf_size] = interval.chromid + 1;
-                m_1d.expr_itr_intervals_starts[m_eval_buf_size] = (double)interval.start;
-                m_1d.expr_itr_intervals_ends[m_eval_buf_size] = (double)interval.end;
-                m_1d.cur_chromid = interval.chromid;
-
-                m_expr_itr_scope_idx[m_eval_buf_size] = ((TrackExpression1DIterator *)m_expr_itr)->get_cur_scope_idx();
-                m_expr_itr_scope_chrom_idx[m_eval_buf_size] = ((TrackExpression1DIterator *)m_expr_itr)->get_cur_scope_chrom_idx();
-				// Publish iterator-derived variables for this slot so expressions can use them
-				if (m_row_subs)
-					m_expr_vars.set_substitution((*m_row_subs)[((TrackExpression1DIterator *)m_expr_itr)->get_cur_scope_idx()]);
-				m_expr_vars.set_vars(interval, m_eval_buf_size);
-                m_expr_itr->next();
+			// Pad the remainder with sentinel values so R-side vectors remain valid
+			for (unsigned i = m_eval_buf_size; i < m_eval_buf_limit; ++i) {
+				m_1d.expr_itr_intervals_chroms[i] = 1;
+				m_1d.expr_itr_intervals_starts[i] = -1.;
+				m_1d.expr_itr_intervals_ends[i] = -1.;
 			}
 		}
 		else {
@@ -443,6 +429,124 @@ bool TrackExprScanner::eval_next()
 	}
 
 	return !m_isend;
+}
+
+// Fills slot idx of the 1D buffers from the iterator's current interval and moves the iterator on.
+void TrackExprScanner::fill_slot1d(unsigned idx)
+{
+	const GInterval &interval = ((TrackExpression1DIterator *)m_expr_itr)->last_interval();
+
+	m_1d.expr_itr_intervals[idx] = interval;
+	m_1d.expr_itr_scope_intervals[idx] = ((TrackExpression1DIterator *)m_expr_itr)->last_scope_interval();
+	m_1d.expr_itr_intervals_chroms[idx] = interval.chromid + 1;
+	m_1d.expr_itr_intervals_starts[idx] = (double)interval.start;
+	m_1d.expr_itr_intervals_ends[idx] = (double)interval.end;
+	m_1d.cur_chromid = interval.chromid;
+
+	m_expr_itr_scope_idx[idx] = ((TrackExpression1DIterator *)m_expr_itr)->get_cur_scope_idx();
+	m_expr_itr_scope_chrom_idx[idx] = ((TrackExpression1DIterator *)m_expr_itr)->get_cur_scope_chrom_idx();
+	// Publish iterator-derived variables for this slot so expressions can use them
+	if (m_row_subs)
+		m_expr_vars.set_substitution((*m_row_subs)[((TrackExpression1DIterator *)m_expr_itr)->get_cur_scope_idx()]);
+	m_expr_vars.set_vars(interval, idx);
+	m_expr_itr->next();
+}
+
+// With a fixed-bin iterator whose bin size is that of every track, and only dense tracks named
+// as is in the expressions (TrackExpressionVars::dense_tracks_only), every iterator interval lies
+// in one bin and takes its value. fill_bins_bulk() then fills a run of bins with one read per
+// track, not a read_interval() per interval and track. options(gdense.bulk.read = FALSE) turns
+// this off, so that tests can compare the two.
+bool TrackExprScanner::can_fill_bins_bulk() const
+{
+	if (m_rows || m_row_subs || m_expr_itr->get_type() != TrackExpressionIteratorBase::FIXED_BIN)
+		return false;
+
+	const TrackExpressionFixedBinIterator *itr = dynamic_cast<const TrackExpressionFixedBinIterator *>(m_expr_itr);
+	if (!itr || !m_expr_vars.dense_tracks_only())
+		return false;
+
+	SEXP opt = Rf_GetOption1(Rf_install("gdense.bulk.read"));
+	if (!Rf_isNull(opt) && Rf_asLogical(opt) == 0)
+		return false;
+
+	for (unsigned ivar = 0; ivar < m_expr_vars.get_num_track_vars(); ++ivar) {
+		auto ibinsize = m_dense_bin_sizes.find(m_expr_vars.get_track_name(ivar));
+		if (ibinsize == m_dense_bin_sizes.end() || (int64_t)ibinsize->second != itr->get_bin_size())
+			return false;
+	}
+	return true;
+}
+
+// Fills the 1D buffers as fill_slot1d() would, a run of bins of one scope interval at a time:
+// the intervals are clipped to the scope interval as TrackExpressionFixedBinIterator::next() clips
+// them, and the values come from TrackExpressionVars::set_vars_bins().
+void TrackExprScanner::fill_bins_bulk()
+{
+	TrackExpressionFixedBinIterator &itr = *(TrackExpressionFixedBinIterator *)m_expr_itr;
+	const int64_t binsize = itr.get_bin_size();
+
+	m_eval_buf_size = 0;
+	while (m_eval_buf_size < m_eval_buf_limit && !itr.isend()) {
+		const int64_t first_bin = itr.get_cur_bin();
+		const int64_t num_bins = min(itr.get_end_bin() - first_bin, (int64_t)(m_eval_buf_limit - m_eval_buf_size));
+
+		// only an empty scope interval has no bins: its interval is filled as the per-interval code fills it
+		if (num_bins <= 0) {
+			fill_slot1d(m_eval_buf_size++);
+			continue;
+		}
+
+		// The intervals are written member by member from locals: copying a struct whose members
+		// were just written (as the iterator writes m_last_interval) stalls each copy on store
+		// forwarding, which took a third of a 1 bp scan.
+		const GInterval &scope_interval = itr.last_scope_interval();
+		const GInterval &cur_interval = itr.last_interval();
+		const int chromid = cur_interval.chromid;
+		const char strand = cur_interval.strand;
+		void *const udata = cur_interval.udata;
+		const int scope_chromid = scope_interval.chromid;
+		const int64_t scope_start = scope_interval.start;
+		const int64_t scope_end = scope_interval.end;
+		const char scope_strand = scope_interval.strand;
+		void *const scope_udata = scope_interval.udata;
+		const int64_t scope_idx = itr.get_cur_scope_idx();
+		const int64_t scope_chrom_idx = itr.get_cur_scope_chrom_idx();
+
+		const unsigned first = m_eval_buf_size;
+		GInterval *intervals = &m_1d.expr_itr_intervals[first];
+		GInterval *scope_intervals = &m_1d.expr_itr_scope_intervals[first];
+		double *starts = m_1d.expr_itr_intervals_starts + first;
+		double *ends = m_1d.expr_itr_intervals_ends + first;
+		int64_t coord = first_bin * binsize;
+
+		for (int64_t i = 0; i < num_bins; ++i, coord += binsize) {
+			const int64_t start = max(coord, scope_start);
+			const int64_t end = min(coord + binsize, scope_end);
+
+			intervals[i].start = start;
+			intervals[i].end = end;
+			intervals[i].chromid = chromid;
+			intervals[i].strand = strand;
+			intervals[i].udata = udata;
+			scope_intervals[i].start = scope_start;
+			scope_intervals[i].end = scope_end;
+			scope_intervals[i].chromid = scope_chromid;
+			scope_intervals[i].strand = scope_strand;
+			scope_intervals[i].udata = scope_udata;
+			starts[i] = (double)start;
+			ends[i] = (double)end;
+		}
+		fill_n(m_1d.expr_itr_intervals_chroms + first, num_bins, chromid + 1);
+		fill_n(m_expr_itr_scope_idx.begin() + first, num_bins, scope_idx);
+		fill_n(m_expr_itr_scope_chrom_idx.begin() + first, num_bins, scope_chrom_idx);
+		m_1d.cur_chromid = chromid;
+
+		const GInterval &interval = intervals[num_bins - 1];
+		m_expr_vars.set_vars_bins(interval, first_bin, (unsigned)num_bins, m_eval_buf_size);
+		m_eval_buf_size += num_bins;
+		itr.advance(num_bins);
+	}
 }
 
 void TrackExprScanner::report_progress()
@@ -1059,6 +1163,8 @@ TrackExpressionIteratorBase *TrackExprScanner::create_expr_iterator(SEXP giterat
 	int common_track_type = -1;
 	int common_binsize = -1;
 
+	m_dense_bin_sizes.clear();
+
 	// Read-only lookup of per-chrom sizes; using the cached const ref avoids
 	// a per-call O(num_contigs) copy that adds up across multitask kids on
 	// large-contig genomes.
@@ -1176,6 +1282,7 @@ for (unsigned ivar = 0; ivar < vars.get_num_track_vars(); ++ivar) {
 							common_track_type = -1;
 					}
 					if (track_type == GenomeTrack::FIXED_BIN) {
+						m_dense_bin_sizes[*itrack_name] = bin_size;
 						if (Rf_isString(giterator)) {
 							if (*itrack_name == CHAR(STRING_ELT(giterator, 0)))
 								common_binsize = (int)bin_size;
@@ -1263,6 +1370,7 @@ for (unsigned ivar = 0; ivar < vars.get_num_track_vars(); ++ivar) {
 
 						if (track_type == GenomeTrack::FIXED_BIN) {
 							binsize = gtrack_fbin.get_bin_size();
+							m_dense_bin_sizes[*itrack_name] = binsize;
 
 							if (Rf_isString(giterator)) {
 								if (*itrack_name == CHAR(STRING_ELT(giterator, 0)))
