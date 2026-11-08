@@ -77,6 +77,41 @@ test_that("gtrack.2d.import_contacts reads a fends file not sorted by fend id", 
     expect_false(gtrack.exists("neg_fend"))
 })
 
+test_that("gtrack.2d.import_contacts takes memory by the number of fends, not by the largest fend id", {
+    skip_if_not(identical(Sys.info()[["sysname"]], "Linux"), "uses ulimit -v of a Linux shell")
+    db <- import_test_db("indexed")
+
+    big_ids <- c(2147483000, 2147483001, 1e9, 5)
+    fends_text <- function(ids) {
+        paste0("fend\tchr\tcoord\n", paste0(sprintf("%.0f", ids), "\t", c("chr1", "chr1", "chr2", "chrX"), "\t", c(1000, 2000, 300, 40), collapse = "\n"), "\n")
+    }
+    contacts_text <- function(ids) {
+        pairs <- rbind(c(1, 2, 3), c(1, 3, 4), c(2, 4, 1), c(3, 4, 2))
+        paste0("fend1\tfend2\tcount\n", paste0(sprintf("%.0f", ids[pairs[, 1]]), "\t", sprintf("%.0f", ids[pairs[, 2]]), "\t", pairs[, 3], collapse = "\n"), "\n")
+    }
+    gtrack.2d.import_contacts("small_ids", "", write_file(contacts_text(1:4), ".tsv"), write_file(fends_text(1:4), ".tsv"))
+
+    # in a process limited to 3 GB of address space: arrays indexed by the fend id would take 24 GB
+    fends <- write_file(fends_text(big_ids), ".tsv")
+    contacts <- write_file(contacts_text(big_ids), ".tsv")
+    script <- tempfile(fileext = ".R")
+    writeLines(c(
+        sprintf(".libPaths(%s)", paste(deparse(.libPaths()), collapse = "")),
+        "suppressMessages(library(misha))",
+        sprintf("suppressMessages(gsetroot(%s))", deparse(db)),
+        "options(gmultitasking = FALSE)",
+        sprintf("gtrack.2d.import_contacts('big_ids', '', %s, %s)", deparse(contacts), deparse(fends))
+    ), script)
+    r <- shQuote(file.path(R.home("bin"), "R"))
+    out <- suppressWarnings(system2("sh", c("-c", shQuote(sprintf("ulimit -v 3000000 && %s --no-echo --no-restore -f %s 2>&1", r, shQuote(script)))),
+        stdout = TRUE, env = "R_TESTS="
+    ))
+    expect_null(attr(out, "status"), label = paste(out, collapse = "\n"))
+
+    gdb.reload()
+    expect_identical(gextract("big_ids", gintervals.2d.all(), colnames = "v"), gextract("small_ids", gintervals.2d.all(), colnames = "v"))
+})
+
 test_that("gtrack.create_dense validates the intervals as gtrack.create_sparse does", {
     import_test_db("indexed")
 
