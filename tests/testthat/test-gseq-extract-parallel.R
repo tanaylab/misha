@@ -152,3 +152,25 @@ test_that("gseq.extract multitasking still enforces gmax.data.size", {
     expect_match(parallel_err, "gmax.data.size")
     expect_match(sequential_err, "Result sequence size")
 })
+
+test_that("gseq.extract pad = TRUE multitasking matches sequential", {
+    set.seed(7)
+    sizes <- gintervals.all()
+    n <- 2000
+    w <- 1000
+    i <- sample(nrow(sizes), n, replace = TRUE)
+    centers <- floor(runif(n) * sizes$end[i])
+    # some windows on a chromosome end, a few wholly outside it
+    edge <- sample(n, 400)
+    centers[edge] <- ifelse(runif(400) < 0.5, 0, sizes$end[i][edge])
+    outside <- sample(setdiff(seq_len(n), edge), 20)
+    centers[outside] <- ifelse(runif(20) < 0.5, -5 * w, sizes$end[i][outside] + 5 * w)
+    intervs <- data.frame(
+        chrom = as.character(sizes$chrom[i]), start = centers - w / 2, end = centers + w / 2,
+        strand = sample(c(-1L, 1L), n, replace = TRUE)
+    )
+    seqs <- withr::with_options(parallel_opts(), gseq.extract(intervs, pad = TRUE))
+    expect_identical(seqs, withr::with_options(list(gmultitasking = FALSE), gseq.extract(intervs, pad = TRUE)))
+    expect_true(all(nchar(seqs) == w))
+    expect_identical(seqs[outside], rep(strrep("N", w), 20))
+})
