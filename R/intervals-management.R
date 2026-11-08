@@ -588,7 +588,7 @@ gintervals.update <- function(intervals.set = NULL, intervals = "", chrom = NULL
             if (is.null(chrom)) {
                 stop("chrom parameter is not specified", call. = FALSE)
             }
-            idx <- which(stats$chrom == chrom)
+            idx <- which(as.character(stats$chrom) == as.character(chrom))
             if (length(idx) > 0) {
                 stats <- stats[-idx, ]
             }
@@ -606,7 +606,7 @@ gintervals.update <- function(intervals.set = NULL, intervals = "", chrom = NULL
             if (is.null(chrom1) || is.null(chrom2)) {
                 stop("chrom1 and chrom2 parameters must be specified", call. = FALSE)
             }
-            idx <- which(stats$chrom1 == chrom1 & stats$chrom2 == chrom2)
+            idx <- which(as.character(stats$chrom1) == as.character(chrom1) & as.character(stats$chrom2) == as.character(chrom2))
             if (length(idx) > 0) {
                 stats <- stats[-idx, ]
             }
@@ -655,7 +655,7 @@ gintervals.update <- function(intervals.set = NULL, intervals = "", chrom = NULL
             if (is.null(chrom)) {
                 stop("chrom parameter is not specified", call. = FALSE)
             }
-            idx <- which(tgt.intervals$chrom == chrom)
+            idx <- which(as.character(tgt.intervals$chrom) == as.character(chrom))
             if (length(idx) > 0) {
                 tgt.intervals <- tgt.intervals[-idx, ]
             }
@@ -667,7 +667,7 @@ gintervals.update <- function(intervals.set = NULL, intervals = "", chrom = NULL
             if (is.null(chrom1) || is.null(chrom2)) {
                 stop("chrom1 and chrom2 parameters must be specified", call. = FALSE)
             }
-            idx <- which(tgt.intervals$chrom1 == chrom1 & tgt.intervals$chrom2 == chrom2)
+            idx <- which(as.character(tgt.intervals$chrom1) == as.character(chrom1) & as.character(tgt.intervals$chrom2) == as.character(chrom2))
             if (length(idx) > 0) {
                 tgt.intervals <- tgt.intervals[-idx, ]
             }

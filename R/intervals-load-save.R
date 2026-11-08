@@ -552,19 +552,19 @@
 
             if (nrow(res) > 0) {
                 if (!is.null(chrom)) {
-                    res <- res[res$chrom == chrom, ]
+                    res <- res[as.character(res$chrom) == as.character(chrom), ]
                     if (nrow(res)) {
                         rownames(res) <- seq_len(nrow(res))
                     }
                 }
                 if (!is.null(chrom1)) {
-                    res <- res[res$chrom1 == chrom1, ]
+                    res <- res[as.character(res$chrom1) == as.character(chrom1), ]
                     if (nrow(res)) {
                         rownames(res) <- seq_len(nrow(res))
                     }
                 }
                 if (!is.null(chrom2)) {
-                    res <- res[res$chrom2 == chrom2, ]
+                    res <- res[as.character(res$chrom2) == as.character(chrom2), ]
                     if (nrow(res)) {
                         rownames(res) <- seq_len(nrow(res))
                     }

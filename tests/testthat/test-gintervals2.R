@@ -298,3 +298,22 @@ test_that("gintervals.rbind refuses columns of different types with an R error",
     expect_identical(.glifetime_counters(), c(ref_count = 0L, protect_count = 0L))
 })
 
+test_that("gintervals.load(chrom =) and gintervals.update() take a factor chrom with some of the levels", {
+    df <- data.frame(chrom = factor(c("chr1", "chr1")), start = c(5, 50), end = c(10, 60))
+    expect_equal(gintervals.load(df, chrom = "chr1")$start, c(5, 50))
+
+    set <- paste0("test.tmpupdate_", sample(1:1e9, 1))
+    withr::defer(gintervals.rm(set, force = TRUE))
+    gintervals.save(set, gintervals(c(1, 2), 0, 100))
+    gintervals.update(set, df, chrom = "chr1")
+    r <- gintervals.load(set)
+    expect_equal(as.character(r$chrom), c("chr1", "chr1", "chr2"))
+    expect_equal(r$start, c(5, 50, 0))
+
+    d2 <- data.frame(chrom1 = factor("chr1"), start1 = 1, end1 = 5, chrom2 = factor("chr2"), start2 = 1, end2 = 5)
+    set2 <- paste0("test.tmpupdate_", sample(1:1e9, 1))
+    withr::defer(gintervals.rm(set2, force = TRUE))
+    gintervals.save(set2, gintervals.2d(c(1, 2), 0, 100, c(2, 2), 0, 50))
+    gintervals.update(set2, d2, chrom1 = "chr1", chrom2 = "chr2")
+    expect_equal(gintervals.load(set2, chrom1 = "chr1", chrom2 = "chr2")$start1, 1)
+})
