@@ -225,3 +225,95 @@ test_that("gintervals.update removes chrom1 2 and chrom2 2 from saved 2d data", 
     result <- list(gintervals.load(temp_track_name, chrom1 = 2, chrom2 = 2), gintervals.chrom_sizes(temp_track_name))
     expect_regression(result, "gintervals.update.2d.4")
 })
+
+# gintervals.rbind() gives the columns base rbind() gives: values, types and factor levels
+expect_rbind_like_base <- function(...) {
+    expect_identical(as.list(gintervals.rbind(...)), as.list(rbind(...)))
+}
+
+test_that("gintervals.rbind binds factors with different levels by their values", {
+    a <- data.frame(chrom = factor("chr2"), start = 0, end = 100)
+    b <- data.frame(chrom = factor("chr1"), start = 500, end = 600)
+    expect_equal(as.character(gintervals.rbind(a, b)$chrom), c("chr2", "chr1"))
+    expect_rbind_like_base(a, b)
+
+    # an extra factor column of saved sets: their chrom column is normalized on save, this one is not
+    a$name <- factor("x")
+    b$name <- factor("y")
+    set_a <- paste0("test.tmprbind_", sample(1:1e9, 1))
+    set_b <- paste0("test.tmprbind_", sample(1:1e9, 1))
+    withr::defer({
+        gintervals.rm(set_a, force = TRUE)
+        gintervals.rm(set_b, force = TRUE)
+    })
+    gintervals.save(set_a, a)
+    gintervals.save(set_b, b)
+    expect_equal(as.character(gintervals.rbind(set_a, set_b)$name), c("x", "y"))
+})
+
+test_that("gintervals.rbind binds a factor with a character column and an integer with a double one", {
+    fac <- gintervals("chr1", 0, 10)
+    chr <- data.frame(chrom = "chr1", start = 5L, end = 20L)
+    r <- gintervals.rbind(fac, chr)
+    expect_equal(as.character(r$chrom), c("chr1", "chr1"))
+    expect_identical(r$start, c(0, 5))
+    expect_rbind_like_base(fac, chr)
+    expect_rbind_like_base(chr, fac)
+    expect_identical(.glifetime_counters(), c(ref_count = 0L, protect_count = 0L))
+})
+
+test_that("gintervals.rbind matches rbind on factor and character columns with NA", {
+    set.seed(17)
+    chroms <- c("chr1", "chr2", "chrX")
+    random_frame <- function() {
+        n <- sample(1:4, 1)
+        d <- data.frame(
+            chrom = sample(chroms, n, replace = TRUE), start = seq_len(n) * 10, end = seq_len(n) * 10 + 5,
+            lab = sample(c("p", "q", "r", NA), n, replace = TRUE)
+        )
+        if (runif(1) < 0.7) {
+            d$chrom <- factor(d$chrom, levels = sample(chroms))
+        }
+        kind <- sample(c("character", "factor", "factor with an NA level"), 1)
+        if (kind == "factor") {
+            d$lab <- factor(d$lab, levels = sample(c("p", "q", "r", "s")))
+        } else if (kind == "factor with an NA level") {
+            d$lab <- factor(d$lab, exclude = NULL)
+        }
+        if (runif(1) < 0.5) {
+            d$start <- as.integer(d$start)
+        }
+        d
+    }
+    for (i in 1:200) {
+        objs <- replicate(sample(2:4, 1), random_frame(), simplify = FALSE)
+        expect_identical(as.list(do.call(gintervals.rbind, objs)), as.list(do.call(rbind, objs)), info = i)
+    }
+})
+
+test_that("gintervals.rbind refuses columns of different types with an R error", {
+    a <- data.frame(chrom = "chr1", start = 0, end = 10, x = 1)
+    b <- data.frame(chrom = "chr1", start = 5, end = 20, x = "a")
+    expect_error(gintervals.rbind(a, b), "column 'x' is numeric in object 1 and character in object 2")
+    expect_identical(.glifetime_counters(), c(ref_count = 0L, protect_count = 0L))
+})
+
+test_that("gintervals.load(chrom =) and gintervals.update() take a factor chrom with some of the levels", {
+    df <- data.frame(chrom = factor(c("chr1", "chr1")), start = c(5, 50), end = c(10, 60))
+    expect_equal(gintervals.load(df, chrom = "chr1")$start, c(5, 50))
+
+    set <- paste0("test.tmpupdate_", sample(1:1e9, 1))
+    withr::defer(gintervals.rm(set, force = TRUE))
+    gintervals.save(set, gintervals(c(1, 2), 0, 100))
+    gintervals.update(set, df, chrom = "chr1")
+    r <- gintervals.load(set)
+    expect_equal(as.character(r$chrom), c("chr1", "chr1", "chr2"))
+    expect_equal(r$start, c(5, 50, 0))
+
+    d2 <- data.frame(chrom1 = factor("chr1"), start1 = 1, end1 = 5, chrom2 = factor("chr2"), start2 = 1, end2 = 5)
+    set2 <- paste0("test.tmpupdate_", sample(1:1e9, 1))
+    withr::defer(gintervals.rm(set2, force = TRUE))
+    gintervals.save(set2, gintervals.2d(c(1, 2), 0, 100, c(2, 2), 0, 50))
+    gintervals.update(set2, d2, chrom1 = "chr1", chrom2 = "chr2")
+    expect_equal(gintervals.load(set2, chrom1 = "chr1", chrom2 = "chr2")$start1, 1)
+})

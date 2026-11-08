@@ -1,4 +1,20 @@
 .gcall <- function(...) {
+    # The number of misha calls running in this process (this one not counted): above zero, this
+    # call is nested in another one, made by R code that the outer call runs (a track expression,
+    # the FUN of gintervals.mapply), in the parent or in one of its kids. Kept in R, and restored
+    # by on.exit, so that an error raised inside a .Call cannot leave it stuck: such an error is a
+    # longjmp that skips ~RdbInitializer, which leaves the C++ counters above zero (and the umask,
+    # the signal handlers and the multitasking state in the shape that call left them). From
+    # 5.16.0 that turned every later call of the session serial. A call made at depth zero has no
+    # misha frame below it - every entry point that evaluates R code is reached through here - so
+    # C_lifetime_repair() puts back what the leaked scope did not before the call starts.
+    depth <- .gcall_depth()
+    if (depth == 0L) {
+        .Call("C_lifetime_repair")
+    }
+    on.exit(assign(".GCALL_DEPTH", depth, envir = .misha), add = TRUE)
+    assign(".GCALL_DEPTH", depth + 1L, envir = .misha)
+
     # C++ cannot raise a warning or a message itself: a caller that catches either with
     # an exiting handler (tryCatch, or options(warn = 2)) would longjmp out of the C
     # frame and leave misha's PROTECT counter inflated. Diagnostics are appended to
@@ -139,6 +155,11 @@
     .Call("C_lifetime_counters")
 }
 
+# The number of .gcall()s running in this process (see .gcall)
+.gcall_depth <- function() {
+    get0(".GCALL_DEPTH", envir = .misha, inherits = FALSE, ifnotfound = 0L)
+}
+
 .misha_env <- function() {
     e <- new.env(parent = parent.frame(2))
     assign(".misha", .misha, envir = e)
@@ -179,8 +200,10 @@
         }
         # A misha call made by R code that another misha call runs (the FUN of
         # gintervals.mapply, a track expression), in the parent or in one of its kids, runs
-        # serially: forking would reuse the outer call's shared memory and kid slots.
-        if (.glifetime_counters()[["ref_count"]] > 0) {
+        # serially: forking would reuse the outer call's shared memory and kid slots. Told by
+        # .gcall()'s depth, not by RdbInitializer's ref_count, which a scope that ended through a
+        # longjmp leaves above zero until the next call repairs it.
+        if (.gcall_depth() > 0L) {
             val <- FALSE
         }
     }
@@ -232,7 +255,7 @@
         if (is.null(substitute(x))) {
             NULL
         } else {
-            str <- deparse(substitute(x), width.cutoff = 500)[1]
+            str <- deparse(substitute(x), width.cutoff = 500, nlines = 1)
             gsub("^\"(.*)\"$", "\\1", str, perl = TRUE)
         }
     } else {
@@ -270,16 +293,130 @@
         stop("Cannot rbind objects: columns differ", call. = FALSE)
     }
 
+    if (length(objs) > 1) {
+        objs <- .grbind_unify_cols(objs)
+    }
     .gcall("grbind", objs, .misha_env())
 }
 
+# The C++ grbind fills each column of the result with the values of every object as they are
+# stored, in a column made like the first object's: a factor's level codes would be read with the
+# first object's levels (rows silently got another chromosome, or another label), and a column of
+# another type ended in an R error inside the .Call. So each column is given one type here first,
+# the one base rbind() gives it:
+#   - factors, and characters bound to a factor, become one factor whose levels are those of the
+#     factors and the values of the characters, in the order met (NA is a level only when a factor
+#     has it);
+#   - factors bound to a character column become characters;
+#   - logical, integer and double columns become the widest of them.
+# Other columns whose types differ (a number and a string, a Date and a number) are an error. As in
+# rbind(), objects with no rows take no part in the choice when another object has rows; they get
+# an empty column of the chosen type.
+.grbind_unify_cols <- function(objs) {
+    nrows <- vapply(objs, function(obj) .row_names_info(obj, 2L), integer(1))
+    donors <- if (any(nrows > 0L)) which(nrows > 0L) else seq_along(objs)
+    for (j in seq_along(objs[[1]])) {
+        cols <- lapply(objs, .subset2, j)
+        if (.grbind_same_type(cols)) {
+            next
+        }
+        unified <- .grbind_unify_col(cols[donors], donors, names(objs[[1]])[j])
+        for (i in setdiff(seq_along(objs), donors)) {
+            objs[[i]][[j]] <- unified[[1]][0]
+        }
+        for (k in seq_along(donors)) {
+            objs[[donors[k]]][[j]] <- unified[[k]]
+        }
+    }
+    objs
+}
+
+# TRUE when the columns have one type, one class and (factors) one set of levels
+.grbind_same_type <- function(cols) {
+    first <- cols[[1]]
+    type <- typeof(first)
+    cls <- oldClass(first)
+    levs <- if (is.factor(first)) levels(first)
+    for (x in cols[-1]) {
+        if (typeof(x) != type || !identical(oldClass(x), cls) || (!is.null(levs) && !identical(levels(x), levs))) {
+            return(FALSE)
+        }
+    }
+    TRUE
+}
+
+# cols: the column of each object that has rows, idx: the positions of these objects
+.grbind_unify_col <- function(cols, idx, name) {
+    if (.grbind_same_type(cols)) {
+        return(cols)
+    }
+    first <- cols[[1]]
+    is_fac <- vapply(cols, is.factor, logical(1))
+    is_chr <- vapply(cols, is.character, logical(1))
+
+    if (is.factor(first) && all(is_fac | is_chr)) {
+        levs <- unique(unlist(lapply(cols, function(x) if (is.factor(x)) levels(x) else x), use.names = FALSE))
+        na_level <- any(vapply(cols[is_fac], function(x) anyNA(levels(x)), logical(1)))
+        if (!na_level) {
+            levs <- levs[!is.na(levs)]
+        }
+        cls <- if (all(vapply(cols[is_fac], is.ordered, logical(1)))) c("ordered", "factor") else "factor"
+        return(lapply(cols, function(x) {
+            if (is.factor(x)) {
+                codes <- match(levels(x), levs)[unclass(x)]
+                if (na_level) {
+                    codes[is.na(unclass(x))] <- match(NA_character_, levs)
+                }
+            } else {
+                codes <- match(x, levs)
+            }
+            structure(codes, levels = levs, class = cls)
+        }))
+    }
+
+    if (is.character(first) && all(is_fac | is_chr)) {
+        return(lapply(cols, function(x) if (is.factor(x)) as.character(x) else x))
+    }
+
+    num_types <- c("logical", "integer", "double")
+    types <- vapply(cols, typeof, character(1))
+    if (all(types %in% num_types) && all(vapply(cols, function(x) is.null(oldClass(x)), logical(1)))) {
+        type <- num_types[max(match(types, num_types))]
+        return(lapply(cols, function(x) {
+            storage.mode(x) <- type
+            x
+        }))
+    }
+
+    describe <- function(x) if (is.factor(x)) "a factor" else if (is.object(x)) sprintf("%s (%s)", class(x)[1], typeof(x)) else class(x)[1]
+    other <- which(!vapply(cols, function(x) identical(class(x), class(first)) && typeof(x) == typeof(first), logical(1)))[1]
+    stop(sprintf(
+        "Cannot rbind objects: column '%s' is %s in object %d and %s in object %d",
+        name, describe(first), idx[1], describe(cols[[other]]), idx[other]
+    ), call. = FALSE)
+}
+
+# options(gmax.data.size) as the C++ side reads it (ConfigurationManager::get_max_data_size): unset
+# (NULL, documented as no limit) or not a number is Inf, NA is an error
+.gmax_data_size <- function() {
+    size <- .ggetOption("gmax.data.size")
+    if (length(size) && is.na(size[1])) {
+        stop("options(gmax.data.size) must be a number, not NA", call. = FALSE)
+    }
+    if (!is.numeric(size) || !length(size)) Inf else size[1]
+}
+
+# A number (a coordinate, a count, gmax.data.size) for a message, as written: sprintf("%d") refuses
+# doubles above 2^31, and %g prints 61331566 as 6.13316e+07
+.gformat_num <- function(x) {
+    format(x, scientific = FALSE, trim = TRUE)
+}
+
 .gverify_max_data_size <- function(size, data_name = "Result", arguments = NULL) {
-    max.data.size <- .ggetOption("gmax.data.size")
+    max.data.size <- .gmax_data_size()
 
     if (size > max.data.size) {
-        # gmax.data.size is a (multi-GB) double; format as a plain integer string
-        # so sprintf doesn't error with "%d" on a non-integer/over-2^31 value.
-        max.data.size.str <- format(max.data.size, scientific = FALSE, trim = TRUE)
+        max.data.size.str <- .gformat_num(max.data.size)
         if (is.null(arguments)) {
             stop(sprintf(
                 paste("%s size exceeded the maximal allowed (%s).",
@@ -632,7 +769,10 @@ gcluster.run <- function(..., opt.flags = "", max.jobs = 400, debug = FALSE, R =
     }
 }
 
-rescue_ALLGENOME <- function(intervals, intervals_name) {
+# intervals_expr: substitute() of the caller's intervals argument (a name given as a string is
+# taken as it is)
+rescue_ALLGENOME <- function(intervals, intervals_expr) {
+    intervals_name <- .gscope_arg_name(intervals_expr)
     if (length(intervals_name) == 0) {
         return(intervals)
     }
@@ -660,6 +800,18 @@ rescue_ALLGENOME <- function(intervals, intervals_name) {
     # options(gmulticontig.2d.mode) when 2D intervals are asked for, or stops without the option; for a
     # computation of the track expression scanner (.gscope_lazy_2d), only when it is 2D.
     return(intervals)
+}
+
+# The name an intervals argument was passed by, for rescue_ALLGENOME: a symbol (ALLGENOME), a call or
+# a string ("ALLGENOME[[1]]") has one. Anything else is a value passed as it is - do.call(), Map() and
+# purrr pass the data frame itself, which is then its own substitute() - and as.character() of a
+# data frame deparses every one of its values: gsummary() over 2M intervals took 39 s instead of 0.6 s.
+.gscope_arg_name <- function(expr) {
+    if (is.symbol(expr) || is.call(expr) || is.character(expr)) {
+        as.character(expr)
+    } else {
+        character(0)
+    }
 }
 
 # The message of a computation over the deferred whole-genome 2D scope (as DEFERRED_2D_SCOPE_MSG in C++)

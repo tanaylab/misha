@@ -1209,8 +1209,8 @@ TrackExpressionVars::Track_var &TrackExpressionVars::add_vtrack_var_src_track(SE
 				SEXP rextend = get_rvector_col(rvtrack, "extend", vtrack.c_str(), false);
 				bool extend = true; // default value (matching constructor default)
 				if (!Rf_isNull(rextend)) {
-					if (!Rf_isLogical(rextend))
-						verror("Virtual track %s: extend parameter must be logical", vtrack.c_str());
+					if (!is_true_or_false(rextend))
+						verror("Virtual track %s: extend parameter must be TRUE or FALSE", vtrack.c_str());
 					extend = LOGICAL(rextend)[0];
 				}
 				pwm_params.extend_flag = extend;
@@ -1242,8 +1242,8 @@ TrackExpressionVars::Track_var &TrackExpressionVars::add_vtrack_var_src_track(SE
 				SEXP rextend = get_rvector_col(rvtrack, "extend", vtrack.c_str(), false);
 				bool extend = true; // default value (matching constructor default)
 				if (!Rf_isNull(rextend)) {
-					if (!Rf_isLogical(rextend))
-						verror("Virtual track %s: extend parameter must be logical", vtrack.c_str());
+					if (!is_true_or_false(rextend))
+						verror("Virtual track %s: extend parameter must be TRUE or FALSE", vtrack.c_str());
 					extend = LOGICAL(rextend)[0];
 				}
 

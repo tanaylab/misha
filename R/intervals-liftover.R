@@ -87,11 +87,11 @@ gintervals.liftover <- function(intervals = NULL,
     }
     .gcheckroot()
 
-    if (!is.logical(include_metadata) || length(include_metadata) != 1) {
-        stop("include_metadata must be a single logical value", call. = FALSE)
+    if (!is.logical(include_metadata) || length(include_metadata) != 1 || is.na(include_metadata)) {
+        stop("include_metadata must be TRUE or FALSE", call. = FALSE)
     }
 
-    intervals <- .gscope_expand_2d(rescue_ALLGENOME(intervals, as.character(substitute(intervals))))
+    intervals <- .gscope_expand_2d(rescue_ALLGENOME(intervals, substitute(intervals)))
 
     if (is.character(chain)) {
         # Chain file path provided - validate and use the policies
@@ -153,8 +153,8 @@ gintervals.liftover <- function(intervals = NULL,
         }
     }
 
-    if (!is.logical(canonic) || length(canonic) != 1) {
-        stop("canonic must be a single logical value", call. = FALSE)
+    if (!is.logical(canonic) || length(canonic) != 1 || is.na(canonic)) {
+        stop("canonic must be TRUE or FALSE", call. = FALSE)
     }
 
     # Validate value_col and aggregation parameters

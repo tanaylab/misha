@@ -2,7 +2,7 @@
 % Please edit documentation in R/intervals-annotation.R
 \name{gintervals.annotate}
 \alias{gintervals.annotate}
-\title{Annotates 1D intervals using nearest neighbors}
+\title{Annotates intervals using nearest neighbors}
 \usage{
 gintervals.annotate(
   intervals,
@@ -21,9 +21,9 @@ gintervals.annotate(
 )
 }
 \arguments{
-\item{intervals}{Intervals to annotate (1D).}
+\item{intervals}{Intervals to annotate.}
 
-\item{annotation_intervals}{Source intervals containing annotation data (1D).}
+\item{annotation_intervals}{Source intervals containing annotation data.}
 
 \item{annotation_columns}{Character vector of column names to copy from
 \code{annotation_intervals}. If \code{NULL} (default), all non-basic
@@ -35,11 +35,16 @@ provided, must have the same length as \code{annotation_columns}. Defaults
 to using the original names.}
 
 \item{dist_column}{Name of the distance column to include. Use \code{NULL} to
-omit the distance column. Defaults to "dist".}
+omit the distance column. Defaults to "dist". For 2D intervals two columns
+are included, with "1" and "2" added to the name (\code{dist1} and
+\code{dist2} by default, as in \code{gintervals.neighbors}).}
 
 \item{max_dist}{Maximum absolute distance. When finite, neighbors with
 \code{|dist| > max_dist} result in annotation columns being set to
-\code{na_value} for those rows, while the row itself is retained.}
+\code{na_value} for those rows, while the row itself is retained. For 2D
+intervals a neighbor is within \code{max_dist} when
+\code{dist1 + dist2 <= max_dist}, the distance by which
+\code{gintervals.neighbors} ranks 2D neighbors.}
 
 \item{na_value}{Value(s) to use for annotations when beyond \code{max_dist}
 or when no neighbor is found. Can be a single scalar recycled for all
@@ -75,7 +80,7 @@ A data frame containing the original intervals plus the requested
   accommodate multiple neighbors.
 }
 \description{
-Annotates one-dimensional intervals by finding nearest neighbors in another
+Annotates intervals by finding nearest neighbors in another
 set of intervals and adding selected columns from the neighbors to the
 original intervals.
 }
@@ -83,7 +88,9 @@ original intervals.
 The function wraps and extends \code{gintervals.neighbors} to provide
 convenient column selection/renaming, optional distance inclusion, distance
 thresholding with custom NA values, multiple neighbors per interval, and
-deterministic tie-breaking. Currently supports 1D intervals only.
+deterministic tie-breaking. For 2D intervals the two distances of the
+neighbor are returned, \code{max_dist} applies to their sum, and a
+\code{tie_method} other than "first" is not supported.
 
 
 - When \code{annotation_columns = NULL}, all non-basic columns present in

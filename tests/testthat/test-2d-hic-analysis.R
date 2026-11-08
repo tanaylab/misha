@@ -905,7 +905,7 @@ test_that("gintervals.neighbors respects 2D distance constraints", {
         mindist2 = -5e4, maxdist2 = 5e4
     )
 
-    expect_regression(neighbors, "gintervals.neighbors.2d.hic.1")
+    expect_regression(neighbors, "gintervals.neighbors.2d.hic.1_v2")
 
     # Basic validation
     expect_true(is.data.frame(neighbors))

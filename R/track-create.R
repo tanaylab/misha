@@ -80,7 +80,7 @@ gtrack.create <- function(track = NULL, description = NULL, expr = NULL, iterato
             .gdb.add_track(trackstr)
             .gtrack.attr.set(
                 trackstr, "created.by",
-                sprintf("gtrack.create(%s, description, %s, iterator=%s)", trackstr, exprstr, deparse(substitute(iterator), width.cutoff = 500)[1]), TRUE
+                sprintf("gtrack.create(%s, description, %s, iterator=%s)", trackstr, exprstr, deparse(substitute(iterator), width.cutoff = 500, nlines = 1)), TRUE
             )
             .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
             .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
@@ -183,7 +183,7 @@ gtrack.create_pwm_energy <- function(track = NULL, description = NULL, pssmset =
                 trackstr, "created.by",
                 sprintf(
                     "gtrack.create_pwm_energy(%s, description, \"%s\", %g, %g, iterator=%s)",
-                    trackstr, pssmset, as.numeric(pssmid), as.numeric(prior), deparse(substitute(iterator), width.cutoff = 500)[1]
+                    trackstr, pssmset, as.numeric(pssmid), as.numeric(prior), deparse(substitute(iterator), width.cutoff = 500, nlines = 1)
                 ), TRUE
             )
             .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
@@ -268,7 +268,7 @@ gtrack.create_sparse <- function(track = NULL, description = NULL, intervals = N
     }
     .gcheckroot()
 
-    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+    intervals <- rescue_ALLGENOME(intervals, substitute(intervals))
 
     if (is.null(values)) {
         if (!is.data.frame(intervals) || !("value" %in% colnames(intervals))) {
@@ -386,7 +386,7 @@ gtrack.create_dense <- function(track = NULL, description = NULL, intervals = NU
 
     .gcheckroot()
 
-    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+    intervals <- rescue_ALLGENOME(intervals, substitute(intervals))
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
 
