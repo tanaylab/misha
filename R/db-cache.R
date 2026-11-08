@@ -560,6 +560,39 @@ gdb.reload <- function(rescan = TRUE) {
     sort(unique(x))
 }
 
+# sort(unique(c(x, name))) for one name, without sorting a sorted x again (a database can list
+# ~10^5 tracks, and sort() compares strings by the locale's collation). Done by a binary search
+# when x is sorted with no two elements that compare equal (is.unsorted(strictly = TRUE)) and
+# `name` compares strictly between the two it goes between: then the order of the result is
+# the only sorted one, which sort() returns too. NULL otherwise (the caller sorts).
+.gdb.sorted_insert <- function(x, name) {
+    if (!is.character(x) || !is.null(attributes(x)) || anyNA(x) ||
+        !is.character(name) || length(name) != 1L || is.na(name) || !is.null(attributes(name)) ||
+        is.unsorted(x, strictly = TRUE)) {
+        return(NULL)
+    }
+    if (name %in% x) {
+        return(x)
+    }
+    n <- length(x)
+    lo <- 1L
+    hi <- n + 1L
+    while (lo < hi) {
+        mid <- (lo + hi) %/% 2L
+        if (x[[mid]] > name) hi <- mid else lo <- mid + 1L
+    }
+    if ((lo > 1L && !(x[[lo - 1L]] < name)) || (lo <= n && !(name < x[[lo]]))) {
+        return(NULL)
+    }
+    c(x[seq_len(lo - 1L)], name, x[seq.int(lo, length.out = n - lo + 1L)])
+}
+
+# .gdb.normalize_cache_list(c(x, name)) for one name
+.gdb.cache_list_add <- function(x, name) {
+    res <- .gdb.sorted_insert(x, name)
+    if (is.null(res)) .gdb.normalize_cache_list(c(x, name)) else res
+}
+
 # The cache is updated one name at a time: a write that created or removed a track (kind "tracks")
 # or an interval set ("intervals") reads the database's .db.cache as it is on disk, adds or removes
 # that one name, and writes it back (a temporary file renamed over it). The session's own lists
@@ -657,7 +690,7 @@ gdb.reload <- function(rescan = TRUE) {
     }
     i <- if (kind == "tracks") 1L else 2L
     names_now <- as.character(lists[[i]])
-    lists[[i]] <- if (add) .gdb.normalize_cache_list(c(names_now, name)) else setdiff(names_now, name)
+    lists[[i]] <- if (add) .gdb.cache_list_add(names_now, name) else setdiff(names_now, name)
 
     success <- tryCatch(
         .gdb.cache_write_file(cache_path, lists),
