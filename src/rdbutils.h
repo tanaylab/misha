@@ -429,8 +429,9 @@ static inline void define_in_misha(SEXP envir, const char *name, SEXP value) {
 // inflated for the rest of the session.
 //
 // The queue is .misha$.GPENDING.DIAGNOSTICS: a list of length-2 character vectors,
-// c(severity, text), in the order they were produced. `severity` is "message" or
-// "warning". Appending rather than assigning one slot per severity means a second
+// c(severity, text), in the order they were produced. `severity` is "message",
+// "warning", or "fork_cost": a warning that also records that it was shown (see
+// warn_if_forks_are_slow). Appending rather than assigning one slot per severity means a second
 // diagnostic within one call cannot silently overwrite the first, and a new severity
 // costs nothing on either side of the boundary.
 //

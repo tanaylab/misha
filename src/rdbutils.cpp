@@ -868,40 +868,63 @@ bool rdb::is_kid()
 // The check is cheap on every call: the anonymous resident size comes from /proc/self/statm.
 // Only when that alone is large enough does it read how much of it is in huge pages
 // (/proc/self/smaps_rollup, or /proc/self/smaps before Linux 4.14, which walk the page tables
-// of the session). A session found mostly in huge pages is not read again until its
-// anonymous memory has grown by a quarter.
+// of the session). That is read again only when the anonymous memory has grown or shrunk by a
+// quarter since; in between the bytes in 4 KB pages found then (capped by the anonymous size)
+// are multiplied by each call's number of kids.
 //
-// MISHA_TEST_FORK_4K_BYTES, an environment variable for the tests, stands in for the bytes
-// held in 4 KB pages.
+// The warning counts as shown once R has raised it: .graise_diagnostics() sets
+// .misha$.GFORK_COST_WARNED when it raises a "fork_cost" diagnostic. A call that fails after
+// queuing it, in a kid or by an interrupt, has its diagnostics dropped, and the next call that
+// forks as many kids warns instead.
+//
+// MISHA_TEST_FORK_4K_BYTES, an environment variable for the tests, stands in for the memory:
+// "A" for A bytes of anonymous memory in 4 KB pages, "A,H" for A bytes of which H are in huge
+// pages.
 static const double FORK_COST_GB_KIDS = 128;
 static bool s_fork_cost_warned = false;
 static uint64_t s_fork_cost_checked_anon = 0;
+static uint64_t s_fork_cost_small_pages = 0;
 
 void rdb::warn_if_forks_are_slow(SEXP envir, unsigned num_kids)
 {
 	if (s_fork_cost_warned || RdbInitializer::is_kid() || num_kids < 2)
 		return;
 
-	const double GB = 1e9;
-	uint64_t small_pages;
-	const char *test_bytes = getenv("MISHA_TEST_FORK_4K_BYTES");
-
-	if (test_bytes)
-		small_pages = strtoull(test_bytes, NULL, 10);
-	else {
-		uint64_t anon = get_anon_resident_mem_usage(getpid());
-
-		if (anon / GB * num_kids < FORK_COST_GB_KIDS || anon < s_fork_cost_checked_anon + s_fork_cost_checked_anon / 4)
-			return;
-
-		uint64_t huge = get_anon_huge_pages(getpid());
-
-		small_pages = anon > huge ? anon - huge : 0;
-		if (small_pages / GB * num_kids < FORK_COST_GB_KIDS)
-			s_fork_cost_checked_anon = anon;
+	SEXP shown = find_in_misha(envir, ".GFORK_COST_WARNED");
+	if (shown != R_UnboundValue && Rf_isLogical(shown) && Rf_length(shown) == 1 && LOGICAL(shown)[0] == TRUE) {
+		s_fork_cost_warned = true;
+		return;
 	}
 
-	if (small_pages / GB * num_kids < FORK_COST_GB_KIDS)
+	const double GB = 1e9;
+	const char *test_memory = getenv("MISHA_TEST_FORK_4K_BYTES");
+	uint64_t test_anon = 0, test_huge = 0;
+
+	if (test_memory) {
+		char *end = NULL;
+		test_anon = strtoull(test_memory, &end, 10);
+		if (end && *end == ',')
+			test_huge = strtoull(end + 1, NULL, 10);
+	}
+
+	uint64_t anon = test_memory ? test_anon : get_anon_resident_mem_usage(getpid());
+
+	if (anon / GB * num_kids < FORK_COST_GB_KIDS)
+		return;
+
+	if (!s_fork_cost_checked_anon || anon >= s_fork_cost_checked_anon + s_fork_cost_checked_anon / 4 ||
+		anon <= s_fork_cost_checked_anon - s_fork_cost_checked_anon / 4)
+	{
+		uint64_t huge = test_memory ? test_huge : get_anon_huge_pages(getpid());
+
+		s_fork_cost_small_pages = anon > huge ? anon - huge : 0;
+		s_fork_cost_checked_anon = anon;
+	}
+
+	uint64_t small_pages = min(s_fork_cost_small_pages, anon);
+
+	// once per call: some calls fork more than once
+	if (small_pages / GB * num_kids < FORK_COST_GB_KIDS || !once_per_call("fork_cost"))
 		return;
 
 	char msg[1000];
@@ -913,8 +936,7 @@ void rdb::warn_if_forks_are_slow(SEXP envir, unsigned num_kids)
 			 "gc()), or run on a host whose kernel keeps R's memory in transparent huge pages (such as "
 			 "RHEL 8 and its clones). This warning is shown once per session.",
 			 small_pages / GB, num_kids);
-	add_pending_diagnostic(envir, "warning", msg);
-	s_fork_cost_warned = true;
+	add_pending_diagnostic(envir, "fork_cost", msg);
 }
 
 bool rdb::once_per_call(const char *key)

@@ -123,6 +123,11 @@
         if (identical(diag[[1]], "message")) {
             message(diag[[2]])
         } else {
+            # The once-per-session fork-cost warning (rdb::warn_if_forks_are_slow) counts as
+            # shown only from here: a call that fails drops its diagnostics unraised.
+            if (identical(diag[[1]], "fork_cost")) {
+                assign(".GFORK_COST_WARNED", TRUE, envir = .misha)
+            }
             warning(diag[[2]], call. = FALSE)
         }
     }
