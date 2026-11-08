@@ -488,3 +488,68 @@ test_that("vtrack with sum function and gextract consistency", {
     total <- sum(r$vt_sum_cons, na.rm = TRUE)
     expect_equal(total, r_summary[["Sum"]], tolerance = 1e-4)
 })
+
+# ============================================================================
+# Multitask gather: the parent builds the R columns from the kids' shared memory
+# ============================================================================
+
+test_that("multitask gextract returns the data frame of the serial path, 1D and 2D", {
+    skip_if(parallel::detectCores() < 2L, "Multitasking test needs at least 2 cores")
+    withr::local_options(list(gmax.processes = 8L, gmax.processes2core = 4L, gmin.scope4process = 1L))
+
+    big <- gintervals(c(1, 2, 3), 0, 20e6)
+    bigx <- big
+    bigx$label <- c("a", "b", "c")
+    bigx$f <- factor(c("x", "y", "x"))
+    calls <- list(
+        function() gextract("test.fixedbin", "test.fixedbin * 2", intervals = big, iterator = 70, colnames = c("a", "b")),
+        function() gextract("test.fixedbin", intervals = big, iterator = 70, intervals_join = "none"),
+        function() gextract("test.fixedbin", intervals = bigx, iterator = 70, intervals_join = "intervals"),
+        function() gextract("test.rects", intervals = gintervals.2d.all()),
+        # 2 and 3 rows: R keeps row names 1..2 as they are and stores 1..3 compacted
+        function() gextract("test.fixedbin", intervals = gintervals(c(1, 2)), iterator = rbind(gintervals(1, 1000, 1100), gintervals(2, 5000, 5100))),
+        function() gextract("test.fixedbin", intervals = gintervals(c(1, 2)), iterator = rbind(gintervals(1, 1000, 1100), gintervals(1, 3000, 3100), gintervals(2, 5000, 5100)))
+    )
+    for (f in calls) {
+        withr::local_options(list(gmultitasking = FALSE))
+        serial <- f()
+        withr::local_options(list(gmultitasking = TRUE))
+        parallel <- f()
+        expect_identical(parallel, serial)
+    }
+})
+
+test_that("multitask gextract does not hold the kids' results twice at its peak", {
+    skip_on_os(c("mac", "windows", "solaris"))
+    skip_if(parallel::detectCores() < 2L, "Multitasking test needs at least 2 cores")
+
+    # Measured in a fresh R process: in this one, memory freed by earlier tests is reused
+    # and hides the growth. VmHWM is the process's peak resident size; writing 5 to
+    # clear_refs resets it (Linux 4.0 and later). The C entry point is called directly,
+    # as the R post-processing has temporaries of its own.
+    script <- withr::local_tempfile(fileext = ".R")
+    writeLines(c(
+        sprintf("library(misha, lib.loc = %s)", deparse(dirname(find.package("misha")))),
+        sprintf("gsetroot(%s)", deparse(get("GROOT", envir = .misha))),
+        "options(gmax.processes = 8L, gmax.processes2core = 4L, gmin.scope4process = 1L, gmultitasking = TRUE)",
+        "peak <- function() as.numeric(gsub('[^0-9]', '', grep('^VmHWM', readLines('/proc/self/status'), value = TRUE))) * 1024",
+        "reset_peak <- function() tryCatch({ writeLines('5', '/proc/self/clear_refs'); TRUE }, error = function(e) FALSE, warning = function(w) FALSE)",
+        "exprs <- c('test.fixedbin', 'test.fixedbin * 2', 'test.fixedbin + 1', '-test.fixedbin')",
+        "invisible(gc())",
+        "if (!reset_peak()) { cat('NO_RESET\\n'); quit(save = 'no') }",
+        "before <- peak()",
+        "res <- misha:::.gcall('gextract_multitask', gintervals(c(1, 2), 0, 50e6), exprs, NULL, 20, NULL, NULL, NULL, 'id', misha:::.misha_env())",
+        "cat('ROWS', nrow(res), '\\n')",
+        "cat('RATIO', (peak() - before) / as.numeric(object.size(res)), '\\n')"
+    ), script)
+    out <- system2(file.path(R.home("bin"), "R"), c("--no-echo", "--no-save", "-f", shQuote(script)), stdout = TRUE, stderr = TRUE)
+    skip_if(any(grepl("NO_RESET", out)), "cannot reset the peak resident size")
+    rows <- as.numeric(sub("ROWS ", "", grep("^ROWS ", out, value = TRUE)))
+    ratio <- as.numeric(sub("RATIO ", "", grep("^RATIO ", out, value = TRUE)))
+    expect_equal(rows, 5e6, info = paste(out, collapse = "\n"))
+
+    # The parent used to copy every kid's result into a vector of intervals and then into
+    # the R columns, keeping all of the shared memory mapped: the peak grew by 2.8 times
+    # the result. It now grows by about the result.
+    expect_lt(ratio, 1.5)
+})
