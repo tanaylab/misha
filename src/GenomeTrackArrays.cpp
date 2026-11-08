@@ -253,6 +253,7 @@ void GenomeTrackArrays::read_interval(const GInterval &interval)
 			(*itrack)->m_last_min_pos = numeric_limits<double>::quiet_NaN();
 		(*itrack)->m_last_lse = (*itrack)->m_last_first = (*itrack)->m_last_last = (*itrack)->m_last_sample = numeric_limits<float>::quiet_NaN();
 		(*itrack)->m_last_first_pos = (*itrack)->m_last_last_pos = (*itrack)->m_last_sample_pos = numeric_limits<double>::quiet_NaN();
+		(*itrack)->m_last_weighted_sum = numeric_limits<double>::quiet_NaN();
 
 		if ((*itrack)->m_use_quantile)
 			(*itrack)->m_sp.reset();

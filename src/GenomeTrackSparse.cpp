@@ -73,6 +73,8 @@ void GenomeTrackSparse::copy_state_from_master()
 		m_last_last = m_master_obj->m_last_last;
 	if (has_function(LAST_POS))
 		m_last_last_pos = m_master_obj->m_last_last_pos;
+	if (has_function(WEIGHTED_SUM))
+		m_last_weighted_sum = m_master_obj->m_last_weighted_sum;
 	if (m_use_quantile)
 		m_sp = m_master_obj->m_sp;
 }
@@ -291,6 +293,8 @@ void GenomeTrackSparse::read_interval(const GInterval &interval)
 		m_last_last = numeric_limits<float>::quiet_NaN();
 	if (has_function(LAST_POS))
 		m_last_last_pos = numeric_limits<double>::quiet_NaN();
+	if (has_function(WEIGHTED_SUM))
+		m_last_weighted_sum = numeric_limits<double>::quiet_NaN();
 
 	if (m_use_quantile)
 		m_sp.reset();
