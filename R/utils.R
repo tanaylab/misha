@@ -255,7 +255,7 @@
         if (is.null(substitute(x))) {
             NULL
         } else {
-            str <- deparse(substitute(x), width.cutoff = 500)[1]
+            str <- deparse(substitute(x), width.cutoff = 500, nlines = 1)
             gsub("^\"(.*)\"$", "\\1", str, perl = TRUE)
         }
     } else {
@@ -769,7 +769,10 @@ gcluster.run <- function(..., opt.flags = "", max.jobs = 400, debug = FALSE, R =
     }
 }
 
-rescue_ALLGENOME <- function(intervals, intervals_name) {
+# intervals_expr: substitute() of the caller's intervals argument (a name given as a string is
+# taken as it is)
+rescue_ALLGENOME <- function(intervals, intervals_expr) {
+    intervals_name <- .gscope_arg_name(intervals_expr)
     if (length(intervals_name) == 0) {
         return(intervals)
     }
@@ -797,6 +800,18 @@ rescue_ALLGENOME <- function(intervals, intervals_name) {
     # options(gmulticontig.2d.mode) when 2D intervals are asked for, or stops without the option; for a
     # computation of the track expression scanner (.gscope_lazy_2d), only when it is 2D.
     return(intervals)
+}
+
+# The name an intervals argument was passed by, for rescue_ALLGENOME: a symbol (ALLGENOME), a call or
+# a string ("ALLGENOME[[1]]") has one. Anything else is a value passed as it is - do.call(), Map() and
+# purrr pass the data frame itself, which is then its own substitute() - and as.character() of a
+# data frame deparses every one of its values: gsummary() over 2M intervals took 39 s instead of 0.6 s.
+.gscope_arg_name <- function(expr) {
+    if (is.symbol(expr) || is.call(expr) || is.character(expr)) {
+        as.character(expr)
+    } else {
+        character(0)
+    }
 }
 
 # The message of a computation over the deferred whole-genome 2D scope (as DEFERRED_2D_SCOPE_MSG in C++)

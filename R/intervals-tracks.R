@@ -83,7 +83,7 @@ gintervals.mapply <- function(FUN = NULL, ..., intervals = NULL, enable.gapply.i
     }
     .gcheckroot()
 
-    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+    intervals <- rescue_ALLGENOME(intervals, substitute(intervals))
 
     if (is.null(intervals)) {
         intervals <- eval.parent(args[[length(args)]])
@@ -192,7 +192,7 @@ gintervals.quantiles <- function(expr = NULL, percentiles = 0.5, intervals = NUL
     }
     .gcheckroot()
 
-    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+    intervals <- rescue_ALLGENOME(intervals, substitute(intervals))
 
     exprstr <- do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame())
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
@@ -276,7 +276,7 @@ gintervals.summary <- function(expr = NULL, intervals = NULL, iterator = NULL, b
     }
     .gcheckroot()
 
-    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+    intervals <- rescue_ALLGENOME(intervals, substitute(intervals))
 
     exprstr <- do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame())
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())

@@ -203,7 +203,7 @@ gseq.extract <- function(intervals = NULL) {
     }
     .gcheckroot()
 
-    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+    intervals <- rescue_ALLGENOME(intervals, substitute(intervals))
 
     res <- .gcall("gseqread", intervals, .misha_env())
     res

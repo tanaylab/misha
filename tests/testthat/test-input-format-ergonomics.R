@@ -140,3 +140,65 @@ test_that("gintervals errors print coordinates as whole numbers", {
     expect_error(gintervals("chr1", 22345678, 12345678), "Invalid interval (chr1, 22345678, 12345678): start", fixed = TRUE)
 })
 
+# do.call(), Map() and purrr pass an argument's value, so substitute() of an intervals argument is
+# the data frame itself. Its name, needed only for the deprecated ALLGENOME names, used to be taken
+# with as.character(), which deparses every value: gsummary() over 2M intervals took 39 s, 0.6 s
+# by name.
+test_that("an intervals data frame passed by value is not deparsed", {
+    expect_identical(.gscope_arg_name(gintervals(1, 0, 100)), character(0))
+    expect_identical(.gscope_arg_name(quote(ALLGENOME)), "ALLGENOME")
+    expect_identical(.gscope_arg_name("ALLGENOME[[1]]"), "ALLGENOME[[1]]")
+
+    # a data frame that fails the call if as.character() is applied to it
+    assign("as.character.misha_deparse_trap", function(x, ...) stop("the intervals were deparsed"), envir = globalenv())
+    withr::defer(rm("as.character.misha_deparse_trap", envir = globalenv()))
+    trap <- gintervals(c(1, 2), 0, 10000)
+    class(trap) <- c("misha_deparse_trap", class(trap))
+    expect_error(as.character(trap), "deparsed")
+
+    plain <- gintervals(c(1, 2), 0, 10000)
+    expect_equal(do.call(gsummary, list("test.fixedbin", intervals = trap)), gsummary("test.fixedbin", plain))
+    expect_equal(
+        do.call(gextract, list("test.fixedbin", intervals = trap, iterator = 1000))$test.fixedbin,
+        gextract("test.fixedbin", plain, iterator = 1000)$test.fixedbin
+    )
+    expect_equal(do.call(gscreen, list("test.fixedbin > 0.2", intervals = trap)), gscreen("test.fixedbin > 0.2", plain))
+    expect_equal(do.call(gquantiles, list("test.fixedbin", 0.5, intervals = trap)), gquantiles("test.fixedbin", 0.5, plain))
+    expect_equal(nrow(do.call(gintervals.force_range, list(trap))), 2)
+    expect_equal(nchar(do.call(gseq.extract, list(trap))), c(10000, 10000))
+})
+
+test_that("every rescue_ALLGENOME() call is given substitute() of the argument", {
+    calls <- list()
+    walk <- function(e) {
+        if (is.call(e)) {
+            if (identical(e[[1]], as.name("rescue_ALLGENOME"))) {
+                calls[[length(calls) + 1L]] <<- e
+            }
+            for (i in seq_along(e)[-1]) {
+                if (!identical(e[[i]], quote(expr = ))) {
+                    walk(e[[i]])
+                }
+            }
+        }
+    }
+    ns <- asNamespace("misha")
+    for (name in ls(ns, all.names = TRUE)) {
+        f <- get(name, envir = ns)
+        if (is.function(f) && !is.primitive(f)) {
+            walk(body(f))
+        }
+    }
+    expect_gt(length(calls), 30)
+    for (cl in calls) {
+        expect_true(is.call(cl[[3]]) && identical(cl[[3]][[1]], as.name("substitute")), info = deparse(cl))
+    }
+})
+
+test_that("the deprecated ALLGENOME names still give the whole genome", {
+    whole <- gsummary("test.sparse", .misha$ALLGENOME)
+    expect_warning(r <- gsummary("test.sparse", ALLGENOME), "ALLGENOME was deprecated")
+    expect_equal(r, whole)
+    expect_warning(r <- gsummary("test.sparse", "ALLGENOME[[1]]"), "ALLGENOME\\[\\[1\\]\\] was deprecated")
+    expect_equal(r, whole)
+})

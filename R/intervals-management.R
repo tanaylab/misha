@@ -381,7 +381,7 @@ gintervals.save <- function(intervals.set.out = NULL, intervals = NULL) {
     }
     .gcheckroot()
 
-    intervals <- .gscope_expand_2d(rescue_ALLGENOME(intervals, as.character(substitute(intervals))))
+    intervals <- .gscope_expand_2d(rescue_ALLGENOME(intervals, substitute(intervals)))
 
     intervals.set.out <- do.call(.gexpr2str, list(substitute(intervals.set.out)), envir = parent.frame())
 
@@ -462,7 +462,7 @@ gintervals.update <- function(intervals.set = NULL, intervals = "", chrom = NULL
     }
     .gcheckroot()
 
-    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+    intervals <- rescue_ALLGENOME(intervals, substitute(intervals))
 
     if (identical(intervals.set, intervals)) {
         return(retv <- NULL)

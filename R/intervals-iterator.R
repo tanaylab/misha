@@ -177,7 +177,7 @@ giterator.intervals <- function(expr = NULL, intervals = .misha$ALLGENOME, itera
         stop("Usage: giterator.intervals(expr = NULL, intervals = .misha$ALLGENOME, iterator = NULL, band = NULL, intervals.set.out = NULL, interval_relative = FALSE, partial_bins = 'clip')", call. = FALSE)
     }
 
-    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+    intervals <- rescue_ALLGENOME(intervals, substitute(intervals))
 
     if (is.null(substitute(expr))) {
         exprstr <- "0"

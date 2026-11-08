@@ -43,7 +43,7 @@ gsegment <- function(expr = NULL, minsegment = NULL, maxpval = 0.05, onetailed =
     }
     .gcheckroot()
 
-    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+    intervals <- rescue_ALLGENOME(intervals, substitute(intervals))
 
     if (is.null(intervals)) {
         intervals <- get("ALLGENOME", envir = .misha)
@@ -145,7 +145,7 @@ gwilcox <- function(expr = NULL, winsize1 = NULL, winsize2 = NULL, maxpval = 0.0
     }
     .gcheckroot()
 
-    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+    intervals <- rescue_ALLGENOME(intervals, substitute(intervals))
 
     if (is.null(intervals)) {
         intervals <- get("ALLGENOME", envir = .misha)
