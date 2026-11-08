@@ -24,6 +24,10 @@ static const uint64_t SEQ_PROBE_INTERVALS = 16;
 static const uint64_t SEQ_MIN_INTERVALS4MT = 500;    // below this even a cold read cannot repay a fork
 static const double   SEQ_PROBE_MIN_USEC = 100.;     // per interval, above which we are I/O bound
 static const double   SEQ_MIN_USEC4PROCESS = 100000.;  // give each kid ~10x the cost of forking it
+// An upper bound on what a read served from the page cache costs per byte (measured 0.2-0.35 ns;
+// 1.8-3.2 ns from a cold NFS): the probe counts only the time beyond it, so a long interval read
+// from the cache does not look I/O bound.
+static const double   SEQ_CACHED_USEC_PER_BYTE = 0.001;
 
 // One shared-memory record: [uint64 original row index][uint64 sequence length][length bytes]
 static const uint64_t SEQ_REC_HEADER = 2 * sizeof(uint64_t);
@@ -114,31 +118,34 @@ SEXP gseqread(SEXP _intervals, SEXP _envir)
 		// memory already mapped and reuse its record size and offsets.
 		if (iu.get_multitasking() && !RdbInitializer::is_kid() &&
 			plain_intervals && num_intervs >= SEQ_MIN_INTERVALS4MT) {
-			struct timespec probe_start, probe_end;
+			struct timespec read_start, read_end;
+			double read_usec = 0.;
 
 			// The probed sequences are kept, so a probe that decides against forking costs nothing.
+			// Only the reads are timed: the strings are made here, in one process, either way.
 			num_probed = min(num_intervs, SEQ_PROBE_INTERVALS);
-			clock_gettime(CLOCK_REALTIME, &probe_start);
 
 			for (uint64_t i = 0; i < num_probed; ++i) {
 				const GInterval &interval = (*plain_intervals)[i];
 
+				clock_gettime(CLOCK_REALTIME, &read_start);
 				seqfetch.read_interval(interval, iu.get_chromkey(), buf);
+				clock_gettime(CLOCK_REALTIME, &read_end);
+				// CLOCK_REALTIME to match the rest of misha (macOS builds shim it); a backwards NTP
+				// step would only cost us one missed chance to distribute, so clamp and move on.
+				read_usec += max(0., (read_end.tv_sec - read_start.tv_sec) * 1000000. +
+										 (read_end.tv_nsec - read_start.tv_nsec) / 1000.);
 				seqlen += buf.size();
 				SET_STRING_ELT(answer, iu.get_orig_interv_idx(interval),
 							   RSaneMkCharLenCE(buf.empty() ? "" : &buf[0], (int)buf.size(), CE_NATIVE));
 			}
 
-			clock_gettime(CLOCK_REALTIME, &probe_end);
 			iu.verify_max_data_size(seqlen, "Result sequence");
 
-			// CLOCK_REALTIME to match the rest of misha (macOS builds shim it); a backwards NTP
-			// step would only cost us one missed chance to distribute, so clamp and move on.
-			double probe_usec = (probe_end.tv_sec - probe_start.tv_sec) * 1000000. +
-								(probe_end.tv_nsec - probe_start.tv_nsec) / 1000.;
-
-			if (probe_usec < 0.)
-				probe_usec = 0.;
+			// The time beyond what reading the same bytes from the page cache costs: the I/O
+			// waits that distributing overlaps. A cached read costs per byte, not per interval,
+			// so without this a long interval (~0.5 Mb) crosses the threshold even from the cache.
+			double probe_usec = max(0., read_usec - SEQ_CACHED_USEC_PER_BYTE * (double)seqlen);
 
 			// Cost per read-ahead window, extrapolated over the windows the whole set spans, then
 			// amortised back over the intervals. A clustered set has far fewer windows than
