@@ -258,7 +258,7 @@ bool GenomeTrackFixedBin::sums_exact(int lo_bit, int hi_bit, int64_t num_vals)
 // gives the same values to the bit (otherwise false is returned too): the count of values always;
 // the sum (need_exact_sum) only while every sum of the values since it was last computed afresh
 // is exact (sums_exact), as both are then the exact sum; the running LSE (need_lse) never, as it
-// is rounded otherwise when slid than when computed afresh.
+// rounds differently slid than computed afresh.
 bool GenomeTrackFixedBin::slide_window(int64_t drop, int64_t add, bool need_lse, bool need_exact_sum)
 {
 	m_scratch_bin_vals.clear();
