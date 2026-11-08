@@ -588,7 +588,7 @@ template <typename T> static string plain(T v) { return string((const char *)&v,
 //------------------------------ ParquetWriter ------------------------------
 
 // Column chunks with more distinct values (by bit pattern) are written PLAIN: arrow's 1 MB
-// dictionary page limit, in floats
+// dictionary page limit, counted in 4-byte values
 static const uint32_t MAX_DICTIONARY_SIZE = 262144;
 
 const uint64_t ParquetWriter::MAX_ROW_GROUP_ROWS;
@@ -622,7 +622,7 @@ void ParquetWriter::open(const string &filename, const vector<string> &value_nam
 	for (size_t i = 1; i < m_meta.schema.size(); ++i) {
 		SchemaElement &col = m_meta.schema[i];
 		col.repetition_type = FieldRepetitionType::OPTIONAL;  // nullable, as arrow writes them
-		col.type = i == 1 ? Type::BYTE_ARRAY : i <= 3 ? (int64_coords ? Type::INT64 : Type::INT32) : Type::FLOAT;
+		col.type = i == 1 ? Type::BYTE_ARRAY : i <= 3 ? (int64_coords ? Type::INT64 : Type::INT32) : Type::DOUBLE;
 		col.name = i <= 3 ? coords[i - 1] : value_names[i - 4];
 	}
 	m_meta.schema[1].converted_type = ConvertedType::UTF8;
@@ -632,7 +632,7 @@ void ParquetWriter::open(const string &filename, const vector<string> &value_nam
 	m_chrom.clear();
 	m_starts.clear();
 	m_ends.clear();
-	m_values.assign(value_names.size(), vector<uint32_t>());
+	m_values.assign(value_names.size(), vector<uint64_t>());
 	create(filename, name);
 }
 
@@ -713,9 +713,8 @@ void ParquetWriter::add_row(const string &chrom, int64_t start, int64_t end, con
 	m_starts.push_back(start);
 	m_ends.push_back(end);
 	for (size_t i = 0; i < m_values.size(); ++i) {
-		float v = (float)values[i];
-		uint32_t bits;
-		memcpy(&bits, &v, sizeof(bits));
+		uint64_t bits;
+		memcpy(&bits, &values[i], sizeof(bits));
 		m_values[i].push_back(bits);
 	}
 }
@@ -760,7 +759,7 @@ void ParquetWriter::flush_row_group()
 	write_coord_column(rg.columns[1], "start", m_starts);
 	write_coord_column(rg.columns[2], "end", m_ends);
 	for (size_t i = 0; i < m_values.size(); ++i)
-		write_fixed_column(rg.columns[i + 3], Type::FLOAT, m_meta.schema[i + 4].name, m_values[i]);
+		write_fixed_column(rg.columns[i + 3], Type::DOUBLE, m_meta.schema[i + 4].name, m_values[i]);
 
 	for (const ColumnChunk &cc : rg.columns) {
 		rg.total_byte_size += cc.meta_data.total_uncompressed_size;
@@ -771,7 +770,7 @@ void ParquetWriter::flush_row_group()
 
 	m_starts.clear();
 	m_ends.clear();
-	for (vector<uint32_t> &v : m_values)
+	for (vector<uint64_t> &v : m_values)
 		v.clear();
 }
 

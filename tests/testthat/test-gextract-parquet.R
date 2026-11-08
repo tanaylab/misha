@@ -18,7 +18,7 @@ skip_without_pyarrow <- function() {
     skip_if(is.null(pyarrow_python()), "python3 with pyarrow is not available")
 }
 
-# Python writes floats in hex so that R reads back the exact float32 value, and decodes
+# Python writes floats in hex so that R reads back the exact value, and decodes
 # binary to text so that a chrom column written without the STRING annotation still loads
 # (and fails the type check rather than the script).
 pq_dump_script <- '
@@ -40,9 +40,9 @@ md = f.metadata
 t = f.read()
 
 # The same table written by pyarrow itself: chrom string, start and end int32 (int64 if
-# coord_type says so), the values float32, all nullable
+# coord_type says so), the values double, all nullable
 coord = pa.int64() if coord_type == "int64" else pa.int32()
-ref_schema = pa.schema([("chrom", pa.string()), ("start", coord), ("end", coord)] + [(n, pa.float32()) for n in t.column_names[3:]])
+ref_schema = pa.schema([("chrom", pa.string()), ("start", coord), ("end", coord)] + [(n, pa.float64()) for n in t.column_names[3:]])
 ref_path = out_json + ".ref.parquet"
 pq.write_table(pa.Table.from_pydict({n: t.column(n).to_pylist() for n in t.column_names}, schema=ref_schema), ref_path)
 ref = pq.read_table(ref_path)
@@ -82,8 +82,8 @@ with open(out_tsv, "w") as fh:
         fh.write("\\t".join(str(py(v)) for v in row) + "\\n")
 '
 
-# Reads a Parquet file with pyarrow: the table (value columns as doubles holding the exact
-# float32 values), the arrow schema (name, type, nullable), per-row-group metadata, and how
+# Reads a Parquet file with pyarrow: the table (value columns as doubles), the arrow schema
+# (name, type, nullable), per-row-group metadata, and how
 # the file compares with pyarrow's own write of the same table (coord_type: its start and end).
 read_pq <- function(path, coord_type = "int32") {
     script <- withr::local_tempfile(fileext = ".py")
@@ -151,7 +151,8 @@ local_pq_track_db <- function(env = parent.frame()) {
     gtrack.create_dense("pq", "pq", intervs, intervs$start / 32 + 0.25 + ifelse(intervs$chrom == "chr2", 1000, 0), 32)
 }
 
-# Rounds to the nearest float32 (as.single() only tags a vector for .C and rounds nothing)
+# Rounds to the nearest float32 (as.single() only tags a vector for .C and rounds nothing): what
+# a track holds
 float32 <- function(x) {
     readBin(writeBin(as.numeric(x), raw(), size = 4), "numeric", size = 4, n = length(x))
 }
@@ -161,7 +162,7 @@ expect_same_rows <- function(got, inmem, value_cols) {
     expect_equal(got$start, as.numeric(inmem$start))
     expect_equal(got$end, as.numeric(inmem$end))
     for (k in value_cols) {
-        expect_identical(got[[k]], float32(inmem[[k]]), label = k)
+        expect_identical(got[[k]], inmem[[k]], label = k)
     }
 }
 
@@ -177,7 +178,7 @@ test_that("parquet output equals in-memory gextract", {
     pq <- read_pq(f)
 
     expect_identical(pq$names, c("chrom", "start", "end", cols))
-    expect_identical(pq$types, c("string", "int32", "int32", "float", "float", "float"))
+    expect_identical(pq$types, c("string", "int32", "int32", "double", "double", "double"))
     expect_arrow_like(pq)
     expect_equal(nrow(pq$table), 32 + 19)
     expect_same_rows(pq$table, inmem, cols)
@@ -206,11 +207,11 @@ test_that("parquet output equals in-memory gextract", {
     expect_match(footer, paste0("misha version ", as.character(packageVersion("misha"))), fixed = TRUE, useBytes = TRUE)
 })
 
-test_that("many columns (Thrift lists of 15 elements or more), values rounded to float32", {
+test_that("many columns (Thrift lists of 15 elements or more), values kept as doubles", {
     skip_without_pyarrow()
     local_pq_track_db()
     f <- file.path(withr::local_tempdir(), "x.parquet")
-    # pq / 3 and the like are not float32 values, so this checks the rounding too
+    # pq / 3 and the like are not float32 values, so this checks that they are not rounded to float
     exprs <- paste0("pq / ", 1:20)
 
     inmem <- gextract(exprs, intervals = gintervals.all(), iterator = 32)
@@ -221,6 +222,29 @@ test_that("many columns (Thrift lists of 15 elements or more), values rounded to
     expect_arrow_like(pq)
     expect_false(identical(float32(inmem[["pq / 3"]]), inmem[["pq / 3"]]))
     expect_same_rows(pq$table, inmem, exprs)
+})
+
+test_that("coordinates past 2^24 are written exactly (position vtracks)", {
+    skip_without_pyarrow()
+    local_pq_db(c(chr1 = 10))
+    # the size misha reads; no sequence of that length is needed for this
+    writeLines("chr1\t200000000", file.path(.misha$GROOT, "chrom_sizes.txt"))
+    suppressMessages(gdb.init(.misha$GROOT))
+    pos <- 190000000 + seq(1, 1999, by = 7)
+    set.seed(1)
+    gtrack.create_sparse("sp", "sp", gintervals("chr1", pos, pos + 1), runif(length(pos)))
+    gvtrack.create("mp", "sp", func = "max.pos.abs")
+    withr::defer(gvtrack.rm("mp"))
+    f <- file.path(withr::local_tempdir(), "x.parquet")
+    scope <- gintervals("chr1", 190000000, 190002000)
+
+    inmem <- gextract("mp", intervals = scope, iterator = 100)
+    gextract("mp", intervals = scope, iterator = 100, file = f)
+    pq <- read_pq(f)
+
+    # float32 holds these only to a multiple of 16
+    expect_false(identical(float32(inmem$mp), inmem$mp))
+    expect_same_rows(pq$table, inmem, "mp")
 })
 
 test_that("an empty result is one empty row group, as pyarrow writes an empty table", {
@@ -236,7 +260,7 @@ test_that("an empty result is one empty row group, as pyarrow writes an empty ta
     pq <- read_pq(f)
 
     expect_identical(pq$names, c("chrom", "start", "end", "pq", "pq * 2"))
-    expect_identical(pq$types, c("string", "int32", "int32", "float", "float"))
+    expect_identical(pq$types, c("string", "int32", "int32", "double", "double"))
     expect_arrow_like(pq)
     expect_equal(nrow(pq$table), 0)
     expect_equal(pq$iter_batches_rows, 0)
@@ -302,7 +326,7 @@ test_that("a chromosome of 2^31 bp or more gets INT64 coordinates", {
     gextract("big", intervals = scope, iterator = 1e6, file = f)
     pq <- read_pq(f, "int64")
 
-    expect_identical(pq$types, c("string", "int64", "int64", "float"))
+    expect_identical(pq$types, c("string", "int64", "int64", "double"))
     expect_arrow_like(pq)
     expect_equal(max(pq$table$end), 2147483648)
     expect_equal(rg_column(pq$row_groups[[1]], "end")$max, 2147483648)
@@ -530,7 +554,7 @@ test_that("every part takes INT64 coordinates when one chromosome of the scope n
     gextract("big", intervals = scope, file = f)
     pq <- read_pq(f, "int64")
 
-    expect_identical(pq$types, c("string", "int64", "int64", "float"))
+    expect_identical(pq$types, c("string", "int64", "int64", "double"))
     expect_arrow_like(pq)
     expect_same_rows(pq$table, inmem, "big")
 })

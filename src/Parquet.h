@@ -152,7 +152,7 @@ struct FileMetaData {
 }
 
 // Writes a Parquet file of intervals and values: chrom (string), start, end (INT32, or INT64
-// with int64_coords) and one FLOAT column per value name, all OPTIONAL (nullable, though no
+// with int64_coords) and one DOUBLE column per value name, all OPTIONAL (nullable, though no
 // value is null) and GZIP-compressed, as arrow writes them. Rows must arrive grouped by
 // chromosome; a row group holds one chromosome and at most MAX_ROW_GROUP_ROWS rows.
 // The file is complete only after close(); the destructor closes the file without finishing it.
@@ -191,7 +191,7 @@ private:
 	string                   m_chrom;
 	vector<int64_t>          m_starts;
 	vector<int64_t>          m_ends;
-	vector<vector<uint32_t>> m_values;  // float bit patterns, one vector per value column
+	vector<vector<uint64_t>> m_values;  // double bit patterns, one vector per value column
 
 	void create(const string &filename, const string &name);
 	void flush_row_group();
