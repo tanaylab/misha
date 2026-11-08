@@ -269,3 +269,21 @@ test_that("gextract writes file and intervals.set.out under gmultitasking.strate
     expect_false(is.data.frame(gextract("test.fixedbin", iv, iterator = 100, intervals.set.out = set)))
     expect_true(gintervals.exists(set))
 })
+
+test_that("track-parallel gextract fails when a worker dies instead of dropping its columns", {
+    withr::local_options(gmultitasking.strategy = "tracks", gmax.processes = 3)
+    parent_pid <- Sys.getpid()
+    # stands in for the out-of-memory killer
+    die_in_worker <- function(x) {
+        if (Sys.getpid() != parent_pid) {
+            tools::pskill(Sys.getpid(), tools::SIGKILL)
+        }
+        x
+    }
+    exprs <- c("test.fixedbin", "die_in_worker(test.fixedbin)", "test.fixedbin * 2")
+    iv <- gintervals(1, 0, 1e5)
+    expect_error(
+        suppressWarnings(gextract(exprs, iv, iterator = 100, colnames = c("a", "b", "c"))),
+        "1 of 3 worker processes ended without returning a result"
+    )
+})
