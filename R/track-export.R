@@ -122,23 +122,27 @@ gtrack.export_bedgraph <- function(track, file, intervals = NULL, iterator = NUL
         warning("The track has no values in the intervals; output file will contain only the header",
             call. = FALSE
         )
-    } else {
-        # Remove rows with NaN values
-        non_nan <- !is.nan(data[[value_col]])
-        data <- data[non_nan, , drop = FALSE]
+    } else if (all(is.nan(data[[value_col]]))) {
+        warning("All values are NaN; output file will contain only the header",
+            call. = FALSE
+        )
+    }
 
-        if (nrow(data) == 0) {
-            warning("All values are NaN; output file will contain only the header",
-                call. = FALSE
-            )
+    # Rows in genome order: chromosome as in the genome database, then start. NULL when they
+    # already are (gextract's output usually is). NaN rows are dropped while writing.
+    ord <- NULL
+    if (!is.null(data) && nrow(data) > 1) {
+        genome_chroms <- as.character(gintervals.all()$chrom)
+        chroms <- data$chrom
+        chrom_order <- if (is.factor(chroms)) {
+            match(levels(chroms), genome_chroms)[as.integer(chroms)]
+        } else {
+            match(chroms, genome_chroms)
         }
-
-        # Sort by chromosome (genome order) then by start
-        # Get chromosome order from the genome database
-        genome_chroms <- gintervals.all()$chrom
-        chrom_order <- match(data$chrom, genome_chroms)
         ord <- order(chrom_order, data$start)
-        data <- data[ord, , drop = FALSE]
+        if (!is.unsorted(ord)) {
+            ord <- NULL
+        }
     }
 
     # Write output
@@ -150,19 +154,75 @@ gtrack.export_bedgraph <- function(track, file, intervals = NULL, iterator = NUL
     writeLines(sprintf("track type=bedGraph name=\"%s\"", name), con)
 
     # Write data lines (tab-separated: chrom, start, end, value).
-    # Coordinates are doubles; format as plain integers so large round values
-    # (e.g. 1e8) are not written in scientific notation, which bedGraphToBigWig
-    # parses as 1 -> out-of-order intervals / corrupt bigwig.
-    if (!is.null(data) && nrow(data) > 0) {
-        lines <- paste(data$chrom,
-            sprintf("%.0f", data$start),
-            sprintf("%.0f", data$end),
-            data[[value_col]],
-            sep = "\t"
-        )
-        writeLines(lines, con)
+    if (!is.null(data)) {
+        .gtrack_write_bedgraph_lines(con, data$chrom, data$start, data$end, data[[value_col]], ord)
     }
 
+    invisible(NULL)
+}
+
+# The arguments of as.character() of a double that C++ needs to format as R does: the scipen
+# and OutDec options
+.gbedgraph_format_options <- function() {
+    scipen <- suppressWarnings(as.integer(getOption("scipen"))[1])
+    if (is.na(scipen)) {
+        scipen <- 0L
+    }
+    list(scipen = scipen, dec = as.character(getOption("OutDec", "."))[1])
+}
+
+# The bedGraph lines of R: paste(chrom, sprintf("%.0f", start), sprintf("%.0f", end), value).
+# Coordinates are doubles, formatted as plain integers so large round values (e.g. 1e8) are not
+# written in scientific notation, which bedGraphToBigWig parses as 1 -> out-of-order intervals /
+# corrupt bigwig.
+.gbedgraph_lines_r <- function(chrom, start, end, value) {
+    paste(chrom, sprintf("%.0f", start), sprintf("%.0f", end), value, sep = "\t")
+}
+
+# TRUE if C++ formats doubles as this R session does. It follows R 4.3 and 4.4 built with long
+# double, so it is checked against R itself on values that take each branch of R's formatting.
+.gbedgraph_cpp_matches_r <- function(fmt) {
+    if (!isTRUE(capabilities("long.double"))) {
+        return(FALSE)
+    }
+    probe <- c(
+        0, -0, 1, -1.5, 0.1, 1 / 3, -2 / 3, 0.1 + 0.2, 1e5, 1e-5, 1e-4, 1e15, 1e16, 123456.7,
+        1234567.1, 100000, 99999.99999999999, 9.9999999999999995e-5, 0.000123456789,
+        123456789012345678, 1e-300, 5e-324, .Machine$double.xmax, 3.4e38, pi * 1e10,
+        exp(1) * 1e-10, 9.995, 0.15, 2^60, -1e-310, NA, Inf, -Inf
+    )
+    n <- length(probe)
+    got <- .gcall(
+        "gtrack_bedgraph_lines", rep("c", n), rep(0, n), rep(1, n), as.numeric(probe), NULL,
+        1, 1e6, fmt$scipen, fmt$dec, .misha_env()
+    )[[1]]
+    identical(got, paste0(.gbedgraph_lines_r(rep("c", n), rep(0, n), rep(1, n), probe), "\n", collapse = ""))
+}
+
+# Writes the bedGraph lines of the rows ord (NULL: all of them, in order) whose value is not NaN
+# to con. C++ builds them as R would, in chunks of about 64 MB, unless it does not format
+# doubles as this R session does; then R builds them.
+.gtrack_write_bedgraph_lines <- function(con, chrom, start, end, value, ord) {
+    fmt <- .gbedgraph_format_options()
+    if (.gbedgraph_cpp_matches_r(fmt)) {
+        from <- 1
+        num_rows <- if (is.null(ord)) length(value) else length(ord)
+        while (from <= num_rows) {
+            res <- .gcall(
+                "gtrack_bedgraph_lines", chrom, start, end, as.numeric(value), ord,
+                from, 64 * 1024^2, fmt$scipen, fmt$dec, .misha_env()
+            )
+            writeLines(res[[1]], con, sep = "")
+            from <- res[[2]]
+        }
+        return(invisible(NULL))
+    }
+
+    rows <- if (is.null(ord)) seq_along(value) else ord
+    rows <- rows[!is.nan(value[rows])]
+    if (length(rows)) {
+        writeLines(.gbedgraph_lines_r(chrom[rows], start[rows], end[rows], value[rows]), con)
+    }
     invisible(NULL)
 }
 

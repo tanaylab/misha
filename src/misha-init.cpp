@@ -90,6 +90,7 @@ extern "C" {
     extern SEXP gtrackimportwig(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gimport_check_chroms(SEXP, SEXP, SEXP, SEXP);
     extern SEXP gtrackimportparquet(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP gtrack_bedgraph_lines(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP parquet_columns(SEXP, SEXP, SEXP);
     extern SEXP gtrackinfo(SEXP, SEXP, SEXP);
     extern SEXP gtrack_intervals_load(SEXP, SEXP, SEXP, SEXP, SEXP);
@@ -219,6 +220,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"gtrackimportwig", (DL_FUNC)&gtrackimportwig, 6},
     {"gimport_check_chroms", (DL_FUNC)&gimport_check_chroms, 4},
     {"gtrackimportparquet", (DL_FUNC)&gtrackimportparquet, 7},
+    {"gtrack_bedgraph_lines", (DL_FUNC)&gtrack_bedgraph_lines, 10},
     {"parquet_columns", (DL_FUNC)&parquet_columns, 3},
     {"gtrackinfo", (DL_FUNC)&gtrackinfo, 3},
     {"gtrack_intervals_load", (DL_FUNC)&gtrack_intervals_load, 5},

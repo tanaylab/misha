@@ -183,6 +183,58 @@ test_that("bedGraph export sorts by chromosome order then start", {
     }
 })
 
+# The data lines gtrack.export_bedgraph wrote when R built them: NaN rows dropped, rows in genome order
+r_bedgraph_lines <- function(track, intervals, iterator) {
+    data <- gextract(track, intervals = intervals, iterator = iterator)
+    data <- data[!is.nan(data[[track]]), , drop = FALSE]
+    data <- data[order(match(data$chrom, gintervals.all()$chrom), data$start), , drop = FALSE]
+    paste(data$chrom, sprintf("%.0f", data$start), sprintf("%.0f", data$end), data[[track]], sep = "\t")
+}
+
+test_that("bedGraph export writes the lines R's paste() writes, whatever scipen and OutDec", {
+    outfile <- tempfile(fileext = ".bedgraph")
+    withr::defer(unlink(outfile))
+    intervs <- gintervals(c(1, 2), 0, 20000)
+    # values of many magnitudes; a few exact zeros and round numbers
+    exprs <- c("dense_track", "dense_track * 1e5 / 3", "dense_track / 7e8", "round(dense_track * 1000) * 100", "-dense_track * 1e300")
+    for (expr in exprs) {
+        for (opts in list(list(scipen = 0, OutDec = "."), list(scipen = 3, OutDec = "."), list(scipen = -4, OutDec = ","))) {
+            withr::with_options(opts, {
+                gtrack.export_bedgraph(expr, outfile, intervals = intervs, iterator = 50)
+                expect_identical(readLines(outfile)[-1], r_bedgraph_lines(expr, intervs, 50),
+                    label = paste(expr, opts$scipen, opts$OutDec)
+                )
+            })
+        }
+    }
+})
+
+test_that("C++ formats doubles as as.character() does", {
+    set.seed(17)
+    n <- 20000
+    vals <- c(
+        runif(n, -1, 1) * 10^runif(n, -310, 308),
+        round(runif(n, -1e6, 1e6), sample(0:8, n, replace = TRUE)),
+        sample(-1e5:1e5, n, replace = TRUE) * 10^sample(-20:20, n, replace = TRUE),
+        10^(-20:20) - 10^(-20:20) * 1e-15, 10^(-20:20) + 10^(-20:20) * 1e-15,
+        readBin(writeBin(runif(n, -100, 100), raw(), size = 4), "numeric", size = 4, n = n),
+        0.5 + 1:1000, 1 / (1:1000), 2^(-1074:-1000), 2^(1000:1023), NA, Inf, -Inf, 0, -0
+    )
+    nv <- length(vals)
+    for (opts in list(list(scipen = 0, OutDec = "."), list(scipen = 7, OutDec = "."), list(scipen = -2, OutDec = ","))) {
+        withr::with_options(opts, {
+            fmt <- .gbedgraph_format_options()
+            got <- .gcall(
+                "gtrack_bedgraph_lines", rep("c", nv), rep(0, nv), rep(1, nv), vals, NULL,
+                1, 1e9, fmt$scipen, fmt$dec, .misha_env()
+            )[[1]]
+            expect_identical(strsplit(got, "\n")[[1]], paste("c", "0", "1", vals, sep = "\t"),
+                label = paste(opts$scipen, opts$OutDec)
+            )
+        })
+    }
+})
+
 test_that("bedGraph export over intervals with no values writes the header only", {
     outfile <- tempfile(fileext = ".bedgraph")
     withr::defer(unlink(outfile))
