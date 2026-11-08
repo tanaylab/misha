@@ -100,6 +100,21 @@ test_that("gintervals.rbind of a factor and a character chrom leaves the session
     expect_gt(count_pids(), 1)
 })
 
+test_that("a misha call in an argument of another one is not nested in it", {
+    # gseq.kmer.dist passes its intervals argument to .gcall unevaluated; the gscreen in it ran
+    # at the raised depth, so in one process
+    pf <- tempfile()
+    on.exit(unlink(pf))
+    pidlog <- function(x) {
+        cat(Sys.getpid(), "\n", file = pf, append = TRUE)
+        x
+    }
+    withr::with_options(list(gmultitasking = TRUE, gmax.processes = 4, gmin.scope4process = 100), {
+        gseq.kmer.dist(gscreen("pidlog(test.fixedbin) > 0.2", gintervals(c(1, 2), 0, 1e6)), k = 2)
+    })
+    expect_gt(length(unique(scan(pf, quiet = TRUE))), 1)
+})
+
 test_that("a scope left behind by a longjmp is put back by the next misha call", {
     umask <- Sys.umask(NA)
     # C_test_leak_scope raises an R error inside its scope on purpose

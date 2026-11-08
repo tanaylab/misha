@@ -8,6 +8,13 @@
     # 5.16.0 that turned every later call of the session serial. A call made at depth zero has no
     # misha frame below it - every entry point that evaluates R code is reached through here - so
     # C_lifetime_repair() puts back what the leaked scope did not before the call starts.
+    #
+    # The arguments are forced first: a misha call in one of them (gseq.kmer.dist(gscreen(...))
+    # passes its argument here unevaluated) runs before this one, not nested in it, and must see
+    # the depth this call was made at. A calling handler of an error raised by the .Call still sees
+    # the raised depth: it runs while the .Call's frame is on the stack, and for an error raised
+    # inside a live scope (the leak case) a repair from there would tear down that scope.
+    invisible(list(...))
     depth <- .gcall_depth()
     if (depth == 0L) {
         .Call("C_lifetime_repair")
