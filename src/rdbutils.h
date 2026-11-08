@@ -587,7 +587,10 @@ template<typename T> void unpack_data(void *&ptr, T &data, uint64_t n) {
 //
 // C6  s_ref_count and s_protect_counter are back at their entry values on every exit. This is the
 //     observable consequence of C1 - C5 rather than a separate rule: if it does not hold, one of
-//     the five above was broken somewhere.
+//     the five above was broken somewhere. As a safety net, .gcall() calls
+//     RdbInitializer::repair_leaked_scope() before a call made when no misha call is running,
+//     so a broken rule costs the call that broke it, not the rest of the session. The net hides
+//     the break from later calls only: tests read the counters right after the call.
 //
 //---------------------------------------------------------------------------------------------
 
@@ -638,6 +641,12 @@ public:
 	// of it, such as the process umask.
 	static int      get_ref_count() { return s_ref_count; }
 	static unsigned get_protect_count() { return s_protect_counter; }
+
+	// The safety net for a broken C6: called by .gcall() when no misha call is running (see the
+	// R-level call depth there), so a counter above zero can only be left by a .Call that exited
+	// through a longjmp. Puts back what that call's ~RdbInitializer did not and zeroes both
+	// counters. Returns true if there was anything to repair.
+	static bool     repair_leaked_scope();
 
 	// allows to safely write to stdout even from a child process
 	// (before doing so please make sure launch_process() does not close stdout)
@@ -709,13 +718,17 @@ private:
 	static int                  s_sigint_fired;
 	static unsigned             s_protect_counter;
 
-	mode_t                      m_old_umask;
-	TGLException::Error_handler m_old_error_handler;
+	// Saved by the outermost RdbInitializer, put back when the last one ends (or by
+	// repair_leaked_scope())
+	static mode_t                      s_old_umask;
+	static TGLException::Error_handler s_old_error_handler;
+
 	unsigned                    m_old_protect_count;
 	set<int>                    m_old_open_fds;
 
 	static string  get_shm_sem_name();
 	static string  get_alloc_suspend_sem_name();
+	static void    release_process_state();
 	static void    sigint_handler(int);
 	static void    sigchld_handler(int);
 	static void    prepare4multitasking(uint64_t res_const_size, uint64_t res_var_size, uint64_t max_res_size, uint64_t max_mem_usage, unsigned num_planned_kids, bool res_size_from_ram = false);

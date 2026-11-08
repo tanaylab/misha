@@ -1,4 +1,20 @@
 .gcall <- function(...) {
+    # The number of misha calls running in this process (this one not counted): above zero, this
+    # call is nested in another one, made by R code that the outer call runs (a track expression,
+    # the FUN of gintervals.mapply), in the parent or in one of its kids. Kept in R, and restored
+    # by on.exit, so that an error raised inside a .Call cannot leave it stuck: such an error is a
+    # longjmp that skips ~RdbInitializer, which leaves the C++ counters above zero (and the umask,
+    # the signal handlers and the multitasking state in the shape that call left them). From
+    # 5.16.0 that turned every later call of the session serial. A call made at depth zero has no
+    # misha frame below it - every entry point that evaluates R code is reached through here - so
+    # C_lifetime_repair() puts back what the leaked scope did not before the call starts.
+    depth <- .gcall_depth()
+    if (depth == 0L) {
+        .Call("C_lifetime_repair")
+    }
+    on.exit(assign(".GCALL_DEPTH", depth, envir = .misha), add = TRUE)
+    assign(".GCALL_DEPTH", depth + 1L, envir = .misha)
+
     # C++ cannot raise a warning or a message itself: a caller that catches either with
     # an exiting handler (tryCatch, or options(warn = 2)) would longjmp out of the C
     # frame and leave misha's PROTECT counter inflated. Diagnostics are appended to
@@ -139,6 +155,11 @@
     .Call("C_lifetime_counters")
 }
 
+# The number of .gcall()s running in this process (see .gcall)
+.gcall_depth <- function() {
+    get0(".GCALL_DEPTH", envir = .misha, inherits = FALSE, ifnotfound = 0L)
+}
+
 .misha_env <- function() {
     e <- new.env(parent = parent.frame(2))
     assign(".misha", .misha, envir = e)
@@ -179,8 +200,10 @@
         }
         # A misha call made by R code that another misha call runs (the FUN of
         # gintervals.mapply, a track expression), in the parent or in one of its kids, runs
-        # serially: forking would reuse the outer call's shared memory and kid slots.
-        if (.glifetime_counters()[["ref_count"]] > 0) {
+        # serially: forking would reuse the outer call's shared memory and kid slots. Told by
+        # .gcall()'s depth, not by RdbInitializer's ref_count, which a scope that ended through a
+        # longjmp leaves above zero until the next call repairs it.
+        if (.gcall_depth() > 0L) {
             val <- FALSE
         }
     }
