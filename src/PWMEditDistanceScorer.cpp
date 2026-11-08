@@ -321,8 +321,17 @@ double PWMEditDistanceScorer::score_interval(const GInterval& interval,
         return std::numeric_limits<float>::quiet_NaN();
     }
 
+    // With indels a window may hold fewer than motif_len bases (insertions make up the rest), and is
+    // scanned when the bases after it are an N run. Where the sequence ends at the chromosome end (extend =
+    // TRUE, the fetched sequence reaching the last base) it is scanned the same way.
+    const bool chrom_end_tail = m_extend && m_max_indels > 0 &&
+        static_cast<int64_t>(exp_interval.end) >= static_cast<int64_t>(chromkey.get_chrom_size(interval.chromid));
+    const size_t min_window = chrom_end_tail
+        ? static_cast<size_t>(std::max(1, motif_len - m_max_indels))
+        : static_cast<size_t>(motif_len);
+
     std::string seq(seq_vec.begin(), seq_vec.end());
-    if (seq.length() < static_cast<size_t>(motif_len)) {
+    if (seq.length() < min_window) {
         return std::numeric_limits<float>::quiet_NaN();
     }
 
@@ -331,7 +340,7 @@ double PWMEditDistanceScorer::score_interval(const GInterval& interval,
         return std::numeric_limits<float>::quiet_NaN();
     }
 
-    ScanMetrics metrics = evaluate_windows(seq, static_cast<size_t>(interval_len));
+    ScanMetrics metrics = evaluate_windows(seq, static_cast<size_t>(interval_len), min_window);
     m_last_metrics = metrics;
 
     switch (m_mode) {
@@ -821,13 +830,14 @@ float PWMEditDistanceScorer::compute_n_mutations_both(const int* fwd_bidx, const
 }
 
 PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const std::string& seq,
-                                                                           size_t interval_length)
+                                                                           size_t interval_length,
+                                                                           size_t min_window)
 {
     ScanMetrics metrics;
 
     const size_t motif_length = static_cast<size_t>(m_pssm.length());
     const size_t target_length = seq.length();
-    if (motif_length == 0 || target_length < motif_length || interval_length == 0) {
+    if (motif_length == 0 || min_window == 0 || target_length < min_window || interval_length == 0) {
         return metrics;
     }
 
@@ -865,7 +875,9 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
     // reaching the threshold suffices.)
     const bool below_bidirect = is_below() && scan_forward && scan_reverse && (need_min || need_n_mutations);
 
-    const size_t max_start = std::min(interval_length, target_length - motif_length + 1);
+    // A window starts where at least min_window bases remain: motif_length, or fewer at a chromosome end
+    // with indels (score_interval)
+    const size_t max_start = std::min(interval_length, target_length - min_window + 1);
     if (max_start == 0 || (!scan_forward && !scan_reverse)) {
         return metrics;
     }
@@ -1029,7 +1041,7 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
                         maybe_update_n_mutations(nmut);
                     }
                 }
-                if (need_pwm) {
+                if (need_pwm && target_length - offset >= motif_length) {
                     float logp = 0.0f;
                     std::string::const_iterator it = seq.begin() + offset;
                     m_pssm.calc_like(it, logp);
@@ -1076,7 +1088,7 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
                         maybe_update_n_mutations(nmut);
                     }
                 }
-                if (need_pwm) {
+                if (need_pwm && target_length - offset >= motif_length) {
                     float logp_rc = 0.0f;
                     std::string::const_iterator it2 = seq.begin() + offset;
                     m_pssm.calc_like_rc(it2, logp_rc);
@@ -1653,7 +1665,9 @@ float PWMEditDistanceScorer::compute_with_one_indel(const int* bidx_arr, int seq
     // ===== Case A: No indel (W = L, k = 0) =====
     // Motif position i aligns with sequence position i (or L-1-i if reverse).
     // This is equivalent to what the DP computes for W=L, k=0.
-    {
+    // Every case aligns only bases the window has (seq_len of them; fewer than L before an N run or at a
+    // chromosome end), never the base after them.
+    if (L <= seq_len) {
         double aligned_score = 0.0;
         float gains_arr[MAX_MOTIF_LEN_OPT];
         int n_gains = 0;
@@ -1790,7 +1804,7 @@ float PWMEditDistanceScorer::compute_with_one_indel(const int* bidx_arr, int seq
     //   motif[m+1..L-1]  aligns with seq[m..L-2]
     //
     // Need L-1 >= 1 (i.e. L >= 2) for this to apply.
-    if (L >= 2) {
+    if (L >= 2 && L - 1 <= seq_len) {
         const int W = L - 1;
 
         // Precompute base scores, gains, and mandatory flags for aligned columns:
@@ -1919,7 +1933,9 @@ float PWMEditDistanceScorer::compute_with_two_indels(const int* bidx_arr, int se
     };
 
     // ===== Case 1: No indel (W = L, k = 0) =====
-    {
+    // Every case aligns only bases the window has (seq_len of them; fewer than L before an N run or at a
+    // chromosome end), never the base after them.
+    if (L <= seq_len) {
         double aligned_score = 0.0;
         float gains_arr[MAX_MOTIF_LEN_OPT];
         int n_gains = 0;
@@ -2013,7 +2029,7 @@ float PWMEditDistanceScorer::compute_with_two_indels(const int* bidx_arr, int se
 
     // ===== Case 3: One insertion (W = L - 1, k = 1) =====
     // Skip entirely if best_edits <= 1 (can't beat a 1-indel result with another 1-indel)
-    if (L >= 2 && (std::isnan(best_edits) || best_edits > 1.0f)) {
+    if (L >= 2 && L - 1 <= seq_len && (std::isnan(best_edits) || best_edits > 1.0f)) {
         const int W = L - 1;
 
         float prefix_scores[MAX_MOTIF_LEN_OPT], prefix_gains_arr[MAX_MOTIF_LEN_OPT];
@@ -2198,7 +2214,7 @@ float PWMEditDistanceScorer::compute_with_two_indels(const int* bidx_arr, int se
     //   motif[m1+1..m2-1]  <-> seq[m1..m2-2]      (config1: motif shifted, seq[i-1])
     //   motif[m2+1..L-1]   <-> seq[m2-1..L-3]     (config2: seq[i-2])
     // Skip if best_edits <= 2
-    if (L >= 3 && (std::isnan(best_edits) || best_edits > 2.0f)) {
+    if (L >= 3 && L - 2 <= seq_len && (std::isnan(best_edits) || best_edits > 2.0f)) {
         const int W = L - 2;
 
         float scores0[MAX_MOTIF_LEN_OPT], gains0_v[MAX_MOTIF_LEN_OPT];
@@ -2328,7 +2344,7 @@ float PWMEditDistanceScorer::compute_with_two_indels(const int* bidx_arr, int se
     // d == m: motif[0..d-1] <-> seq[0..d-1],
     //         motif[d+1..L-1] <-> seq[d+1..L-1]
     // Skip if best_edits <= 2
-    if (std::isnan(best_edits) || best_edits > 2.0f) {
+    if (L <= seq_len && (std::isnan(best_edits) || best_edits > 2.0f)) {
         const int W = L;
 
         float scores_ns[MAX_MOTIF_LEN_OPT], gains_ns[MAX_MOTIF_LEN_OPT];   // no shift

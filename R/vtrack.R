@@ -1020,7 +1020,10 @@
 #'     insertions and deletions in addition to substitutions, using a banded Needleman-Wunsch DP.
 #'     Each insertion or deletion counts as one edit. An inserted base scores the best its motif
 #'     column allows (the column maximum for \code{"above"}, the minimum for \code{"below"}), and a
-#'     deleted base scores nothing. Typical values are 1-2. Only supported by the non-LSE variants
+#'     deleted base scores nothing. A window may then hold fewer bases than the PSSM (down to
+#'     PSSM length minus \code{max_indels}, the rest inserted): such windows are scanned where the
+#'     A, C, G, T run they start in ends, before an \code{N} or other non-ACGT base, and at a
+#'     chromosome end (with \code{extend = TRUE}). Typical values are 1-2. Only supported by the non-LSE variants
 #'     (\code{pwm.edit_distance}, \code{pwm.edit_distance.pos}, \code{pwm.max.edit_distance}).
 #'   \item \code{direction}: \code{"above"} (default) or \code{"below"}. See Direction above.
 #' }

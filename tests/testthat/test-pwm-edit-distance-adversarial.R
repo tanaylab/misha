@@ -2013,3 +2013,73 @@ test_that("indels: max_indels = 3 is exact (no cheaper alignment missed)", {
         expect_lte(r$ed3_r[k], r$ed2_r[k])
     }
 })
+
+test_that("indels: a window shorter than the motif at a chromosome end is scanned as before an N run", {
+    # With insertions a window may hold fewer than L bases. Before an N run such
+    # a window was scanned; at the chromosome end the scan stopped at the last
+    # full-length window, so the last starts were NA.
+    pssm <- structure(c(
+        0.289059949638304, 0.765800540168912, 0.00347585269750313,
+        0.643266951333656, 0.166971128351294, 0.392771351852197, 0.956813518658636,
+        0.00720825395649754, 0.125848970554678, 0.185711579486119, 0.245713777963034,
+        0.620780527463697, 0.235169567229761, 0.00186895219631772, 0.131171669840629,
+        0.00289069135768031, 0.650092955874321, 0.0102013770101287, 0.00149015116496921,
+        0.333079810960369, 0.0329072533347471, 0.572560126564569, 0.10545979791873,
+        0.160719611942056, 0.100817893693182, 0.21075819302004, 0.038979269957673,
+        0.00841027581029925
+    ), dim = c(7L, 4L), dimnames = list(NULL, c("A", "C", "G", "T")))
+    thr <- -27.05969
+    core <- "CTATATGATTTTCTTT"
+    old_root <- .misha$GROOT
+    withr::defer(gsetroot(old_root))
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    values <- list()
+    for (genome in c(core, paste0(core, strrep("N", 10)))) {
+        root <- tempfile("chrom_end_")
+        dir.create(root)
+        dir.create(file.path(root, "tracks"))
+        dir.create(file.path(root, "seq"))
+        writeLines(sprintf("chr1\t%d", nchar(genome)), file.path(root, "chrom_sizes.txt"))
+        writeBin(charToRaw(genome), file.path(root, "seq", "chr1.seq"))
+        gsetroot(root)
+        for (d in 0:3) {
+            gvtrack.create(paste0("ce", d), NULL, "pwm.edit_distance",
+                pssm = pssm, score.thresh = thr, prior = 0.01, bidirect = FALSE,
+                direction = "below", max_indels = d
+            )
+        }
+        iv <- gintervals(1, 6:12, 7:13)
+        r <- gextract(paste0("ce", 0:3), iv, iterator = 1)
+        r <- r[order(r$start), ]
+        values[[length(values) + 1]] <- r[, paste0("ce", 0:3)]
+
+        for (d in 1:3) {
+            g <- gseq.pwm_edits(iv, pssm,
+                score.thresh = thr, prior = 0.01, bidirect = FALSE,
+                direction = "below", max_indels = d
+            )
+            n <- rep(NA_real_, nrow(iv))
+            n[g$seq_idx] <- g$n_edits
+            expect_equal(n, r[[paste0("ce", d)]], info = sprintf("gseq.pwm_edits D=%d", d))
+        }
+    }
+    # the same at the chromosome end as before the N run
+    expect_equal(values[[1]], values[[2]])
+    r <- values[[1]]
+    # without indels nothing past the last full window
+    expect_true(all(is.na(r$ce0[5:7])))
+    # starts 10 and 11 (rows 5, 6): 5 edits with 2 or 3 indels, as an exhaustive search says
+    for (k in 5:7) {
+        sub <- substr(core, k + 6, nchar(core))
+        for (d in 1:3) {
+            ref <- bruteforce_pwm_edit_distance_with_indels(sub, pssm, thr,
+                max_indels = d, prior = 0.01, direction = "below", starts = 1
+            )
+            expect_equal(r[[paste0("ce", d)]][k], ref, info = sprintf("start %d D=%d", k + 5, d))
+        }
+    }
+    expect_equal(r$ce2[5:6], c(5, 5))
+    expect_equal(r$ce3[5:6], c(5, 5))
+})

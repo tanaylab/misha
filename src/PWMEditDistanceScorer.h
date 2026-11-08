@@ -218,7 +218,8 @@ private:
      */
     void precompute_tables();
 
-    ScanMetrics evaluate_windows(const std::string& seq, size_t interval_length);
+    // min_window: fewest bases a window may start with (motif length, or less at a chromosome end with indels)
+    ScanMetrics evaluate_windows(const std::string& seq, size_t interval_length, size_t min_window);
     double encode_position(size_t index, size_t target_length, size_t motif_length, int direction) const;
     inline bool should_scan_forward() const;
     inline bool should_scan_reverse() const;
