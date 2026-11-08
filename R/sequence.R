@@ -712,6 +712,11 @@ gseq.pwm_edits <- function(seqs,
         indel_extra <- if (!is.null(max_indels)) as.integer(max_indels) else 0L
         ext <- if (isTRUE(extend)) w - 1L + indel_extra else if (isFALSE(extend)) 0L else as.integer(extend) + indel_extra
         extended_intervals <- intervals_df
+        # A strand column is ignored, as the vtrack ignores it: gseq.extract()
+        # would return strand = -1 rows reverse-complemented, and the scan
+        # (and, with indels, its extra bases at the END) would then run over
+        # the other strand. The strand scanned is set by bidirect / strand.
+        extended_intervals$strand <- NULL
         extended_intervals$end <- extended_intervals$end + ext
         # Clamp to chromosome boundaries (vectorized: O(N) total, not O(N*M))
         chrom_sizes <- gintervals.all()
