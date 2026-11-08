@@ -149,6 +149,47 @@ test_that("gdataset.load() reload (idempotency via unload+load)", {
     })
 })
 
+test_that("gdataset.load() of a loaded dataset that is refused leaves it loaded", {
+    skip_on_os("windows")
+    withr::with_tempdir({
+        intervs <- gintervals(1, 0, 1000)
+        create_test_db("working_db")
+        create_test_db("dataset1")
+        create_test_db("dataset2")
+        gsetroot("dataset1")
+        gtrack.create_sparse("ds_only", "", intervs, 1)
+        gtrack.create_sparse("shared", "", intervs, 10)
+        gsetroot("dataset2")
+        gtrack.create_sparse("shared", "", intervs, 20)
+        gsetroot("working_db")
+        gintervals.save("foo", gintervals(1, 0, 100))
+        ds1 <- normalizePath("dataset1")
+        ds2 <- normalizePath("dataset2")
+        gdataset.load(ds2)
+        gdataset.load(ds1, force = TRUE)
+        loaded <- gdataset.ls()
+
+        # without force, the re-load is refused for the name it took from dataset2
+        expect_error(gdataset.load(ds1), "tracks 'shared' already exist in loaded dataset")
+        expect_equal(gdataset.ls(), loaded)
+        expect_equal(unname(gtrack.dataset(c("ds_only", "shared"))), c(ds1, ds1))
+        expect_equal(gextract("shared", intervs)$shared, 10)
+
+        # another session adds to dataset1 a track named as an interval set of the working database
+        job <- parallel::mcparallel(withr::with_options(list(gmultitasking = FALSE), {
+            suppressMessages(gsetroot(ds1))
+            gtrack.create_sparse("foo", "", intervs, 2)
+            TRUE
+        }))
+        expect_true(isTRUE(parallel::mccollect(job)[[1]]))
+        expect_error(gdataset.load(ds1, force = TRUE), "'foo' would be both a track and an interval set")
+        expect_equal(gdataset.ls(), loaded)
+        expect_equal(unname(gtrack.dataset(c("ds_only", "shared"))), c(ds1, ds1))
+        expect_equal(gextract("ds_only", intervs)$ds_only, 1)
+        expect_false("foo" %in% gtrack.ls())
+    })
+})
+
 test_that("gdataset.load() normalizes paths correctly", {
     withr::with_tempdir({
         create_test_db("working_db")
