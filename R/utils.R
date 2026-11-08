@@ -270,7 +270,107 @@
         stop("Cannot rbind objects: columns differ", call. = FALSE)
     }
 
+    if (length(objs) > 1) {
+        objs <- .grbind_unify_cols(objs)
+    }
     .gcall("grbind", objs, .misha_env())
+}
+
+# The C++ grbind fills each column of the result with the values of every object as they are
+# stored, in a column made like the first object's: a factor's level codes would be read with the
+# first object's levels (rows silently got another chromosome, or another label), and a column of
+# another type ended in an R error inside the .Call. So each column is given one type here first,
+# the one base rbind() gives it:
+#   - factors, and characters bound to a factor, become one factor whose levels are those of the
+#     factors and the values of the characters, in the order met (NA is a level only when a factor
+#     has it);
+#   - factors bound to a character column become characters;
+#   - logical, integer and double columns become the widest of them.
+# Other columns whose types differ (a number and a string, a Date and a number) are an error. As in
+# rbind(), objects with no rows take no part in the choice when another object has rows; they get
+# an empty column of the chosen type.
+.grbind_unify_cols <- function(objs) {
+    nrows <- vapply(objs, function(obj) .row_names_info(obj, 2L), integer(1))
+    donors <- if (any(nrows > 0L)) which(nrows > 0L) else seq_along(objs)
+    for (j in seq_along(objs[[1]])) {
+        cols <- lapply(objs, .subset2, j)
+        if (.grbind_same_type(cols)) {
+            next
+        }
+        unified <- .grbind_unify_col(cols[donors], donors, names(objs[[1]])[j])
+        for (i in setdiff(seq_along(objs), donors)) {
+            objs[[i]][[j]] <- unified[[1]][0]
+        }
+        for (k in seq_along(donors)) {
+            objs[[donors[k]]][[j]] <- unified[[k]]
+        }
+    }
+    objs
+}
+
+# TRUE when the columns have one type, one class and (factors) one set of levels
+.grbind_same_type <- function(cols) {
+    first <- cols[[1]]
+    type <- typeof(first)
+    cls <- oldClass(first)
+    levs <- if (is.factor(first)) levels(first)
+    for (x in cols[-1]) {
+        if (typeof(x) != type || !identical(oldClass(x), cls) || (!is.null(levs) && !identical(levels(x), levs))) {
+            return(FALSE)
+        }
+    }
+    TRUE
+}
+
+# cols: the column of each object that has rows, idx: the positions of these objects
+.grbind_unify_col <- function(cols, idx, name) {
+    if (.grbind_same_type(cols)) {
+        return(cols)
+    }
+    first <- cols[[1]]
+    is_fac <- vapply(cols, is.factor, logical(1))
+    is_chr <- vapply(cols, is.character, logical(1))
+
+    if (is.factor(first) && all(is_fac | is_chr)) {
+        levs <- unique(unlist(lapply(cols, function(x) if (is.factor(x)) levels(x) else x), use.names = FALSE))
+        na_level <- any(vapply(cols[is_fac], function(x) anyNA(levels(x)), logical(1)))
+        if (!na_level) {
+            levs <- levs[!is.na(levs)]
+        }
+        cls <- if (all(vapply(cols[is_fac], is.ordered, logical(1)))) c("ordered", "factor") else "factor"
+        return(lapply(cols, function(x) {
+            if (is.factor(x)) {
+                codes <- match(levels(x), levs)[unclass(x)]
+                if (na_level) {
+                    codes[is.na(unclass(x))] <- match(NA_character_, levs)
+                }
+            } else {
+                codes <- match(x, levs)
+            }
+            structure(codes, levels = levs, class = cls)
+        }))
+    }
+
+    if (is.character(first) && all(is_fac | is_chr)) {
+        return(lapply(cols, function(x) if (is.factor(x)) as.character(x) else x))
+    }
+
+    num_types <- c("logical", "integer", "double")
+    types <- vapply(cols, typeof, character(1))
+    if (all(types %in% num_types) && all(vapply(cols, function(x) is.null(oldClass(x)), logical(1)))) {
+        type <- num_types[max(match(types, num_types))]
+        return(lapply(cols, function(x) {
+            storage.mode(x) <- type
+            x
+        }))
+    }
+
+    describe <- function(x) if (is.factor(x)) "a factor" else if (is.object(x)) sprintf("%s (%s)", class(x)[1], typeof(x)) else class(x)[1]
+    other <- which(!vapply(cols, function(x) identical(class(x), class(first)) && typeof(x) == typeof(first), logical(1)))[1]
+    stop(sprintf(
+        "Cannot rbind objects: column '%s' is %s in object %d and %s in object %d",
+        name, describe(first), idx[1], describe(cols[[other]]), idx[other]
+    ), call. = FALSE)
 }
 
 .gverify_max_data_size <- function(size, data_name = "Result", arguments = NULL) {
