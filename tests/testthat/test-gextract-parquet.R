@@ -724,3 +724,20 @@ test_that("field metadata survives the merge of the parts of kids", {
     expect_identical(gtrack.attr.get("back_six", "heldout.chroms"), "chr3,chr5")
     expect_identical(gtrack.attr.get("back_six", "description"), "six")
 })
+
+test_that("gtrack.import of a one-column Parquet file restores the attributes too, its own attrs first", {
+    local_pq_track_db()
+    gtrack.attr.set("pq", "value.scale", "linear")
+    gtrack.attr.set("pq", "checkpoint", "epoch 7")
+    f <- file.path(withr::local_tempdir(), "x.parquet")
+    gextract("pq", intervals = gintervals.all(), iterator = 32, file = f)
+
+    gtrack.import("one", "", f, 64, attrs = c(checkpoint = "mine"))
+    expect_identical(gtrack.attr.get("one", "value.scale"), "linear")
+    expect_identical(gtrack.attr.get("one", "checkpoint"), "mine")
+    expect_identical(gtrack.attr.get("one", "description"), "pq")
+    expect_match(gtrack.attr.get("one", "created.by"), "gtrack.import", fixed = TRUE)
+    # pq's binsize is 32; the track imported at 64 does not carry it
+    expect_identical(gtrack.attr.get("pq", "binsize"), "32")
+    expect_identical(gtrack.attr.get("one", "binsize"), "")
+})

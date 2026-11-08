@@ -142,8 +142,9 @@
 #' @param description a character string description
 #' @param file file path. A Parquet file (recognized by its first bytes, whatever its name)
 #' is imported when it has exactly one value column besides 'chrom', 'start' and 'end';
-#' it always makes a dense track, so 'binsize' must be > 0. Use
-#' \code{\link{gtrack.import_parquet}} for several columns.
+#' it always makes a dense track, so 'binsize' must be > 0, and the column's field metadata
+#' becomes attributes of the track as in \code{\link{gtrack.import_parquet}} ('attrs' wins
+#' over it). Use \code{\link{gtrack.import_parquet}} for several columns.
 #' @param binsize bin size of the newly created 'Dense' track or '0' for a
 #' 'Sparse' track
 #' @param defval default track value
@@ -242,6 +243,7 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
                 }
                 pq_columns <- .gcall("parquet_columns", file, file.original, .misha_env())$name
                 pq_columns <- setdiff(pq_columns, c("chrom", "start", "end"))
+                pq_metadata <- .gcall("parquet_field_metadata", file, file.original, .misha_env())
                 if (length(pq_columns) != 1) {
                     stop(sprintf(
                         "gtrack.import needs a Parquet file with exactly one value column, but %s has %d (%s); use gtrack.import_parquet to import several columns",
@@ -311,6 +313,9 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
                         .gtrack_set_created_attrs(trackstr, description, sprintf("gtrack.import(%s, description, \"%s\", %d, %g, attrs)", trackstr, file.original, bed_binsize, defval), attrs)
                     } else {
                         .gtrack_set_created_attrs(trackstr, description, sprintf("gtrack.import(%s, description, \"%s\", %d, %g, attrs)", trackstr, file.original, binsize, defval), attrs)
+                        if (!is.null(pq_columns)) {
+                            .gtrack_restore_parquet_attrs(trackstr, pq_metadata[[pq_columns]], description, names(attrs))
+                        }
                     }
 
                     # If database is indexed, automatically convert the track to indexed format
