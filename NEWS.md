@@ -1,3 +1,23 @@
+# misha 5.17.0
+
+This release fixes the defects found in the review of 5.16.1, makes common large computations faster, and adds features for work with sequence-to-function models. Fixes that change results are marked **Behavior fix**; recompute anything that depends on them.
+
+* `gseq.extract(pad = TRUE)` returns fixed-width windows that run past a chromosome end, padded with "N".
+
+* **Behavior fix:** `gextract(file = "*.parquet")` writes value columns as double; they were float32, which rounded positions by up to 8 bp.
+
+* Track attributes travel through Parquet: `gextract(file = "*.parquet")` stores each track column's attributes, and `gtrack.import_parquet()` and `gtrack.import()` restore them. The docs of `gtrack.attr.set()` suggest names for model predictions: `value.scale`, `model`, `checkpoint`, `heldout.chroms`.
+
+* **Behavior fix:** a track-parallel `gextract()` whose worker process dies (e.g. out of memory) stops with an error; the worker's columns were dropped silently.
+
+* **Behavior fix:** imports (WIG, bedGraph, tab-delimited, bigWig, Parquet, `gtrack.array.import()`) clip a record that runs past the chromosome end and drop one that starts past it, with one warning; some formats errored and others clipped silently. Values near the float limit no longer become NaN.
+
+* `gtrack.export_bedgraph()` is about 10x faster and `gtrack.export_bigwig()` about 4x; `gtrack.export_bigwig()` works on databases whose chromosome order is not alphabetical; an export over intervals with no values writes the header. bedGraph and WIG import is about 6x faster.
+
+* `gtrack.2d.import_contacts(fends =)` uses memory in proportion to the number of fends, not the largest id.
+
+* `gmax.data.size` is documented as a number of records, and `gextract()`'s error over it suggests `file =`. The `gtrack.smooth()` docs give the exact window rule.
+
 # misha 5.16.1
 
 * **Behavior fix:** a numeric `strand` other than -1, 0 or 1 is an error, as in `gintervals()`; functions that read intervals took 255 as -1 (e.g. `gseq.extract()` returned the reverse complement) and 2 as 1.
