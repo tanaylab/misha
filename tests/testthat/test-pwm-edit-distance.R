@@ -2346,7 +2346,7 @@ describe("One-indel specialized solver", {
         )
     })
 
-    it("score filter bypass: max_indels=1 still runs even when score.min rejects no-indel windows", {
+    it("score filter applies with indels: max_indels=1 is NA when score.min rejects every window", {
         remove_all_vtracks()
 
         # Use the vtrack interface on a genomic interval.
@@ -2382,7 +2382,8 @@ describe("One-indel specialized solver", {
             bidirect = FALSE, extend = FALSE, prior = 0
         )
 
-        # With indel: score.min is bypassed when max_indels > 0
+        # With indel: score.min filters on the same ungapped window score
+        # (it used to be ignored silently when max_indels > 0)
         gvtrack.create("edist_indel_filt", NULL,
             func = "pwm.edit_distance",
             pssm = acgt_pssm, score.thresh = threshold,
@@ -2400,11 +2401,31 @@ describe("One-indel specialized solver", {
             info = "No-indel with strict score.min should return NA"
         )
 
-        # With indel: score filter is bypassed, so it should produce a result
-        # (the interval contains ACGT, so threshold is reachable)
-        expect_false(is.na(result$edist_indel_filt[1]),
-            info = "max_indels=1 should bypass score.min filter"
+        # With indel: every window is filtered out as well, although the interval
+        # contains ACGT and the threshold is reachable
+        expect_true(is.na(result$edist_indel_filt[1]),
+            info = "max_indels=1 with strict score.min should return NA"
         )
+
+        # A score.min every window passes leaves the result unfiltered
+        gvtrack.create("edist_indel_nofilt", NULL,
+            func = "pwm.edit_distance",
+            pssm = acgt_pssm, score.thresh = threshold,
+            score.min = -Inf, max_indels = 1,
+            bidirect = FALSE, extend = FALSE, prior = 0
+        )
+        gvtrack.create("edist_indel_plain", NULL,
+            func = "pwm.edit_distance",
+            pssm = acgt_pssm, score.thresh = threshold,
+            max_indels = 1,
+            bidirect = FALSE, extend = FALSE, prior = 0
+        )
+        r2 <- gextract(c("edist_indel_nofilt", "edist_indel_plain"),
+            test_interval,
+            iterator = test_interval
+        )
+        expect_false(is.na(r2$edist_indel_plain[1]))
+        expect_equal(r2$edist_indel_nofilt[1], r2$edist_indel_plain[1])
     })
 
     it("backward compatibility: max_indels=0 produces identical results to omitted max_indels", {
