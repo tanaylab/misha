@@ -1,12 +1,131 @@
 #include <errno.h>
 
 #include "port.h"
-#include "strutil.h"
 #include "Wig.h"
 
 string Wig::FIELDS_STRS[NUM_FIELDS] = { "chrom=", "start=", "step=", "span=" };
 
-#include <fstream>
+// Bytes read from the file at a time
+static const size_t WIG_BLOCK_SIZE = 1 << 20;
+
+// The characters that separate fields: isspace() of the C locale ('\n' ends a line, and '\r' is
+// removed before a line is split)
+static const struct SpaceChars {
+	bool is[256];
+
+	SpaceChars() {
+		memset(is, 0, sizeof(is));
+		is[(unsigned char)' '] = is[(unsigned char)'\t'] = is[(unsigned char)'\v'] = is[(unsigned char)'\f'] = true;
+	}
+} s_space;
+
+void Wig::seek(int64_t pos)
+{
+	if (m_buf.empty())
+		m_buf.resize(WIG_BLOCK_SIZE + 1);
+	m_bfile.seek(pos, SEEK_SET);
+	m_buf_fpos = pos;
+	m_buf_pos = m_buf_end = 0;
+	m_file_end = false;
+}
+
+// The next line, without its '\n', and whether it had one (the last line of a file may not).
+// line[len] can be overwritten. Returns false at the end of the file.
+bool Wig::next_line(char *&line, size_t &len, bool &terminated)
+{
+	while (1) {
+		char *start = m_buf.data() + m_buf_pos;
+		char *nl = (char *)memchr(start, '\n', m_buf_end - m_buf_pos);
+
+		if (nl) {
+			line = start;
+			len = nl - start;
+			terminated = true;
+			m_buf_pos += len + 1;
+			return true;
+		}
+
+		if (m_file_end) {
+			if (m_buf_pos == m_buf_end)
+				return false;
+			line = start;
+			len = m_buf_end - m_buf_pos;
+			terminated = false;
+			m_buf_pos = m_buf_end;
+			return true;
+		}
+
+		// Keep the partial line and read more after it; one byte stays free for a NUL
+		size_t left = m_buf_end - m_buf_pos;
+		memmove(m_buf.data(), start, left);
+		m_buf_fpos += m_buf_pos;
+		m_buf_pos = 0;
+		m_buf_end = left;
+		if (m_buf.size() < left + WIG_BLOCK_SIZE + 1)
+			m_buf.resize(left + WIG_BLOCK_SIZE + 1);
+
+		uint64_t n = m_bfile.read(m_buf.data() + m_buf_end, WIG_BLOCK_SIZE);
+		if (m_bfile.error())
+			TGLError<Wig>(FILE_ERROR, "Failed to read WIG file %s: %s", m_bfile.file_name().c_str(), strerror(errno));
+		if (!n)
+			m_file_end = true;
+		m_buf_end += n;
+	}
+}
+
+// Splits the next line that is not empty into m_fields, which is left empty at the end of the
+// file. Returns the number of lines consumed, counted as split_line_by_space_chars counts them:
+// every line, and one more when the end of the file is reached.
+int Wig::split_fields()
+{
+	int num_lines = 0;
+	char *line;
+	size_t len;
+	bool terminated;
+
+	m_fields.clear();
+	while (next_line(line, len, terminated)) {
+		++num_lines;
+
+		// '\r' is dropped wherever it is, not only before '\n'
+		if (memchr(line, '\r', len)) {
+			char *out = line;
+			for (size_t i = 0; i < len; ++i) {
+				if (line[i] != '\r')
+					*out++ = line[i];
+			}
+			len = out - line;
+		}
+
+		char *p = line;
+		char *end = line + len;
+		bool trailing_space = len && s_space.is[(unsigned char)line[len - 1]];
+		while (1) {
+			while (p < end && s_space.is[(unsigned char)*p])
+				++p;
+			if (p == end)
+				break;
+			char *field = p;
+			while (p < end && !s_space.is[(unsigned char)*p])
+				++p;
+			m_fields.push_back(Field{ field, (size_t)(p - field) });
+			*p = '\0';  // a separator, the '\n' or the byte after the last line
+			if (p < end)
+				++p;
+		}
+		// As split_line_by_space_chars: space after the last field adds one empty field
+		if (!m_fields.empty() && trailing_space) {
+			*end = '\0';
+			m_fields.push_back(Field{ end, 0 });
+		}
+
+		if (!m_fields.empty())
+			return num_lines;
+		if (!terminated)
+			return num_lines;
+	}
+	return num_lines + 1;
+}
 
 void Wig::init(const GenomeChromKey &chromkey, const string &filename, bool ignore_unknown_chroms)
 {
@@ -23,6 +142,8 @@ void Wig::init(const GenomeChromKey &chromkey, const string &filename, bool igno
 
 	if (m_bfile.open(filename.c_str(), "r"))
 		TGLError<Wig>(FILE_ERROR, "Failed to open WIG file %s: %s", m_bfile.file_name().c_str(), strerror(errno));
+	m_has_last_chrom = false;
+	seek(0);
 
 	Rec rec;
 	int64_t lineno = 1;
@@ -32,7 +153,7 @@ void Wig::init(const GenomeChromKey &chromkey, const string &filename, bool igno
 	int chrom_rec_type = -1;
 
 	while (1) {
-		last_fpos = m_bfile.tell();
+		last_fpos = tell();
 		last_lineno = lineno;
 
 		if (!read_record(rec, lineno))
@@ -102,7 +223,7 @@ bool Wig::get_data(int chromid, GIntervals &intervals)
 	int64_t step = 0;
 	Rec rec;
 
-	m_bfile.seek(m_chrom_fpos[chromid], SEEK_SET);
+	seek(m_chrom_fpos[chromid]);
 
 	while (1) {
 		if (!read_record(rec, lineno))
@@ -177,58 +298,55 @@ bool Wig::get_data(int chromid, GIntervals &intervals)
 
 bool Wig::read_record(Rec &rec, int64_t &lineno)
 {
-	vector<string> fields;
+	vector<Field> &fields = m_fields;
 
 	while (1) {
-		lineno += split_line_by_space_chars(m_bfile, fields);
-
-		if (m_bfile.error())
-			TGLError<Wig>(FILE_ERROR, "Failed to read WIG file %s: %s", m_bfile.file_name().c_str(), strerror(errno));
+		lineno += split_fields();
 
 		if (fields.empty())
 			break;
 
 		// UCSC header lines
-		if (fields[0] == "track" || fields[0] == "browser" || (fields[0].size() && fields[0][0] == '#'))
+		if (fields[0] == "track" || fields[0] == "browser" || fields[0].str[0] == '#')
 			continue;
 
 		if (fields[0] == "variableStep") {
 			if (fields.size() < 2 || fields.size() > 3 ||
-					fields[1].compare(0, FIELDS_STRS[CHROM_FIELD].size(), FIELDS_STRS[CHROM_FIELD]) ||
-					(fields.size() == 3 && fields[2].compare(0, FIELDS_STRS[SPAN_FIELD].size(), FIELDS_STRS[SPAN_FIELD])))
+					!fields[1].starts_with(FIELDS_STRS[CHROM_FIELD]) ||
+					(fields.size() == 3 && !fields[2].starts_with(FIELDS_STRS[SPAN_FIELD])))
 				TGLError<Wig>(INVALID_FORMAT, "Invalid format of WIG file %s, line %ld", m_bfile.file_name().c_str(), lineno - 1);
 
-			rec.var_step.chromid = str2chromid(fields[1].c_str() + FIELDS_STRS[CHROM_FIELD].length(), lineno - 1);
-			rec.var_step.span = fields.size() == 3 ? str2span(fields[2].c_str() + FIELDS_STRS[SPAN_FIELD].length(), lineno - 1) : 1;
+			rec.var_step.chromid = str2chromid(fields[1].str + FIELDS_STRS[CHROM_FIELD].length(), lineno - 1);
+			rec.var_step.span = fields.size() == 3 ? str2span(fields[2].str + FIELDS_STRS[SPAN_FIELD].length(), lineno - 1) : 1;
 			rec.type = VAR_STEP_REC;
 			return true;
 		}
 
 		if (fields[0] == "fixedStep") {
 			if (fields.size() < 4 || fields.size() > 5 ||
-					fields[1].compare(0, FIELDS_STRS[CHROM_FIELD].size(), FIELDS_STRS[CHROM_FIELD]) ||
-					fields[2].compare(0, FIELDS_STRS[START_FIELD].size(), FIELDS_STRS[START_FIELD]) ||
-					fields[3].compare(0, FIELDS_STRS[STEP_FIELD].size(), FIELDS_STRS[STEP_FIELD]) ||
-					(fields.size() == 5 && fields[4].compare(0, FIELDS_STRS[SPAN_FIELD].size(), FIELDS_STRS[SPAN_FIELD])))
+					!fields[1].starts_with(FIELDS_STRS[CHROM_FIELD]) ||
+					!fields[2].starts_with(FIELDS_STRS[START_FIELD]) ||
+					!fields[3].starts_with(FIELDS_STRS[STEP_FIELD]) ||
+					(fields.size() == 5 && !fields[4].starts_with(FIELDS_STRS[SPAN_FIELD])))
 				TGLError<Wig>(INVALID_FORMAT, "Invalid format of WIG file %s, line %ld", m_bfile.file_name().c_str(), lineno - 1);
 
-			rec.fixed_step.chromid = str2chromid(fields[1].c_str() + FIELDS_STRS[CHROM_FIELD].length(), lineno - 1);
-			rec.fixed_step.start = str2start(fields[2].c_str() + FIELDS_STRS[START_FIELD].length(), lineno - 1);
-			rec.fixed_step.step = str2step(fields[3].c_str() + FIELDS_STRS[STEP_FIELD].length(), lineno - 1);
-			rec.fixed_step.span = fields.size() == 5 ? str2span(fields[4].c_str() + FIELDS_STRS[SPAN_FIELD].length(), lineno - 1) : 1;
+			rec.fixed_step.chromid = str2chromid(fields[1].str + FIELDS_STRS[CHROM_FIELD].length(), lineno - 1);
+			rec.fixed_step.start = str2start(fields[2].str + FIELDS_STRS[START_FIELD].length(), lineno - 1);
+			rec.fixed_step.step = str2step(fields[3].str + FIELDS_STRS[STEP_FIELD].length(), lineno - 1);
+			rec.fixed_step.span = fields.size() == 5 ? str2span(fields[4].str + FIELDS_STRS[SPAN_FIELD].length(), lineno - 1) : 1;
 			rec.type = FIXED_STEP_REC;
 			return true;
 		}
 
 		if (fields.size() == 1) {
-			rec.val = str2val(fields[0].c_str(), lineno - 1);
+			rec.val = str2val(fields[0].str, lineno - 1);
 			rec.type = VAL_REC;
 			return true;
 		}
 
 		if (fields.size() == 2) {
-			rec.coord_val.coord = str2coord(fields[0].c_str(), 1, lineno - 1);
-			rec.coord_val.val = str2val(fields[1].c_str(), lineno - 1);
+			rec.coord_val.coord = str2coord(fields[0].str, 1, lineno - 1);
+			rec.coord_val.val = str2val(fields[1].str, lineno - 1);
 			rec.type = COORD_VAL_REC;
 			return true;
 		}
@@ -249,14 +367,14 @@ bool Wig::read_record(Rec &rec, int64_t &lineno)
 			// "invalid format" error path below.
 			bool looks_like_bedgraph = true;
 			for (int i = 0; i < 4 && looks_like_bedgraph; ++i) {
-				if (fields[i].find('=') != string::npos)
+				if (memchr(fields[i].str, '=', fields[i].len))
 					looks_like_bedgraph = false;
 			}
 			if (looks_like_bedgraph) {
-				rec.bedgraph.chromid = str2chromid(fields[0].c_str(), lineno - 1);
-				rec.bedgraph.start = str2coord(fields[1].c_str(), 0, lineno - 1);
-				rec.bedgraph.end = str2coord(fields[2].c_str(), 0, lineno - 1);
-				rec.bedgraph.val = str2val(fields[3].c_str(), lineno - 1);
+				rec.bedgraph.chromid = str2chromid(fields[0].str, lineno - 1);
+				rec.bedgraph.start = str2coord(fields[1].str, 0, lineno - 1);
+				rec.bedgraph.end = str2coord(fields[2].str, 0, lineno - 1);
+				rec.bedgraph.val = str2val(fields[3].str, lineno - 1);
 				rec.type = BEDGRAPH_REC;
 				return true;
 			}

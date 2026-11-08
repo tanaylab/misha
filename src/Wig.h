@@ -2,6 +2,7 @@
 #define WIG_H_
 
 #include <cstdint>
+#include <cstring>
 #include <string>
 #include <vector>
 #include "BufferedFile.h"
@@ -73,6 +74,16 @@ private:
 		};
 	};
 
+	// A field of the line being parsed: NUL-terminated in the line buffer. len is its full
+	// length, which a NUL byte inside the field makes longer than strlen(str).
+	struct Field {
+		char  *str;
+		size_t len;
+
+		bool operator==(const char *s) const { return len == strlen(s) && !memcmp(str, s, len); }
+		bool starts_with(const string &prefix) const { return len >= prefix.size() && !memcmp(str, prefix.data(), prefix.size()); }
+	};
+
 	static string FIELDS_STRS[NUM_FIELDS];
 
 	GenomeChromKey *m_chromkey;
@@ -82,6 +93,25 @@ private:
 	BufferedFile    m_bfile;
 	bool            m_ignore_unknown_chroms;
 	UnknownChroms   m_unknown_chroms;
+
+	// The file is read a block at a time into m_buf and split into fields in place.
+	// [m_buf_pos, m_buf_end) is the part not parsed yet; m_buf[0] is at offset m_buf_fpos.
+	vector<char>    m_buf;
+	size_t          m_buf_pos{0};
+	size_t          m_buf_end{0};
+	int64_t         m_buf_fpos{0};
+	bool            m_file_end{false};
+	vector<Field>   m_fields;
+
+	// The last chromosome name looked up and its id (-1: not in the database)
+	string          m_last_chrom;
+	int             m_last_chromid{-1};
+	bool            m_has_last_chrom{false};
+
+	int64_t tell() const { return m_buf_fpos + m_buf_pos; }
+	void    seek(int64_t pos);
+	bool    next_line(char *&line, size_t &len, bool &terminated);
+	int     split_fields();
 
 	bool read_record(Rec &rec, int64_t &lineno);
 
@@ -96,18 +126,27 @@ private:
 
 //-------------------------------------IMPLEMENTATION -----------------------------------------
 
+// Consecutive records nearly always name the same chromosome: the last name is looked up once
 inline int Wig::str2chromid(const char *str, int64_t lineno)
 {
+	size_t len = strlen(str);
+
+	if (m_has_last_chrom && len == m_last_chrom.size() && !memcmp(str, m_last_chrom.data(), len))
+		return m_last_chromid;
+
+	int chromid;
 	try {
-		return m_chromkey->chrom2id(str);
+		chromid = m_chromkey->chrom2id(str);
 	} catch (TGLException &e) {
-		if (m_ignore_unknown_chroms) {
-			m_unknown_chroms.record(str);
-			return -1;
-		}
-		TGLError<Wig>(BAD_CHROM, "WIG file %s, line %ld: %s\n", m_bfile.file_name().c_str(), lineno, e.msg());
+		if (!m_ignore_unknown_chroms)
+			TGLError<Wig>(BAD_CHROM, "WIG file %s, line %ld: %s\n", m_bfile.file_name().c_str(), lineno, e.msg());
+		m_unknown_chroms.record(str);
+		chromid = -1;
 	}
-	return -1;
+	m_last_chrom.assign(str, len);
+	m_last_chromid = chromid;
+	m_has_last_chrom = true;
+	return chromid;
 }
 
 inline int64_t Wig::str2span(const char *str, int64_t lineno)
