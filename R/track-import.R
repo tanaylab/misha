@@ -243,13 +243,13 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
                 }
                 pq_columns <- .gcall("parquet_columns", file, file.original, .misha_env())$name
                 pq_columns <- setdiff(pq_columns, c("chrom", "start", "end"))
-                pq_metadata <- .gcall("parquet_field_metadata", file, file.original, .misha_env())
                 if (length(pq_columns) != 1) {
                     stop(sprintf(
                         "gtrack.import needs a Parquet file with exactly one value column, but %s has %d (%s); use gtrack.import_parquet to import several columns",
                         file.original, length(pq_columns), paste(pq_columns, collapse = ", ")
                     ), call. = FALSE)
                 }
+                pq_metadata <- .gcall("parquet_field_metadata", file, file.original, pq_columns, .misha_env())
             } else if (is_bed_input || length(grep("^.+\\.bed$", file, perl = TRUE))) {
                 message("Importing BED file...\n")
                 report.progress <- TRUE
@@ -913,7 +913,7 @@ gtrack.import_parquet <- function(description, path, binsize, track.prefix = NUL
     }
 
     # the attributes gextract(file = "*.parquet") wrote for track columns: Arrow field metadata
-    field_md <- .gcall("parquet_field_metadata", files[1], files[1], .misha_env())
+    field_md <- .gcall("parquet_field_metadata", files[1], files[1], columns, .misha_env())
 
     tracks <- paste0(track.prefix, columns)
     # the rule gintervals.save applies to interval set names; dots are directories

@@ -13,6 +13,7 @@
 #include <map>
 #include <memory>
 #include <numeric>
+#include <set>
 #include <tuple>
 
 #include "DataFrameUtils.h"
@@ -586,20 +587,62 @@ SEXP parquet_columns(SEXP _file, SEXP _name, SEXP _envir)
 }
 
 // The Arrow field metadata of the columns of a Parquet file (see arrow_field_metadata): a list named
-// by column of named character vectors (key = value), only for the columns that have some. name is
-// what messages call the file.
-SEXP parquet_field_metadata(SEXP _file, SEXP _name, SEXP _envir)
+// by column of named character vectors (key = value), only for the columns of _columns (NULL: all)
+// that have some. name is what messages call the file.
+SEXP parquet_field_metadata(SEXP _file, SEXP _name, SEXP _columns, SEXP _envir)
 {
 	try {
 		RdbInitializer rdb_init;
 
 		if (!Rf_isString(_file) || Rf_length(_file) != 1 || !Rf_isString(_name) || Rf_length(_name) != 1)
 			verror("File argument is not a string");
+		if (!Rf_isNull(_columns) && !Rf_isString(_columns))
+			verror("Columns argument is not a character vector");
 
 		ParquetReader reader;
 		reader.open(CHAR(STRING_ELT(_file, 0)), CHAR(STRING_ELT(_name, 0)));
 
 		map<string, vector<pair<string, string>>> md = arrow_field_metadata(reader.metadata());
+		const char *name = CHAR(STRING_ELT(_name, 0));
+
+		if (!Rf_isNull(_columns)) {
+			set<string> wanted;
+			for (int i = 0; i < Rf_length(_columns); ++i)
+				wanted.insert(CHAR(STRING_ELT(_columns, i)));
+			for (auto icol = md.begin(); icol != md.end(); )
+				icol = wanted.count(icol->first) ? next(icol) : md.erase(icol);
+		}
+
+		// An R string cannot hold a NUL byte: such a column name, key or value is left out, with a
+		// warning, rather than failing the import
+		auto has_nul = [](const string &s) { return s.find('\0') != string::npos; };
+		auto shown = [](const string &s) {
+			string res;
+			for (char c : s)
+				res += c ? string(1, c) : string("\\0");
+			return res;
+		};
+		for (auto icol = md.begin(); icol != md.end(); ) {
+			if (has_nul(icol->first)) {
+				add_pending_diagnostic(_envir, "warning",
+				                       ("The field metadata of column \"" + shown(icol->first) + "\" of " + name +
+				                        " was left out: the column name holds a NUL byte").c_str());
+				icol = md.erase(icol);
+				continue;
+			}
+			vector<pair<string, string>> kept;
+			for (const auto &kv : icol->second) {
+				if (has_nul(kv.first) || has_nul(kv.second))
+					add_pending_diagnostic(_envir, "warning",
+					                       ("Field metadata \"" + shown(kv.first) + "\" of column \"" + icol->first + "\" of " + name +
+					                        " was left out: it holds a NUL byte, which an attribute cannot").c_str());
+				else
+					kept.push_back(kv);
+			}
+			icol->second.swap(kept);
+			++icol;
+		}
+
 		SEXP answer = rprotect_ptr(RSaneAllocVector(VECSXP, md.size()));
 		SEXP cols = rprotect_ptr(RSaneAllocVector(STRSXP, md.size()));
 		size_t i = 0;
