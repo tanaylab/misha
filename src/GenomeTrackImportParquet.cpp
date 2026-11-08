@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <map>
 #include <memory>
 #include <numeric>
 #include <tuple>
@@ -573,6 +574,49 @@ SEXP parquet_columns(SEXP _file, SEXP _name, SEXP _envir)
 		SET_VECTOR_ELT(answer, 1, types);
 		SET_STRING_ELT(colnames, 0, RSaneMkChar("name"));
 		SET_STRING_ELT(colnames, 1, RSaneMkChar("type"));
+		return answer;
+	} catch (TGLException &e) {
+		rerror("%s", e.msg());
+	} catch (const bad_alloc &e) {
+		rerror("Out of memory");
+	} catch (const exception &e) {
+		rerror("%s", e.what());
+	}
+	return R_NilValue;
+}
+
+// The Arrow field metadata of the columns of a Parquet file (see arrow_field_metadata): a list named
+// by column of named character vectors (key = value), only for the columns that have some. name is
+// what messages call the file.
+SEXP parquet_field_metadata(SEXP _file, SEXP _name, SEXP _envir)
+{
+	try {
+		RdbInitializer rdb_init;
+
+		if (!Rf_isString(_file) || Rf_length(_file) != 1 || !Rf_isString(_name) || Rf_length(_name) != 1)
+			verror("File argument is not a string");
+
+		ParquetReader reader;
+		reader.open(CHAR(STRING_ELT(_file, 0)), CHAR(STRING_ELT(_name, 0)));
+
+		map<string, vector<pair<string, string>>> md = arrow_field_metadata(reader.metadata());
+		SEXP answer = rprotect_ptr(RSaneAllocVector(VECSXP, md.size()));
+		SEXP cols = rprotect_ptr(RSaneAllocVector(STRSXP, md.size()));
+		size_t i = 0;
+
+		for (const auto &col : md) {
+			SEXP values = rprotect_ptr(RSaneAllocVector(STRSXP, col.second.size()));
+			SEXP keys = rprotect_ptr(RSaneAllocVector(STRSXP, col.second.size()));
+			for (size_t k = 0; k < col.second.size(); ++k) {
+				SET_STRING_ELT(keys, k, RSaneMkCharLenCE(col.second[k].first.data(), col.second[k].first.size(), CE_NATIVE));
+				SET_STRING_ELT(values, k, RSaneMkCharLenCE(col.second[k].second.data(), col.second[k].second.size(), CE_NATIVE));
+			}
+			Rf_setAttrib(values, R_NamesSymbol, keys);
+			SET_VECTOR_ELT(answer, i, values);
+			SET_STRING_ELT(cols, i, RSaneMkCharLenCE(col.first.data(), col.first.size(), CE_NATIVE));
+			++i;
+		}
+		Rf_setAttrib(answer, R_NamesSymbol, cols);
 		return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());

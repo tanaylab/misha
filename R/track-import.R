@@ -730,6 +730,22 @@ gtrack.import_set <- function(description = NULL, path = NULL, binsize = NULL, t
 }
 
 
+# Sets the attributes of a track gtrack.import_parquet created from md, the field metadata of its
+# column (a named character vector), except those the import sets: created.by, created.date,
+# created.user, and description unless the description given is empty
+.gtrack_restore_parquet_attrs <- function(track, md, description) {
+    skip <- c("created.by", "created.date", "created.user", if (nzchar(description)) "description")
+    md <- md[!is.na(names(md)) & nzchar(names(md)) & !names(md) %in% skip & !is.na(md) & nzchar(md)]
+    md <- md[!duplicated(names(md))]
+    if (length(md)) {
+        table <- as.data.frame(as.list(md), stringsAsFactors = FALSE, check.names = FALSE)
+        rownames(table) <- track
+        .gtrack.attr.import(table, FALSE, TRUE)
+    }
+    invisible(NULL)
+}
+
+
 #' Creates dense tracks from the columns of Parquet files
 #'
 #' Creates one 'Dense' track per value column of one or more Parquet files.
@@ -768,6 +784,15 @@ gtrack.import_set <- function(description = NULL, path = NULL, binsize = NULL, t
 #' or past the end are dropped, with one warning that gives the counts and the
 #' first such row. Messages number the rows of a file from 0, as pyarrow and
 #' pandas do.
+#'
+#' The field metadata of a column in the first file (Arrow field metadata, as
+#' \code{\link{gextract}} writes the attributes of a track column, or as
+#' pyarrow writes 'pa.field(name, type, metadata = ...)') becomes attributes
+#' of its track, except 'created.by', 'created.date' and 'created.user', which
+#' the import sets, and 'description' unless the 'description' argument is an
+#' empty string. A file without field metadata imports with only those
+#' attributes. See \code{\link{gtrack.attr.set}} for the attributes of model
+#' predictions.
 #'
 #' The import is all or nothing: if it fails or is interrupted, none of the
 #' tracks is created.
@@ -879,6 +904,9 @@ gtrack.import_parquet <- function(description, path, binsize, track.prefix = NUL
         }
     }
 
+    # the attributes gextract(file = "*.parquet") wrote for track columns: Arrow field metadata
+    field_md <- .gcall("parquet_field_metadata", files[1], files[1], .misha_env())
+
     tracks <- paste0(track.prefix, columns)
     # the rule gintervals.save applies to interval set names; dots are directories
     bad <- !grepl("^[A-Za-z][\\w.]*$", tracks, perl = TRUE)
@@ -931,6 +959,7 @@ gtrack.import_parquet <- function(description, path, binsize, track.prefix = NUL
                     ),
                     NULL
                 )
+                .gtrack_restore_parquet_attrs(tracks[i], field_md[[columns[i]]], description)
                 if (.gdb.is_indexed()) {
                     gtrack.convert_to_indexed(tracks[i])
                 }

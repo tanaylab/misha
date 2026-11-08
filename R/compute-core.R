@@ -31,7 +31,10 @@
 #' symbolic link is followed, and the file it points to is replaced) and
 #' renamed when complete, so an error or an interrupt leaves an existing file
 #' as it was. With a numeric 'iterator' the file is a table of dense bins
-#' that pyarrow reads directly.
+#' that pyarrow reads directly. A column whose track expression is exactly the
+#' name of a track carries the track's attributes as its field metadata (Arrow
+#' field metadata: in pyarrow, \code{pq.read_schema(file).field(name).metadata});
+#' \code{\link{gtrack.import_parquet}} restores them.
 #'
 #' If 'intervals.set.out' is not 'NULL' the result is saved as an intervals
 #' set. Similarly to 'file' parameter 'intervals.set.out' can be useful to

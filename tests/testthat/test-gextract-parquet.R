@@ -53,7 +53,8 @@ except Exception:
     concat_ok = False
 
 meta = {"schema": [{"name": x.name, "type": str(x.type), "nullable": x.nullable} for x in f.schema_arrow], "row_groups": [],
-        "schema_equals_reference": t.schema.equals(ref.schema), "concat_ok": concat_ok}
+        "schema_equals_reference": t.schema.equals(ref.schema), "concat_ok": concat_ok,
+        "field_metadata": {x.name: {k.decode(): v.decode() for k, v in x.metadata.items()} for x in f.schema_arrow if x.metadata}}
 for i in range(md.num_row_groups):
     rg = md.row_group(i)
     cols = []
@@ -112,7 +113,8 @@ read_pq <- function(path, coord_type = "int32") {
         iter_batches_rows = meta$iter_batches_rows,
         read_table_rows = meta$read_table_rows,
         schema_equals_reference = meta$schema_equals_reference,
-        concat_ok = meta$concat_ok
+        concat_ok = meta$concat_ok,
+        field_metadata = meta$field_metadata
     )
 }
 
@@ -245,6 +247,67 @@ test_that("coordinates past 2^24 are written exactly (position vtracks)", {
     # float32 holds these only to a multiple of 16
     expect_false(identical(float32(inmem$mp), inmem$mp))
     expect_same_rows(pq$table, inmem, "mp")
+})
+
+# The attributes of a track as a named character vector, sorted by name
+track_attrs <- function(track) {
+    a <- gtrack.attr.export(track)
+    v <- vapply(a, as.character, "")
+    v <- v[nzchar(v)]
+    v[order(names(v))]
+}
+
+test_that("track attributes travel as field metadata, and gtrack.import_parquet restores them", {
+    skip_without_pyarrow()
+    local_pq_track_db()
+    model <- "mod\u00e8le \u03b1"
+    gtrack.attr.set("pq", "value.scale", "log2(x+1)")
+    gtrack.attr.set("pq", "model", model)
+    # a track without any attribute
+    gtrack.create_dense("bare", "", gintervals.all(), c(1, 2), 32)
+    for (a in names(gtrack.attr.export("bare"))) {
+        .gtrack.attr.set("bare", a, "", TRUE)
+    }
+    expect_length(track_attrs("bare"), 0)
+    f <- file.path(withr::local_tempdir(), "x.parquet")
+
+    gextract(c("pq", "bare", "pq * 2"), intervals = gintervals.all(), iterator = 32, colnames = c("pq", "bare", "twice"), file = f)
+    pq <- read_pq(f)
+
+    # only the track column has field metadata: the attributes of the track
+    expect_identical(names(pq$field_metadata), "pq")
+    got <- unlist(pq$field_metadata$pq)
+    expect_identical(got[order(names(got))], track_attrs("pq"))
+    expect_identical(got[["model"]], model)
+    expect_arrow_like(pq)
+
+    # an empty description: the track's description comes from the file
+    gtrack.import_parquet("", f, 32, track.prefix = "back_")
+    back <- track_attrs("back_pq")
+    expect_identical(back[["value.scale"]], "log2(x+1)")
+    expect_identical(back[["model"]], model)
+    expect_identical(back[["description"]], "pq")
+    expect_match(back[["created.by"]], "gtrack.import_parquet", fixed = TRUE)
+    expect_identical(sort(names(back)), sort(names(track_attrs("pq"))))
+    for (track in c("back_bare", "back_twice")) {
+        expect_identical(sort(names(track_attrs(track))), c("created.by", "created.date", "created.user"), label = track)
+    }
+
+    # a description given wins
+    gtrack.import_parquet("mine", f, 32, track.prefix = "given_", columns = "pq")
+    expect_identical(track_attrs("given_pq")[["description"]], "mine")
+    expect_identical(track_attrs("given_pq")[["value.scale"]], "log2(x+1)")
+})
+
+test_that("field metadata survives the merge of the parts of kids", {
+    local_six_chrom_db(rep(1300000, 6))
+    withr::local_options(gmax.processes = 4, gmin.scope4process = 1000)
+    gtrack.attr.set("six", "heldout.chroms", "chr3,chr5")
+    f <- file.path(withr::local_tempdir(), "x.parquet")
+    gextract("six", intervals = gintervals.all(), iterator = 50, file = f)
+    gtrack.import_parquet("", f, 50, track.prefix = "back_")
+    expect_identical(gtrack.attr.get("back_six", "heldout.chroms"), "chr3,chr5")
+    expect_identical(gtrack.attr.get("back_six", "description"), "six")
 })
 
 test_that("an empty result is one empty row group, as pyarrow writes an empty table", {
