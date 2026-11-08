@@ -2280,15 +2280,19 @@ describe("One-indel specialized solver", {
     it("deletion improves alignment: inserted extra base is removed by one-indel solver", {
         remove_all_vtracks()
 
-        # "ATCGT" is "ACGT" with an extra T inserted after A.
-        # Use a tight threshold equal to the perfect-match score so that
-        # no 4bp substitution-only window can reach it.
+        # "ACAGT" is "ACGT" with an extra A inserted after C.
+        # Use a tight threshold equal to the perfect-match score.
         # Perfect score = 4 * log(0.97) ~ -0.122
-        seq <- "ATCGT"
+        # (The sequence used to be "ATCGT", but there one substitution, TCGT ->
+        # ACGT, is just as good as the deletion; it was missed only because the
+        # summed float gains landed 1e-7 below a threshold set exactly at the
+        # maximum. "ACAGT" needs 2 substitutions in either 4-bp window, so the
+        # deletion is the one 1-edit answer.)
+        seq <- "ACAGT"
         threshold <- sum(log(c(0.97, 0.97, 0.97, 0.97)))
 
-        # Without indels: no 4bp window of "ATCGT" matches ACGT perfectly.
-        # Windows are "ATCG" and "TCGT", both have at least 1 mismatch.
+        # Without indels: no 4bp window of "ACAGT" is within one substitution of ACGT.
+        # Windows are "ACAG" and "CAGT", both have two mismatches.
         # At the tight threshold these are unreachable, so we get 0 rows.
         result_no_indel <- gseq.pwm_edits(seq, acgt_pssm,
             score.thresh = threshold,
@@ -2299,7 +2303,7 @@ describe("One-indel specialized solver", {
             info = "No sub-only window should reach the tight threshold"
         )
 
-        # With max_indels=1: the solver can delete the extra T to recover "ACGT"
+        # With max_indels=1: the solver can delete the extra A to recover "ACGT"
         result_with_indel <- gseq.pwm_edits(seq, acgt_pssm,
             score.thresh = threshold,
             max_indels = 1L, prior = 0, bidirect = FALSE
@@ -2308,10 +2312,10 @@ describe("One-indel specialized solver", {
             info = "Indel solver should find at least one alignment"
         )
 
-        # Expect exactly 1 edit: the deletion of the extra T
+        # Expect exactly 1 edit: the deletion of the extra A
         best_with_indel <- min(result_with_indel$n_edits)
         expect_equal(best_with_indel, 1,
-            info = "Should need exactly 1 deletion to recover ACGT from ATCGT"
+            info = "Should need exactly 1 deletion to recover ACGT from ACAGT"
         )
 
         # Confirm that the indel edit type is "del"

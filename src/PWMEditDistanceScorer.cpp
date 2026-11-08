@@ -691,6 +691,12 @@ bool PWMEditDistanceScorer::passes_prefilter(const int* bidx, int seq_avail, boo
 
 float PWMEditDistanceScorer::compute_window_edits(const int* bidx, int seq_avail, bool reverse)
 {
+    // No sequence reaches a threshold beyond S_max (ABOVE) or S_min (BELOW): every motif column, aligned,
+    // substituted or inserted, scores at most its col_max and at least its col_min.
+    if (!is_globally_reachable()) {
+        return std::numeric_limits<float>::quiet_NaN();
+    }
+
     // When indels are enabled, use specialized solvers.
     // Apply pigeonhole pre-filter first to skip windows that provably cannot
     // match within the edit budget.
@@ -1117,323 +1123,190 @@ float PWMEditDistanceScorer::compute_with_indels(const int* bidx_arr, int seq_le
 
     const int D = m_max_indels;
     const bool below = (m_direction == Direction::BELOW);
-    float best_edits = std::numeric_limits<float>::quiet_NaN();
 
-    // For each sequence window length W in [L-D, L+D], align the motif (length L)
-    // against W sequence bases using a 3D DP:
-    //   ABOVE: dp[i][j][k] = max PWM score aligning motif[0..i-1] with seq[0..j-1]
-    //   BELOW: dp[i][j][k] = min PWM score aligning motif[0..i-1] with seq[0..j-1]
-    //                 using exactly k indels (insertions + deletions)
+    // Exact for any number of indels. For each sequence window length W in [L-D, L+D], a banded DP aligns
+    // the motif (L columns) with W sequence bases and keeps, for every number of indels k and every number
+    // of substitutions s, the best score reachable (max for ABOVE, min for BELOW):
+    //   dp[i][j][k][s] over motif[0..i-1] and seq[0..j-1], |i - j| <= D
+    // A column aligned with a base scores that base, or, substituted (s + 1), its target score (col_max
+    // ABOVE, col_min BELOW); an inserted column (k + 1, no sequence base) scores its target as well; a deleted
+    // base (k + 1) scores nothing. The answer is the least k + s whose dp[L][W][k][s] satisfies the
+    // threshold. Keeping only the best score per (W, k) and adding substitutions afterwards is not enough:
+    // an alignment scoring lower can need fewer substitutions.
     //
-    // Band constraint: |i - j| <= D (prevents needing > D indels)
-    //
-    // For each final state dp[L][W][k], the score tells us the PWM log-likelihood
-    // of the aligned positions with their actual sequence bases. To reach the
-    // threshold, we may need additional substitutions: each substitution replaces
-    // a base with the column-optimal base for the given direction.
-    // ABOVE: gain = col_max - current (raise score toward threshold)
-    // BELOW: gain = current - col_min (lower score toward threshold)
-    // We traceback to find aligned positions and greedily pick the largest gains.
-    //
-    // Total edits = k (indels) + subs_needed.
-    // We minimize this across all W and k.
+    // A base whose score is log-zero is a mandatory substitution for ABOVE (m_mandatory_table): it can only
+    // be aligned substituted.
 
-    // DP initialization sentinel: -inf for ABOVE (maximize), +inf for BELOW (minimize)
-    const double dp_sentinel = below
-        ? std::numeric_limits<double>::infinity()
-        : -std::numeric_limits<double>::infinity();
+    // Most edits worth looking at: max_edits when set; otherwise every column substituted plus D indels
+    int best_total = (m_max_edits >= 1) ? m_max_edits + 1 : L + D + 1;
 
-    for (int W = std::max(1, L - D); W <= L + D; ++W) {
-        if (W > seq_len) {
-            break;
+    // Alignments with at most two indels first, solved exactly by the specialized solver when the motif fits
+    // it; otherwise the k = 0 alignment (W = L) alone, exactly, by taking the largest gains. Either bounds
+    // the number of substitutions the DP below has to track, and often settles the window.
+    const bool two_indels_done = (D >= 3 && L <= MAX_MOTIF_LEN_OPT);
+    if (two_indels_done) {
+        const float r = compute_with_two_indels(bidx_arr, seq_len, reverse);  // NaN: none within max_edits
+        if (!std::isnan(r)) {
+            best_total = static_cast<int>(r);
         }
-
-        const int rows = L + 1;
-        const int cols = W + 1;
-        const int indel_levels = D + 1;  // k = 0, 1, ..., D
-
-        // Reuse pre-allocated DP buffer to avoid per-window heap allocation
-        size_t dp_size = (size_t)rows * cols * indel_levels;
-        if (m_dp_buffer.size() < dp_size) {
-            m_dp_buffer.resize(dp_size);
+        if (best_total == 0) {
+            return 0.0f;
         }
-        std::fill(m_dp_buffer.begin(), m_dp_buffer.begin() + dp_size, dp_sentinel);
-        auto& dp = m_dp_buffer;
-
-        auto idx3 = [cols, indel_levels](int i, int j, int k) -> int {
-            return i * cols * indel_levels + j * indel_levels + k;
-        };
-
-        // Base case: empty alignment, 0 indels
-        dp[idx3(0, 0, 0)] = 0.0;
-
-        // First column: skip motif positions (each costs 1 indel)
-        for (int i = 1; i <= std::min(L, D); ++i) {
-            dp[idx3(i, 0, i)] = 0.0;
-        }
-
-        // First row: skip sequence positions (each costs 1 indel)
-        for (int j = 1; j <= std::min(W, D); ++j) {
-            dp[idx3(0, j, j)] = 0.0;
-        }
-
-        // Fill DP
-        for (int i = 1; i <= L; ++i) {
-            int j_min = std::max(1, i - D);
-            int j_max = std::min(W, i + D);
-
-            for (int j = j_min; j <= j_max; ++j) {
-                // Get precomputed base index at position j-1
-                int seq_idx = reverse ? (W - 1 - (j - 1)) : (j - 1);
-                int bi = bidx_arr[seq_idx];
-
-                // Use precomputed score from PSSM (complement already applied in bidx_arr).
-                // For the generic DP we need the raw PSSM score (not the mandatory-adjusted one),
-                // because the DP traceback handles gains separately.
-                float base_score;
-                if (bi == 4) {
-                    // Unknown base: worst case for the direction
-                    // ABOVE: minimum score (hardest to reach threshold from above)
-                    // BELOW: maximum score (hardest to get below threshold)
-                    if (below) {
-                        float max_s = -std::numeric_limits<float>::infinity();
-                        for (int b = 0; b < 4; b++) {
-                            float s = m_pssm[i - 1].get_log_prob_from_code(b);
-                            if (s > max_s) max_s = s;
-                        }
-                        base_score = max_s;
-                    } else {
-                        float min_s = std::numeric_limits<float>::infinity();
-                        for (int b = 0; b < 4; b++) {
-                            float s = m_pssm[i - 1].get_log_prob_from_code(b);
-                            if (s < min_s) min_s = s;
-                        }
-                        base_score = min_s;
-                    }
-                } else {
-                    base_score = m_pssm[i - 1].get_log_prob_from_code(bi);
-                }
-
-                for (int k = 0; k <= D; ++k) {
-                    // 1. Match/Substitution (diagonal): align motif[i-1] with seq[j-1]
-                    if (std::abs((i - 1) - (j - 1)) <= D) {
-                        double prev = dp[idx3(i - 1, j - 1, k)];
-                        if (below) {
-                            // BELOW: minimize score
-                            if (prev < std::numeric_limits<double>::infinity() * 0.5) {
-                                double new_score = prev + static_cast<double>(base_score);
-                                if (new_score < dp[idx3(i, j, k)]) {
-                                    dp[idx3(i, j, k)] = new_score;
-                                }
-                            }
-                        } else {
-                            // ABOVE: maximize score
-                            if (prev > -std::numeric_limits<double>::infinity() * 0.5) {
-                                double new_score = prev + static_cast<double>(base_score);
-                                if (new_score > dp[idx3(i, j, k)]) {
-                                    dp[idx3(i, j, k)] = new_score;
-                                }
-                            }
-                        }
-                    }
-
-                    if (k < D) {
-                        // 2. Insertion: skip motif[i-1], advance motif not sequence
-                        if (std::abs((i - 1) - j) <= D) {
-                            double prev = dp[idx3(i - 1, j, k)];
-                            if (below) {
-                                if (prev < std::numeric_limits<double>::infinity() * 0.5) {
-                                    if (prev < dp[idx3(i, j, k + 1)]) {
-                                        dp[idx3(i, j, k + 1)] = prev;
-                                    }
-                                }
-                            } else {
-                                if (prev > -std::numeric_limits<double>::infinity() * 0.5) {
-                                    if (prev > dp[idx3(i, j, k + 1)]) {
-                                        dp[idx3(i, j, k + 1)] = prev;
-                                    }
-                                }
-                            }
-                        }
-
-                        // 3. Deletion: skip seq[j-1], advance sequence not motif
-                        if (std::abs(i - (j - 1)) <= D) {
-                            double prev = dp[idx3(i, j - 1, k)];
-                            if (below) {
-                                if (prev < std::numeric_limits<double>::infinity() * 0.5) {
-                                    if (prev < dp[idx3(i, j, k + 1)]) {
-                                        dp[idx3(i, j, k + 1)] = prev;
-                                    }
-                                }
-                            } else {
-                                if (prev > -std::numeric_limits<double>::infinity() * 0.5) {
-                                    if (prev > dp[idx3(i, j, k + 1)]) {
-                                        dp[idx3(i, j, k + 1)] = prev;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+    } else if (L <= seq_len) {
+        double aligned_score = 0.0;
+        int mandatory_subs = 0;
+        std::vector<float>& gains = m_heur_deltas;
+        gains.clear();
+        for (int i = 0; i < L; i++) {
+            const int b = bidx_arr[reverse ? (L - 1 - i) : i];
+            aligned_score += static_cast<double>(m_score_table[i][b]);
+            if (m_mandatory_table[i][b]) {
+                mandatory_subs++;
+            } else if (m_gain_table[i][b] > 0.0f) {
+                gains.push_back(m_gain_table[i][b]);
             }
         }
-
-        // Extract results for each indel count k
-        for (int k = 0; k <= D; ++k) {
-            double score = dp[idx3(L, W, k)];
-            // Check for sentinel (unreachable state)
-            bool is_sentinel = below
-                ? (score >= std::numeric_limits<double>::infinity() * 0.5)
-                : (score <= -std::numeric_limits<double>::infinity() * 0.5);
-            if (is_sentinel) {
-                continue;
-            }
-
-            // If score already satisfies threshold, no substitutions needed
-            if (threshold_satisfied(score)) {
-                float total_edits = static_cast<float>(k);
-                if (std::isnan(best_edits) || total_edits < best_edits) {
-                    best_edits = total_edits;
-                }
-                continue;
-            }
-
-            // Traceback to find aligned motif positions and their gains
-            std::vector<float> aligned_gains;
-            aligned_gains.reserve(L);
-            int ti = L, tj = W, tk = k;
-
-            while (ti > 0 || tj > 0) {
-                if (ti == 0 && tj > 0 && tk > 0) {
-                    // Must be deletion
-                    tj--; tk--;
-                    continue;
-                }
-                if (tj == 0 && ti > 0 && tk > 0) {
-                    // Must be insertion
-                    ti--; tk--;
-                    continue;
-                }
-                if (ti == 0 || tj == 0) break;
-
-                double cur = dp[idx3(ti, tj, tk)];
-
-                // Helper: check if a DP value is a valid (non-sentinel) state
-                auto is_valid = [&](double val) -> bool {
-                    return below
-                        ? (val < std::numeric_limits<double>::infinity() * 0.5)
-                        : (val > -std::numeric_limits<double>::infinity() * 0.5);
-                };
-
-                // Try diagonal (match/substitution) first
-                bool found = false;
-                if (std::abs((ti - 1) - (tj - 1)) <= D) {
-                    int s_idx = reverse ? (W - 1 - (tj - 1)) : (tj - 1);
-                    int bi = bidx_arr[s_idx];
-
-                    float bs;
-                    if (bi == 4) {
-                        // Unknown base: use same logic as DP fill
-                        if (below) {
-                            float max_s = -std::numeric_limits<float>::infinity();
-                            for (int bb = 0; bb < 4; bb++) {
-                                float s = m_pssm[ti - 1].get_log_prob_from_code(bb);
-                                if (s > max_s) max_s = s;
-                            }
-                            bs = max_s;
-                        } else {
-                            float min_s = std::numeric_limits<float>::infinity();
-                            for (int bb = 0; bb < 4; bb++) {
-                                float s = m_pssm[ti - 1].get_log_prob_from_code(bb);
-                                if (s < min_s) min_s = s;
-                            }
-                            bs = min_s;
-                        }
-                    } else {
-                        bs = m_pssm[ti - 1].get_log_prob_from_code(bi);
-                    }
-
-                    double prev = dp[idx3(ti - 1, tj - 1, tk)];
-                    if (is_valid(prev) &&
-                        std::fabs((prev + static_cast<double>(bs)) - cur) < 1e-9 * std::max(1.0, std::fabs(cur))) {
-                        // ABOVE: gain = col_max - bs (how much we can raise the score)
-                        // BELOW: gain = bs - col_min (how much we can lower the score)
-                        float gain = below
-                            ? (bs - m_col_min_scores[ti - 1])
-                            : (m_col_max_scores[ti - 1] - bs);
-                        if (gain > 1e-12f) {
-                            aligned_gains.push_back(gain);
-                        }
-                        ti--; tj--;
-                        found = true;
-                    }
-                }
-
-                if (!found && ti > 0 && tk > 0 && std::abs((ti - 1) - tj) <= D) {
-                    // Try insertion
-                    double prev = dp[idx3(ti - 1, tj, tk - 1)];
-                    if (is_valid(prev) &&
-                        std::fabs(prev - cur) < 1e-9 * std::max(1.0, std::fabs(cur))) {
-                        ti--; tk--;
-                        found = true;
-                    }
-                }
-
-                if (!found && tj > 0 && tk > 0 && std::abs(ti - (tj - 1)) <= D) {
-                    // Try deletion
-                    double prev = dp[idx3(ti, tj - 1, tk - 1)];
-                    if (is_valid(prev) &&
-                        std::fabs(prev - cur) < 1e-9 * std::max(1.0, std::fabs(cur))) {
-                        tj--; tk--;
-                        found = true;
-                    }
-                }
-
-                if (!found) break;  // DP inconsistency (shouldn't happen)
-            }
-
-            double deficit = compute_deficit(score);
-            if (deficit <= 0.0) {
-                float total_edits = static_cast<float>(k);
-                if (std::isnan(best_edits) || total_edits < best_edits) {
-                    best_edits = total_edits;
-                }
-                continue;
-            }
-
-            // Check total available gain
-            double total_gain = 0.0;
-            for (float g : aligned_gains) {
-                total_gain += static_cast<double>(g);
-            }
-            if (total_gain < deficit) {
-                continue;  // Cannot reach threshold
-            }
-
-            // Sort gains descending, greedily pick largest
-            std::sort(aligned_gains.begin(), aligned_gains.end(), std::greater<float>());
-
+        double deficit = compute_deficit(aligned_score);
+        int total = mandatory_subs;
+        if (deficit > 0.0) {
+            std::sort(gains.begin(), gains.end(), std::greater<float>());
+            total = -1;
             double acc = 0.0;
-            int subs = 0;
-            for (float g : aligned_gains) {
-                acc += static_cast<double>(g);
-                subs++;
-                if (acc >= deficit) break;
+            for (size_t g = 0; g < gains.size(); g++) {
+                acc += static_cast<double>(gains[g]);
+                if (acc >= deficit) {
+                    total = mandatory_subs + static_cast<int>(g) + 1;
+                    break;
+                }
+            }
+        }
+        if (total >= 0 && total < best_total) {
+            best_total = total;
+        }
+        if (best_total == 0) {
+            return 0.0f;
+        }
+    }
+
+    const double sentinel = below ? std::numeric_limits<double>::infinity()
+                                  : -std::numeric_limits<double>::infinity();
+    auto valid = [below](double v) -> bool {
+        return below ? (v < std::numeric_limits<double>::infinity()) : (v > -std::numeric_limits<double>::infinity());
+    };
+    auto improve = [below](double& cell, double v) {
+        if (below ? (v < cell) : (v > cell)) cell = v;
+    };
+
+    const int JD = 2 * D + 1;  // band: j - i in [-D, D]
+    const int KD = D + 1;
+
+    // Window lengths with the fewest indels still to look at: an alignment of W bases has k = ins + del with
+    // ins - del = L - W, so k >= |W - L| and k has the parity of W - L; alignments done above are skipped
+    // (k = 0, or k <= 2 after the two-indel solver). Shortest first: an answer found early bounds the
+    // substitutions tracked for the rest.
+    std::vector<std::pair<int, int>> order;  // (W, fewest indels)
+    const int k_done = two_indels_done ? 2 : 0;
+    for (int W = std::max(1, L - D); W <= L + D; ++W) {
+        const int dw = std::abs(W - L);
+        int k_min = dw;
+        while (k_min <= k_done) k_min += 2;
+        if (k_min <= D) order.emplace_back(W, k_min);
+    }
+    std::stable_sort(order.begin(), order.end(),
+                     [](const std::pair<int, int>& a, const std::pair<int, int>& b) { return a.second < b.second; });
+
+    for (const auto& wk : order) {
+        {
+            const int W = wk.first;
+            const int k_min = wk.second;
+            const int dw = std::abs(W - L);
+            if (W < 1 || W > seq_len) continue;
+            // Substitutions worth tracking: total k + s < best_total with k >= k_min, at most one per column
+            const int S = std::min(L, best_total - 1 - k_min);
+            if (S < 0) continue;
+            const int SD = S + 1;
+            const size_t row_size = static_cast<size_t>(JD) * KD * SD;
+            if (m_dp_buffer.size() < 2 * row_size) {
+                m_dp_buffer.resize(2 * row_size);
+            }
+            double* prev = m_dp_buffer.data();
+            double* cur = m_dp_buffer.data() + row_size;
+            auto cell = [&](double* row, int dj, int k, int s) -> double& {
+                return row[(static_cast<size_t>(dj + D) * KD + k) * SD + s];
+            };
+
+            // Row i = 0: j bases deleted (k = j)
+            std::fill(prev, prev + row_size, sentinel);
+            for (int j = 0; j <= std::min(W, D); ++j) {
+                cell(prev, j, j, 0) = 0.0;
             }
 
-            float total_edits = static_cast<float>(k + subs);
-            if (std::isnan(best_edits) || total_edits < best_edits) {
-                best_edits = total_edits;
+            for (int i = 1; i <= L; ++i) {
+                const int col = i - 1;
+                const double tgt = static_cast<double>(target_score(col));
+                std::fill(cur, cur + row_size, sentinel);
+                const int j_lo = std::max(0, i - D);
+                const int j_hi = std::min(W, i + D);
+                for (int j = j_lo; j <= j_hi; ++j) {
+                    const int dj = j - i;
+
+                    // Match or substitution: from (i-1, j-1), same band offset
+                    if (j >= 1) {
+                        const int seq_idx = reverse ? (W - 1 - (j - 1)) : (j - 1);
+                        const int b = bidx_arr[seq_idx];
+                        const bool mandatory = m_mandatory_table[col][b];
+                        const double bs = static_cast<double>(m_score_table[col][b]);
+                        for (int k = 0; k < KD; ++k) {
+                            for (int s = 0; s <= S; ++s) {
+                                const double pv = cell(prev, dj, k, s);
+                                if (!valid(pv)) continue;
+                                if (!mandatory) improve(cell(cur, dj, k, s), pv + bs);
+                                if (s < S) improve(cell(cur, dj, k, s + 1), pv + tgt);
+                            }
+                        }
+                    }
+
+                    // Insertion: motif column col gets an inserted base; from (i-1, j), band offset dj + 1
+                    if (dj + 1 <= D) {
+                        for (int k = 0; k + 1 < KD; ++k) {
+                            for (int s = 0; s <= S; ++s) {
+                                const double pv = cell(prev, dj + 1, k, s);
+                                if (valid(pv)) improve(cell(cur, dj, k + 1, s), pv + tgt);
+                            }
+                        }
+                    }
+
+                    // Deletion: sequence base j-1 is skipped; from (i, j-1) in this row, band offset dj - 1
+                    if (j >= 1 && dj - 1 >= -D) {
+                        for (int k = 0; k + 1 < KD; ++k) {
+                            for (int s = 0; s <= S; ++s) {
+                                const double pv = cell(cur, dj - 1, k, s);
+                                if (valid(pv)) improve(cell(cur, dj, k + 1, s), pv);
+                            }
+                        }
+                    }
+                }
+                std::swap(prev, cur);
+            }
+
+            const int dj_end = W - L;
+            for (int k = std::max(dw, k_min); k < KD; ++k) {
+                for (int s = 0; s <= S && k + s < best_total; ++s) {
+                    const double v = cell(prev, dj_end, k, s);
+                    if (valid(v) && threshold_satisfied(v)) {
+                        best_total = k + s;
+                        break;
+                    }
+                }
             }
         }
     }
 
-    // Apply max_edits cap if set
-    if (!std::isnan(best_edits) && m_max_edits >= 1 && best_edits > static_cast<float>(m_max_edits)) {
+    const int cap = (m_max_edits >= 1) ? m_max_edits : L + D;
+    if (best_total > cap) {
         return std::numeric_limits<float>::quiet_NaN();
     }
-
-    return best_edits;
+    return static_cast<float>(best_total);
 }
 
 bool PWMEditDistanceScorer::early_abandon_banded_dp(const char* seq_ptr, int seq_len, bool reverse) const
@@ -1518,23 +1391,25 @@ bool PWMEditDistanceScorer::early_abandon_banded_dp(const char* seq_ptr, int seq
             }
         }
 
+        // ABOVE: use col_max (substitutions can raise score to maximum)
+        // BELOW: use col_min (substitutions can lower score to minimum)
+        // An inserted base scores the same: the best base an insertion can put in the column.
+        const double col_score = below
+            ? static_cast<double>(m_col_min_scores[i - 1])
+            : static_cast<double>(m_col_max_scores[i - 1]);
+
         // j=0: only insertion (skip motif[i-1]) is possible
         if (j_lo == 0) {
             for (int k = 1; k <= D; k++) {
                 double prev = dp_prev[0][k - 1];
                 bool is_valid = below ? (prev < SENTINEL) : (prev > SENTINEL);
-                bool is_better = below ? (prev < dp_cur[0][k]) : (prev > dp_cur[0][k]);
+                double cand = prev + col_score;
+                bool is_better = below ? (cand < dp_cur[0][k]) : (cand > dp_cur[0][k]);
                 if (is_valid && is_better) {
-                    dp_cur[0][k] = prev;
+                    dp_cur[0][k] = cand;
                 }
             }
         }
-
-        // ABOVE: use col_max (substitutions can raise score to maximum)
-        // BELOW: use col_min (substitutions can lower score to minimum)
-        const double col_score = below
-            ? static_cast<double>(m_col_min_scores[i - 1])
-            : static_cast<double>(m_col_max_scores[i - 1]);
 
         for (int j = std::max(1, j_lo); j <= j_hi; j++) {
             for (int k = 0; k <= D; k++) {
@@ -1552,13 +1427,14 @@ bool PWMEditDistanceScorer::early_abandon_banded_dp(const char* seq_ptr, int seq
                     }
                 }
 
-                // 2. Insertion (skip motif[i-1]): dp_prev[j][k-1]
+                // 2. Insertion (motif[i-1] gets an inserted base): dp_prev[j][k-1] + col_score
                 if (k >= 1 && std::abs((i - 1) - j) <= D) {
                     double prev = dp_prev[j][k - 1];
                     bool is_valid = below ? (prev < SENTINEL) : (prev > SENTINEL);
-                    bool is_better = below ? (prev < val) : (prev > val);
+                    double cand = prev + col_score;
+                    bool is_better = below ? (cand < val) : (cand > val);
                     if (is_valid && is_better) {
-                        val = prev;
+                        val = cand;
                     }
                 }
 
@@ -1906,10 +1782,11 @@ float PWMEditDistanceScorer::compute_with_one_indel(const int* bidx_arr, int seq
     }
 
     // ===== Case C: One insertion in motif (W = L - 1, k = 1) =====
-    // We have L-1 sequence bases and L motif positions. One motif position is skipped.
+    // We have L-1 sequence bases and L motif positions. One motif position has no
+    // sequence base, and a base is inserted there.
     // The insertion at motif position m means:
     //   motif[0..m-1]    aligns with seq[0..m-1]
-    //   motif[m]          is skipped (insertion)
+    //   motif[m]          gets the inserted base, which scores target_score(m)
     //   motif[m+1..L-1]  aligns with seq[m..L-2]
     //
     // Need L-1 >= 1 (i.e. L >= 2) for this to apply.
@@ -1965,7 +1842,8 @@ float PWMEditDistanceScorer::compute_with_one_indel(const int* bidx_arr, int seq
         // m=L-1: skip motif[L-1], motif[0..L-2] aligns with seq[0..L-2]
         float gains_arr[MAX_MOTIF_LEN_OPT];
         for (int m = 0; m < L; m++) {
-            double aligned_score = prefix_cum_score[m] + suffix_cum_score[m];
+            double aligned_score = prefix_cum_score[m] + suffix_cum_score[m] +
+                                   static_cast<double>(target_score(m));
 
             // Quick O(1) deficit check: skip expensive gains collection if hopeless
             if (!quick_deficit_check(aligned_score, 1, best_edits)) continue;
@@ -2176,7 +2054,9 @@ float PWMEditDistanceScorer::compute_with_two_indels(const int* bidx_arr, int se
 
         float gains_arr[MAX_MOTIF_LEN_OPT];
         for (int m = 0; m < L; m++) {
-            double aligned_score = prefix_cum[m] + suffix_cum[m];
+            // motif[m] gets the inserted base
+            double aligned_score = prefix_cum[m] + suffix_cum[m] +
+                                   static_cast<double>(target_score(m));
 
             if (!quick_deficit_check(aligned_score, 1, best_edits)) continue;
 
@@ -2312,7 +2192,7 @@ float PWMEditDistanceScorer::compute_with_two_indels(const int* bidx_arr, int se
     }
 
     // ===== Case 5: Two insertions (W = L - 2, k = 2) =====
-    // Skip 2 motif columns m1 < m2 in [0, L-1].
+    // Insert bases at 2 motif columns m1 < m2 in [0, L-1] (each scores target_score()).
     // Segment layout:
     //   motif[0..m1-1]     <-> seq[0..m1-1]       (config0: no shift)
     //   motif[m1+1..m2-1]  <-> seq[m1..m2-2]      (config1: motif shifted, seq[i-1])
@@ -2407,7 +2287,10 @@ float PWMEditDistanceScorer::compute_with_two_indels(const int* bidx_arr, int se
                     mand3_count = suf2_mand[m2 + 1];
                 }
 
-                double aligned_score = seg1 + seg2 + seg3;
+                // motif[m1] and motif[m2] get the inserted bases
+                double aligned_score = seg1 + seg2 + seg3 +
+                                       static_cast<double>(target_score(m1)) +
+                                       static_cast<double>(target_score(m2));
 
                 if (!quick_deficit_check(aligned_score, 2, best_edits)) continue;
 
@@ -2432,7 +2315,7 @@ float PWMEditDistanceScorer::compute_with_two_indels(const int* bidx_arr, int se
     }
 
     // ===== Case 6: One deletion + one insertion (W = L, k = 2) =====
-    // Delete seq[d], skip motif[m]. Remaining L-1 pairs align 1:1.
+    // Delete seq[d], insert a base at motif[m] (scores target_score(m)). Remaining L-1 pairs align 1:1.
     //
     // d < m: motif[0..d-1] <-> seq[0..d-1],
     //        motif[d..m-1] <-> seq[d+1..m],
@@ -2539,6 +2422,9 @@ float PWMEditDistanceScorer::compute_with_two_indels(const int* bidx_arr, int se
                         mandatory_subs += suf_ns_mand[d + 1];
                     }
                 }
+
+                // motif[m] gets the inserted base
+                aligned_score += static_cast<double>(target_score(m));
 
                 if (!quick_deficit_check(aligned_score, 2, best_edits)) continue;
 

@@ -4,272 +4,108 @@ create_isolated_test_db()
 # R-level brute-force reference implementations for differential testing
 # ============================================================================
 
-#' Brute-force edit distance with indels: enumerate all alignment families.
+#' Brute-force edit distance with indels: enumerate every alignment.
 #' For a motif of length L, sequence of length S, with max_indels D:
-#'   For each window width W in [L-D, L+D]:
-#'     For each starting position p in [1, S-W+1]:
-#'       Run NW-style DP to find optimal alignment(s), then greedily count subs.
+#'   For each window width W in [L-D, L+D] and starting position p in [1, S-W+1]:
+#'     Enumerate every alignment of the L motif columns to the W bases with at
+#'     most D indels. An aligned column scores its base, an inserted column (no
+#'     base) scores the column maximum (the base an insertion puts there), and a
+#'     deleted base scores nothing; then greedily count the substitutions the
+#'     aligned columns need. A zero-probability base is a forced substitution.
+#' With direction = "below", the target of a column is its minimum and the
+#' threshold is to be reached from above (no forced substitutions). `starts`
+#' restricts the window starts (1-based) scanned.
 #' Returns minimum total edits (indels + subs) across all windows and strands.
 bruteforce_pwm_edit_distance_with_indels <- function(seq, pssm, threshold,
                                                      max_indels, max_edits = NULL,
-                                                     bidirect = FALSE, prior = 0) {
-    motif_len <- nrow(pssm)
+                                                     bidirect = FALSE, prior = 0,
+                                                     direction = "above", starts = NULL) {
+    L <- nrow(pssm)
     S <- nchar(seq)
+    D <- max_indels
+    below <- direction == "below"
 
     if (prior > 0) {
         pssm <- pssm + prior
         pssm <- pssm / rowSums(pssm)
     }
     log_pssm <- log(pssm)
-    col_max <- apply(log_pssm, 1, max)
+    col_max <- if (below) apply(log_pssm, 1, min) else apply(log_pssm, 1, max)
+    base_idx_map <- c(A = 1, C = 2, G = 3, T = 4)
 
-    # Score one alignment (motif vs subseq) using DP with up to D indels
-    score_alignment_dp <- function(subseq_str, reverse = FALSE) {
-        W <- nchar(subseq_str)
-        L <- motif_len
-        D <- max_indels
-
-        # Guard: if subseq is shorter than expected, skip
-        if (W < max(1, L - D)) {
-            return(NA_real_)
-        }
-
-        # Get sequence bases
-        bases <- strsplit(subseq_str, "")[[1]]
-        if (reverse) {
-            bases <- rev(bases)
-            comp <- c(A = "T", C = "G", G = "C", T = "A", N = "N")
-            bases <- comp[bases]
-        }
-
-        base_idx_map <- c(A = 1, C = 2, G = 3, T = 4)
-
-        best_edits <- NA_real_
-
-        # 3D DP: dp[i+1, j+1, k+1] = best PWM score aligning motif[0..i-1] with seq[0..j-1] using k indels
-        dp <- array(-Inf, dim = c(L + 1, W + 1, D + 1))
-        dp[1, 1, 1] <- 0.0 # dp[0][0][0] = 0
-
-        # First column: skip motif positions (insertions)
-        for (i in 1:min(L, D)) {
-            dp[i + 1, 1, i + 1] <- 0.0
-        }
-        # First row: skip seq positions (deletions)
-        for (j in 1:min(W, D)) {
-            dp[1, j + 1, j + 1] <- 0.0
-        }
-
-        for (i in 1:L) {
-            j_min <- max(1, i - D)
-            j_max <- min(W, i + D)
-
-            for (j in j_min:j_max) {
-                b <- bases[j]
-                bi <- base_idx_map[b]
-                if (is.na(bi)) {
-                    base_score <- min(log_pssm[i, ])
-                } else {
-                    base_score <- log_pssm[i, bi]
-                }
-
-                for (k in 0:D) {
-                    # Match/substitution (diagonal)
-                    if (abs((i - 1) - (j - 1)) <= D) {
-                        prev <- dp[i, j, k + 1]
-                        if (is.finite(prev)) {
-                            val <- prev + base_score
-                            if (val > dp[i + 1, j + 1, k + 1]) {
-                                dp[i + 1, j + 1, k + 1] <- val
-                            }
-                        }
-                    }
-
-                    if (k < D) {
-                        # Insertion: skip motif[i-1]
-                        if (abs((i - 1) - j) <= D) {
-                            prev <- dp[i, j + 1, k + 1]
-                            if (is.finite(prev)) {
-                                if (prev > dp[i + 1, j + 1, k + 2]) {
-                                    dp[i + 1, j + 1, k + 2] <- prev
-                                }
-                            }
-                        }
-
-                        # Deletion: skip seq[j-1]
-                        if (abs(i - (j - 1)) <= D) {
-                            prev <- dp[i + 1, j, k + 1]
-                            if (is.finite(prev)) {
-                                if (prev > dp[i + 1, j + 1, k + 2]) {
-                                    dp[i + 1, j + 1, k + 2] <- prev
-                                }
-                            }
-                        }
-                    }
-                }
+    # Every alignment of L columns to W bases: a vector giving, for each column,
+    # the base it is aligned with (0 = inserted column), and its number of indels
+    alignments <- function(W) {
+        res <- list()
+        rec <- function(i, j, k, a) {
+            if (i == L && j == W) {
+                res[[length(res) + 1]] <<- list(a = a, k = k)
+                return(invisible())
             }
+            if (i < L && j < W) {
+                a2 <- a
+                a2[i + 1] <- j + 1
+                rec(i + 1, j + 1, k, a2)
+            }
+            if (k < D && i < L) {
+                a2 <- a
+                a2[i + 1] <- 0
+                rec(i + 1, j, k + 1, a2)
+            }
+            if (k < D && j < W) rec(i, j + 1, k + 1, a)
         }
-
-        # Extract results for each k
-        for (k in 0:D) {
-            score <- dp[L + 1, W + 1, k + 1]
-            if (!is.finite(score)) next
-
-            if (score >= threshold) {
-                total_edits <- k
-                if (!is.null(max_edits) && total_edits > max_edits) next
-                if (is.na(best_edits) || total_edits < best_edits) {
-                    best_edits <- total_edits
-                }
-                next
-            }
-
-            # Need substitutions: traceback to find aligned positions
-            # Instead of traceback, we use a simpler approach:
-            # The DP score represents the sum of base scores at aligned positions.
-            # For each aligned position, the gain is col_max - base_score.
-            # We need to find which positions are aligned (not indeled).
-            # Since this is brute force, we reconstruct via traceback.
-
-            # Simplified: compute the max possible gain from aligned positions.
-            # We know the score and the number of indels k.
-            # The number of aligned (matched) positions is L - num_insertions.
-            # But we need the actual gains. Let's do a proper traceback.
-
-            gains <- traceback_gains(dp, log_pssm, col_max, bases, L, W, D, k)
-
-            deficit <- threshold - score
-            if (deficit <= 0) {
-                total_edits <- k
-            } else {
-                gains_sorted <- sort(gains, decreasing = TRUE)
-                max_subs <- length(gains_sorted)
-                if (!is.null(max_edits)) {
-                    max_subs <- min(max_subs, max_edits - k)
-                    if (max_subs < 0) next
-                }
-                acc <- 0
-                subs <- 0
-                reached <- FALSE
-                for (g in gains_sorted[seq_len(min(max_subs, length(gains_sorted)))]) {
-                    acc <- acc + g
-                    subs <- subs + 1
-                    if (acc >= deficit - 1e-10) {
-                        reached <- TRUE
-                        break
-                    }
-                }
-                if (!reached) next
-                total_edits <- k + subs
-            }
-
-            if (!is.null(max_edits) && total_edits > max_edits) next
-            if (is.na(best_edits) || total_edits < best_edits) {
-                best_edits <- total_edits
-            }
-        }
-
-        return(best_edits)
+        rec(0, 0, 0, integer(L))
+        res
     }
 
-    # Traceback to recover gains at aligned positions
-    traceback_gains <- function(dp, log_pssm, col_max, bases, L, W, D, target_k) {
-        gains <- c()
-        ti <- L
-        tj <- W
-        tk <- target_k
-
-        base_idx_map <- c(A = 1, C = 2, G = 3, T = 4)
-
-        while (ti > 0 || tj > 0) {
-            if (ti == 0 && tj > 0 && tk > 0) {
-                tj <- tj - 1
-                tk <- tk - 1
-                next
-            }
-            if (tj == 0 && ti > 0 && tk > 0) {
-                ti <- ti - 1
-                tk <- tk - 1
-                next
-            }
-            if (ti == 0 || tj == 0) break
-
-            cur <- dp[ti + 1, tj + 1, tk + 1]
-
-            # Try diagonal (match/substitution)
-            found <- FALSE
-            if (abs((ti - 1) - (tj - 1)) <= D) {
-                b <- bases[tj]
-                bi <- base_idx_map[b]
-                if (is.na(bi)) {
-                    bs <- min(log_pssm[ti, ])
-                } else {
-                    bs <- log_pssm[ti, bi]
-                }
-
-                prev <- dp[ti, tj, tk + 1]
-                if (is.finite(prev) && abs((prev + bs) - cur) < 1e-8 * max(1, abs(cur))) {
-                    gain <- col_max[ti] - bs
-                    if (gain > 1e-12) {
-                        gains <- c(gains, gain)
-                    }
-                    ti <- ti - 1
-                    tj <- tj - 1
-                    found <- TRUE
-                }
-            }
-
-            if (!found && ti > 0 && tk > 0 && abs((ti - 1) - tj) <= D) {
-                # Try insertion
-                prev <- dp[ti, tj + 1, tk]
-                if (is.finite(prev) && abs(prev - cur) < 1e-8 * max(1, abs(cur))) {
-                    ti <- ti - 1
-                    tk <- tk - 1
-                    found <- TRUE
-                }
-            }
-
-            if (!found && tj > 0 && tk > 0 && abs(ti - (tj - 1)) <= D) {
-                # Try deletion
-                prev <- dp[ti + 1, tj, tk]
-                if (is.finite(prev) && abs(prev - cur) < 1e-8 * max(1, abs(cur))) {
-                    tj <- tj - 1
-                    tk <- tk - 1
-                    found <- TRUE
-                }
-            }
-
-            if (!found) break
+    window_edits <- function(subseq_str, reverse) {
+        W <- nchar(subseq_str)
+        bases <- strsplit(subseq_str, "")[[1]]
+        if (reverse) {
+            comp <- c(A = "T", C = "G", G = "C", T = "A", N = "N")
+            bases <- unname(comp[rev(bases)])
         }
-
-        return(gains)
+        bi <- unname(base_idx_map[bases])
+        if (anyNA(bi)) {
+            return(NA_real_)
+        }
+        best <- NA_real_
+        for (al in alignments(W)) {
+            matched <- al$a > 0
+            sc <- log_pssm[cbind(which(matched), bi[al$a[matched]])]
+            mand <- if (below) rep(FALSE, length(sc)) else !is.finite(sc)
+            score <- sum(sc[!mand]) + sum(col_max[which(matched)][mand]) + sum(col_max[!matched])
+            edits <- al$k + sum(mand)
+            deficit <- if (below) score - threshold else threshold - score
+            if (deficit > 1e-10) {
+                gains <- abs(col_max[which(matched)] - sc)[!mand]
+                gains <- sort(gains, decreasing = TRUE)
+                j <- which(cumsum(gains) >= deficit - 1e-10)[1]
+                if (is.na(j)) next
+                edits <- edits + j
+            }
+            if (!is.null(max_edits) && edits > max_edits) next
+            if (is.na(best) || edits < best) best <- edits
+        }
+        best
     }
 
     best_edits <- NA_real_
-
-    D <- max_indels
-
-    for (W in max(1, motif_len - D):min(S, motif_len + D)) {
+    for (W in seq(max(1, L - D), L + D)) {
         if (W > S) next
         for (p in seq_len(S - W + 1)) {
+            if (!is.null(starts) && !(p %in% starts)) next
             subseq <- substr(seq, p, p + W - 1)
-
-            # Forward
-            result <- score_alignment_dp(subseq, reverse = FALSE)
-            if (!is.na(result) && (is.na(best_edits) || result < best_edits)) {
-                best_edits <- result
-            }
-
-            # Reverse complement if bidirect
-            if (bidirect) {
-                result_rc <- score_alignment_dp(subseq, reverse = TRUE)
-                if (!is.na(result_rc) && (is.na(best_edits) || result_rc < best_edits)) {
-                    best_edits <- result_rc
+            for (rev in if (bidirect) c(FALSE, TRUE) else FALSE) {
+                result <- window_edits(subseq, rev)
+                if (!is.na(result) && (is.na(best_edits) || result < best_edits)) {
+                    best_edits <- result
                 }
             }
         }
     }
 
-    return(best_edits)
+    best_edits
 }
 
 
@@ -2015,5 +1851,165 @@ test_that("adversarial: specialized vs generic with PSSMs containing near-zero p
 
     if (length(mismatches) > 0) {
         fail(paste("Mismatches found:\n", paste(mismatches, collapse = "\n")))
+    }
+})
+
+
+# ============================================================================
+# Inserted motif columns score the inserted base; the indel search is exact
+# ============================================================================
+
+test_that("indels: a threshold above the best possible PWM score is unreachable", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    # An inserted column used to add 0 instead of the inserted base's score, so a
+    # threshold above the sum of the column maxima was "reachable" with indels.
+    pssm <- rbind(c(.97, .01, .01, .01), c(.97, .01, .01, .01), c(.25, .25, .25, .25), c(.97, .01, .01, .01))
+    colnames(pssm) <- c("A", "C", "G", "T")
+    thr <- sum(log(apply(pssm, 1, max))) + 0.5
+
+    iv <- gintervals(1, c(0, 1000, 5000), c(200, 1200, 5200))
+    for (d in 1:3) {
+        gvtrack.create(paste0("unreach_ed", d), NULL, "pwm.edit_distance",
+            pssm = pssm, score.thresh = thr, max_indels = d, prior = 0, bidirect = FALSE
+        )
+    }
+    r <- gextract(paste0("unreach_ed", 1:3), iv, iterator = iv)
+    expect_true(all(is.na(as.matrix(r[, paste0("unreach_ed", 1:3)]))))
+
+    for (d in 1:3) {
+        res <- gseq.pwm_edits("TTTAAATTT", pssm,
+            score.thresh = thr, prior = 0, bidirect = FALSE, max_indels = d
+        )
+        expect_equal(nrow(res), 0L)
+    }
+})
+
+test_that("indels: gseq.pwm_edits reports edits whose result scores score_after", {
+    set.seed(1108)
+    bases <- c("A", "C", "G", "T")
+    for (rep in 1:12) {
+        L <- sample(4:6, 1)
+        pssm <- matrix(rgamma(4 * L, 0.5), L)
+        pssm <- pssm / rowSums(pssm)
+        colnames(pssm) <- bases
+        lp <- log((pssm + 0.01) / rowSums(pssm + 0.01))
+        smax <- sum(apply(lp, 1, max))
+        smin <- sum(apply(lp, 1, min))
+        for (direction in c("above", "below")) {
+            thr <- if (direction == "above") smax - 0.25 * (smax - smin) else smin + 0.25 * (smax - smin)
+            seqs <- vapply(1:8, function(i) paste(sample(bases, L + sample(-1:2, 1), TRUE), collapse = ""), "")
+            for (d in 1:2) {
+                res <- gseq.pwm_edits(seqs, pssm,
+                    score.thresh = thr, max_indels = d, prior = 0.01,
+                    bidirect = FALSE, direction = direction
+                )
+                res <- res[!duplicated(res$seq_idx), ]
+                for (k in seq_len(nrow(res))) {
+                    mutated <- strsplit(gsub("-", "", res$mutated_seq[k]), "")[[1]]
+                    expect_length(mutated, L)
+                    own <- sum(lp[cbind(seq_len(L), match(mutated, bases))])
+                    expect_equal(res$score_after[k], own, tolerance = 1e-4)
+                    if (direction == "above") {
+                        expect_gte(res$score_after[k], thr - 1e-4)
+                    } else {
+                        expect_lte(res$score_after[k], thr + 1e-4)
+                    }
+                }
+            }
+        }
+    }
+})
+
+test_that("indels: gseq.pwm_edits matches an exhaustive alignment search for max_indels = 1..3", {
+    set.seed(2611)
+    bases <- c("A", "C", "G", "T")
+    mismatches <- character(0)
+    for (rep in 1:10) {
+        L <- sample(4:5, 1)
+        pssm <- matrix(rgamma(4 * L, 0.5), L)
+        pssm <- pssm / rowSums(pssm)
+        colnames(pssm) <- bases
+        lp <- log((pssm + 0.01) / rowSums(pssm + 0.01))
+        smax <- sum(apply(lp, 1, max))
+        smin <- sum(apply(lp, 1, min))
+        for (direction in c("above", "below")) {
+            thr <- if (direction == "above") smax - 0.3 * (smax - smin) else smin + 0.3 * (smax - smin)
+            for (i in 1:4) {
+                s <- paste(sample(bases, L + sample(0:2, 1), TRUE), collapse = "")
+                for (d in 1:3) {
+                    res <- gseq.pwm_edits(s, pssm,
+                        score.thresh = thr, max_indels = d, prior = 0.01,
+                        bidirect = FALSE, direction = direction
+                    )
+                    got <- if (nrow(res)) min(res$n_edits) else NA
+                    ref <- bruteforce_pwm_edit_distance_with_indels(s, pssm, thr,
+                        max_indels = d, prior = 0.01, direction = direction
+                    )
+                    if (!identical(as.numeric(got), as.numeric(ref))) {
+                        mismatches <- c(mismatches, sprintf("%s %s D=%d: C++=%s ref=%s", s, direction, d, got, ref))
+                    }
+                }
+            }
+        }
+    }
+    expect_equal(mismatches, character(0))
+})
+
+test_that("indels: max_indels = 3 is exact (no cheaper alignment missed)", {
+    # The generic DP for three or more indels kept only the best-scoring
+    # alignment per window length and indel count, then added substitutions;
+    # an alignment scoring lower can need fewer. On mm10 chr19 at
+    # 22,639,521 this gave 6 edits with max_indels = 3 and 5 with 2.
+    seq <- "CTATATGATTTTCTTT"
+    root <- tempfile("indel3_")
+    dir.create(root)
+    dir.create(file.path(root, "tracks"))
+    dir.create(file.path(root, "seq"))
+    writeLines(sprintf("chr1\t%d", nchar(seq)), file.path(root, "chrom_sizes.txt"))
+    writeBin(charToRaw(seq), file.path(root, "seq", "chr1.seq"))
+    old_root <- .misha$GROOT
+    withr::defer(gsetroot(old_root))
+    gsetroot(root)
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    pssm <- structure(c(
+        0.289059949638304, 0.765800540168912, 0.00347585269750313,
+        0.643266951333656, 0.166971128351294, 0.392771351852197, 0.956813518658636,
+        0.00720825395649754, 0.125848970554678, 0.185711579486119, 0.245713777963034,
+        0.620780527463697, 0.235169567229761, 0.00186895219631772, 0.131171669840629,
+        0.00289069135768031, 0.650092955874321, 0.0102013770101287, 0.00149015116496921,
+        0.333079810960369, 0.0329072533347471, 0.572560126564569, 0.10545979791873,
+        0.160719611942056, 0.100817893693182, 0.21075819302004, 0.038979269957673,
+        0.00841027581029925
+    ), dim = c(7L, 4L), dimnames = list(NULL, c("A", "C", "G", "T")))
+    thr <- -27.05969
+    for (d in 2:3) {
+        for (st in c(1, -1)) {
+            gvtrack.create(sprintf("ed%d_%s", d, if (st == 1) "f" else "r"), NULL, "pwm.edit_distance",
+                pssm = pssm, score.thresh = thr, prior = 0.01, bidirect = FALSE, strand = st,
+                direction = "below", max_indels = d
+            )
+        }
+    }
+    vt <- c("ed2_f", "ed2_r", "ed3_f", "ed3_r")
+    # every window start with at least L bases before the chromosome end (the
+    # vtrack scans no window that runs past the end)
+    starts <- 0:(nchar(seq) - 7)
+    r <- gextract(vt, gintervals(1, starts, starts + 1), iterator = 1)
+    r <- r[order(r$start), ]
+    for (k in seq_len(nrow(r))) {
+        p <- r$start[k] + 1
+        sub <- substr(seq, p, nchar(seq))
+        for (d in 2:3) {
+            ref_f <- bruteforce_pwm_edit_distance_with_indels(sub, pssm, thr,
+                max_indels = d, prior = 0.01, direction = "below", starts = 1
+            )
+            expect_equal(r[[sprintf("ed%d_f", d)]][k], ref_f, info = sprintf("start %d D=%d fwd", r$start[k], d))
+        }
+        expect_lte(r$ed3_f[k], r$ed2_f[k])
+        expect_lte(r$ed3_r[k], r$ed2_r[k])
     }
 })
