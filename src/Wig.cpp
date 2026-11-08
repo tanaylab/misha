@@ -201,6 +201,12 @@ void Wig::init(const GenomeChromKey &chromkey, const string &filename, bool igno
 	}
 }
 
+// a + b for a, b >= 0, capped at INT64_MAX: a record that far is past the chromosome end and dropped
+static inline int64_t add_capped(int64_t a, int64_t b)
+{
+	return b > INT64_MAX - a ? INT64_MAX : a + b;
+}
+
 bool Wig::clip(int chromid, int64_t start, int64_t end, int64_t lineno)
 {
 	int64_t chromsize = m_chromkey->get_chrom_size(chromid);
@@ -272,9 +278,10 @@ bool Wig::get_data(int chromid, GIntervals &intervals)
 						m_bfile.file_name().c_str(), lineno - 1);
 
 			int64_t chromsize = m_chromkey->get_chrom_size(chromid);
-			if (start + span <= chromsize || !clip(chromid, start, start + span, lineno - 1))
-				intervals.push_back(GInterval(chromid, start, min(start + span, chromsize), 0, GInterval::cast2udata(rec.val)));
-			start += step;
+			int64_t end = add_capped(start, span);
+			if (end <= chromsize || !clip(chromid, start, end, lineno - 1))
+				intervals.push_back(GInterval(chromid, start, min(end, chromsize), 0, GInterval::cast2udata(rec.val)));
+			start = add_capped(start, step);
 		} else if (rec.type == COORD_VAL_REC) {
 			if (span < 0)
 				TGLError<Wig>(INVALID_FORMAT, "Invalid format of WIG file %s, line %ld: value is not preceeded by variableStep header",
@@ -282,8 +289,9 @@ bool Wig::get_data(int chromid, GIntervals &intervals)
 
 			int64_t chromsize = m_chromkey->get_chrom_size(chromid);
 			int64_t coord = rec.coord_val.coord;
-			if (coord + span <= chromsize || !clip(chromid, coord, coord + span, lineno - 1))
-				intervals.push_back(GInterval(chromid, coord, min(coord + span, chromsize), 0, GInterval::cast2udata(rec.coord_val.val)));
+			int64_t end = add_capped(coord, span);
+			if (end <= chromsize || !clip(chromid, coord, end, lineno - 1))
+				intervals.push_back(GInterval(chromid, coord, min(end, chromsize), 0, GInterval::cast2udata(rec.coord_val.val)));
 		} else if (rec.type == BEDGRAPH_REC) {
 			if (rec.bedgraph.chromid != chromid)
 				break;

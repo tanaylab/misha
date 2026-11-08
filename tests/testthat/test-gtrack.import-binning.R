@@ -163,3 +163,35 @@ test_that("records past the chromosome end are clipped, or dropped, with one war
         }
     })
 })
+
+test_that("WIG records at coordinates near 2^63 are dropped like any record past the chromosome end", {
+    local_db_state()
+    withr::with_tempdir({
+        create_test_db("ovf_db", chrom_sizes = data.frame(chrom = "chr1", size = 1000))
+        gdb.init("ovf_db")
+        files <- list(
+            # start + span would overflow
+            variableStep = c("variableStep chrom=chr1 span=10", "11\t7", "9223372036854775800\t1"),
+            # start, and start + step, would overflow
+            fixedStep = c("fixedStep chrom=chr1 start=11 step=10 span=1", "7", "fixedStep chrom=chr1 start=9223372036854775800 step=10", "1", "2", "3")
+        )
+        dropped <- c(variableStep = 1, fixedStep = 3)
+        for (fmt in names(files)) {
+            f <- file.path(getwd(), paste0(fmt, ".wig"))
+            writeLines(files[[fmt]], f)
+            for (binsize in c(0, 10)) {
+                label <- paste(fmt, "binsize", binsize)
+                expect_warning(
+                    gtrack.import("ovf", "", f, binsize = binsize),
+                    sprintf("0 record(s) running past the end of their chromosome were clipped to it, and %d record(s) starting at or past", dropped[[fmt]]),
+                    fixed = TRUE, label = label
+                )
+                x <- gextract("ovf", gintervals.all(), iterator = if (binsize) binsize else "ovf", colnames = "v")
+                x <- x[!is.nan(x$v), ]
+                expect_equal(x$start, 10, label = label)
+                expect_equal(x$v, 7, label = label)
+                gtrack.rm("ovf", force = TRUE)
+            }
+        }
+    })
+})
