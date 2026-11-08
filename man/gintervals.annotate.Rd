@@ -41,8 +41,10 @@ are included, with "1" and "2" added to the name (\code{dist1} and
 
 \item{max_dist}{Maximum absolute distance. When finite, neighbors with
 \code{|dist| > max_dist} result in annotation columns being set to
-\code{na_value} for those rows, while the row itself is retained. 1D
-intervals only.}
+\code{na_value} for those rows, while the row itself is retained. For 2D
+intervals a neighbor is within \code{max_dist} when
+\code{dist1 + dist2 <= max_dist}, the distance by which
+\code{gintervals.neighbors} ranks 2D neighbors.}
 
 \item{na_value}{Value(s) to use for annotations when beyond \code{max_dist}
 or when no neighbor is found. Can be a single scalar recycled for all
@@ -87,8 +89,8 @@ The function wraps and extends \code{gintervals.neighbors} to provide
 convenient column selection/renaming, optional distance inclusion, distance
 thresholding with custom NA values, multiple neighbors per interval, and
 deterministic tie-breaking. For 2D intervals the two distances of the
-neighbor are returned, and \code{max_dist} and a \code{tie_method} other
-than "first" are not supported.
+neighbor are returned, \code{max_dist} applies to their sum, and a
+\code{tie_method} other than "first" is not supported.
 
 
 - When \code{annotation_columns = NULL}, all non-basic columns present in

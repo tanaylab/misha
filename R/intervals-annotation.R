@@ -10,8 +10,8 @@
 #' convenient column selection/renaming, optional distance inclusion, distance
 #' thresholding with custom NA values, multiple neighbors per interval, and
 #' deterministic tie-breaking. For 2D intervals the two distances of the
-#' neighbor are returned, and \code{max_dist} and a \code{tie_method} other
-#' than "first" are not supported.
+#' neighbor are returned, \code{max_dist} applies to their sum, and a
+#' \code{tie_method} other than "first" is not supported.
 #'
 #' @param intervals Intervals to annotate.
 #' @param annotation_intervals Source intervals containing annotation data.
@@ -28,8 +28,10 @@
 #'   \code{dist2} by default, as in \code{gintervals.neighbors}).
 #' @param max_dist Maximum absolute distance. When finite, neighbors with
 #'   \code{|dist| > max_dist} result in annotation columns being set to
-#'   \code{na_value} for those rows, while the row itself is retained. 1D
-#'   intervals only.
+#'   \code{na_value} for those rows, while the row itself is retained. For 2D
+#'   intervals a neighbor is within \code{max_dist} when
+#'   \code{dist1 + dist2 <= max_dist}, the distance by which
+#'   \code{gintervals.neighbors} ranks 2D neighbors.
 #' @param na_value Value(s) to use for annotations when beyond \code{max_dist}
 #'   or when no neighbor is found. Can be a single scalar recycled for all
 #'   columns, or a named list/vector supplying per-column values matching
@@ -146,11 +148,6 @@ gintervals.annotate <- function(intervals,
     if (tie_method != "first" && maxneighbors > 1 && is2d) {
         stop("tie_method other than \"first\" is supported for 1D intervals only", call. = FALSE)
     }
-    # A 2D neighbor has two distances, and which of them (or what of both) max_dist would limit is
-    # not decided
-    if (is.finite(max_dist) && is2d) {
-        stop("max_dist is supported for 1D intervals only", call. = FALSE)
-    }
     # The distance columns: for 2D intervals the two distances of gintervals.neighbors (dist1, dist2
     # with the default dist_column)
     dist_columns <- if (!is.null(dist_column) && is2d) paste0(dist_column, c("1", "2")) else dist_column
@@ -251,10 +248,11 @@ gintervals.annotate <- function(intervals,
     }
 
     # Annotation values are replaced by na_value when no neighbor was found
-    # (na.if.notfound gives an NA distance) or the neighbor is beyond max_dist
+    # (na.if.notfound gives an NA distance) or the neighbor is beyond max_dist: in 2D its
+    # dist1 + dist2, the distance gintervals.neighbors ranks 2D neighbors by
     to_fill <- is.na(dist)
     if (is.finite(max_dist)) {
-        to_fill <- to_fill | abs(dist) > max_dist
+        to_fill <- to_fill | abs(if (is2d) dist + dist2 else dist) > max_dist
     }
 
     annotations <- ann_part[, annotation_columns, drop = FALSE]

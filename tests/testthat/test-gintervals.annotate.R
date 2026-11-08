@@ -282,8 +282,12 @@ test_that("gintervals.annotate returns both distances of a 2D neighbor", {
     expect_true(is.na(res$label))
     expect_true(is.na(res$dist1) && is.na(res$dist2))
 
-    # which distance max_dist would limit in 2D is not decided
-    expect_error(gintervals.annotate(q, a, max_dist = 1000), "max_dist is supported for 1D intervals only")
+    # max_dist limits dist1 + dist2 (2300 here); dist1 alone (1900) is within 2000
+    res <- gintervals.annotate(q, a, max_dist = 2300)
+    expect_equal(res$label, "B")
+    res <- gintervals.annotate(q, a, max_dist = 2000)
+    expect_true(is.na(res$label))
+    expect_equal(c(res$dist1, res$dist2), c(1900, 400))
 
     q$dist2 <- 1
     expect_error(gintervals.annotate(q, a), "Distance column dist2 already exists")
