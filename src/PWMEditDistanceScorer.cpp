@@ -786,8 +786,24 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
     const bool need_pwm = (m_mode == Mode::PWM_MAX_EDITS);
     const bool has_score_min = !std::isnan(m_score_min);
     const bool has_score_max = !std::isnan(m_score_max);
-    const bool has_score_filter = has_score_min || has_score_max;
-    const bool apply_score_filter = has_score_filter && (m_max_indels == 0);
+    // score.min / score.max filter on the window's current, ungapped PWM score (the L bases from the
+    // window start), with or without indels. With indels a window may start a run of fewer than L ACGT
+    // bases (it can still be aligned with insertions); it has no ungapped score, as the pwm vtrack does not
+    // score it, so it does not pass a filter.
+    const bool apply_score_filter = has_score_min || has_score_max;
+    const int L_int = static_cast<int>(motif_length);
+    auto passes_score_filter = [&](const char* window_start, int seq_avail, bool reverse) -> bool {
+        if (!apply_score_filter) {
+            return true;
+        }
+        if (seq_avail < L_int) {
+            return false;
+        }
+        float logp = compute_window_pwm_score(window_start, reverse);
+        if (has_score_min && logp < m_score_min) return false;
+        if (has_score_max && logp > m_score_max) return false;
+        return true;
+    };
 
     // For direction=BELOW with bidirectional scanning: a genomic substitution
     // affects both strands, so we need enough edits to bring the *harder* strand
@@ -981,12 +997,7 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
         } else if (scan_forward || scan_reverse) {
             if (scan_forward) {
                 if (need_min) {
-                    bool pass_score_filter = true;
-                    if (apply_score_filter) {
-                        float logp = compute_window_pwm_score(window_start, /*reverse=*/false);
-                        if (has_score_min && logp < m_score_min) pass_score_filter = false;
-                        if (has_score_max && logp > m_score_max) pass_score_filter = false;
-                    }
+                    bool pass_score_filter = passes_score_filter(window_start, seq_avail, /*reverse=*/false);
 
                     if (pass_score_filter) {
                         const int* bidx = fwd_bidx.data() + offset;
@@ -1015,12 +1026,7 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
                     }
                 }
                 if (need_n_mutations) {
-                    bool pass_score_filter = true;
-                    if (apply_score_filter) {
-                        float logp = compute_window_pwm_score(window_start, /*reverse=*/false);
-                        if (has_score_min && logp < m_score_min) pass_score_filter = false;
-                        if (has_score_max && logp > m_score_max) pass_score_filter = false;
-                    }
+                    bool pass_score_filter = passes_score_filter(window_start, seq_avail, /*reverse=*/false);
                     if (pass_score_filter) {
                         float nmut = compute_n_mutations(fwd_bidx.data() + offset, /*reverse=*/false);
                         maybe_update_n_mutations(nmut);
@@ -1036,12 +1042,7 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
 
             if (scan_reverse) {
                 if (need_min) {
-                    bool pass_score_filter = true;
-                    if (apply_score_filter) {
-                        float logp = compute_window_pwm_score(window_start, /*reverse=*/true);
-                        if (has_score_min && logp < m_score_min) pass_score_filter = false;
-                        if (has_score_max && logp > m_score_max) pass_score_filter = false;
-                    }
+                    bool pass_score_filter = passes_score_filter(window_start, seq_avail, /*reverse=*/true);
 
                     if (pass_score_filter) {
                         const int* bidx = rev_bidx.data() + offset;
@@ -1072,12 +1073,7 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
                     }
                 }
                 if (need_n_mutations) {
-                    bool pass_score_filter = true;
-                    if (apply_score_filter) {
-                        float logp = compute_window_pwm_score(window_start, /*reverse=*/true);
-                        if (has_score_min && logp < m_score_min) pass_score_filter = false;
-                        if (has_score_max && logp > m_score_max) pass_score_filter = false;
-                    }
+                    bool pass_score_filter = passes_score_filter(window_start, seq_avail, /*reverse=*/true);
                     if (pass_score_filter) {
                         float nmut = compute_n_mutations(rev_bidx.data() + offset, /*reverse=*/true);
                         maybe_update_n_mutations(nmut);
@@ -1095,7 +1091,7 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
 
     if (need_pwm && pwm_found) {
         // For PWM_MAX_EDITS mode: compute edit distance at the best PWM window
-        // Apply score.min/score.max filter (bypass when indels are enabled)
+        // Apply score.min/score.max filter to its (ungapped) PWM score
         if (apply_score_filter &&
             ((has_score_min && metrics.best_pwm_logp < m_score_min) ||
              (has_score_max && metrics.best_pwm_logp > m_score_max))) {

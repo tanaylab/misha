@@ -959,10 +959,10 @@ WindowResult find_best_window_edits(
     const int L = pssm.length();
     const bool has_score_min = !std::isnan(score_min);
     const bool has_score_max = !std::isnan(score_max);
-    // Disable score filter when indels are enabled: with indels, the DP alignment
-    // can use L±D bases, so the L-length pre-score is not a valid pre-filter.
-    // This matches PWMEditDistanceScorer::compute_interval behavior.
-    const bool has_score_filter = (has_score_min || has_score_max) && (max_indels == 0);
+    // The filter is on the window's current, ungapped score (the L bases from its start), with or
+    // without indels, as in PWMEditDistanceScorer::evaluate_windows. With indels a window may start a run
+    // of fewer than L ACGT bases; it has no ungapped score and does not pass a filter.
+    const bool has_score_filter = has_score_min || has_score_max;
     const int seqlen = static_cast<int>(seq.length());
 
     WindowResult best;
@@ -988,7 +988,8 @@ WindowResult find_best_window_edits(
         auto try_window = [&](bool reverse, int direction) {
             int seq_avail = std::min(seqlen - s0, acgt_run[s0]);
             // Score filter: compute L-length window score for filtering
-            if (has_score_filter && seq_avail >= L) {
+            if (has_score_filter) {
+                if (seq_avail < L) return;
                 float logp = 0.0f;
                 for (int i = 0; i < L; i++) {
                     int si = reverse ? (L - 1 - i) : i;

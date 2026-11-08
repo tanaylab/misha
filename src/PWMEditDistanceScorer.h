@@ -26,7 +26,8 @@
  *
  * score.min/score.max filtering: when m_score_min (m_score_max) is not NaN,
  * windows whose PWM score is below m_score_min (above m_score_max) are
- * skipped (edit distance returns NA for that window).
+ * skipped (edit distance returns NA for that window). The PWM score is the
+ * window's ungapped score (L bases from its start) also when indels are allowed.
  * For MIN_EDITS/MIN_EDITS_POSITION modes, only windows passing both filters
  * are considered. For PWM_MAX_EDITS mode, the best-PWM window is found first,
  * then its edit distance is only computed if its score passes both filters.
