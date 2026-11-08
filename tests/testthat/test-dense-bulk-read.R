@@ -1,6 +1,6 @@
 # A dense track read at its own bin size, with no virtual track in the expressions, is read a run of
 # bins at a time (TrackExprScanner::fill_bins_bulk) instead of through read_interval() per iterator
-# interval. Each call below is run both ways - options(gdense.bulk.read = FALSE) forces the
+# interval. Each call below is run both ways - MISHA_DISABLE_DENSE_BULK_READ=1 forces the
 # per-interval path - and the results must be bit-identical: -0 is read as 0 and a NaN with a payload
 # or a sign as R's NaN, as read_interval() reads them. The calls that may not use the bulk path
 # (other bin sizes, virtual tracks, other variables) would give other values if they did.
@@ -65,7 +65,7 @@ local_bulk_db <- function(env = parent.frame()) {
 expect_same_both_paths <- function(expr) {
     q <- substitute(expr)
     env <- parent.frame()
-    per_interval <- withr::with_options(list(gdense.bulk.read = FALSE), eval(q, env))
+    per_interval <- withr::with_envvar(c(MISHA_DISABLE_DENSE_BULK_READ = "1"), eval(q, env))
     bulk <- eval(q, env)
     expect_identical(bulk, per_interval)
     expect_identical(serialize(bulk, NULL), serialize(per_interval, NULL))

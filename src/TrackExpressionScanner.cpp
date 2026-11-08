@@ -10,6 +10,7 @@
 #include <sys/time.h>
 
 #include <climits>
+#include <cstdlib>
 #include <limits>
 #include <set>
 #include <unordered_set>
@@ -455,8 +456,9 @@ void TrackExprScanner::fill_slot1d(unsigned idx)
 // With a fixed-bin iterator whose bin size is that of every track, and only dense tracks named
 // as is in the expressions (TrackExpressionVars::dense_tracks_only), every iterator interval lies
 // in one bin and takes its value. fill_bins_bulk() then fills a run of bins with one read per
-// track, not a read_interval() per interval and track. options(gdense.bulk.read = FALSE) turns
-// this off, so that tests can compare the two.
+// track, not a read_interval() per interval and track. MISHA_DISABLE_DENSE_BULK_READ=1 in the
+// environment turns this off (read as MISHA_DISABLE_SPATIAL_SLIDING is), so that tests can compare
+// the two.
 bool TrackExprScanner::can_fill_bins_bulk() const
 {
 	if (m_rows || m_row_subs || m_expr_itr->get_type() != TrackExpressionIteratorBase::FIXED_BIN)
@@ -466,8 +468,8 @@ bool TrackExprScanner::can_fill_bins_bulk() const
 	if (!itr || !m_expr_vars.dense_tracks_only())
 		return false;
 
-	SEXP opt = Rf_GetOption1(Rf_install("gdense.bulk.read"));
-	if (!Rf_isNull(opt) && Rf_asLogical(opt) == 0)
+	const char *disable_env = getenv("MISHA_DISABLE_DENSE_BULK_READ");
+	if (disable_env && string(disable_env) == "1")
 		return false;
 
 	for (unsigned ivar = 0; ivar < m_expr_vars.get_num_track_vars(); ++ivar) {
