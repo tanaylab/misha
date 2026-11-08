@@ -135,6 +135,44 @@ test_that("gsynth.train respects mask", {
     gvtrack.rm("test_vt")
 })
 
+test_that("gsynth.train leaves out (k+1)-mers that reach into the mask, as gseq.kmer.dist does", {
+    gdb.init_examples()
+    k <- 2
+    iv <- gintervals(1, 1000, 61000)
+    mask <- gintervals(1, c(5000, 20000), c(5100, 20007))
+    model <- gsynth.train(intervals = iv, mask = mask, iterator = 1000, k = k)
+
+    # the forward and reverse-complement (k+1)-mer counts gseq.kmer.dist gives
+    kd <- gseq.kmer.dist(iv, k = k + 1, mask = mask)
+    expected <- matrix(0, 4^k, 4)
+    code <- function(s) match(strsplit(s, "")[[1]], c("A", "C", "G", "T")) - 1
+    for (i in seq_len(nrow(kd))) {
+        w <- kd$kmer[i]
+        for (x in list(code(w), 3 - rev(code(w)))) {
+            ctx <- sum(x[1:k] * 4^((k - 1):0)) + 1
+            expected[ctx, x[k + 1] + 1] <- expected[ctx, x[k + 1] + 1] + kd$count[i]
+        }
+    }
+    expect_equal(unname(as.matrix(model$model_data$counts[[1]])), expected)
+    expect_equal(model$total_kmers, 2 * sum(kd$count))
+})
+
+test_that("gsynth.train counts a position covered by overlapping intervals once", {
+    gdb.init_examples()
+    one <- gsynth.train(intervals = gintervals(1, 0, 4000), iterator = 100, k = 2)
+    overlapping <- gsynth.train(intervals = gintervals(c(1, 1), c(0, 1000), c(3000, 4000)), iterator = 100, k = 2)
+    expect_equal(overlapping$total_kmers, one$total_kmers)
+    expect_equal(overlapping$model_data$counts, one$model_data$counts)
+
+    if ("g_frac_ov" %in% gvtrack.ls()) gvtrack.rm("g_frac_ov")
+    gvtrack.create("g_frac_ov", NULL, "kmer.frac", kmer = "G")
+    withr::defer(gvtrack.rm("g_frac_ov"))
+    one <- gsynth.train(list(expr = "g_frac_ov", breaks = c(0, 0.25, 1)), intervals = gintervals(1, 0, 4000), iterator = 100, k = 2)
+    overlapping <- gsynth.train(list(expr = "g_frac_ov", breaks = c(0, 0.25, 1)), intervals = gintervals(c(1, 1), c(0, 1000), c(3000, 4000)), iterator = 100, k = 2)
+    expect_equal(overlapping$per_bin_kmers, one$per_bin_kmers)
+    expect_equal(overlapping$model_data$counts, one$model_data$counts)
+})
+
 test_that("gsynth.save and gsynth.load work correctly", {
     gdb.init_examples()
 

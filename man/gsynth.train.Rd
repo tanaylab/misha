@@ -26,13 +26,19 @@ gsynth.train(
 }
 If no dimensions are provided, trains an unstratified model with a single bin.}
 
-\item{mask}{Optional intervals to exclude from training. Regions in the mask
-will not contribute to k-mer counts. Can be computed using \code{gscreen()}.}
+\item{mask}{Optional intervals to exclude from training. A (k+1)-mer that
+overlaps the mask does not contribute to k-mer counts, as in
+\code{\link{gseq.kmer.dist}}. Can be computed using \code{gscreen()}.}
 
-\item{intervals}{Genomic intervals to process. If NULL, uses all chromosomes.}
+\item{intervals}{Genomic intervals to process. If NULL, uses all chromosomes.
+Overlapping intervals are unified first, so each position is counted
+once; a (k+1)-mer that crosses from an interval into an adjacent one
+is not counted.}
 
 \item{iterator}{Iterator for track evaluation, determines the resolution at which
-track values are computed.}
+track values are computed. It is stored in the model
+(\code{model$iterator}) and used by \code{\link{gsynth.sample}} and
+\code{\link{gsynth.score}}.}
 
 \item{pseudocount}{Total Dirichlet concentration alpha used in the
 smoothed posterior \code{P(a|c,b) = (N + alpha * pi_a(b)) /
