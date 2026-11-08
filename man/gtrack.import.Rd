@@ -20,8 +20,9 @@ gtrack.import(
 
 \item{file}{file path. A Parquet file (recognized by its first bytes, whatever its name)
 is imported when it has exactly one value column besides 'chrom', 'start' and 'end';
-it always makes a dense track, so 'binsize' must be > 0. Use
-\code{\link{gtrack.import_parquet}} for several columns.}
+it always makes a dense track, so 'binsize' must be > 0, and the column's field metadata
+becomes attributes of the track as in \code{\link{gtrack.import_parquet}} ('attrs' wins
+over it). Use \code{\link{gtrack.import_parquet}} for several columns.}
 
 \item{binsize}{bin size of the newly created 'Dense' track or '0' for a
 'Sparse' track}

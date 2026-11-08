@@ -72,7 +72,8 @@ The field metadata of a column in the first file (Arrow field metadata, as
 \code{\link{gextract}} writes the attributes of a track column, or as
 pyarrow writes 'pa.field(name, type, metadata = ...)') becomes attributes
 of its track, except 'created.by', 'created.date' and 'created.user', which
-the import sets, and 'description' unless the 'description' argument is an
+the import sets, 'type' and 'binsize', which describe how the source track
+was stored, and 'description' unless the 'description' argument is an
 empty string. A file without field metadata imports with only those
 attributes. See \code{\link{gtrack.attr.set}} for the attributes of model
 predictions.
