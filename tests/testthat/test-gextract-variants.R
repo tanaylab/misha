@@ -185,6 +185,59 @@ test_that("a listed variant pairs with every bin whose reach contains it", {
     expect_false(any(res$pos %in% c(1020, 1029)))
 })
 
+test_that("listed variants: each (bin, variant) with the variant in the bin's reach, duplicates and other chromosomes too", {
+    define_variant_vtracks()
+    iv <- gintervals(c(1, 1, 2), c(1000, 1003, 1000), c(1010, 1006, 1012))
+    g1 <- toupper(strsplit(gseq.extract(gintervals(1, 990, 1030)), "")[[1]])
+    g2 <- toupper(strsplit(gseq.extract(gintervals(2, 990, 1030)), "")[[1]])
+    ref_at <- function(g, pos) g[pos - 990 + 1]
+    alt_of <- function(r) setdiff(VARIANT_BASES, r)[1]
+    pos1 <- c(995, 1000, 1004, 1004, 1016, 1020)
+    pos2 <- c(1004, 1008, 1029)
+    v <- data.frame(
+        chrom = c(rep("chr1", length(pos1)), rep("chr2", length(pos2))),
+        start = c(pos1, pos2),
+        ref = c(ref_at(g1, pos1), ref_at(g2, pos2))
+    )
+    v <- v[v$ref %in% VARIANT_BASES, ]
+    v$alt <- vapply(v$ref, alt_of, "")
+    v$end <- v$start + 1
+    # the same variant twice, and one with a wrong ref at the same position
+    v <- rbind(v, v[2, ], transform(v[2, ], ref = alt_of(v$ref[2]), alt = v$ref[2]))
+    res <- suppressWarnings(gextract.variants("v_pwm", iv, variants = v, iterator = 1))
+
+    # v_pwm reads [s - 5, s + 7) from a 1 bp bin [s, s + 1)
+    bins <- gextract("v_pwm", iv, iterator = 1)
+    want <- do.call(rbind, lapply(seq_len(nrow(bins)), function(i) {
+        hit <- v[as.character(v$chrom) == as.character(bins$chrom[i]) &
+            v$start >= bins$start[i] - 5 & v$start < bins$end[i] + 6, ]
+        if (!nrow(hit)) {
+            return(NULL)
+        }
+        data.frame(chrom = as.character(bins$chrom[i]), start = bins$start[i], pos = hit$start, ref = hit$ref, alt = hit$alt)
+    }))
+    got <- data.frame(chrom = as.character(res$chrom), start = res$start, pos = res$pos, ref = res$ref, alt = res$alt)
+    key <- function(d) d[do.call(order, unname(as.list(d))), ]
+    expect_equal(nrow(got), nrow(want))
+    expect_equal(key(got), key(want), ignore_attr = TRUE)
+})
+
+test_that("listed variants join only the bin positions that hold one", {
+    define_variant_vtracks()
+    # The join used to take every (bin, position) a bin reads: ~10^7 rows for 10^5 variants.
+    rows_joined <- integer(0)
+    record <- function(n) rows_joined <<- c(rows_joined, n)
+    suppressMessages(trace("merge.data.frame", tracer = bquote(.(record)(nrow(x))), where = baseenv(), print = FALSE))
+    withr::defer(suppressMessages(untrace("merge.data.frame", where = baseenv())))
+    g <- toupper(strsplit(gseq.extract(gintervals(1, 5000, 5001)), "")[[1]])
+    v <- data.frame(chrom = "chr1", start = 5000, end = 5001, ref = g, alt = setdiff(VARIANT_BASES, g)[1])
+    res <- gextract.variants("v_pwm", gintervals(1, 4000, 6000), variants = v, iterator = 1)
+    # bins 4994..5005 read 5000; the 2000 bins read ~24000 positions
+    expect_equal(nrow(res), 12L)
+    expect_gt(length(rows_joined), 0)
+    expect_lte(max(rows_joined), nrow(res))
+})
+
 test_that("variants are validated", {
     define_variant_vtracks()
     iv <- gintervals(1, 1000, 1001)
