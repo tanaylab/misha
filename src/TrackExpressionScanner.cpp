@@ -38,6 +38,7 @@
 #include "TrackExpressionIterator.h"
 #include "TrackExpressionSparseIterator.h"
 #include "TrackExpressionScanner.h"
+#include "TrackNameIndex.h"
 #include "TrackExpressionTrackRectsIterator.h"
 #include "TrackExpressionVars.h"
 #include "rdbutils.h"
@@ -1081,20 +1082,10 @@ for (unsigned ivar = 0; ivar < vars.get_num_track_vars(); ++ivar) {
 
 		if (find(track_names.begin(), track_names.end(), iter_val) == track_names.end()) {
 			if (Rf_isString(giterator)) {
-				SEXP all_track_names;
-				SEXPCleaner all_track_names_cleaner(all_track_names);
-
-                rprotect(all_track_names = find_in_misha(m_iu.get_env(), "GTRACKS"));
-				if (Rf_isString(all_track_names)) {
-					int i;
-					for (i = 0; i < Rf_length(all_track_names); ++i) {
-						if (iter_val == CHAR(STRING_ELT(all_track_names, i)))
-							break;
-                }
-					if (i >= Rf_length(all_track_names)) 
-						verror("Invalid iterator: %s is neither a name of a track nor a name of an intervals set", iter_val.c_str());
-				}
-                        }
+				SEXP all_track_names = find_in_misha(m_iu.get_env(), "GTRACKS");
+				if (Rf_isString(all_track_names) && !TrackNameIndex::gtracks(all_track_names).find(iter_val))
+					verror("Invalid iterator: %s is neither a name of a track nor a name of an intervals set", iter_val.c_str());
+			}
 			track_names.push_back(iter_val);
 			track_types.push_back(GenomeTrack::get_type(m_iu.get_chrom_files(track2path(m_iu.get_env(), iter_val))));
 		}

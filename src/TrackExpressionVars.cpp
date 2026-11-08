@@ -18,6 +18,7 @@
 #include "GenomeTrackArrays.h"
 #include "GenomeTrackComputed.h"
 #include "GenomeTrackFixedBin.h"
+#include "TrackNameIndex.h"
 #include "GenomeTrackRects.h"
 #include "GenomeTrackSparse.h"
 #include "TrackExpressionVars.h"
@@ -240,25 +241,25 @@ void TrackExpressionVars::parse_exprs(const vector<string> &track_exprs)
     // objects of its own that must outlive this function.
     runprotect(gwds);
 
+	// The names each expression holds, in the order of GTRACKS and then of the virtual tracks
+	const TrackNameIndex &track_index = TrackNameIndex::gtracks(rtracknames[TRACK]);
+	unique_ptr<TrackNameIndex> vtrack_index;
+	if (Rf_isString(rtracknames[VTRACK]))
+		vtrack_index.reset(new TrackNameIndex(rtracknames[VTRACK]));
+	vector<int> found;
+
 	for (vector<string>::const_iterator iexpr = track_exprs.begin(); iexpr != track_exprs.end(); ++iexpr) {
 		for (int var_type = 0; var_type < NUM_VAR_TYPES; ++var_type) {
 			if (!Rf_isString(rtracknames[var_type]))
 				continue;
 
-			for (int itrack = 0; itrack < Rf_length(rtracknames[var_type]); ++itrack) {
+			(var_type == TRACK ? track_index : *vtrack_index).find_names(*iexpr, rtracknames[var_type], found);
+			for (int itrack : found) {
 				string track = CHAR(STRING_ELT(rtracknames[var_type], itrack));
-				uint64_t pos = 0;
-
-				while ((pos = iexpr->find(track, pos)) != string::npos) {
-					if (is_var(*iexpr, pos, pos + track.size())) {
-						if (var_type == TRACK)
-							add_track_var(track);
-						else
-                            add_vtrack_var(track, VECTOR_ELT(vtracks, itrack));
-						break;
-					}
-					pos += track.size();
-				}
+				if (var_type == TRACK)
+					add_track_var(track);
+				else
+					add_vtrack_var(track, VECTOR_ELT(vtracks, itrack));
 			}
 		}
 	}
@@ -966,17 +967,10 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
     {
         string track(CHAR(STRING_ELT(rsrc, 0)));
 
-        SEXP gtracks = find_in_misha(m_iu.get_env(), "GTRACKS");
-        if (Rf_isString(gtracks))
+        if (TrackNameIndex::gtracks(find_in_misha(m_iu.get_env(), "GTRACKS")).find(track))
         {
-            for (int itrack = 0; itrack < Rf_length(gtracks); itrack++)
-            {
-                if (!strcmp(CHAR(STRING_ELT(gtracks, itrack)), track.c_str()))
-                {
-                    add_vtrack_var_src_track(rvtrack, vtrack, track);
-                    return;
-                }
-            }
+            add_vtrack_var_src_track(rvtrack, vtrack, track);
+            return;
         }
     }
 
