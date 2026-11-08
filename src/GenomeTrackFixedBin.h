@@ -121,11 +121,10 @@ protected:
 	int64_t m_sliding_num_vs{0};
 	bool m_lse_sliding_valid{false};
 	bool m_running_lse_initialized{false};
-	// Exponents of the lowest and the highest set bit over the values that entered the sliding
-	// sum since it was last computed afresh, and whether every sum of them is exact (see
-	// slide_window)
-	int m_sum_lo_bit{INT_MAX};
-	int m_sum_hi_bit{INT_MIN};
+	// The smallest and the largest exponent field of the values that entered the sliding sum since
+	// it was last computed afresh, and whether every sum of them is exact (see slide_window)
+	int m_sum_lo_exp{INT_MAX};
+	int m_sum_hi_exp{INT_MIN};
 	bool m_sum_exact{false};
 	int m_fast_path_mode{0}; // 0=unknown, 1=reducer-only fast path, 2=avg/nearest-only fast path, 3=single-function fast path, -1=generic path
 	Functions m_single_func{AVG}; // used when m_fast_path_mode == 3
@@ -156,9 +155,9 @@ protected:
 	void reset_sliding_window_state();
 	bool sliding_step(int64_t sbin, int64_t ebin, bool same_size, int64_t &drop, int64_t &add) const;
 	bool slide_window(int64_t drop, int64_t add, bool need_lse, bool need_exact_sum);
-	void start_sum_range() { m_sum_lo_bit = INT_MAX; m_sum_hi_bit = INT_MIN; }
-	static void add_to_bit_range(float v, int &lo_bit, int &hi_bit);
-	static bool sums_exact(int lo_bit, int hi_bit, int64_t num_vals);
+	void start_sum_range() { m_sum_lo_exp = INT_MAX; m_sum_hi_exp = INT_MIN; }
+	static bool add_to_exp_range(float v, int &lo_exp, int &hi_exp);
+	static bool sums_exact(int lo_exp, int hi_exp, int64_t num_vals);
 
 	// Kahan compensated summation helpers for m_sliding_sum
 	inline void kahan_add_to_sliding_sum(double value) {
