@@ -728,10 +728,12 @@ test_that("a stale .db.cache lock that cannot be read is broken by its age", {
     Sys.chmod(lock, "000")
     expect_null(.gdb.cache_lock(db, wait = 0.2))
     expect_equal(lock_files(), ".db.cache.lock")
-    # and one taken after the stale lock was judged stale is put back
+    # and one taken after the stale lock was judged stale is put back, readable or not
     expect_false(.gdb.cache_break_lock(lock, Sys.time() - 7200))
     expect_equal(lock_files(), ".db.cache.lock")
     Sys.chmod(lock, "644")
+    expect_false(.gdb.cache_break_lock(lock, Sys.time() - 7200))
+    expect_equal(lock_files(), ".db.cache.lock")
     expect_equal(readLines(lock), "n0 2 alive")
     unlink(lock)
 })

@@ -740,10 +740,11 @@ gdb.reload <- function(rescan = TRUE) {
 
 # Breaks a stale lock, judged stale by its modification time `mtime`: it is renamed to a name of its
 # own (of two breakers, one wins the rename), then removed if it is still the lock that was judged
-# stale: the same token, or for a lock that cannot be read (another user's, left by a killed session
-# whose umask kept it from the group), the same modification time. A fresh lock taken in between is
-# put back, or, if the name is taken again, removed: its holder then finds the lock not its own when
-# it unlocks, and marks the cache dirty (.gdb.cache_unlock).
+# stale: the same modification time (a lock is not touched after it is taken), and the same token
+# unless it cannot be read (another user's, left by a killed session whose umask kept it from the
+# group). A fresh lock taken in between, also before the token was read here, is put back, or, if the
+# name is taken again, removed: its holder then finds the lock not its own when it unlocks, and marks
+# the cache dirty (.gdb.cache_unlock).
 .gdb.cache_break_lock <- function(path, mtime) {
     read_lock <- function(p) tryCatch(suppressWarnings(readLines(p, warn = FALSE)), error = function(e) NULL)
     held <- read_lock(path)
@@ -751,11 +752,8 @@ gdb.reload <- function(rescan = TRUE) {
     if (!suppressWarnings(file.rename(path, moved))) {
         return(invisible(FALSE))
     }
-    same <- if (is.null(held)) {
-        isTRUE(as.numeric(file.info(moved)$mtime) == as.numeric(mtime))
-    } else {
-        identical(read_lock(moved), held)
-    }
+    same <- isTRUE(as.numeric(file.info(moved)$mtime) == as.numeric(mtime)) &&
+        (is.null(held) || identical(read_lock(moved), held))
     if (!same && !file.exists(path) && suppressWarnings(file.rename(moved, path))) {
         return(invisible(FALSE))
     }
