@@ -134,6 +134,7 @@ extern "C" {
     extern SEXP C_lifetime_counters(void);
     extern SEXP C_test_file_size_limit(SEXP);
     extern SEXP C_take_write_error(SEXP);
+    extern SEXP C_save_rng_state();
 }
 
 static const R_CallMethodDef CallEntries[] = {
@@ -262,6 +263,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"C_lifetime_counters", (DL_FUNC)&C_lifetime_counters, 0},
     {"C_test_file_size_limit", (DL_FUNC)&C_test_file_size_limit, 1},
     {"C_take_write_error", (DL_FUNC)&C_take_write_error, 1},
+    {"C_save_rng_state", (DL_FUNC)&C_save_rng_state, 0},
     {NULL, NULL, 0}
 };
 

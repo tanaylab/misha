@@ -790,9 +790,9 @@ SEXP gtrackcor_spearman(SEXP _track_exprs, SEXP _intervals, SEXP _iterator_polic
                 ++total_bins[i];
                 if (!std::isnan(x) && !std::isnan(y)) {
                     ++non_nan_counts[i];
-                    pair_samplers[i].add({x, y}, unif_rand);
-                    x_samplers[i].add(x, unif_rand);
-                    y_samplers[i].add(y, unif_rand);
+                    pair_samplers[i].add({x, y}, r_unif_rand);
+                    x_samplers[i].add(x, r_unif_rand);
+                    y_samplers[i].add(y, r_unif_rand);
                 }
             }
         }
@@ -914,9 +914,9 @@ SEXP gtrackcor_spearman_multitask(SEXP _track_exprs, SEXP _intervals, SEXP _iter
                     ++total_bins[i];
                     if (!std::isnan(x) && !std::isnan(y)) {
                         ++non_nan_counts[i];
-                        pair_samplers[i].add({x, y}, unif_rand);
-                        x_samplers[i].add(x, unif_rand);
-                        y_samplers[i].add(y, unif_rand);
+                        pair_samplers[i].add({x, y}, r_unif_rand);
+                        x_samplers[i].add(x, r_unif_rand);
+                        y_samplers[i].add(y, r_unif_rand);
                     }
                 }
             }
@@ -1026,7 +1026,7 @@ SEXP gtrackcor_spearman_multitask(SEXP _track_exprs, SEXP _intervals, SEXP _iter
                     if (kid_rate > 0) {
                         double keep_prob = min_sampling_rate_pairs[i] / kid_rate;
                         for (const auto &p : kid_data[k].pairs[i]) {
-                            if (keep_prob >= 1.0 || unif_rand() < keep_prob)
+                            if (keep_prob >= 1.0 || r_unif_rand() < keep_prob)
                                 merged_pairs[i].push_back(p);
                         }
                     }
@@ -1036,7 +1036,7 @@ SEXP gtrackcor_spearman_multitask(SEXP _track_exprs, SEXP _intervals, SEXP _iter
                     if (kid_rate > 0) {
                         double keep_prob = min_sampling_rate_x[i] / kid_rate;
                         for (double v : kid_data[k].x_samp[i]) {
-                            if (keep_prob >= 1.0 || unif_rand() < keep_prob)
+                            if (keep_prob >= 1.0 || r_unif_rand() < keep_prob)
                                 merged_x[i].push_back(v);
                         }
                     }
@@ -1046,7 +1046,7 @@ SEXP gtrackcor_spearman_multitask(SEXP _track_exprs, SEXP _intervals, SEXP _iter
                     if (kid_rate > 0) {
                         double keep_prob = min_sampling_rate_y[i] / kid_rate;
                         for (double v : kid_data[k].y_samp[i]) {
-                            if (keep_prob >= 1.0 || unif_rand() < keep_prob)
+                            if (keep_prob >= 1.0 || r_unif_rand() < keep_prob)
                                 merged_y[i].push_back(v);
                         }
                     }
