@@ -950,7 +950,19 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
         }
     };
 
+    m_window_cap = -1;
     for (size_t offset = 0; offset < max_start; ++offset) {
+        // For the min-edits modes only a strictly smaller value changes the result (an equal one at a later
+        // window loses the tie), so nothing past a 0 matters, and with indels each window's search can stop
+        // at one less than the best so far
+        if (need_min && !std::isnan(metrics.min_edits)) {
+            if (metrics.min_edits <= 0.0f) {
+                break;
+            }
+            if (m_max_indels > 0) {
+                m_window_cap = static_cast<int>(metrics.min_edits) - 1;
+            }
+        }
         const char* window_start = seq_data + offset;
         const int seq_avail = std::min(static_cast<int>(target_length - offset), acgt_run[offset]);
         if (seq_avail < min_span) {
@@ -1098,6 +1110,8 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
         }
     }
 
+    m_window_cap = -1;
+
     if (need_pwm && pwm_found) {
         // For PWM_MAX_EDITS mode: compute edit distance at the best PWM window
         // Apply score.min/score.max filter to its (ungapped) PWM score
@@ -1150,7 +1164,8 @@ float PWMEditDistanceScorer::compute_with_indels(const int* bidx_arr, int seq_le
     // be aligned substituted.
 
     // Most edits worth looking at: max_edits when set; otherwise every column substituted plus D indels
-    int best_total = (m_max_edits >= 1) ? m_max_edits + 1 : L + D + 1;
+    const int edit_cap = indel_cap();
+    int best_total = (edit_cap >= 0) ? edit_cap + 1 : L + D + 1;
 
     // Alignments with at most two indels first, solved exactly by the specialized solver when the motif fits
     // it; otherwise the k = 0 alignment (W = L) alone, exactly, by taking the largest gains. Either bounds
@@ -1314,7 +1329,7 @@ float PWMEditDistanceScorer::compute_with_indels(const int* bidx_arr, int seq_le
         }
     }
 
-    const int cap = (m_max_edits >= 1) ? m_max_edits : L + D;
+    const int cap = (edit_cap >= 0) ? edit_cap : L + D;
     if (best_total > cap) {
         return std::numeric_limits<float>::quiet_NaN();
     }
@@ -1532,8 +1547,9 @@ bool PWMEditDistanceScorer::quick_deficit_check(double aligned_score, int indels
         return false;
     }
 
+    const int cap = indel_cap();
     // Prune: if indels alone exceed budget, skip
-    if (m_max_edits >= 0 && indels > m_max_edits) {
+    if (cap >= 0 && indels > cap) {
         return false;
     }
 
@@ -1548,8 +1564,8 @@ bool PWMEditDistanceScorer::quick_deficit_check(double aligned_score, int indels
         int ceiling = static_cast<int>(best_edits_so_far) - 1 - indels;
         if (ceiling < max_subs) max_subs = ceiling;
     }
-    if (m_max_edits >= 0) {
-        int budget_subs = m_max_edits - indels;
+    if (cap >= 0) {
+        int budget_subs = cap - indels;
         if (budget_subs < max_subs) max_subs = budget_subs;
     }
     if (max_subs <= 0) {
@@ -1574,8 +1590,9 @@ float PWMEditDistanceScorer::compute_min_edits_from_gains(double aligned_score,
         return std::numeric_limits<float>::quiet_NaN();
     }
 
+    const int cap = indel_cap();
     // Prune: if indels alone exceed budget, skip
-    if (m_max_edits >= 0 && indels > m_max_edits) {
+    if (cap >= 0 && indels > cap) {
         return std::numeric_limits<float>::quiet_NaN();
     }
 
@@ -1590,8 +1607,8 @@ float PWMEditDistanceScorer::compute_min_edits_from_gains(double aligned_score,
         int ceiling = static_cast<int>(best_edits_so_far) - 1 - indels;
         if (ceiling < max_subs) max_subs = ceiling;
     }
-    if (m_max_edits >= 0) {
-        int budget_subs = m_max_edits - indels;
+    if (cap >= 0) {
+        int budget_subs = cap - indels;
         if (budget_subs < max_subs) max_subs = budget_subs;
     }
     if (max_subs <= 0) {
@@ -1791,7 +1808,7 @@ float PWMEditDistanceScorer::compute_with_one_indel(const int* bidx_arr, int seq
     // (insertion also costs 1 indel)
     if (!std::isnan(best_edits) && best_edits <= 1.0f) {
         // Apply max_edits cap if set
-        if (m_max_edits >= 1 && best_edits > static_cast<float>(m_max_edits)) {
+        if (indel_cap() >= 0 && best_edits > static_cast<float>(indel_cap())) {
             return std::numeric_limits<float>::quiet_NaN();
         }
         return best_edits;
@@ -1890,7 +1907,7 @@ float PWMEditDistanceScorer::compute_with_one_indel(const int* bidx_arr, int seq
     }
 
     // Apply max_edits cap if set
-    if (!std::isnan(best_edits) && m_max_edits >= 1 && best_edits > static_cast<float>(m_max_edits)) {
+    if (!std::isnan(best_edits) && indel_cap() >= 0 && best_edits > static_cast<float>(indel_cap())) {
         return std::numeric_limits<float>::quiet_NaN();
     }
 
@@ -2099,7 +2116,7 @@ float PWMEditDistanceScorer::compute_with_two_indels(const int* bidx_arr, int se
 
     // Early return: if best_edits <= 1, no 2-indel case can beat it
     if (!std::isnan(best_edits) && best_edits <= 1.0f) {
-        if (m_max_edits >= 1 && best_edits > static_cast<float>(m_max_edits)) {
+        if (indel_cap() >= 0 && best_edits > static_cast<float>(indel_cap())) {
             return std::numeric_limits<float>::quiet_NaN();
         }
         return best_edits;
@@ -2481,7 +2498,7 @@ float PWMEditDistanceScorer::compute_with_two_indels(const int* bidx_arr, int se
     }
 
     // Apply max_edits cap if set
-    if (!std::isnan(best_edits) && m_max_edits >= 1 && best_edits > static_cast<float>(m_max_edits)) {
+    if (!std::isnan(best_edits) && indel_cap() >= 0 && best_edits > static_cast<float>(indel_cap())) {
         return std::numeric_limits<float>::quiet_NaN();
     }
 

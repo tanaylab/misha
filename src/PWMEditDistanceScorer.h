@@ -112,6 +112,16 @@ private:
     DnaPSSM m_pssm;
     float m_threshold;
     int m_max_edits;  // -1 = exact computation, >=1 = fast heuristic
+    // Per-window cap for the indel solvers (-1 = none): evaluate_windows sets it to one less than the best
+    // value the interval has so far, since a window that cannot beat it does not change the result
+    int m_window_cap = -1;
+
+    // Most edits an indel solver looks for: max_edits and the window cap, whichever is smaller; -1 = none
+    inline int indel_cap() const {
+        int cap = (m_max_edits >= 1) ? m_max_edits : -1;
+        if (m_window_cap >= 0 && (cap < 0 || m_window_cap < cap)) cap = m_window_cap;
+        return cap;
+    }
     int m_max_indels; // 0 = substitutions only, >=1 = allow insertions/deletions via banded NW DP
     Mode m_mode;
     Direction m_direction;  // ABOVE = edits to raise score >= threshold; BELOW = edits to lower score <= threshold

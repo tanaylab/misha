@@ -386,7 +386,11 @@ WindowResult compute_window_edits_detailed_with_indels(
     int max_edits,
     int max_indels,
     bool reverse,
-    bool below)
+    bool below,
+    std::vector<double>& dp,  // DP buffer, reused across calls
+    int best_n,               // edits of the best window so far (-1: none); a window needing more cannot win
+    float best_sb,            // its score_before
+    bool tie_on_score)        // true: an equal count wins only with a higher score_before
 {
     const int D = max_indels;
 
@@ -456,46 +460,125 @@ WindowResult compute_window_edits_detailed_with_indels(
         return std::fabs(a - b) < 1e-9 * std::max(1.0, std::fabs(b));
     };
 
-    // Fewest edits worth looking at: max_edits when set; otherwise every column substituted plus D indels
-    const int cap = (max_edits >= 0) ? max_edits : L + D;
-    int best_total = cap + 1;
+    // Compute score_before: the PWM score of the L-length window
+    // at the same starting position (standard scoring, no alignment).
+    // This matches the non-indel path where score_before is the true
+    // PWM score of the original sequence.
+    double sb_score = 0.0;
+    for (int i = 0; i < L; i++) {
+        int si = reverse ? (L - 1 - i) : i;
+        char b = (si < seq_avail) ? seq_ptr[si] : 'N';
+        if (reverse) b = complement_base(b);
+        int bi = base_to_index(b);
+        if (bi == 4) {
+            // Unknown: use mean log-probability
+            double mean_lp = 0.0;
+            for (int bb = 0; bb < 4; bb++)
+                mean_lp += static_cast<double>(pssm[i].get_log_prob_from_code(bb));
+            sb_score += mean_lp / 4.0;
+        } else {
+            sb_score += static_cast<double>(pssm[i].get_log_prob_from_code(bi));
+        }
+    }
+
+    // Most edits worth looking at: max_edits when set, and no more than the best window so far needs
+    // (fewer, when an equal count would lose the tie on score_before); otherwise every column substituted
+    // plus D indels
+    int limit_all = L + D;
+    if (max_edits >= 0) limit_all = std::min(limit_all, max_edits);
+    if (best_n >= 0) {
+        const bool tie_can_win = !tie_on_score || static_cast<float>(sb_score) > best_sb;
+        limit_all = std::min(limit_all, tie_can_win ? best_n : best_n - 1);
+        if (limit_all < 0) return best_result;
+    }
+
+    // The alignment without indels (W = L) solved exactly by taking the largest gains bounds the rest. Plus
+    // one, so that rounding in the DP's own sums can never leave it stricter than the DP.
+    if (L <= seq_avail) {
+        double sc0 = 0.0;
+        int mand0 = 0;
+        std::vector<double> gains;
+        gains.reserve(L);
+        for (int i = 0; i < L; i++) {
+            bool mandatory;
+            const double bs = base_score(i, base_at(L, i), mandatory);
+            if (mandatory) {
+                mand0++;
+                sc0 += target[i];
+            } else {
+                sc0 += bs;
+                const double g = below ? (bs - target[i]) : (target[i] - bs);
+                if (g > 0.0) gains.push_back(g);
+            }
+        }
+        double deficit = below ? (sc0 - static_cast<double>(threshold)) : (static_cast<double>(threshold) - sc0);
+        int k0 = mand0;
+        if (deficit > 0.0) {
+            std::sort(gains.begin(), gains.end(), std::greater<double>());
+            k0 = -1;
+            double acc = 0.0;
+            for (size_t g = 0; g < gains.size(); g++) {
+                acc += gains[g];
+                if (acc >= deficit) {
+                    k0 = mand0 + static_cast<int>(g) + 1;
+                    break;
+                }
+            }
+        }
+        if (k0 >= 0 && k0 + 1 < limit_all) limit_all = k0 + 1;
+    }
+
+    // Totals up to limit_all are accepted until one is found; then only smaller ones (the lowest W with the
+    // fewest edits wins, and in it the fewest indels)
+    int best_total = limit_all;
+    bool have = false;
+    const int JD = 2 * D + 1;  // band: j - i in [-D, D]
+    const int KD = D + 1;
 
     for (int W = std::max(1, L - D); W <= L + D; ++W) {
         if (W > seq_avail) break;
         const int dw = std::abs(W - L);
-        const int S = std::min(L, best_total - 1 - dw);  // substitutions worth tracking
+        const int limit = have ? best_total - 1 : best_total;
+        const int S = std::min(L, limit - dw);  // substitutions worth tracking
         if (S < 0) continue;
 
-        const int KD = D + 1, SD = S + 1, JD = W + 1;
-        std::vector<double> dp(static_cast<size_t>(L + 1) * JD * KD * SD, sentinel);
+        const int SD = S + 1;
+        const size_t dp_size = static_cast<size_t>(L + 1) * JD * KD * SD;
+        if (dp.size() < dp_size) dp.resize(dp_size);
+        std::fill(dp.begin(), dp.begin() + dp_size, sentinel);
         auto at = [&](int i, int j, int k, int sb) -> double& {
-            return dp[((static_cast<size_t>(i) * JD + j) * KD + k) * SD + sb];
+            return dp[((static_cast<size_t>(i) * JD + (j - i + D)) * KD + k) * SD + sb];
         };
 
         at(0, 0, 0, 0) = 0.0;
         for (int i = 0; i <= L; ++i) {
             const int j_lo = std::max(0, i - D);
             const int j_hi = std::min(W, i + D);
+            const double tgt = i > 0 ? target[i - 1] : 0.0;
             for (int j = j_lo; j <= j_hi; ++j) {
                 if (i == 0 && j == 0) continue;
+                const bool has_match = i > 0 && j > 0;
+                bool mandatory = true;
+                double bs = 0.0;
+                if (has_match) bs = base_score(i - 1, base_at(W, j - 1), mandatory);
+                const bool has_ins = i > 0 && (j - (i - 1)) <= D;
+                const bool has_del = j > 0 && (i - (j - 1)) <= D;
                 for (int k = 0; k <= D; ++k) {
                     for (int sb = 0; sb <= S; ++sb) {
                         double& c = at(i, j, k, sb);
-                        if (i > 0 && j > 0 && std::abs((i - 1) - (j - 1)) <= D) {
-                            bool mandatory;
-                            const double bs = base_score(i - 1, base_at(W, j - 1), mandatory);
+                        if (has_match) {
                             const double pm = at(i - 1, j - 1, k, sb);
                             if (!mandatory && valid(pm)) improve(c, pm + bs);
                             if (sb > 0) {
                                 const double ps = at(i - 1, j - 1, k, sb - 1);
-                                if (valid(ps)) improve(c, ps + target[i - 1]);
+                                if (valid(ps)) improve(c, ps + tgt);
                             }
                         }
-                        if (i > 0 && k > 0 && std::abs((i - 1) - j) <= D) {
+                        if (has_ins && k > 0) {
                             const double pi = at(i - 1, j, k - 1, sb);
-                            if (valid(pi)) improve(c, pi + target[i - 1]);
+                            if (valid(pi)) improve(c, pi + tgt);
                         }
-                        if (j > 0 && k > 0 && std::abs(i - (j - 1)) <= D) {
+                        if (has_del && k > 0) {
                             const double pd = at(i, j - 1, k - 1, sb);
                             if (valid(pd)) improve(c, pd);
                         }
@@ -506,7 +589,7 @@ WindowResult compute_window_edits_detailed_with_indels(
 
         // Least k + s here (fewest indels on a tie, as before)
         int end_k = -1, end_s = -1;
-        for (int total = dw; total < best_total && end_k < 0; ++total) {
+        for (int total = dw; total <= limit && end_k < 0; ++total) {
             for (int k = dw; k <= std::min(D, total) && end_k < 0; ++k) {
                 const int sb = total - k;
                 if (sb > S) continue;
@@ -627,28 +710,8 @@ WindowResult compute_window_edits_detailed_with_indels(
             }
         }
 
-        // Compute score_before: the PWM score of the L-length window
-        // at the same starting position (standard scoring, no alignment).
-        // This matches the non-indel path where score_before is the true
-        // PWM score of the original sequence.
-        double sb_score = 0.0;
-        for (int i = 0; i < L; i++) {
-            int si = reverse ? (L - 1 - i) : i;
-            char b = (si < seq_avail) ? seq_ptr[si] : 'N';
-            if (reverse) b = complement_base(b);
-            int bi = base_to_index(b);
-            if (bi == 4) {
-                // Unknown: use mean log-probability
-                double mean_lp = 0.0;
-                for (int bb = 0; bb < 4; bb++)
-                    mean_lp += static_cast<double>(pssm[i].get_log_prob_from_code(bb));
-                sb_score += mean_lp / 4.0;
-            } else {
-                sb_score += static_cast<double>(pssm[i].get_log_prob_from_code(bi));
-            }
-        }
-
         best_total = end_k + end_s;
+        have = true;
         best_result.n_edits = best_total;
         best_result.score_before = static_cast<float>(sb_score);
         best_result.score_after = static_cast<float>(at(L, W, end_k, end_s));
@@ -703,6 +766,9 @@ WindowResult find_best_window_edits(
         acgt_run[j] = base_to_index(seq[j]) < 4 ? acgt_run[j + 1] + 1 : 0;
     }
     const int min_span = std::max(1, L - std::max(0, max_indels));
+    std::vector<double> dp_buffer;
+    // A strand's count alone does not decide a below + bidirect window, so there a tie stays open
+    const bool below_bidirect = below && scan_forward && scan_reverse;
 
     for (int s0 = roi_start_0; s0 <= roi_end_0; ++s0) {
         const char* window_start = seq.data() + s0;
@@ -735,12 +801,14 @@ WindowResult find_best_window_edits(
             return true;
         };
 
-        // Edits for one strand reading (n_edits < 0: unreachable within max_edits)
+        // Edits for one strand reading (n_edits < 0: unreachable within max_edits, or not able to beat the
+        // best window so far).
         auto edits_for = [&](bool reverse) -> WindowResult {
             if (max_indels > 0) {
                 return compute_window_edits_detailed_with_indels(
                     window_start, seq_avail, L, pssm, col_max_scores, col_min_scores,
-                    S_max, S_min, threshold, max_edits, max_indels, reverse, below);
+                    S_max, S_min, threshold, max_edits, max_indels, reverse, below, dp_buffer,
+                    best.n_edits, best.score_before, !below_bidirect);
             }
             return compute_window_edits_detailed(
                 window_start, L, pssm, col_max_scores, col_min_scores,
@@ -757,7 +825,7 @@ WindowResult find_best_window_edits(
             }
         };
 
-        if (below && scan_forward && scan_reverse) {
+        if (below_bidirect) {
             // "below" on both strands, as in the pwm.edit_distance vtrack: a genomic substitution changes
             // both readings and both must end up below, so the harder strand decides. A strand the score
             // filter removes is left out; one that cannot be brought below makes the window unreachable.
