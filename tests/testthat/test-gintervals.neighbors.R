@@ -587,3 +587,34 @@ test_that("gintervals.neighbors handles identical intervals correctly", {
         expect_setequal(qres$tid, c(1, 2, 3))
     }
 })
+
+test_that("gintervals.neighbors breaks distance ties by the neighbor's coordinates, not the input order", {
+    i1 <- data.frame(chrom = "chr1", start = 1000, end = 1100)
+    # all four at distance 100; a and b are the same interval
+    i2 <- data.frame(chrom = "chr1", start = c(1200, 1200, 800, 1200), end = c(1300, 1300, 900, 1250), id = c("a", "b", "c", "d"))
+    for (ord in list(1:4, 4:1, c(2, 4, 1, 3))) {
+        x <- i2[ord, ]
+        expect_equal(gintervals.neighbors(i1, x)$id, "c")
+        expect_equal(gintervals.neighbors(i1, x, maxneighbors = 2)$id, c("c", "d"))
+        expect_equal(gintervals.neighbors(i1, x, maxneighbors = 4)$id[1:2], c("c", "d"))
+    }
+    # only the same intervals keep their input order
+    expect_equal(gintervals.neighbors(i1, i2, maxneighbors = 4)$id, c("c", "d", "a", "b"))
+    expect_equal(gintervals.neighbors(i1, i2[4:1, ], maxneighbors = 4)$id, c("c", "d", "b", "a"))
+})
+
+test_that("2D gintervals.neighbors picks the nearest by dist1 + dist2 whatever the input order", {
+    q <- gintervals.2d("chr1", 1000, 1100, "chr1", 1000, 1100)
+    # D: dist1 2, dist2 1 (3); E: dist1 4, dist2 0 (4); F: dist1 3, dist2 0 (3). The neighbor search
+    # meets F before D, and D and E at the same step.
+    n <- gintervals.2d("chr1", c(1102, 1104, 1103), c(1200, 1200, 1150), "chr1", c(1101, 1050, 1070), c(1200, 1060, 1080))
+    n$id <- c("D", "E", "F")
+    for (ord in list(1:2, 2:1)) {
+        expect_equal(gintervals.neighbors(q, n[ord, ])$id, "D")
+    }
+    for (ord in list(1:3, 3:1, c(2, 3, 1))) {
+        res <- gintervals.neighbors(q, n[ord, ], maxneighbors = 2)
+        expect_equal(res$id, c("D", "F"))
+        expect_equal(res$dist1 + res$dist2, c(3, 3))
+    }
+})

@@ -17,18 +17,29 @@
 using namespace std;
 using namespace rdb;
 
+// Neighbors are ordered by query, then by distance, then by the neighbor's coordinates, so which
+// neighbors are chosen among those at the same distance, and their order, does not depend on the
+// input order. Only neighbors with the same coordinates keep their input order (by row).
 struct IntervNeighbor {
 	int64_t        id1;
 	int64_t        id2;
 	int64_t        dist;
+	int64_t        start2;
+	int64_t        end2;
 
-	IntervNeighbor(int64_t _id1, int64_t _id2, int64_t _dist) : id1(_id1), id2(_id2), dist(_dist) {}
+	IntervNeighbor(int64_t _id1, int64_t _id2, int64_t _dist, int64_t _start2 = 0, int64_t _end2 = 0) :
+		id1(_id1), id2(_id2), dist(_dist), start2(_start2), end2(_end2) {}
 
 	bool operator<(const IntervNeighbor &o) const {
-		return
-			id1 < o.id1 ||
-			(id1 == o.id1 && llabs(dist) < llabs(o.dist)) ||
-			(id1 == o.id1 && llabs(dist) == llabs(o.dist) && id2 < o.id2);
+		if (id1 != o.id1)
+			return id1 < o.id1;
+		if (llabs(dist) != llabs(o.dist))
+			return llabs(dist) < llabs(o.dist);
+		if (start2 != o.start2)
+			return start2 < o.start2;
+		if (end2 != o.end2)
+			return end2 < o.end2;
+		return id2 < o.id2;
 	}
 };
 
@@ -37,14 +48,25 @@ struct IntervNeighbor2D {
 	int64_t        id2;
 	int64_t        dist1;
 	int64_t        dist2;
+	int64_t        start1, end1, start2, end2;  // of the neighbor
 
-	IntervNeighbor2D(int64_t _id1, int64_t _id2, int64_t _dist1, int64_t _dist2) : id1(_id1), id2(_id2), dist1(_dist1), dist2(_dist2) {}
+	IntervNeighbor2D(int64_t _id1, int64_t _id2, int64_t _dist1, int64_t _dist2, const Rectangle &rect = Rectangle(0, 0, 0, 0)) :
+		id1(_id1), id2(_id2), dist1(_dist1), dist2(_dist2), start1(rect.x1), end1(rect.x2), start2(rect.y1), end2(rect.y2) {}
 
 	bool operator<(const IntervNeighbor2D &o) const {
-		return
-			id1 < o.id1 ||
-			(id1 == o.id1 && llabs(dist1 + dist2) < llabs(o.dist1 + o.dist2)) ||
-			(id1 == o.id1 && llabs(dist1 + dist2) == llabs(o.dist1 + o.dist2) && id2 < o.id2);
+		if (id1 != o.id1)
+			return id1 < o.id1;
+		if (llabs(dist1 + dist2) != llabs(o.dist1 + o.dist2))
+			return llabs(dist1 + dist2) < llabs(o.dist1 + o.dist2);
+		if (start1 != o.start1)
+			return start1 < o.start1;
+		if (end1 != o.end1)
+			return end1 < o.end1;
+		if (start2 != o.start2)
+			return start2 < o.start2;
+		if (end2 != o.end2)
+			return end2 < o.end2;
+		return id2 < o.id2;
 	}
 };
 
@@ -210,8 +232,8 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 			vector<IntervNeighbor> result;
 
 			intervals1d[0].sort();
-			// stable: equal intervals keep their input order on every platform, so
-			// neighbor ties don't depend on the C++ library
+			// Ties do not depend on this order (see IntervNeighbor); stable to keep it the same on
+			// every platform all the same.
 			stable_sort(intervals1d[1].begin(), intervals1d[1].end(), GIntervalsFetcher1D::compare_by_start_coord);
 
 			int chromid = -1;
@@ -246,6 +268,8 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 					inn.begin(*iinterv);
 
 				int num_neighbors = 0;
+				int64_t cutoff = 0;  // |dist| of the maxneighbors-th neighbor found
+				size_t first = result.size();
 				while (!inn.is_end()) {
 					int64_t dist;
 					
@@ -259,14 +283,24 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 					
 					if (llabs(dist) > maxdist)
 						break;
+					// The iterator yields the neighbors by |dist|. Once maxneighbors are found, those
+					// at the distance of the last one are taken too, and the ties are cut below.
+					if (num_neighbors >= maxneighbors && llabs(dist) > cutoff)
+						break;
 					if (dist >= distance_start && dist <= distance_end) {
-						result.push_back(IntervNeighbor(iu.get_orig_interv_idx(*iinterv), iu.get_orig_interv_idx(*inn), dist));
+						result.push_back(IntervNeighbor(iu.get_orig_interv_idx(*iinterv), iu.get_orig_interv_idx(*inn), dist, inn->start, inn->end));
 						iu.verify_max_data_size(result.size());
-						num_neighbors++;
-						if (num_neighbors >= maxneighbors) 
-							break;
+						if (++num_neighbors == maxneighbors)
+							cutoff = llabs(dist);
 					}
 					inn.next();
+				}
+
+				// neighbors tied at the cutoff distance: keep those with the smallest coordinates
+				if (num_neighbors > maxneighbors) {
+					sort(result.begin() + first, result.end());
+					result.erase(result.begin() + first + maxneighbors, result.end());
+					num_neighbors = maxneighbors;
 				}
 
 				if (na_if_notfound && !num_neighbors) {
@@ -374,6 +408,8 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 					inn.begin(*iinterv);
 
 				int num_neighbors = 0;
+				int64_t cutoff = 0;  // the largest dist1 + dist2 of the first maxneighbors neighbors found
+				size_t first = result.size();
 				while (!inn.is_end()) {
 					int64_t dist1 = iinterv->xdist(*inn);
 					int64_t dist2 = iinterv->ydist(*inn);
@@ -381,15 +417,30 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 					if (dist1 > distance_end1 && dist2 > distance_end2) 
 						break;
 
+					// The iterator orders the neighbors by dist1 + dist2 plus one for each axis on which
+					// the rectangles do not overlap (manhattan_dist with touch_is_at_dist_one), so a
+					// neighbor found later can be nearer by dist1 + dist2 than one found earlier, by up
+					// to 2. Once maxneighbors are found, every neighbor at dist1 + dist2 <= cutoff comes
+					// before that order passes cutoff + 2; the nearest are chosen from them below.
+					if (num_neighbors >= maxneighbors && iinterv->manhattan_dist(*inn, true) > cutoff + 2)
+						break;
+
 					if (dist1 >= distance_start1 && dist1 <= distance_end1 && dist2 >= distance_start2 && dist2 <= distance_end2) {
-						result.push_back(IntervNeighbor2D(iu.get_orig_interv_idx(*iinterv), inn->v, dist1, dist2));
+						result.push_back(IntervNeighbor2D(iu.get_orig_interv_idx(*iinterv), inn->v, dist1, dist2, *inn));
 						iu.verify_max_data_size(result.size());
-                        num_neighbors++;
-                        if (num_neighbors >= maxneighbors) 
-                            break;
+						if (num_neighbors < maxneighbors)
+							cutoff = max(cutoff, dist1 + dist2);
+						num_neighbors++;
 					}
 
 					inn.next();
+				}
+
+				// keep the maxneighbors nearest by dist1 + dist2, ties by the smallest coordinates
+				if (num_neighbors > maxneighbors) {
+					sort(result.begin() + first, result.end());
+					result.erase(result.begin() + first + maxneighbors, result.end());
+					num_neighbors = maxneighbors;
 				}
 
 				if (na_if_notfound && !num_neighbors) {
