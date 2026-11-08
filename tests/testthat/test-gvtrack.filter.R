@@ -1071,11 +1071,18 @@ vf_blocks <- function(nblocks) {
 }
 
 # A sparse, a dense (50 bp bins, the bins between the values hold none) and an array track of the values of vv,
-# in a new database; returns the sources to compare, the value-based vtrack included
+# in a new per-chromosome database (so the tracks are written per chromosome); returns the sources to compare, the
+# value-based vtrack included
 vf_sources <- function(vv, env = parent.frame()) {
+    d <- tempfile("vf_")
+    dir.create(d)
+    withr::defer(unlink(d, recursive = TRUE), envir = testthat::teardown_env())
     set.seed(1)
     s1 <- paste(sample(c("A", "C", "G", "T"), max(vv$end) + 1000, TRUE), collapse = "")
-    setup_db(list(sprintf(">chr1\n%s\n", s1), ">chr2\nACGTACGTACGT\n"))
+    cat(sprintf(">chr1\n%s\n", s1), file = file.path(d, "chr1.fasta"))
+    cat(">chr2\nACGTACGTACGT\n", file = file.path(d, "chr2.fasta"))
+    suppressMessages(gdb.create(groot = file.path(d, "db"), fasta = file.path(d, c("chr1.fasta", "chr2.fasta")), format = "per-chromosome"))
+    gdb.init(file.path(d, "db"))
     gtrack.create_sparse("vf_sp", "x", vv[, 1:3], vv$score)
     gtrack.create_dense("vf_dn", "x", vv[, 1:3], vv$score, 50, NaN)
     f <- tempfile(fileext = ".tsv")
@@ -1112,10 +1119,16 @@ test_that("with a filter, first and last and their positions skip unmasked parts
             }
         }
     }
+    track_files <- function(tr) list.files(file.path(.misha$GROOT, "tracks", paste0(tr, ".track")))
+    expect_true("chr1" %in% track_files("vf_sp"))
     check("per-chromosome")
     withr::with_options(list(gshared.track.backend = TRUE), check("shared backend"))
-    for (tr in c("vf_sp", "vf_dn", "vf_arr")) suppressMessages(gtrack.convert_to_indexed(tr))
+    for (tr in c("vf_sp", "vf_dn", "vf_arr")) {
+        suppressMessages(gtrack.convert_to_indexed(tr))
+        expect_true("track.idx" %in% track_files(tr))
+    }
     check("indexed")
+    withr::with_options(list(gshared.track.backend = TRUE), check("indexed, shared backend"))
 })
 
 test_that("with a filter, nearest is the average of the unmasked values, each counted once", {
