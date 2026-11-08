@@ -1161,3 +1161,22 @@ test_that("with a filter, sample draws each unmasked value with the same chance"
         }
     }
 })
+
+test_that("with a filter, size and exists are 0 when the unmasked parts hold no value", {
+    local_db_state()
+    vv <- data.frame(chrom = "chr1", start = c(100, 500), end = c(110, 510), score = c(1, 2))
+    srcs <- vf_sources(vv)
+    iv <- gintervals("chr1", 200, 300)
+    # parts [200,250) and [260,300), neither holds a value
+    mask <- gintervals("chr1", 250, 260)
+    for (s in names(srcs)) {
+        for (f in c("size", "exists", "avg", "sum")) {
+            gvtrack.create("vf", srcs[[s]], f, filter = mask)
+            expected <- if (f %in% c("size", "exists")) 0 else NA_real_
+            expect_equal(gextract("vf", iv, iterator = iv)$vf, expected, info = paste(s, f))
+        }
+        # an interval masked entirely gives NA, as documented
+        gvtrack.create("vf", srcs[[s]], "size", filter = gintervals("chr1", 150, 350))
+        expect_true(is.na(gextract("vf", iv, iterator = iv)$vf), info = s)
+    }
+})

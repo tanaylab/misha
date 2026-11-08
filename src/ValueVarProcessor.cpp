@@ -148,7 +148,11 @@ void ValueVarProcessor::process_single_value_var(
 
 		// Finalize result for filtered case
 		if (!agg.has_value) {
-			var.var[idx] = numeric_limits<double>::quiet_NaN();
+			// No unmasked value: size and exists count none, the other functions have nothing to report
+			if (var.val_func == TrackExpressionVars::Value_var::SIZE || var.val_func == TrackExpressionVars::Value_var::EXISTS)
+				var.var[idx] = 0;
+			else
+				var.var[idx] = numeric_limits<double>::quiet_NaN();
 		} else {
 			switch (var.val_func) {
 				case TrackExpressionVars::Value_var::AVG:
