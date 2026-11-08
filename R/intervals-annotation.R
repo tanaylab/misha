@@ -1,18 +1,20 @@
 # Interval annotation functions
 
-#' Annotates 1D intervals using nearest neighbors
+#' Annotates intervals using nearest neighbors
 #'
-#' Annotates one-dimensional intervals by finding nearest neighbors in another
+#' Annotates intervals by finding nearest neighbors in another
 #' set of intervals and adding selected columns from the neighbors to the
 #' original intervals.
 #'
 #' The function wraps and extends \code{gintervals.neighbors} to provide
 #' convenient column selection/renaming, optional distance inclusion, distance
 #' thresholding with custom NA values, multiple neighbors per interval, and
-#' deterministic tie-breaking. Currently supports 1D intervals only.
+#' deterministic tie-breaking. For 2D intervals the two distances of the
+#' neighbor are returned, and \code{max_dist} and a \code{tie_method} other
+#' than "first" are not supported.
 #'
-#' @param intervals Intervals to annotate (1D).
-#' @param annotation_intervals Source intervals containing annotation data (1D).
+#' @param intervals Intervals to annotate.
+#' @param annotation_intervals Source intervals containing annotation data.
 #' @param annotation_columns Character vector of column names to copy from
 #'   \code{annotation_intervals}. If \code{NULL} (default), all non-basic
 #'   columns are used, i.e. everything beyond the coordinate/strand columns
@@ -21,10 +23,13 @@
 #'   provided, must have the same length as \code{annotation_columns}. Defaults
 #'   to using the original names.
 #' @param dist_column Name of the distance column to include. Use \code{NULL} to
-#'   omit the distance column. Defaults to "dist".
+#'   omit the distance column. Defaults to "dist". For 2D intervals two columns
+#'   are included, with "1" and "2" added to the name (\code{dist1} and
+#'   \code{dist2} by default, as in \code{gintervals.neighbors}).
 #' @param max_dist Maximum absolute distance. When finite, neighbors with
 #'   \code{|dist| > max_dist} result in annotation columns being set to
-#'   \code{na_value} for those rows, while the row itself is retained.
+#'   \code{na_value} for those rows, while the row itself is retained. 1D
+#'   intervals only.
 #' @param na_value Value(s) to use for annotations when beyond \code{max_dist}
 #'   or when no neighbor is found. Can be a single scalar recycled for all
 #'   columns, or a named list/vector supplying per-column values matching
@@ -137,9 +142,18 @@ gintervals.annotate <- function(intervals,
     annotation_intervals <- .gintervals.load_ext(annotation_intervals)
 
     # Ties are broken by start or end, which 2D intervals do not have
-    if (tie_method != "first" && maxneighbors > 1 && !.gintervals.is1d(annotation_intervals)) {
+    is2d <- !.gintervals.is1d(annotation_intervals)
+    if (tie_method != "first" && maxneighbors > 1 && is2d) {
         stop("tie_method other than \"first\" is supported for 1D intervals only", call. = FALSE)
     }
+    # A 2D neighbor has two distances, and which of them (or what of both) max_dist would limit is
+    # not decided
+    if (is.finite(max_dist) && is2d) {
+        stop("max_dist is supported for 1D intervals only", call. = FALSE)
+    }
+    # The distance columns: for 2D intervals the two distances of gintervals.neighbors (dist1, dist2
+    # with the default dist_column)
+    dist_columns <- if (!is.null(dist_column) && is2d) paste0(dist_column, c("1", "2")) else dist_column
 
     # Original row order: used to group ties and, with keep_order, to restore the order
     intervals$.orig_order <- seq_len(nrow(intervals))
@@ -172,8 +186,8 @@ gintervals.annotate <- function(intervals,
     # Check for column name conflicts
     if (!overwrite) {
         existing_cols <- colnames(intervals)
-        if (!is.null(dist_column) && dist_column %in% existing_cols) {
-            stop(paste("Distance column", dist_column, "already exists. Use overwrite=TRUE or choose different name."), call. = FALSE)
+        for (dist_col in intersect(dist_columns, existing_cols)) {
+            stop(paste("Distance column", dist_col, "already exists. Use overwrite=TRUE or choose different name."), call. = FALSE)
         }
 
         conflicts <- intersect(column_names, existing_cols)
@@ -206,16 +220,17 @@ gintervals.annotate <- function(intervals,
             }
             result[[column_names[i]]] <- rep(fill_val, n)
         }
-        if (!is.null(dist_column)) {
-            result[[dist_column]] <- rep(NA_real_, n)
+        for (dist_col in dist_columns) {
+            result[[dist_col]] <- rep(NA_real_, n)
         }
         result$.orig_order <- NULL
         return(result)
     }
 
     # The neighbors result is the query columns, then the annotation columns, then
-    # the distance. Split it by position: shared column names get suffixes there,
-    # and a name-based lookup would pick the query's column instead of the neighbor's.
+    # the distance (dist1 and dist2 for 2D). Split it by position: shared column names get
+    # suffixes there, and a name-based lookup would pick the query's column instead of the
+    # neighbor's.
     n1 <- ncol(intervals)
     n2 <- ncol(annotation_intervals)
     query_part <- neighbors_result[, seq_len(n1), drop = FALSE]
@@ -223,6 +238,7 @@ gintervals.annotate <- function(intervals,
     ann_part <- neighbors_result[, n1 + seq_len(n2), drop = FALSE]
     colnames(ann_part) <- colnames(annotation_intervals)
     dist <- neighbors_result[[n1 + n2 + 1L]]
+    dist2 <- if (is2d) neighbors_result[[n1 + n2 + 2L]]
 
     # Apply tie-breaking if needed
     if (tie_method != "first" && maxneighbors > 1) {
@@ -254,10 +270,13 @@ gintervals.annotate <- function(intervals,
     }
 
     # Assemble: query columns (minus those overwritten), annotations, distance
-    replaced <- c(column_names, dist_column)
+    replaced <- c(column_names, dist_columns)
     result <- cbind(query_part[, setdiff(colnames(query_part), replaced), drop = FALSE], annotations)
     if (!is.null(dist_column)) {
-        result[[dist_column]] <- dist
+        result[[dist_columns[1]]] <- dist
+        if (is2d) {
+            result[[dist_columns[2]]] <- dist2
+        }
     }
     rownames(result) <- NULL
 
