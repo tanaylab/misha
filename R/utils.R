@@ -396,13 +396,27 @@
     ), call. = FALSE)
 }
 
+# options(gmax.data.size) as the C++ side reads it (ConfigurationManager::get_max_data_size): unset
+# (NULL, documented as no limit) or not a number is Inf, NA is an error
+.gmax_data_size <- function() {
+    size <- .ggetOption("gmax.data.size")
+    if (length(size) && is.na(size[1])) {
+        stop("options(gmax.data.size) must be a number, not NA", call. = FALSE)
+    }
+    if (!is.numeric(size) || !length(size)) Inf else size[1]
+}
+
+# A number (a coordinate, a count, gmax.data.size) for a message, as written: sprintf("%d") refuses
+# doubles above 2^31, and %g prints 61331566 as 6.13316e+07
+.gformat_num <- function(x) {
+    format(x, scientific = FALSE, trim = TRUE)
+}
+
 .gverify_max_data_size <- function(size, data_name = "Result", arguments = NULL) {
-    max.data.size <- .ggetOption("gmax.data.size")
+    max.data.size <- .gmax_data_size()
 
     if (size > max.data.size) {
-        # gmax.data.size is a (multi-GB) double; format as a plain integer string
-        # so sprintf doesn't error with "%d" on a non-integer/over-2^31 value.
-        max.data.size.str <- format(max.data.size, scientific = FALSE, trim = TRUE)
+        max.data.size.str <- .gformat_num(max.data.size)
         if (is.null(arguments)) {
             stop(sprintf(
                 paste("%s size exceeded the maximal allowed (%s).",

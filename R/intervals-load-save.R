@@ -390,13 +390,13 @@
             if (!.gintervals.loadable(intervals.set, chrom = chrom)) {
                 if (is.null(chrom)) {
                     stop(sprintf(
-                        "Cannot load a big intervals set %s: its size (%d) exceeds the limit (%d) controlled by gmax.data.size option.\nFor big intervals sets only one chromosome pair can be loaded at a time.",
-                        intervals.set, sum(meta$stats$size), .ggetOption("gmax.data.size")
+                        "Cannot load a big intervals set %s: its size (%s) exceeds the limit (%s) controlled by gmax.data.size option.\nFor big intervals sets only one chromosome pair can be loaded at a time.",
+                        intervals.set, .gformat_num(sum(meta$stats$size)), .gformat_num(.gmax_data_size())
                     ), call. = FALSE)
                 } else {
                     stop(sprintf(
-                        "Cannot load chromosome %s of an intervals set %s: its size (%d) exceeds the limit (%d) controlled by gmax.data.size option.",
-                        chrom, intervals.set, sum(meta$stats$size), .ggetOption("gmax.data.size")
+                        "Cannot load chromosome %s of an intervals set %s: its size (%s) exceeds the limit (%s) controlled by gmax.data.size option.",
+                        chrom, intervals.set, .gformat_num(sum(meta$stats$size)), .gformat_num(.gmax_data_size())
                     ), call. = FALSE)
                 }
             }
@@ -461,23 +461,23 @@
             if (!.gintervals.loadable(intervals.set, chrom1 = chrom1, chrom2 = chrom2)) {
                 if (!is.null(chrom1) && !is.null(chrom2)) {
                     stop(sprintf(
-                        "Cannot load chromosome pair (%s, %s) of an intervals set %s: its size (%d) exceeds the limit (%d) controlled by gmax.data.size option.",
-                        chrom1, chrom2, intervals.set, sum(meta$stats$size), .ggetOption("gmax.data.size")
+                        "Cannot load chromosome pair (%s, %s) of an intervals set %s: its size (%s) exceeds the limit (%s) controlled by gmax.data.size option.",
+                        chrom1, chrom2, intervals.set, .gformat_num(sum(meta$stats$size)), .gformat_num(.gmax_data_size())
                     ), call. = FALSE)
                 } else if (!is.null(chrom1)) {
                     stop(sprintf(
-                        "Cannot load chromosome %s of an intervals set %s: its size (%d) exceeds the limit (%d) controlled by gmax.data.size option.",
-                        chrom1, intervals.set, sum(meta$stats$size), .ggetOption("gmax.data.size")
+                        "Cannot load chromosome %s of an intervals set %s: its size (%s) exceeds the limit (%s) controlled by gmax.data.size option.",
+                        chrom1, intervals.set, .gformat_num(sum(meta$stats$size)), .gformat_num(.gmax_data_size())
                     ), call. = FALSE)
                 } else if (!is.null(chrom2)) {
                     stop(sprintf(
-                        "Cannot load chromosome %s of an intervals set %s: its size (%d) exceeds the limit (%d) controlled by gmax.data.size option.",
-                        chrom2, intervals.set, sum(meta$stats$size), .ggetOption("gmax.data.size")
+                        "Cannot load chromosome %s of an intervals set %s: its size (%s) exceeds the limit (%s) controlled by gmax.data.size option.",
+                        chrom2, intervals.set, .gformat_num(sum(meta$stats$size)), .gformat_num(.gmax_data_size())
                     ), call. = FALSE)
                 } else {
                     stop(sprintf(
-                        "Cannot load a big intervals set %s: its size (%d) exceeds the limit (%d) controlled by gmax.data.size option.\nFor big intervals sets only one chromosome pair can be loaded at a time.",
-                        intervals.set, sum(meta$stats$size), .ggetOption("gmax.data.size")
+                        "Cannot load a big intervals set %s: its size (%s) exceeds the limit (%s) controlled by gmax.data.size option.\nFor big intervals sets only one chromosome pair can be loaded at a time.",
+                        intervals.set, .gformat_num(sum(meta$stats$size)), .gformat_num(.gmax_data_size())
                     ), call. = FALSE)
                 }
             }

@@ -354,3 +354,12 @@ test_that("gintervals.normalize one-to-many preserves metadata", {
     expect_equal(result$score, c(42.5, 42.5))
     expect_equal(result$strand, c(1, 1))
 })
+
+test_that("an unset gmax.data.size means no limit for the R-side checks", {
+    withr::local_options(gmax.data.size = NULL)
+    iv <- gintervals(c(1, 2), 0, 1000)
+    expect_equal(nrow(gintervals.normalize(iv, 10)), 2)
+    expect_equal(nrow(gintervals.force_range(iv)), 2)
+    expect_equal(nrow(gintervals.union(iv, gintervals(1, 500, 2000))), 2)
+})
+
