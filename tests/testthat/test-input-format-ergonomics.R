@@ -202,3 +202,15 @@ test_that("the deprecated ALLGENOME names still give the whole genome", {
     expect_warning(r <- gsummary("test.sparse", "ALLGENOME[[1]]"), "ALLGENOME\\[\\[1\\]\\] was deprecated")
     expect_equal(r, whole)
 })
+
+test_that("interval operations given the whole-genome scope say to pick its 1D or 2D part", {
+    # .misha$ALLGENOME (and the deprecated ALLGENOME) holds the 1D and the 2D genome together; these
+    # failed with "argument is of length zero"
+    msg <- "use gintervals.all\\(\\) for the 1D genome"
+    expect_error(suppressWarnings(gintervals.force_range(ALLGENOME)), msg)
+    expect_error(gintervals.force_range(.misha$ALLGENOME), msg)
+    expect_error(gintervals.normalize(.misha$ALLGENOME, 10), msg)
+    expect_error(gintervals.chrom_sizes(.misha$ALLGENOME), msg)
+    expect_error(gintervals.neighbors(.misha$ALLGENOME, gintervals(1, 0, 100)), msg)
+    expect_equal(nrow(gintervals.force_range(.misha$ALLGENOME[[1]])), nrow(gintervals.all()))
+})

@@ -338,6 +338,12 @@
 }
 
 .gintervals.load <- function(intervals.set = NULL, chrom = NULL, chrom1 = NULL, chrom2 = NULL, progress = FALSE) {
+    # A list of interval sets passes the 1D test below (no column names), and failed later with
+    # "argument is of length zero". The usual one is the whole-genome scope, .misha$ALLGENOME (also what
+    # the deprecated ALLGENOME name gives), which holds the 1D and the 2D genome together.
+    if (is.list(intervals.set) && !is.data.frame(intervals.set)) {
+        stop("A list of intervals, such as the whole-genome scope .misha$ALLGENOME (1D and 2D together), is not an intervals set: use gintervals.all() for the 1D genome or gintervals.2d.all() for the 2D one", call. = FALSE)
+    }
     if (!is.null(chrom)) {
         chrom <- .gchroms(chrom)
         if (length(chrom) > 1) {
