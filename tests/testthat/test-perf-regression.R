@@ -230,6 +230,21 @@ test_that("gquantiles finds a high percentile without walking every rank below i
     expect_lt(high / low, 1.3)
 })
 
+test_that("a dense track at its own bin size is read a run of bins at a time", {
+    # At the track's bin size every iterator interval lies in one bin, and the bins are read in runs
+    # (TrackExprScanner::fill_bins_bulk). A 100 bp iterator over the 50 bp bins, with half the
+    # rows, still reads each interval through read_interval(), as the 50 bp one used to: 50 bp then
+    # took about twice as long as 100 bp. Single process, full chr1.
+    skip_unless_perf()
+    fix <- .perf_setup(n_dense_tracks = 1)
+    on.exit(.perf_cleanup(fix), add = TRUE)
+    withr::local_options(gmultitasking = FALSE)
+
+    t50 <- time_op(gsummary(fix$dense_tracks[1], intervals = fix$full_chr1, iterator = 50))
+    t100 <- time_op(gsummary(fix$dense_tracks[1], intervals = fix$full_chr1, iterator = 100))
+    expect_lt(t50 / t100, 1)
+})
+
 test_that("gtrack.create_dense from intervals on its bin grid skips the per-bin aggregation", {
     # One sorted interval per bin (what gextract returns) used to go through an index sort and
     # an aggregation with two vector allocations per bin. An extra NaN interval off the grid on
