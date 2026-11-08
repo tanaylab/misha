@@ -151,6 +151,15 @@ test_that("gseq.extract multitasking still enforces gmax.data.size", {
     expect_match(parallel_err, "Result sequence size")
     expect_match(parallel_err, "gmax.data.size")
     expect_match(sequential_err, "Result sequence size")
+    # Both check the whole result before reading, so both name its size (the sequential path used
+    # to read up to the limit and name the size read so far)
+    expect_identical(sequential_err, parallel_err)
+    long <- gintervals(1, seq(0, by = 1e6, length.out = 200), seq(0, by = 1e6, length.out = 200) + 6e5)
+    long_errs <- lapply(list(list(gmultitasking = FALSE), list(gmultitasking = TRUE, gmax.processes = 4)), function(opts) {
+        tryCatch(withr::with_options(c(opts, list(gmax.data.size = 1e8)), gseq.extract(long)), error = conditionMessage)
+    })
+    expect_match(long_errs[[1]], "Result sequence size")
+    expect_identical(long_errs[[1]], long_errs[[2]])
 })
 
 test_that("gseq.extract keeps long intervals read from the page cache in one process", {
