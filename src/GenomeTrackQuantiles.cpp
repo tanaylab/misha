@@ -76,8 +76,11 @@ static SEXP build_rintervals_quantiles(GIntervalsFetcher1D *out_intervals1d, GIn
     for (unsigned ipercentile = 0; ipercentile < percentiles.size(); ++ipercentile) {
         SEXP percentile_vals;
         percentile_vals = rprotect_ptr(RSaneAllocVector(REALSXP, num_intervs));
-		for (uint64_t iinterv = 0; iinterv < num_intervs; ++iinterv)
-			REAL(percentile_vals)[iinterv] = quantiles[iinterv * percentiles.size() + ipercentile];
+		// 0.0 for a zero of either sign, as gquantiles gives it
+		for (uint64_t iinterv = 0; iinterv < num_intervs; ++iinterv) {
+			double v = quantiles[iinterv * percentiles.size() + ipercentile];
+			REAL(percentile_vals)[iinterv] = v == 0 ? 0. : v;
+		}
 		SET_VECTOR_ELT(answer, num_interv_cols + ipercentile, percentile_vals);
 	}
 
@@ -1374,8 +1377,9 @@ SEXP gbins_quantiles(SEXP _track_exprs, SEXP _breaks, SEXP _include_lowest, SEXP
 		for (unsigned i = 0; i < totalbins; i++) {
 			unsigned offset = i * percentiles.size();
 
+			// 0.0 for a zero of either sign, as gquantiles gives it
 			for (vector<Percentile>::const_iterator ip = percentiles.begin(); ip != percentiles.end(); ++ip)
-				REAL(answer)[totalbins * ip->index + i] = medians[offset + ip->index];
+				REAL(answer)[totalbins * ip->index + i] = medians[offset + ip->index] == 0 ? 0. : medians[offset + ip->index];
 		}
 
 		dim = rprotect_ptr(RSaneAllocVector(INTSXP, bins_manager.get_num_bin_finders() + 1));

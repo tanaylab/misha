@@ -51,3 +51,18 @@ test_that("gintervals.quantiles works with intervals.set.out (2d)", {
         gintervals.quantiles("test.rects", percentile = c(0.5, 0.3, 0.2, 0.9), intervs, iterator = c(1, 1))
     )
 })
+
+test_that("gintervals.quantiles returns 0, not -0, for a zero quantile, single process and multitask", {
+    withr::local_options(gmax.data.size = 1e9)
+    intervs <- gintervals(c(1, 1, 2, 2), c(0, 3e6, 0, 5e6), c(2e6, 9e6, 4e6, 2e7))
+    pcts <- c(0, 0.001, 0.1, 0.5, 0.75, 0.999, 1)
+    for (e in c("as.numeric(ifelse(test.fixedbin > 0.1, -0, 0))", "as.numeric(ifelse(test.fixedbin > 0.1, -0, test.fixedbin))")) {
+        serial <- withr::with_options(list(gmultitasking = FALSE), gintervals.quantiles(e, pcts, intervs))
+        parallel <- withr::with_options(list(gmultitasking = TRUE, gmax.processes = 4), gintervals.quantiles(e, pcts, intervs))
+        # bit for bit: identical() alone takes -0 and 0 as equal
+        expect_true(identical(parallel, serial, num.eq = FALSE), label = e)
+        vals <- unlist(parallel[, -(1:3)])
+        expect_gt(sum(vals == 0, na.rm = TRUE), 0)
+        expect_true(all(1 / vals[vals == 0 & !is.na(vals)] == Inf), label = e)
+    }
+})
