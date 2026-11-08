@@ -2044,6 +2044,11 @@ void TrackExpressionVars::start_chrom(const GInterval &interval)
 					} else {
 						// Shared backends disabled — cache the track directly
 						m_indexed_track_backends.emplace(idx_key, new_track);
+						// The other vtracks of this track (other shifts or functions) read the cached object
+						// through dependents, which overwrite its values; read it the same way.
+						shared_ptr<GenomeTrack> dependent = create_dependent_1d_track(itrack_n_imdf->type, new_track);
+						if (dependent)
+							itrack_n_imdf->track = dependent;
 					}
 				}
 			}
@@ -2134,6 +2139,10 @@ void TrackExpressionVars::start_chrom(const GInterval2D &interval)
 							} else {
 								// Shared backends disabled — cache the track directly
 								m_indexed_track_backends.emplace(idx_key, new_track);
+								// read it through a dependent, as the other vtracks of the track do (see start_chrom above)
+								shared_ptr<GenomeTrack> dependent = create_dependent_1d_track(itrack_n_imdf->type, new_track);
+								if (dependent)
+									itrack_n_imdf->track = dependent;
 							}
 						}
 					}

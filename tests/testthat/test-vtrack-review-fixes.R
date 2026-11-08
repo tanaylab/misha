@@ -654,6 +654,34 @@ test_that("gtrack.create_pwm_energy leaves out windows holding N; an interval wi
     expect_true(any(is.na(r$en)))
 })
 
+test_that("an indexed track read under different shifts keeps each shift's values on the first chromosome", {
+    local_db_state()
+    vt_fix_db()
+    # bin k holds (k + 1)^2, so a window's average is not the value of its middle bin
+    v <- (1:20)^2
+    gtrack.create_dense("dn5", "x", gintervals("chr1", seq(0, 950, 50), seq(50, 1000, 50)), v, 50, NaN)
+    withr::defer(gtrack.rm("dn5", force = TRUE))
+    suppressMessages(gtrack.convert_to_indexed("dn5"))
+    gvtrack.create("d5_wide", "dn5", "sum", sshift = -100, eshift = 100)
+    gvtrack.create("d5_narrow", "dn5", "sum")
+    withr::defer(gvtrack.clear())
+    iv <- gintervals("chr1", c(200, 500), c(250, 550))
+    # [200, 250) is bin 4 and [500, 550) bin 10; widened, [100, 350) holds bins 2..6 and [400, 650) bins 8..12
+    narrow <- v[c(5, 11)]
+    wide <- c(sum(v[3:7]), sum(v[9:13]))
+    for (shared in c(FALSE, TRUE)) {
+        withr::local_options(gshared.track.backend = shared)
+        info <- paste("shared backend", shared)
+        r <- gextract(c("d5_wide", "d5_narrow"), iv, iterator = iv)
+        expect_equal(r$d5_wide, wide, info = info)
+        expect_equal(r$d5_narrow, narrow, info = info)
+        # the track itself next to a shifted vtrack of it
+        r <- gextract(c("dn5", "d5_wide"), iv, iterator = iv)
+        expect_equal(r$dn5, narrow, info = info)
+        expect_equal(r$d5_wide, wide, info = info)
+    }
+})
+
 test_that("a filter that splits a dense bin counts it once when the track is read through a shared object", {
     local_db_state()
     vt_fix_db()
