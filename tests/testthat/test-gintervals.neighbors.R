@@ -618,3 +618,18 @@ test_that("2D gintervals.neighbors picks the nearest by dist1 + dist2 whatever t
         expect_equal(res$dist1 + res$dist2, c(3, 3))
     }
 })
+
+test_that("candidates tied with the kept neighbors do not count against gmax.data.size", {
+    # 1000 intervals overlap the query; one is kept
+    withr::local_options(gmax.data.size = 100)
+    starts <- seq(0, by = 10, length.out = 1000)
+    t <- data.frame(chrom = "chr1", start = starts, end = starts + 5)
+    r <- gintervals.neighbors(gintervals(1, 0, 20000), t)
+    expect_equal(nrow(r), 1)
+    expect_equal(r$start1, 0)
+    q2 <- gintervals.2d("chr1", 0, 20000, "chr1", 0, 20000)
+    t2 <- gintervals.2d("chr1", starts, starts + 5, "chr1", 0, 5)
+    r2 <- gintervals.neighbors(q2, t2)
+    expect_equal(nrow(r2), 1)
+    expect_equal(r2$start11, 0)
+})

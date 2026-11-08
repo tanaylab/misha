@@ -289,9 +289,10 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 						break;
 					if (dist >= distance_start && dist <= distance_end) {
 						result.push_back(IntervNeighbor(iu.get_orig_interv_idx(*iinterv), iu.get_orig_interv_idx(*inn), dist, inn->start, inn->end));
-						iu.verify_max_data_size(result.size());
 						if (++num_neighbors == maxneighbors)
 							cutoff = llabs(dist);
+						// the rows kept: tied candidates beyond maxneighbors are cut below
+						iu.verify_max_data_size(first + min(num_neighbors, maxneighbors));
 					}
 					inn.next();
 				}
@@ -427,10 +428,11 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 
 					if (dist1 >= distance_start1 && dist1 <= distance_end1 && dist2 >= distance_start2 && dist2 <= distance_end2) {
 						result.push_back(IntervNeighbor2D(iu.get_orig_interv_idx(*iinterv), inn->v, dist1, dist2, *inn));
-						iu.verify_max_data_size(result.size());
 						if (num_neighbors < maxneighbors)
 							cutoff = max(cutoff, dist1 + dist2);
 						num_neighbors++;
+						// the rows kept: candidates beyond maxneighbors are cut below
+						iu.verify_max_data_size(first + min(num_neighbors, maxneighbors));
 					}
 
 					inn.next();
