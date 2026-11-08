@@ -132,10 +132,10 @@ double PWMLseEditDistanceScorer::score_interval(const GInterval& interval,
     }
 }
 
-float PWMLseEditDistanceScorer::encode_position(size_t index,
-                                                 size_t target_length,
-                                                 size_t motif_length,
-                                                 int direction) const
+double PWMLseEditDistanceScorer::encode_position(size_t index,
+                                                  size_t target_length,
+                                                  size_t motif_length,
+                                                  int direction) const
 {
     // The reverse pass scores a reversed-and-complemented COPY of the target
     // (see compute_lse_edits: seq_bases[q] = complement(seq[R-1-q])), so `index`
@@ -144,12 +144,12 @@ float PWMLseEditDistanceScorer::encode_position(size_t index,
     // bidirect = TRUE, where m_strand is not -1. `index` is a single edit
     // position, not a window start, so motif_length does not enter.
     (void)motif_length;
-    float pos = static_cast<float>(index) + 1.0f;
+    double pos = static_cast<double>(index) + 1.0;
     if (direction == -1) {
-        pos = static_cast<float>(target_length) - static_cast<float>(index);
+        pos = static_cast<double>(target_length) - static_cast<double>(index);
     }
     if (m_pssm.is_bidirect()) {
-        pos *= static_cast<float>(direction);
+        pos *= static_cast<double>(direction);
     }
     return pos;
 }
@@ -237,8 +237,8 @@ double PWMLseEditDistanceScorer::compute_delta_z(int q, int y_idx,
     return delta_z;
 }
 
-float PWMLseEditDistanceScorer::edit_position(int q, int y, const std::vector<int>& seq_bases,
-                                              const std::vector<double>& A_p, int N, int L, int direction) const
+double PWMLseEditDistanceScorer::edit_position(int q, int y, const std::vector<int>& seq_bases,
+                                               const std::vector<double>& A_p, int N, int L, int direction) const
 {
     const size_t R = seq_bases.size();
     if (direction != 0)
@@ -253,7 +253,7 @@ float PWMLseEditDistanceScorer::edit_position(int q, int y, const std::vector<in
             dz[d] += A_p[w] * std::expm1(win_score(w, q, y, N, L) - win_score(w, q, seq_bases[q], N, L));
         }
     }
-    const float pos = static_cast<float>(q) + 1.0f;
+    const double pos = static_cast<double>(q) + 1.0;
     return std::fabs(dz[1]) > std::fabs(dz[0]) ? -pos : pos;
 }
 
@@ -771,7 +771,7 @@ PWMLseEditDistanceScorer::compute_lse_edit_distance(const std::string& seq,
     // Already at target? 0 edits needed
     if (is_below ? (F <= T) : (F >= T)) {
         result.min_edits = 0.0f;
-        result.best_pos = std::numeric_limits<float>::quiet_NaN();  // No edit needed
+        result.best_pos = std::numeric_limits<double>::quiet_NaN();  // No edit needed
         return result;
     }
 

@@ -628,10 +628,10 @@ inline char PWMEditDistanceScorer::complement_base(char base) const
     }
 }
 
-float PWMEditDistanceScorer::encode_position(size_t index,
-                                             size_t target_length,
-                                             size_t motif_length,
-                                             int direction) const
+double PWMEditDistanceScorer::encode_position(size_t index,
+                                              size_t target_length,
+                                              size_t motif_length,
+                                              int direction) const
 {
     // No strand remap here: unlike PWMScorer, this scorer never sets
     // expanded_interval.strand, so the target is always the forward strand and
@@ -639,9 +639,9 @@ float PWMEditDistanceScorer::encode_position(size_t index,
     // scored with calc_like_rc() at the same index.
     (void)target_length;
     (void)motif_length;
-    float pos = static_cast<float>(index) + 1.0f;
+    double pos = static_cast<double>(index) + 1.0;
     if (m_pssm.is_bidirect()) {
-        pos *= static_cast<float>(direction);
+        pos *= static_cast<double>(direction);
     }
     return pos;
 }
@@ -1115,7 +1115,7 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
                                                     metrics.best_pwm_direction);
     } else if (need_pwm) {
         metrics.best_pwm_edits = std::numeric_limits<float>::quiet_NaN();
-        metrics.best_pwm_position = std::numeric_limits<float>::quiet_NaN();
+        metrics.best_pwm_position = std::numeric_limits<double>::quiet_NaN();
     }
 
     return metrics;

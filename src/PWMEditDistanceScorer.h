@@ -80,10 +80,10 @@ public:
     double score_interval(const GInterval& interval, const GenomeChromKey& chromkey) override;
 
     float get_last_min_edits() const { return m_last_metrics.min_edits; }
-    float get_last_min_edits_pos() const { return m_last_metrics.min_edits_position; }
+    double get_last_min_edits_pos() const { return m_last_metrics.min_edits_position; }
     float get_last_pwm_max_logp() const { return m_last_metrics.best_pwm_logp; }
     float get_last_pwm_max_edits() const { return m_last_metrics.best_pwm_edits; }
-    float get_last_pwm_max_pos() const { return m_last_metrics.best_pwm_position; }
+    double get_last_pwm_max_pos() const { return m_last_metrics.best_pwm_position; }
     float get_last_n_mutations() const { return m_last_metrics.n_mutations; }
     int get_max_indels() const { return m_max_indels; }
 
@@ -91,15 +91,17 @@ protected:
     int64_t pattern_length() const override { return (int64_t)m_pssm.length() + m_max_indels; }
 
 private:
+    // Positions are double, not float: a float holds integers exactly only up to 2^24, so a position more
+    // than ~16.7 Mb into the interval was rounded (as PWMScorer::compute_position_result once was).
     struct ScanMetrics {
         float min_edits = std::numeric_limits<float>::quiet_NaN();
-        float min_edits_position = std::numeric_limits<float>::quiet_NaN();
+        double min_edits_position = std::numeric_limits<double>::quiet_NaN();
         size_t min_index = 0;
         int min_direction = 1;
 
         float best_pwm_logp = -std::numeric_limits<float>::infinity();
         float best_pwm_edits = std::numeric_limits<float>::quiet_NaN();
-        float best_pwm_position = std::numeric_limits<float>::quiet_NaN();
+        double best_pwm_position = std::numeric_limits<double>::quiet_NaN();
         size_t best_pwm_index = 0;
         int best_pwm_direction = 1;
 
@@ -216,7 +218,7 @@ private:
     void precompute_tables();
 
     ScanMetrics evaluate_windows(const std::string& seq, size_t interval_length);
-    float encode_position(size_t index, size_t target_length, size_t motif_length, int direction) const;
+    double encode_position(size_t index, size_t target_length, size_t motif_length, int direction) const;
     inline bool should_scan_forward() const;
     inline bool should_scan_reverse() const;
     inline char complement_base(char base) const;

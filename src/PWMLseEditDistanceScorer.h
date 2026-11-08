@@ -126,12 +126,13 @@ private:
     /**
      * Encode position (1-based, signed by strand when bidirect)
      */
-    float encode_position(size_t index, size_t target_length, size_t motif_length, int direction) const;
+    double encode_position(size_t index, size_t target_length, size_t motif_length, int direction) const;
 
 
+    // best_pos is double: a float holds integers exactly only up to 2^24 (~16.7 Mb)
     struct LseResult {
         float min_edits = std::numeric_limits<float>::quiet_NaN();
-        float best_pos = std::numeric_limits<float>::quiet_NaN();
+        double best_pos = std::numeric_limits<double>::quiet_NaN();
         int best_edit_index = -1;    // genomic index of best single edit
         int best_edit_direction = 1; // direction for the best single edit position
     };
@@ -166,8 +167,8 @@ private:
 
     // Reported position of an edit at q to base y. direction is the pass (1 or -1) of a one-strand search;
     // 0 marks a joint search, where the edit moves both strands and is signed by the one it moves more.
-    float edit_position(int q, int y, const std::vector<int>& seq_bases, const std::vector<double>& A_p,
-                        int N, int L, int direction) const;
+    double edit_position(int q, int y, const std::vector<int>& seq_bases, const std::vector<double>& A_p,
+                         int N, int L, int direction) const;
 
     /**
      * Initialize per-start scores and partition function
