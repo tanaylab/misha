@@ -19,8 +19,8 @@ test_that("gintervals.neighbors works in 2D", {
     # COMMENTED OUT: ordering changed after dist2segment fix (see issue about mindist=0,maxdist=0 bug)
     # expect_regression(gintervals.neighbors("test.bigintervs_1d_1", "test.bigintervs_1d_2"), "gintervals.neighbors.2d.2")
     # expect_regression(gintervals.neighbors("test.generated_1d_1", "test.generated_1d_2"), "gintervals.neighbors.2d.3")
-    expect_regression(gintervals.neighbors("test.bigintervs_2d_5", "test.bigintervs_2d_6"), "gintervals.neighbors.2d.4")
-    expect_regression(gintervals.neighbors("test.generated_2d_5", "test.generated_2d_6"), "gintervals.neighbors.2d.5")
+    expect_regression(gintervals.neighbors("test.bigintervs_2d_5", "test.bigintervs_2d_6"), "gintervals.neighbors.2d.4_v2")
+    expect_regression(gintervals.neighbors("test.generated_2d_5", "test.generated_2d_6"), "gintervals.neighbors.2d.5_v2")
 })
 
 test_that("gintervals.neighbors works with intervals.set.out", {
@@ -77,7 +77,7 @@ test_that("columns are maintained (2d)", {
         "dist1", "dist2"
     )))
     expect_true("blabla" %in% colnames(res))
-    expect_regression(res, "gintervals.neighbors.9")
+    expect_regression(res, "gintervals.neighbors.9_v2")
 })
 
 test_that("gintervals.neighbors works with intervals.set.out without min and max dist", {
