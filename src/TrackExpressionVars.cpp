@@ -1738,6 +1738,14 @@ void TrackExpressionVars::register_track_functions()
 
 void TrackExpressionVars::init(const TrackExpressionIteratorBase &expr_itr)
 {
+	m_has_sequence_vars = m_has_track_vars = false;
+	for (const Track_var &var : m_track_vars) {
+		if (is_sequence_based_function(var.val_func))
+			m_has_sequence_vars = true;
+		else
+			m_has_track_vars = true;
+	}
+
 	// First validate iterator compatibility
 	for (Track_vars::const_iterator itrack_var = m_track_vars.begin(); itrack_var != m_track_vars.end(); ++itrack_var)
 	{
@@ -2243,16 +2251,20 @@ void TrackExpressionVars::set_vars(unsigned idx)
 		}
 
 	// Process sequence-based variables first (PWM, kmer, masked)
-	m_sequence_processor->process_sequence_vars(m_track_vars, m_interval1d, idx);
+	if (m_has_sequence_vars)
+		m_sequence_processor->process_sequence_vars(m_track_vars, m_interval1d, idx);
 
 	// Process regular track variables
-	m_track_processor->process_track_vars(m_track_vars, m_interval1d, m_interval2d, m_band, idx);
+	if (m_has_track_vars)
+		m_track_processor->process_track_vars(m_track_vars, m_interval1d, m_interval2d, m_band, idx);
 
 	// Process interval variables
-	m_interv_processor->process_interv_vars(m_interv_vars, m_interval1d, idx);
+	if (!m_interv_vars.empty())
+		m_interv_processor->process_interv_vars(m_interv_vars, m_interval1d, idx);
 
 	// Process value variables
-	m_value_processor->process_value_vars(m_value_vars, m_interval1d, idx);
+	if (!m_value_vars.empty())
+		m_value_processor->process_value_vars(m_value_vars, m_interval1d, idx);
 }
 
 
