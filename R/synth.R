@@ -841,7 +841,9 @@ gsynth.forbid_kmer <- function(model, pattern, check = TRUE) {
 #' @param iterator Iterator for track evaluation, determines the resolution at which
 #'        track values are computed. It is stored in the model
 #'        (\code{model$iterator}) and used by \code{\link{gsynth.sample}} and
-#'        \code{\link{gsynth.score}}.
+#'        \code{\link{gsynth.score}}. If NULL, the iterator the dimension
+#'        expressions imply is used, and its bin size (that of their dense
+#'        tracks) is stored.
 #' @param pseudocount Total Dirichlet concentration alpha used in the
 #'        smoothed posterior \code{P(a|c,b) = (N + alpha * pi_a(b)) /
 #'        (sum_a N + alpha)}. Default is 1.
@@ -1075,6 +1077,12 @@ gsynth.train <- function(...,
 
         if (is.null(track_data) || nrow(track_data) == 0) {
             stop("No track data extracted. Check that intervals and iterator are valid.", call. = FALSE)
+        }
+
+        # Without an iterator the bins are those the expressions imply (the bin size of their
+        # dense tracks): the model keeps that bin size, which gsynth.sample and gsynth.score need
+        if (is.null(.iterator)) {
+            .iterator <- .gcall("C_gsynth_implicit_binsize", exprs, intervals, .misha_env())
         }
 
         n_positions <- nrow(track_data)

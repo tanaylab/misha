@@ -22,6 +22,8 @@
 #include "rdbprogress.h"
 #include "rdbutils.h"
 #include "StratifiedMarkovModel.h"
+#include "TrackExpressionFixedBinIterator.h"
+#include "TrackExpressionScanner.h"
 
 using namespace std;
 using namespace rdb;
@@ -415,6 +417,46 @@ SEXP C_gsynth_train(SEXP _chrom_ids, SEXP _chrom_starts, SEXP _chrom_ends,
 
         return answer;
 
+    } catch (TGLException& e) {
+        rerror("%s", e.msg());
+    } catch (const bad_alloc& e) {
+        rerror("Out of memory");
+    }
+    return R_NilValue;
+}
+
+/**
+ * C_gsynth_implicit_binsize: the bin size of the iterator that track
+ * expressions imply when no iterator is given (the bin size of their dense
+ * tracks), or NULL when that iterator is not a fixed-bin one. gsynth.train
+ * stores it as the model's iterator.
+ *
+ * @param _exprs Character vector of track expressions
+ * @param _intervals R intervals object (the scope)
+ * @param _envir R environment
+ */
+SEXP C_gsynth_implicit_binsize(SEXP _exprs, SEXP _intervals, SEXP _envir) {
+    try {
+        RdbInitializer rdb_init;
+        IntervUtils iu(_envir);
+
+        GIntervalsFetcher1D* intervals1d = NULL;
+        GIntervalsFetcher2D* intervals2d = NULL;
+        iu.convert_rintervs(_intervals, &intervals1d, &intervals2d);
+        unique_ptr<GIntervalsFetcher1D> intervals1d_guard(intervals1d);
+        unique_ptr<GIntervalsFetcher2D> intervals2d_guard(intervals2d);
+
+        TrackExprScanner scanner(iu);
+        scanner.check(_exprs, intervals1d, intervals2d, R_NilValue, R_NilValue);
+        const TrackExpressionFixedBinIterator* itr =
+            dynamic_cast<const TrackExpressionFixedBinIterator*>(scanner.get_iterator());
+        if (!itr) {
+            return R_NilValue;
+        }
+
+        SEXP answer = rprotect_ptr(RSaneAllocVector(REALSXP, 1));
+        REAL(answer)[0] = (double)itr->get_bin_size();
+        return answer;
     } catch (TGLException& e) {
         rerror("%s", e.msg());
     } catch (const bad_alloc& e) {

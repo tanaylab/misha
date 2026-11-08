@@ -38,7 +38,9 @@ is not counted.}
 \item{iterator}{Iterator for track evaluation, determines the resolution at which
 track values are computed. It is stored in the model
 (\code{model$iterator}) and used by \code{\link{gsynth.sample}} and
-\code{\link{gsynth.score}}.}
+\code{\link{gsynth.score}}. If NULL, the iterator the dimension
+expressions imply is used, and its bin size (that of their dense
+tracks) is stored.}
 
 \item{pseudocount}{Total Dirichlet concentration alpha used in the
 smoothed posterior \code{P(a|c,b) = (N + alpha * pi_a(b)) /

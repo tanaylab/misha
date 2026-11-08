@@ -569,3 +569,39 @@ test_that("a model saved without its iterator asks for it, and an unstratified o
     )
     expect_error(gsynth.score(loaded0, "zz_gsm_noiter0", intervals = iv), "or pass resolution")
 })
+
+test_that("a model trained with the implicit iterator of a dense track samples, scores and saves", {
+    gdb.init_examples()
+    if ("dense_avg_it" %in% gvtrack.ls()) gvtrack.rm("dense_avg_it")
+    gvtrack.create("dense_avg_it", "dense_track", "avg")
+    withr::defer({
+        gvtrack.rm("dense_avg_it")
+        for (tr in c("zz_impl_a", "zz_impl_b")) if (gtrack.exists(tr)) gtrack.rm(tr, force = TRUE)
+    })
+    rng <- gsummary("dense_track", intervals = gintervals(1, 0, 50000))
+    breaks <- seq(rng["Min"], rng["Max"], length.out = 4)
+    binsize <- gtrack.info("dense_track")$bin.size
+
+    # no iterator: the bins are those of dense_track
+    model <- gsynth.train(list(expr = "dense_avg_it", breaks = breaks), intervals = gintervals(1, 0, 50000), k = 2)
+    expect_equal(model$iterator, binsize)
+    explicit <- gsynth.train(list(expr = "dense_avg_it", breaks = breaks), intervals = gintervals(1, 0, 50000), iterator = binsize, k = 2)
+    expect_equal(model$model_data$counts, explicit$model_data$counts)
+
+    iv <- gintervals(1, 1000, 5000)
+    s <- gsynth.sample(model, output_format = "vector", intervals = iv, seed = 2)
+    expect_identical(s, gsynth.sample(explicit, output_format = "vector", intervals = iv, seed = 2))
+
+    f <- file.path(tempdir(), "test_gsm_implicit_iter")
+    withr::defer(unlink(f, recursive = TRUE))
+    gsynth.save(model, f)
+    loaded <- gsynth.load(f)
+    expect_equal(loaded$iterator, binsize)
+    expect_identical(gsynth.sample(loaded, output_format = "vector", intervals = iv, seed = 2), s)
+
+    gsynth.score(model, "zz_impl_a", intervals = iv)
+    gsynth.score(loaded, "zz_impl_b", intervals = iv)
+    a <- gextract("zz_impl_a", intervals = iv, iterator = binsize)$zz_impl_a
+    expect_true(any(is.finite(a)))
+    expect_identical(gextract("zz_impl_b", intervals = iv, iterator = binsize)$zz_impl_b, a)
+})
