@@ -2269,3 +2269,25 @@ test_that("gseq.pwm refuses strand = 0 when bidirect is FALSE", {
         ignore_attr = TRUE
     )
 })
+
+test_that("a reverse-strand read leaves a byte above 127 as it is", {
+    # basepair2complementary() indexed its 256-entry table with a plain (signed)
+    # char, so a byte >= 128 in a .seq file was looked up below the table.
+    local_db_state()
+    db <- tempfile("highbyte_")
+    withr::defer(unlink(db, recursive = TRUE))
+    dir.create(file.path(db, "seq"), recursive = TRUE)
+    dir.create(file.path(db, "tracks"))
+    bytes <- charToRaw(strrep("ACGTTGCAAC", 6))
+    bytes[31] <- as.raw(200)
+    writeBin(bytes, file.path(db, "seq", "chrT.seq"))
+    writeLines(sprintf("chrT\t%d", length(bytes)), file.path(db, "chrom_sizes.txt"))
+    suppressMessages(gsetroot(db))
+
+    got <- charToRaw(gseq.extract(data.frame(chrom = "chrT", start = 25, end = 37, strand = -1)))
+    expected <- rev(bytes[26:37])
+    acgt <- expected != as.raw(200)
+    comp <- c(A = "T", C = "G", G = "C", T = "A")
+    expected[acgt] <- charToRaw(paste(comp[rawToChar(expected[acgt], multiple = TRUE)], collapse = ""))
+    expect_identical(got, expected)
+})
