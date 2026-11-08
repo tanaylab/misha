@@ -50,6 +50,23 @@ for (format in c("indexed", "per-chromosome")) {
     })
 }
 
+test_that("gtrack.array.import clips records past the chromosome end, with one warning", {
+    import_test_db("indexed")
+
+    # chrM is 500 bp: the second record is clipped, the third dropped
+    f <- write_file("chrom\tstart\tend\ta\tb\nchrM\t0\t400\t1\t2\nchrM\t400\t600\t3\t4\nchrM\t700\t800\t5\t6\n", ".tsv")
+    expect_warning(
+        gtrack.array.import("arr_clip", "", f),
+        "1 record(s) running past the end of their chromosome were clipped to it, and 1 record(s) starting at or past the chromosome end were dropped; the first: line 3: (chrM, 400, 600), chromosome size 500",
+        fixed = TRUE
+    )
+    res <- gtrack.array.extract("arr_clip", NULL, gintervals.all())
+    expect_equal(res$start, c(0, 400))
+    expect_equal(res$end, c(400, 500))
+    expect_equal(res$a, c(1, 3))
+    expect_equal(res$b, c(2, 4))
+})
+
 test_that("gtrack.2d.import_contacts reads a fends file not sorted by fend id", {
     import_test_db("indexed")
 

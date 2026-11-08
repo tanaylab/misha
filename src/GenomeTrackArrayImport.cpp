@@ -20,7 +20,7 @@ class Source {
 public:
 	Source(const GenomeChromKey &chromkey, const char *src) : m_chromkey(chromkey) {
 		m_src = src;
-		m_csv.init(m_src.c_str(), m_chromkey);
+		m_csv.init(m_src.c_str(), m_chromkey, true);
 		m_dependencies.resize(get_colnames().size());
 		m_array_idxs.resize(get_colnames().size());
 	}
@@ -288,6 +288,36 @@ SEXP garrays_import(SEXP _track, SEXP _src, SEXP _colnames, SEXP _envir)
 			}
 		}
 		progress.report_last();
+
+		// One warning for the records past the end of their chromosome that the files held: clipped
+		// to it, or dropped when they start at or past it, as gtrack.import does
+		uint64_t num_clipped = 0, num_dropped = 0;
+		string clipped_files, first_file, first_clipped;
+		int num_clipped_files = 0;
+		for (Source *source : sources) {
+			if (!source->is_csv())
+				continue;
+			const GenomeArraysCsv &csv = source->get_csv();
+			if (!csv.get_num_clipped() && !csv.get_num_dropped())
+				continue;
+			num_clipped += csv.get_num_clipped();
+			num_dropped += csv.get_num_dropped();
+			if (!num_clipped_files) {
+				first_file = source->get_src();
+				first_clipped = csv.get_first_clipped();
+			}
+			clipped_files += (num_clipped_files++ ? ", " : "") + string(source->get_src());
+		}
+		if (num_clipped_files) {
+			char msg[10000];
+			snprintf(msg, sizeof(msg),
+			         "%s %s: %llu record(s) running past the end of their chromosome were clipped to it, and %llu record(s) "
+			         "starting at or past the chromosome end were dropped; the first: %s",
+			         num_clipped_files == 1 ? "File" : "Files", clipped_files.c_str(), (unsigned long long)num_clipped,
+			         (unsigned long long)num_dropped,
+			         (num_clipped_files == 1 ? first_clipped : "file " + first_file + ", " + first_clipped).c_str());
+			add_pending_diagnostic(_envir, "warning", msg);
+		}
 
 		for (Source *source : sources) {
 			if (source->is_csv())
