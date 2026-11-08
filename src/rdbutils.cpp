@@ -214,6 +214,8 @@ void RdbInitializer::release_process_state()
 	// if exception is thrown ~RdbInitializer is called first and then the child might need
 	// to write the error into the shared memory
 	if (!s_is_kid) {
+		forget_reaped_kids();
+
 		if (s_shm_sem != SEM_FAILED) {
 			SemLocker sl(s_shm_sem);
 			SigBlocker sb;
@@ -223,15 +225,28 @@ void RdbInitializer::release_process_state()
 				kill(ipid->pid, SIGTERM);
 		}
 
-		// after SIGTERM is sent to all the kids let's wait till sigchld_hander() burries them all
-        while (1) {
-            SigBlocker sb;
-            check_kids_state(true);
-            if (s_running_pids.empty())
-                break;
-
-            sigsuspend(&sb.oldsigset);
-        }
+		// After SIGTERM is sent to all the kids, wait till they are reaped. The wait is a poll, not
+		// sigsuspend(): a kid that another waitpid() reaps sends no SIGCHLD this loop would see.
+		// A kid still alive after 10 s gets SIGKILL; after 30 s the rest are given up on.
+		for (int waited_ms = 0;; waited_ms += 10) {
+			{
+				SigBlocker sb;
+				check_kids_state(true);
+				forget_reaped_kids();
+				if (s_running_pids.empty())
+					break;
+			}
+			if (waited_ms == 10000) {
+				for (vector<LiveStat>::const_iterator ipid = s_running_pids.begin(); ipid != s_running_pids.end(); ++ipid)
+					kill(ipid->pid, SIGKILL);
+			}
+			if (waited_ms >= 30000) {
+				s_running_pids.clear();
+				break;
+			}
+			struct timespec ts = {0, 10 * 1000 * 1000};
+			nanosleep(&ts, NULL);  // a SIGCHLD ends it early
+		}
 
 		if (s_shm_sem != SEM_FAILED)
 			sem_close(s_shm_sem); // semaphore should be already unlinked, only need to close it
@@ -250,6 +265,22 @@ void RdbInitializer::release_process_state()
 	sigaction(SIGCHLD, &s_old_sigchld_act, NULL);
 
 	umask(s_old_umask);
+}
+
+// Drops from s_running_pids the kids that are already gone: one that ended is reaped here, and one
+// that someone else reaped (waitpid gives ECHILD) is no longer ours - its pid may even belong to
+// another process by now, which must not be signaled.
+void RdbInitializer::forget_reaped_kids()
+{
+	for (size_t i = 0; i < s_running_pids.size();) {
+		int status;
+		pid_t res = waitpid(s_running_pids[i].pid, &status, WNOHANG);
+		if (res == s_running_pids[i].pid || (res < 0 && errno == ECHILD)) {
+			s_running_pids[i] = s_running_pids.back();
+			s_running_pids.pop_back();
+		} else
+			++i;
+	}
 }
 
 bool RdbInitializer::repair_leaked_scope()

@@ -618,3 +618,57 @@ test_that("2D gintervals.neighbors picks the nearest by dist1 + dist2 whatever t
         expect_equal(res$dist1 + res$dist2, c(3, 3))
     }
 })
+
+test_that("candidates tied with the kept neighbors do not count against gmax.data.size", {
+    # 1000 intervals overlap the query; one is kept
+    withr::local_options(gmax.data.size = 100)
+    starts <- seq(0, by = 10, length.out = 1000)
+    t <- data.frame(chrom = "chr1", start = starts, end = starts + 5)
+    r <- gintervals.neighbors(gintervals(1, 0, 20000), t)
+    expect_equal(nrow(r), 1)
+    expect_equal(r$start1, 0)
+    q2 <- gintervals.2d("chr1", 0, 20000, "chr1", 0, 20000)
+    t2 <- gintervals.2d("chr1", starts, starts + 5, "chr1", 0, 5)
+    r2 <- gintervals.neighbors(q2, t2)
+    expect_equal(nrow(r2), 1)
+    expect_equal(r2$start11, 0)
+})
+
+test_that("neighbors at distance 0 are chosen by coordinates when a query overlaps many", {
+    # the ties at distance 0 are found through an index, not by walking all of them
+    set.seed(11)
+    s <- sample(0:20000, 3000, replace = TRUE)
+    t <- data.frame(chrom = "chr1", start = s, end = s + sample(c(1, 10, 100, 1000), 3000, replace = TRUE))
+    t <- rbind(t, t[1:50, ]) # the same intervals twice
+    t$id <- seq_len(nrow(t))
+    qs <- sample(0:20000, 40)
+    q <- data.frame(chrom = "chr1", start = qs, end = qs + sample(c(5, 500, 5000), 40, replace = TRUE))
+    q$qid <- seq_len(nrow(q))
+    gap <- function(s1, e1, s2, e2) ifelse(s2 <= e1 & e2 >= s1, 0, pmax(s2 - e1, s1 - e2))
+    for (k in c(1, 3)) {
+        res <- gintervals.neighbors(q, t, maxneighbors = k)
+        for (i in seq_len(nrow(q))) {
+            d <- gap(q$start[i], q$end[i], t$start, t$end)
+            expect_equal(res$id[res$qid == i], t$id[order(d, t$start, t$end, t$id)][1:k], info = paste(k, i))
+        }
+    }
+
+    g <- expand.grid(i = 0:59, j = 0:59)
+    t2 <- data.frame(
+        chrom1 = "chr1", start1 = g$i * 100, end1 = g$i * 100 + sample(c(50, 100), nrow(g), replace = TRUE),
+        chrom2 = "chr1", start2 = g$j * 100, end2 = g$j * 100 + 50
+    )
+    t2$id <- seq_len(nrow(t2))
+    s1 <- sample(0:5000, 40)
+    s2 <- sample(0:5000, 40)
+    q2 <- data.frame(chrom1 = "chr1", start1 = s1, end1 = s1 + sample(c(10, 300, 2000), 40, replace = TRUE), chrom2 = "chr1", start2 = s2, end2 = s2 + 700)
+    q2$qid <- seq_len(nrow(q2))
+    for (k in c(1, 3)) {
+        res <- gintervals.neighbors(q2, t2, maxneighbors = k)
+        for (i in seq_len(nrow(q2))) {
+            d <- gap(q2$start1[i], q2$end1[i], t2$start1, t2$end1) + gap(q2$start2[i], q2$end2[i], t2$start2, t2$end2)
+            want <- t2$id[order(d, t2$start1, t2$end1, t2$start2, t2$end2, t2$id)][1:k]
+            expect_equal(res$id[res$qid == i], want, info = paste("2D", k, i))
+        }
+    }
+})
