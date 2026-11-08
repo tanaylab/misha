@@ -755,7 +755,7 @@ mock_base <- function(name, fun, env = parent.frame()) {
     real
 }
 
-test_that("a failed gtrack.copy(overwrite = TRUE) keeps what another session put at the name", {
+test_that("a failed gtrack.copy(overwrite = TRUE) keeps what another session put at the name, and trashes the track it replaced", {
     local_db_state()
     db <- review_db(withr::local_tempdir())
     tracks <- file.path(db, "tracks")
@@ -772,16 +772,15 @@ test_that("a failed gtrack.copy(overwrite = TRUE) keeps what another session put
         }
         rename(from, to)
     })
-    orig_bytes <- readBin(file.path(tracks, "orig.track", "track.dat"), "raw", 1e6)
-    expect_warning(expect_error(gtrack.copy("src", "orig", overwrite = TRUE), "Failed to rename"), "is kept at")
+    expect_warning(expect_error(gtrack.copy("src", "orig", overwrite = TRUE), "Failed to rename"), "was moved to the trash")
     expect_equal(readBin(file.path(tracks, "orig.track", "track.dat"), "raw", 1e6), other_bytes)
     # the session still lists the name, which a track holds
     expect_true(gtrack.exists("orig"))
-    # the track that was there is kept, under its hidden name: what took the name may be incomplete
-    # (an older misha writes in place) or go again (a copy that fails after it was placed)
-    kept <- list.files(tracks, pattern = "^\\.[0-9a-f]+$", all.files = TRUE, full.names = TRUE)
-    expect_length(kept, 1)
-    expect_equal(readBin(file.path(kept, "track.dat"), "raw", 1e6), orig_bytes)
+    expect_equal(gextract("orig", gintervals("chr1", 0, 1000))$orig, 99)
+    # the track that was there, replaced by the other session's, is not kept under a hidden name, nor
+    # under a staging one (the trash removes it in the background)
+    left <- setdiff(list.files(tracks, all.files = TRUE, no.. = TRUE), c("orig.track", "src.track", "other.track"))
+    expect_equal(grep("^\\.trash\\.", left, value = TRUE, invert = TRUE), character(0))
 })
 
 test_that("gtrack.copy stops on a short copy instead of committing it", {
