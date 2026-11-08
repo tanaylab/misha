@@ -1,3 +1,27 @@
+# misha 5.17.0
+
+This release fixes the defects found in the review of 5.16.1, makes common large computations faster, and adds features for work with sequence-to-function models. Fixes that change results are marked **Behavior fix**; recompute anything that depends on them.
+
+* **Behavior fix:** `gintervals.rbind()` binds columns as `rbind()` does; data frames whose factor levels differed got rows of another chromosome, or another value in an extra factor column.
+
+* **Behavior fix:** `gintervals.neighbors()` breaks distance ties by the neighbor's coordinates, so its results no longer depend on the input order. In 2D it could return a neighbor farther than the nearest by `dist1 + dist2`.
+
+* **Behavior fix:** a 2D `gintervals.annotate()` returns both distances (`dist1`, `dist2`); `max_dist` limits `dist1 + dist2`.
+
+* **Behavior fix:** with `options(gmulticontig.2d.cache = TRUE)`, a later change of `gmulticontig.2d.mode` is honoured.
+
+* An error inside a misha call (e.g. `gintervals.rbind()` of mismatched columns) no longer turns multitasking off for the rest of the session or leaves the umask at 007.
+
+* An `NA` logical argument (`unify_touching_intervals`, `bidirect`, `extend`, `canonic`, `include_metadata`, `interval_relative`, `remove.dups`, `allow.duplicates`) is an error; it was read as `TRUE` or `FALSE`. An `NA`, infinite or integer-`NA` coordinate is an invalid interval.
+
+* `options(gmax.data.size = NULL)` means no limit everywhere. `gintervals.load(chrom =)` and `gintervals.update()` accept a factor chromosome column with only some of the levels. `gintervals()` errors print whole-number coordinates.
+
+* Intervals passed by value (`do.call()`, `Map()`, purrr) are no longer deparsed: `gsummary()` over 2M intervals took 39 s instead of 0.5 s.
+
+* Databases: a stale `.db.cache.lock` that cannot be read is broken by its age; a refused re-load of a dataset leaves it loaded; `gtrack.copy(db =)` into a dataset no longer hides the working database's own track; when a `gtrack.copy(overwrite = TRUE)` fails because another session wrote the name, the replaced track goes to the trash instead of a hidden directory; a failed conversion to the indexed format no longer leaves buffered bytes to be written into other files at exit.
+
+* `gintervals.normalize()` documents that windows are clipped at chromosome ends.
+
 # misha 5.16.1
 
 * **Behavior fix:** a numeric `strand` other than -1, 0 or 1 is an error, as in `gintervals()`; functions that read intervals took 255 as -1 (e.g. `gseq.extract()` returned the reverse complement) and 2 as 1.
