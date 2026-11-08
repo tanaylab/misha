@@ -3393,3 +3393,75 @@ describe("Reachability bound safety", {
         }
     })
 })
+
+test_that("pwm.edit_distance.pos and pwm.edit_distance.lse.pos past 2^24 are exact", {
+    # Positions were kept in float, which holds consecutive integers only up to
+    # 2^24: a window 20,000,001 bases into the interval came back as 20,000,000.
+    # Reaching that needs an iterator interval longer than 16.7 Mb, so (as in
+    # test-potts.R) this runs only where a real assembly is at hand.
+    big <- Sys.getenv("MISHA_LARGE_GENOME", "")
+    skip_if(
+        big == "" || !dir.exists(big),
+        "set MISHA_LARGE_GENOME to a groot with a chromosome over 16.7 Mb"
+    )
+    old <- .misha$GROOT
+    withr::defer(gsetroot(old))
+    gsetroot(big)
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+    ci <- gintervals.all()
+    ci <- ci[ci$end > 16777218L + 1000L, , drop = FALSE]
+    skip_if(nrow(ci) == 0L, "no chromosome over 16.7 Mb in this genome")
+    chrom <- as.character(ci$chrom[1L])
+
+    L <- 16L
+    one_hot <- function(word) {
+        b <- strsplit(word, "")[[1]]
+        m <- matrix(0, L, 4, dimnames = list(NULL, c("A", "C", "G", "T")))
+        m[cbind(seq_len(L), match(b, colnames(m)))] <- 1
+        m
+    }
+    # 1-based positions must be ODD: floats represent only even integers between
+    # 2^24 and 2^25, so an even one would pass against the defect. off is
+    # 0-based, so it is even.
+    found <- FALSE
+    for (off in 16777218L + 2L * c(50L, 177L, 301L, 452L, 613L)) {
+        word <- toupper(gseq.extract(gintervals(chrom, off, off + L)))
+        if (grepl("[^ACGT]", word)) next
+        pssm <- one_hot(word)
+        # the planted window must be the first exact match: none before it
+        gvtrack.create("big_ed", NULL, "pwm.edit_distance",
+            pssm = pssm, score.thresh = 0, prior = 0, bidirect = FALSE
+        )
+        before <- gextract("big_ed", gintervals(chrom, 0, off), iterator = gintervals(chrom, 0, off))$big_ed
+        gvtrack.rm("big_ed")
+        if (isTRUE(before > 0)) {
+            found <- TRUE
+            break
+        }
+    }
+    skip_if(!found, "no first-occurrence 16-mer past 2^24 in this genome")
+
+    gvtrack.create("big_edpos", NULL, "pwm.edit_distance.pos",
+        pssm = pssm, score.thresh = 0, prior = 0, bidirect = FALSE
+    )
+    iv <- gintervals(chrom, 0, off + 1L)
+    expect_equal(gextract("big_edpos", iv, iterator = iv)$big_edpos, off + 1)
+
+    # LSE: a PSSM one substitution away from the window at `off` (column 2), so
+    # the one edit that reaches the threshold is at 1-based off + 3 (odd). It is
+    # the unique such window if no other window is within 2 substitutions.
+    j <- 2L
+    alt <- setdiff(c("A", "C", "G", "T"), substr(word, j + 1, j + 1))[1]
+    lse_word <- paste0(substr(word, 1, j), alt, substr(word, j + 2, L))
+    lse_pssm <- one_hot(lse_word)
+    gvtrack.create("big_near", NULL, "pwm.edit_distance",
+        pssm = lse_pssm, score.thresh = 0, prior = 0, bidirect = FALSE
+    )
+    near <- gextract("big_near", gintervals(chrom, 0, off), iterator = gintervals(chrom, 0, off))$big_near
+    skip_if(!isTRUE(near >= 2), "the near-match window is not unique")
+    gvtrack.create("big_lsepos", NULL, "pwm.edit_distance.lse.pos",
+        pssm = lse_pssm, score.thresh = -1, prior = 0.01, bidirect = FALSE
+    )
+    expect_equal(gextract("big_lsepos", iv, iterator = iv)$big_lsepos, off + j + 1)
+})
