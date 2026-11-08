@@ -15,19 +15,19 @@
 
     err.intervs <- intervals[intervals$start < 0, ]
     if (nrow(err.intervs) > 0) {
-        stop(sprintf("Invalid interval (%s, %g, %g): start coordinate is out of range", err.intervs$chrom[1], err.intervs$start[1], err.intervs$end[1]), call. = FALSE)
+        stop(sprintf("Invalid interval (%s, %s, %s): start coordinate is out of range", err.intervs$chrom[1], .gformat_num(err.intervs$start[1]), .gformat_num(err.intervs$end[1])), call. = FALSE)
     }
 
     err.intervs <- intervals[intervals$end > maxends, ]
     if (nrow(err.intervs) > 0) {
-        stop(sprintf("Invalid interval (%s, %g, %g): end coordinate exceeds chromosome boundaries", err.intervs$chrom[1], err.intervs$start[1], err.intervs$end[1]), call. = FALSE)
+        stop(sprintf("Invalid interval (%s, %s, %s): end coordinate exceeds chromosome boundaries", err.intervs$chrom[1], .gformat_num(err.intervs$start[1]), .gformat_num(err.intervs$end[1])), call. = FALSE)
     }
 
     err.intervs <- intervals[intervals$start >= intervals$end, ]
     if (nrow(err.intervs) > 0) {
         stop(sprintf(
-            "Invalid interval (%s, %g, %g): start coordinate exceeds or equals to end coordinate. Note: misha uses 0-based, half-open [start, end) coordinates (like BED). If your input is 1-based (GFF/GTF/VCF), subtract 1 from start.",
-            err.intervs$chrom[1], err.intervs$start[1], err.intervs$end[1]
+            "Invalid interval (%s, %s, %s): start coordinate exceeds or equals to end coordinate. Note: misha uses 0-based, half-open [start, end) coordinates (like BED). If your input is 1-based (GFF/GTF/VCF), subtract 1 from start.",
+            err.intervs$chrom[1], .gformat_num(err.intervs$start[1]), .gformat_num(err.intervs$end[1])
         ), call. = FALSE)
     }
 
@@ -43,7 +43,7 @@
             bad <- is.na(mapped)
             if (any(bad)) {
                 i <- match(TRUE, bad)
-                stop(sprintf("Invalid strand value \"%s\" of interval (%s, %g, %g)", intervals$strand[i], intervals$chrom[i], intervals$start[i], intervals$end[i]), call. = FALSE)
+                stop(sprintf("Invalid strand value \"%s\" of interval (%s, %s, %s)", intervals$strand[i], intervals$chrom[i], .gformat_num(intervals$start[i]), .gformat_num(intervals$end[i])), call. = FALSE)
             }
             intervals$strand <- as.numeric(mapped)
         } else if (!is.numeric(intervals$strand)) {
@@ -51,7 +51,7 @@
         } else {
             err.intervs <- intervals[intervals$strand != as.integer(intervals$strand) | intervals$strand < -1 | intervals$strand > 1, ]
             if (nrow(err.intervs) > 0) {
-                stop(sprintf("Invalid strand value %g of interval (%s, %g, %g)", err.intervs$strand[1], err.intervs$chrom[1], err.intervs$start[1], err.intervs$end[1]), call. = FALSE)
+                stop(sprintf("Invalid strand value %g of interval (%s, %s, %s)", err.intervs$strand[1], err.intervs$chrom[1], .gformat_num(err.intervs$start[1]), .gformat_num(err.intervs$end[1])), call. = FALSE)
             }
         }
     }

@@ -128,3 +128,15 @@ test_that("gintervals.import_bed name=FALSE/score=FALSE/strand=FALSE drop those 
     out <- gintervals.import_bed(f, name = FALSE, score = FALSE, strand = FALSE)
     expect_equal(colnames(out), c("chrom", "start", "end"))
 })
+
+test_that("gintervals errors print coordinates as whole numbers", {
+    chr1_end <- gintervals.all()$end[gintervals.all()$chrom == "chr1"]
+    expect_error(
+        gintervals("chr1", 61331566, chr1_end + 1),
+        sprintf("Invalid interval (chr1, 61331566, %s): end", format(chr1_end + 1, scientific = FALSE)),
+        fixed = TRUE
+    )
+    expect_error(gintervals("chr1", -12345678, 10), "Invalid interval (chr1, -12345678, 10): start", fixed = TRUE)
+    expect_error(gintervals("chr1", 22345678, 12345678), "Invalid interval (chr1, 22345678, 12345678): start", fixed = TRUE)
+})
+
