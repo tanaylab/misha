@@ -424,3 +424,20 @@ test_that("an integer NA coordinate is an invalid interval, as a double NA is", 
     expect_error(gseq.extract(data.frame(chrom = "chr1", start = 0L, end = 10L, strand = NA_integer_)), "Invalid strand value \\(NA\\)")
     expect_identical(.glifetime_counters(), c(ref_count = 0L, protect_count = 0L))
 })
+
+test_that("an infinite or out-of-range coordinate is an invalid interval", {
+    # the cast to int64_t made it -9223372036854775808, which the error then named
+    one_d <- function(start, end) data.frame(chrom = "chr1", start = start, end = end)
+    for (iv in list(one_d(-Inf, 10), one_d(0, Inf), one_d(0, 1e30))) {
+        expect_error(gseq.extract(iv), "Invalid format of interval at index 1")
+        expect_error(gextract("test.fixedbin", iv), "Invalid format of interval at index 1")
+        expect_error(gintervals.canonic(iv), "Invalid format of interval at index 1")
+    }
+    for (col in c("start1", "end1", "start2", "end2")) {
+        two_d <- data.frame(chrom1 = "chr1", start1 = 0, end1 = 100, chrom2 = "chr1", start2 = 0, end2 = 100)
+        two_d[[col]] <- if (startsWith(col, "start")) -Inf else Inf
+        expect_error(gintervals.canonic(two_d), "Invalid format of interval at index 1", info = col)
+        expect_error(gextract("test.rects", two_d), "Invalid format of interval at index 1", info = col)
+    }
+    expect_identical(.glifetime_counters(), c(ref_count = 0L, protect_count = 0L))
+})

@@ -64,6 +64,13 @@ const char *chrom_name(SEXP chroms, SEXP chrom_levels, unsigned i, char *buf, si
 	return buf;
 }
 
+// False for a coordinate that is NA, infinite or beyond the int64_t range: casting it to int64_t is
+// undefined (it came out as -9223372036854775808)
+static inline bool is_valid_coord(double v)
+{
+	return std::fabs(v) < 9.2e18;
+}
+
 unsigned IntervalConverter::get_rintervs_type_mask(SEXP rintervals, const char *error_msg_prefix) const
 {
 	// Intervals are a data frame, or a list of a 1D and a 2D one. Anything else must stop here:
@@ -391,7 +398,7 @@ SEXP IntervalConverter::convert_rintervs(SEXP rintervals, GIntervals *intervals,
 			// num_elt: an integer NA is NaN, as a double NA; INTEGER() read it as -2147483648
 			double start_val = num_elt(starts, i);
 			double end_val = num_elt(ends, i);
-			if (std::isnan(start_val) || std::isnan(end_val) ||
+			if (!is_valid_coord(start_val) || !is_valid_coord(end_val) ||
 				(strands != R_NilValue && Rf_isReal(strands) && std::isnan(REAL(strands)[i])))
 				verror("%sInvalid format of interval at index %d", error_msg_prefix, i + 1);
 
@@ -509,7 +516,7 @@ SEXP IntervalConverter::convert_rintervs(SEXP rintervals, GIntervals *intervals,
 			double end1_val = num_elt(ends1, i);
 			double start2_val = num_elt(starts2, i);
 			double end2_val = num_elt(ends2, i);
-			if (std::isnan(start1_val) || std::isnan(end1_val) || std::isnan(start2_val) || std::isnan(end2_val))
+			if (!is_valid_coord(start1_val) || !is_valid_coord(end1_val) || !is_valid_coord(start2_val) || !is_valid_coord(end2_val))
 				verror("%sInvalid format of interval at index %d", error_msg_prefix, i + 1);
 
 			char chrom_buf1[32], chrom_buf2[32];
