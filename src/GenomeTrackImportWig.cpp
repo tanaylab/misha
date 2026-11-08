@@ -315,7 +315,7 @@ SEXP gtrackimportwig(SEXP _track, SEXP _wig, SEXP _srcname, SEXP _binsize, SEXP 
 
 		if (is_csv) {
 			try {
-				csv.init(fname, iu.get_chromkey());
+				csv.init(fname, iu.get_chromkey(), true);
 				if (csv.get_colnames().size() != 1)
 					verror("More than one value column appears in file %s", fname);
 			} catch (TGLException &e) {
@@ -396,6 +396,17 @@ SEXP gtrackimportwig(SEXP _track, SEXP _wig, SEXP _srcname, SEXP _binsize, SEXP 
 
 		// Only now, when nothing downstream can throw, is it safe to leave a pending
 		// message behind for .gcall() to raise.
+		uint64_t num_clipped = is_bigwig ? bigwig.get_num_clipped() : is_csv ? csv.get_num_clipped() : wig.get_num_clipped();
+		uint64_t num_dropped = is_bigwig ? bigwig.get_num_dropped() : is_csv ? csv.get_num_dropped() : wig.get_num_dropped();
+		const string &first_clipped = is_bigwig ? bigwig.get_first_clipped() : is_csv ? csv.get_first_clipped() : wig.get_first_clipped();
+		if (num_clipped || num_dropped) {
+			char msg[10000];
+			snprintf(msg, sizeof(msg),
+			         "File %s: %llu record(s) running past the end of their chromosome were clipped to it, and %llu record(s) "
+			         "starting at or past the chromosome end were dropped; the first: %s",
+			         srcname, (unsigned long long)num_clipped, (unsigned long long)num_dropped, first_clipped.c_str());
+			add_pending_diagnostic(_envir, "warning", msg);
+		}
 		report_skipped_chroms(srcname, unknown_chroms, num_matched_chroms, _envir);
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());

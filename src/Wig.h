@@ -35,6 +35,13 @@ public:
 	// Number of database chromosomes for which the file contains data.
 	uint64_t get_num_matched_chroms() const;
 
+	// Records read by get_data() that ran past the end of their chromosome: clipped to it, or
+	// dropped when they start at or past it; and the first of them, "line N: (chrom, start, end),
+	// chromosome size N" ("" if none)
+	uint64_t get_num_clipped() const { return m_num_clipped; }
+	uint64_t get_num_dropped() const { return m_num_dropped; }
+	const string &get_first_clipped() const { return m_first_clipped; }
+
 private:
 	enum { CHROM_FIELD, START_FIELD, STEP_FIELD, SPAN_FIELD, NUM_FIELDS };
 	enum RecordType { FIXED_STEP_REC, VAR_STEP_REC, VAL_REC, COORD_VAL_REC, BEDGRAPH_REC };
@@ -102,6 +109,13 @@ private:
 	int64_t         m_buf_fpos{0};
 	bool            m_file_end{false};
 	vector<Field>   m_fields;
+
+	uint64_t        m_num_clipped{0};
+	uint64_t        m_num_dropped{0};
+	string          m_first_clipped;
+
+	// Notes a record that runs past the end of the chromosome; returns true if it is to be dropped
+	bool clip(int chromid, int64_t start, int64_t end, int64_t lineno);
 
 	// The last chromosome name looked up and its id (-1: not in the database)
 	string          m_last_chrom;

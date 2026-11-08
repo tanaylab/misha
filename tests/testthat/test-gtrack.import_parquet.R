@@ -188,7 +188,6 @@ test_that("unsupported files error and create nothing", {
         list(file = "zstd.parquet", binsize = 32, msg = "ZSTD"),
         list(file = "delta.parquet", binsize = 32, msg = "DELTA_BINARY_PACKED"),
         list(file = "overlap.parquet", binsize = 32, msg = "overlap"),
-        list(file = "beyond_end.parquet", binsize = 32, msg = "exceeds"),
         list(file = "pandas_default.parquet", binsize = 0, msg = "Parquet import creates dense tracks; binsize must be > 0")
     )
     for (case in cases) {
@@ -204,6 +203,56 @@ test_that("unsupported files error and create nothing", {
         expect_length(staging_leftovers(db), 0)
     }
     expect_error(gtrack.import_parquet("test", pq_fixture("no_such_*.parquet"), 32), "No files")
+})
+
+test_that("a row past the chromosome end is clipped, with a warning naming the row", {
+    db <- local_pq_db()
+    # the last row of chr2 is (chr2, 576, 640); chr2 is 600 bp
+    expect_warning(
+        gtrack.import_parquet("test", pq_fixture("beyond_end.parquet"), 32, track.prefix = "x_"),
+        "1 row(s) running past the end of their chromosome were clipped to it, and 0 row(s) starting at or past the chromosome end were dropped; the first is row 50 (row group 0) of ",
+        fixed = TRUE
+    )
+    for (value_col in c("a", "b")) {
+        expect_identical(track_values(paste0("x_", value_col)), expected_values(value_col), info = value_col)
+    }
+})
+
+test_that("rows past the chromosome end are clipped or dropped with one warning, serial and in kids", {
+    db <- local_pq_db()
+    # 32 bp rows of a genome whose chromosomes are longer, written by gextract: 20 columns, so
+    # that the import takes two batches of columns
+    src <- withr::local_tempdir()
+    create_test_db(file.path(src, "long"), data.frame(chrom = c("chr1", "chr2"), size = c(1100, 700)))
+    gdb.init(file.path(src, "long"))
+    intervs <- giterator.intervals(intervals = gintervals.all(), iterator = 32)
+    gtrack.create_dense("v", "", intervs, intervs$start / 32 + 0.25, 32)
+    f <- file.path(src, "rows.parquet")
+    gextract(paste0("v + ", 1:20), gintervals.all(), iterator = 32, colnames = paste0("c", 1:20), file = f)
+    gdb.init(db)
+
+    # (chr1, 992, 1024) and (chr2, 576, 608) are clipped, the 3 rows of each after them dropped
+    msg <- paste0(
+        "2 row(s) running past the end of their chromosome were clipped to it, and 6 row(s) starting at or past the ",
+        "chromosome end were dropped; the first is row 31 (row group 0) of ", f, ": (chr1, 992, 1024), chromosome size 1000"
+    )
+    for (multitask in c(FALSE, TRUE)) {
+        withr::with_options(list(gmultitasking = multitask, gmax.processes = 4), {
+            prefix <- if (multitask) "mt_" else "s_"
+            warns <- character()
+            withCallingHandlers(
+                gtrack.import_parquet("test", f, 32, track.prefix = prefix),
+                warning = function(w) {
+                    warns <<- c(warns, conditionMessage(w))
+                    invokeRestart("muffleWarning")
+                }
+            )
+            expect_identical(warns, msg, label = prefix)
+            for (k in c(1, 20)) {
+                expect_identical(track_values(paste0(prefix, "c", k)), bin_k + 0.25 + k, label = paste(prefix, k))
+            }
+        })
+    }
 })
 
 test_that("a value near the float limit survives binning", {

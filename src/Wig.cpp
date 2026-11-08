@@ -136,6 +136,8 @@ void Wig::init(const GenomeChromKey &chromkey, const string &filename, bool igno
 	m_chrom_fpos.resize(chromkey.get_num_chroms(), -1);
 	m_chrom_lineno.resize(chromkey.get_num_chroms(), -1);
 	m_unknown_chroms.clear();
+	m_num_clipped = m_num_dropped = 0;
+	m_first_clipped.clear();
 
 	// read the file to determine the positions of first chrom appearences
 	int last_chromid = -1;
@@ -199,6 +201,24 @@ void Wig::init(const GenomeChromKey &chromkey, const string &filename, bool igno
 	}
 }
 
+bool Wig::clip(int chromid, int64_t start, int64_t end, int64_t lineno)
+{
+	int64_t chromsize = m_chromkey->get_chrom_size(chromid);
+
+	if (m_first_clipped.empty()) {
+		char buf[1000];
+		snprintf(buf, sizeof(buf), "line %lld: (%s, %lld, %lld), chromosome size %lld", (long long)lineno,
+		         m_chromkey->id2chrom(chromid).c_str(), (long long)start, (long long)end, (long long)chromsize);
+		m_first_clipped = buf;
+	}
+	if (start >= chromsize) {
+		++m_num_dropped;
+		return true;
+	}
+	++m_num_clipped;
+	return false;
+}
+
 uint64_t Wig::get_num_matched_chroms() const
 {
 	uint64_t num_matched = 0;
@@ -237,10 +257,6 @@ bool Wig::get_data(int chromid, GIntervals &intervals)
 			step = rec.fixed_step.step;
 			span = rec.fixed_step.span;
 
-			if (start >= (int64_t)m_chromkey->get_chrom_size(rec.fixed_step.chromid))
-				TGLError<Wig>(BAD_START, "WIG file %s, line %ld: start coordinate %ld exceeds chromosome %s boundaries",
-						m_bfile.file_name().c_str(), lineno - 1, start, m_chromkey->id2chrom(chromid).c_str());
-
 			if (span > step)
 				TGLError<Wig>(INVALID_FORMAT, "Invalid format of WIG file %s, line %ld: span exceeds step", m_bfile.file_name().c_str(), lineno - 1);
 		} else if (rec.type == VAR_STEP_REC) {
@@ -255,41 +271,34 @@ bool Wig::get_data(int chromid, GIntervals &intervals)
 				TGLError<Wig>(INVALID_FORMAT, "Invalid format of WIG file %s, line %ld: value is not preceeded by fixedStep header",
 						m_bfile.file_name().c_str(), lineno - 1);
 
-			if (start >= (int64_t)m_chromkey->get_chrom_size(chromid))
-				TGLError<Wig>(INVALID_FORMAT, "[1] Invalid format of WIG file %s, line %ld: coordinate %ld exceeds chromosome %s boundaries",
-						m_bfile.file_name().c_str(), lineno - 1, start, m_chromkey->id2chrom(chromid).c_str());
-
-			int64_t end_coord = min(start + span, (int64_t)m_chromkey->get_chrom_size(chromid));
-			intervals.push_back(GInterval(chromid, start, end_coord, 0, GInterval::cast2udata(rec.val)));
+			int64_t chromsize = m_chromkey->get_chrom_size(chromid);
+			if (start + span <= chromsize || !clip(chromid, start, start + span, lineno - 1))
+				intervals.push_back(GInterval(chromid, start, min(start + span, chromsize), 0, GInterval::cast2udata(rec.val)));
 			start += step;
 		} else if (rec.type == COORD_VAL_REC) {
 			if (span < 0)
 				TGLError<Wig>(INVALID_FORMAT, "Invalid format of WIG file %s, line %ld: value is not preceeded by variableStep header",
 						m_bfile.file_name().c_str(), lineno - 1);
 
-			if (rec.coord_val.coord >= (int64_t)m_chromkey->get_chrom_size(chromid))
-				TGLError<Wig>(BAD_COORD, "[2] WIG file %s, line %ld: coordinate %ld exceeds chromosome %s boundaries",
-						m_bfile.file_name().c_str(), lineno - 1, rec.coord_val.coord, m_chromkey->id2chrom(chromid).c_str());
-
-			int64_t end_coord = min(rec.coord_val.coord + span, (int64_t)m_chromkey->get_chrom_size(chromid));
-			intervals.push_back(GInterval(chromid, rec.coord_val.coord, end_coord, 0, GInterval::cast2udata(rec.coord_val.val)));
+			int64_t chromsize = m_chromkey->get_chrom_size(chromid);
+			int64_t coord = rec.coord_val.coord;
+			if (coord + span <= chromsize || !clip(chromid, coord, coord + span, lineno - 1))
+				intervals.push_back(GInterval(chromid, coord, min(coord + span, chromsize), 0, GInterval::cast2udata(rec.coord_val.val)));
 		} else if (rec.type == BEDGRAPH_REC) {
 			if (rec.bedgraph.chromid != chromid)
 				break;
 
 			if (rec.bedgraph.start >= rec.bedgraph.end)
-				TGLError<Wig>(BAD_COORD, "WIG file %s, line %ld: start coordinate exceeds end coordinate", m_bfile.file_name().c_str());
+				TGLError<Wig>(BAD_COORD, "WIG file %s, line %ld: start coordinate exceeds end coordinate", m_bfile.file_name().c_str(), lineno - 1);
 
-			if (rec.bedgraph.end > (int64_t)m_chromkey->get_chrom_size(chromid))
-				TGLError<Wig>(BAD_COORD, "WIG file %s, line %ld: coordinate %ld exceeds chromosome %s boundaries",
-						m_bfile.file_name().c_str(), lineno - 1, rec.bedgraph.end, m_chromkey->id2chrom(chromid).c_str());
-
-			intervals.push_back(GInterval(chromid, rec.bedgraph.start, rec.bedgraph.end, 0, GInterval::cast2udata(rec.bedgraph.val)));
+			int64_t chromsize = m_chromkey->get_chrom_size(chromid);
+			if (rec.bedgraph.end <= chromsize || !clip(chromid, rec.bedgraph.start, rec.bedgraph.end, lineno - 1))
+				intervals.push_back(GInterval(chromid, rec.bedgraph.start, min(rec.bedgraph.end, chromsize), 0, GInterval::cast2udata(rec.bedgraph.val)));
 		}
 	}
 
-	for (GIntervals::const_iterator iinterv = intervals.begin() + 1; iinterv < intervals.end(); ++iinterv) {
-		if ((iinterv - 1)->end > iinterv->start)
+	for (size_t i = 1; i < intervals.size(); ++i) {
+		if (intervals[i - 1].end > intervals[i].start)
 			TGLError<Wig>(INVALID_FORMAT, "Invalid format of WIG file %s: file contains overlapping intervals", m_bfile.file_name().c_str());
 	}
 

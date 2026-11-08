@@ -119,10 +119,12 @@
 #' otherwise a constant value of 1 is used. For BED inputs, 'binsize' controls
 #' the output type: if 'binsize' is 0 the track is 'Sparse'; otherwise the track
 #' is 'Dense' with bin-averaged values based on overlaps with BED intervals (and
-#' 'defval' for regions not covered). BED records that run past the end of
-#' their chromosome are clipped to it, and records left empty (zero length, or
-#' starting at or past the chromosome end) are dropped, with one warning giving
-#' the counts; a BED file with no record left is an error.
+#' 'defval' for regions not covered). Empty BED records (zero length) are
+#' dropped; a BED file with no record left is an error.
+#'
+#' In every format, records that run past the end of their chromosome are
+#' clipped to it, and records that start at or past the end are dropped, with
+#' one warning giving the counts.
 #'
 #' If 'binsize' is 0 the resulted track is created in 'Sparse' format.
 #' Otherwise the 'Dense' format is chosen with a bin size equal to 'binsize'.
@@ -760,6 +762,12 @@ gtrack.import_set <- function(description = NULL, path = NULL, binsize = NULL, t
 #' overlap. Chromosome names are matched through the chromosome alias chain
 #' as in \code{\link{gtrack.import}}, with the same reporting of names the
 #' database does not have.
+#'
+#' Rows that run past the end of their chromosome (such as a last 32 bp bin
+#' written with 'end = start + 32') are clipped to it, and rows that start at
+#' or past the end are dropped, with one warning that gives the counts and the
+#' first such row. Messages number the rows of a file from 0, as pyarrow and
+#' pandas do.
 #'
 #' The import is all or nothing: if it fails or is interrupted, none of the
 #' tracks is created.
