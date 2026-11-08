@@ -303,8 +303,8 @@ SEXP gintervcanonic(SEXP _intervs, SEXP _unify_touching_intervals, SEXP _envir)
 	try {
         RdbInitializer rdb_init;
 
-        if (!Rf_isLogical(_unify_touching_intervals) || Rf_xlength(_unify_touching_intervals) != 1)
-            verror("unify_touching_intervals argument is not logical");
+        if (!is_true_or_false(_unify_touching_intervals))
+            verror("unify_touching_intervals argument must be TRUE or FALSE");
 
         bool unify_touching_intervals = LOGICAL(_unify_touching_intervals)[0] == 1;
         IntervUtils iu(_envir);
