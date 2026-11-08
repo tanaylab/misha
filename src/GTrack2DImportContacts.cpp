@@ -51,7 +51,10 @@ static const int64_t MAX_FEND_ID = INT32_MAX;
 
 // The chromosome and coordinate of each fend, by fend id. Held in arrays indexed by the id (12 bytes an id)
 // while the ids are dense enough, as real fends files number their fends 1..N; once an id would make the
-// arrays too sparse for the number of fends (ids near 1e9 would take 12 GB), in a hash table.
+// arrays too sparse for the number of fends (ids near 1e9 would take 12 GB), in a hash table, and back in
+// arrays as soon as the fends added since make the ids dense again (a file not sorted by id can start with
+// large ids). The two thresholds differ by a factor of 2, so that the number of fends at least doubles
+// between two switches: each switch copies every fend.
 class FendIndex {
 public:
 	enum { NOT_LISTED = -2, UNKNOWN_CHROM = -1 };
@@ -60,8 +63,13 @@ public:
 	bool add(int64_t id, int chromid, int64_t coord)
 	{
 		++m_num_fends;
-		if (m_sparse)
-			return m_map.emplace(id, Fend{ chromid, coord }).second;
+		m_max_id = max(m_max_id, id);
+		if (m_sparse) {
+			bool added = m_map.emplace(id, Fend{ chromid, coord }).second;
+			if ((uint64_t)m_max_id < max(MIN_DENSE_IDS, DENSE_IDS_PER_FEND * m_num_fends))
+				to_dense();
+			return added;
+		}
 
 		if ((uint64_t)id >= m_chromids.size()) {
 			if ((uint64_t)id >= max(MIN_DENSE_IDS, MAX_IDS_PER_FEND * m_num_fends)) {
@@ -91,39 +99,22 @@ public:
 
 	int64_t coord(int64_t id) const { return m_sparse ? m_map.find(id)->second.coord : m_coords[id]; }
 
-	// Called once every fend is added: back to arrays if the ids turned out dense enough after all (a file
-	// not sorted by id can start with a large one), for faster lookups
-	void finish()
-	{
-		if (!m_sparse)
-			return;
-		int64_t max_id = -1;
-		for (const auto &fend : m_map)
-			max_id = max(max_id, fend.first);
-		if ((uint64_t)max_id >= max(MIN_DENSE_IDS, MAX_IDS_PER_FEND * m_num_fends))
-			return;
-		m_chromids.assign(max_id + 1, NOT_LISTED);
-		m_coords.assign(max_id + 1, 0);
-		for (const auto &fend : m_map) {
-			m_chromids[fend.first] = fend.second.chromid;
-			m_coords[fend.first] = fend.second.coord;
-		}
-		unordered_map<int64_t, Fend>().swap(m_map);
-		m_sparse = false;
-	}
-
 private:
 	struct Fend {
 		int     chromid;
 		int64_t coord;
 	};
 
-	// The arrays may hold up to MAX_IDS_PER_FEND ids a fend, and MIN_DENSE_IDS ids whatever the number of fends
+	// Arrays of MIN_DENSE_IDS ids are kept whatever the number of fends. Past that, an id of
+	// MAX_IDS_PER_FEND ids a fend or more moves the fends to the hash table, and they move back once the
+	// largest id is below DENSE_IDS_PER_FEND ids a fend.
 	static const uint64_t MIN_DENSE_IDS = 1 << 24;
-	static const uint64_t MAX_IDS_PER_FEND = 4;
+	static const uint64_t MAX_IDS_PER_FEND = 8;
+	static const uint64_t DENSE_IDS_PER_FEND = 4;
 
 	bool                              m_sparse{false};
 	uint64_t                          m_num_fends{0};
+	int64_t                           m_max_id{-1};
 	vector<int>                       m_chromids;
 	vector<int64_t>                   m_coords;
 	unordered_map<int64_t, Fend>      m_map;
@@ -138,6 +129,18 @@ private:
 		vector<int>().swap(m_chromids);
 		vector<int64_t>().swap(m_coords);
 		m_sparse = true;
+	}
+
+	void to_dense()
+	{
+		m_chromids.assign(m_max_id + 1, NOT_LISTED);
+		m_coords.assign(m_max_id + 1, 0);
+		for (const auto &fend : m_map) {
+			m_chromids[fend.first] = fend.second.chromid;
+			m_coords[fend.first] = fend.second.coord;
+		}
+		unordered_map<int64_t, Fend>().swap(m_map);
+		m_sparse = false;
 	}
 };
 
@@ -453,7 +456,6 @@ static uint64_t process_contacts_as_fends(IntervUtils &iu, SEXP _contacts, SEXP 
 	}
 	progress.report_last();
 	fends_file.close();
-	fends.finish();
 
 	// STEP 1: Read the contacts and split them into binary files each holding the contacts of specific pair of chromosomes.
 	// Each kid reads a contiguous block of the contacts files.
