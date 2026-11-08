@@ -141,7 +141,9 @@ gseq.comp <- function(seq) {
 #' All reported positions are on the full input sequence.
 #'
 #' @param seqs character vector of DNA sequences (A/C/G/T/N; case-insensitive)
-#' @param pssm numeric matrix or data frame with columns named A, C, G, T (additional columns are allowed and will be ignored)
+#' @param pssm numeric matrix or data frame with columns named A, C, G, T (additional columns are allowed and will be ignored).
+#'   Each row holds the probabilities or counts of the four bases at one motif position; log-odds matrices, \code{NA}
+#'   values and rows summing to 0 are rejected.
 #' @param mode character; one of "lse", "max", "pos", or "count"
 #' @param bidirect logical; if TRUE, scans both strands (default: TRUE)
 #' @param strand integer; \code{1} for the forward strand, \code{-1} for the
@@ -607,22 +609,32 @@ gseq.potts <- function(seqs, model, mode = c("lse", "max", "pos", "count"),
 #'
 #' @param seqs character vector of DNA sequences, OR a data frame of genomic
 #'   intervals (with columns chrom, start, end). When intervals are provided,
-#'   sequences are extracted automatically via \code{gseq.extract}.
+#'   sequences are extracted automatically via \code{gseq.extract}, and the
+#'   windows scanned are those the \code{pwm.edit_distance} virtual track scans
+#'   for the same interval. A \code{strand} column is ignored, as by the virtual
+#'   track: the strand scanned is set by \code{bidirect} and \code{strand}.
 #' @param pssm numeric matrix or data frame with columns A, C, G, T. Each row
-#'   is a motif position.
+#'   is a motif position and holds the probabilities or counts of the four
+#'   bases; log-odds matrices, \code{NA} values and rows summing to 0 are
+#'   rejected.
 #' @param score.thresh single number; target PWM log-likelihood score to reach.
 #' @param max_edits integer or NULL; maximum number of edits to search. NULL
 #'   means no cap. Default NULL.
 #' @param max_indels integer or NULL; maximum number of insertions and deletions
 #'   allowed (default NULL, substitutions only). When > 0, a banded
 #'   Needleman-Wunsch DP is used. Edits are reported with \code{edit_type}
-#'   "sub", "ins", or "del".
+#'   "sub", "ins", or "del". An inserted base is the best its motif column
+#'   allows (the column maximum for \code{"above"}, the minimum for
+#'   \code{"below"}) and is scored as such.
 #' @param bidirect logical; scan both strands? Default TRUE.
 #' @param prior numeric; pseudocount for PSSM frequencies. Default 0.01.
 #' @param score.min numeric or NULL; skip windows with PWM score below this.
-#'   Default NULL (no filter).
+#'   Default NULL (no filter). The score is the window's ungapped score (the
+#'   PSSM-length window from its start), also with \code{max_indels > 0}; a
+#'   window without one (a non-ACGT base among its first PSSM-length bases) is
+#'   skipped when a filter is set.
 #' @param score.max numeric or NULL; skip windows with PWM score above this.
-#'   Default NULL (no filter).
+#'   Default NULL (no filter). Same score as \code{score.min}.
 #' @param extend logical or integer; extend sequence for boundary motifs.
 #'   Default TRUE.
 #' @param strand integer; which strand to scan when \code{bidirect=FALSE}.
