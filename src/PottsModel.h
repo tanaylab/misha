@@ -269,6 +269,8 @@ public:
     // Each sum still adds its pairs in m_pairs_at[j]'s order.
     inline double best_delta(const int8_t *c) const
     {
+        if (m_field_start.empty())
+            build_delta_tables();
         double best = -std::numeric_limits<double>::infinity();
         int j = 0;
         for (; j + 1 < m_W; j += 2) {
@@ -392,11 +394,7 @@ private:
     // 100).
     static constexpr int MAX_BLOCKS = 128;
 
-    // m_pairs_at[i]: indices k of the pairs that contain position i. Also the
-    // tables best_delta() reads: for position j, one entry per pair of
-    // m_pairs_at[j], in that order, holding the pair's other position and its
-    // 4x4 table turned so that row (other base) * 4 + (base at j) is the
-    // coupling, whichever end of the pair j is.
+    // m_pairs_at[i]: indices k of the pairs that contain position i.
     void build_pair_index()
     {
         m_pairs_at.assign((std::size_t)m_W, std::vector<int>());
@@ -404,9 +402,22 @@ private:
             m_pairs_at[m_p1[k]].push_back((int)k);
             m_pairs_at[m_p2[k]].push_back((int)k);
         }
+    }
+
+    // best_delta()'s tables: for position j, one entry per pair of
+    // m_pairs_at[j], in that order, holding the pair's other position and its
+    // 4x4 table turned so that row (other base) * 4 + (base at j) is the
+    // coupling, whichever end of the pair j is. Built on best_delta()'s first
+    // call: only potts.max with max_edits = 1 on one strand reads them, and a
+    // wide, dense model and its twin would otherwise pay for 2 x npair x 16
+    // doubles per scorer.
+    void build_delta_tables() const
+    {
         m_field_start.assign((std::size_t)m_W + 1, 0);
         m_field_other.clear();
         m_field_tab.clear();
+        m_field_other.reserve(2 * m_p1.size());
+        m_field_tab.reserve(2 * m_p1.size() * 16);
         for (int j = 0; j < m_W; ++j) {
             m_field_start[j] = m_field_other.size();
             for (const int k : m_pairs_at[j]) {
@@ -421,7 +432,6 @@ private:
             }
         }
         m_field_start[m_W] = m_field_other.size();
-
     }
 
     void build_blocked_tables()
@@ -562,11 +572,11 @@ private:
     std::vector<double> m_J; // npair*16, [k*16 + b*4 + a]
     std::vector<int> m_p1, m_p2;
     std::vector<std::vector<int>> m_pairs_at;
-    // best_delta()'s tables, built by build_pair_index(): position j's entries
-    // are [m_field_start[j], m_field_start[j + 1]).
-    std::vector<std::size_t> m_field_start;
-    std::vector<int> m_field_other;
-    std::vector<double> m_field_tab;
+    // best_delta()'s tables, built on its first call by build_delta_tables():
+    // position j's entries are [m_field_start[j], m_field_start[j + 1]).
+    mutable std::vector<std::size_t> m_field_start;
+    mutable std::vector<int> m_field_other;
+    mutable std::vector<double> m_field_tab;
 
     // Blocked-kernel tables, built by build_blocked_tables(). m_nblocks == 0
     // means "not built" (W too wide for MAX_BLOCKS) - blocked_available()
