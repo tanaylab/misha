@@ -538,19 +538,22 @@ SEXP gbigintervs_indexed_create(SEXP _intervset_path, SEXP _num_chroms, SEXP _en
         string dat_path = intervset_path + "/intervals.dat.tmp";
         string idx_path = intervset_path + "/intervals.idx.tmp";
 
-        FILE *dat_fp = fopen(dat_path.c_str(), "wb");
+        OutFile dat_fp(fopen(dat_path.c_str(), "wb"), &fclose);
         if (!dat_fp) {
             verror("Cannot create %s: %s", dat_path.c_str(), strerror(errno));
         }
 
-        FILE *idx_fp = fopen(idx_path.c_str(), "wb");
+        OutFile idx_fp(fopen(idx_path.c_str(), "wb"), &fclose);
         if (!idx_fp) {
-            fclose(dat_fp);
             verror("Cannot create %s: %s", idx_path.c_str(), strerror(errno));
         }
 
         // Write index header with placeholder checksum
-        write_1d_index_header(idx_fp, num_chroms, 0);
+        write_1d_index_header(idx_fp.get(), num_chroms, 0);
+
+        // closed before the result is built: an R error there would not unwind
+        fclose(dat_fp.release());
+        fclose(idx_fp.release());
 
         // Return a list with file paths and current offset
         // We'll track state in R and pass it back to subsequent calls
@@ -569,9 +572,6 @@ SEXP gbigintervs_indexed_create(SEXP _intervset_path, SEXP _num_chroms, SEXP _en
         SET_VECTOR_ELT(result, 1, Rf_mkString(idx_path.c_str()));
         SET_VECTOR_ELT(result, 2, Rf_mkString(intervset_path.c_str()));
         SET_VECTOR_ELT(result, 3, Rf_ScalarInteger(num_chroms));
-
-        fclose(dat_fp);
-        fclose(idx_fp);
 
         UNPROTECT(2);
         return result;
@@ -595,30 +595,28 @@ SEXP gbigintervs_indexed_write_chrom(SEXP _dat_path, SEXP _intervals, SEXP _envi
         string dat_path = CHAR(STRING_ELT(_dat_path, 0));
 
         // Open dat file in append mode
-        FILE *dat_fp = fopen(dat_path.c_str(), "ab");
+        OutFile dat_fp(fopen(dat_path.c_str(), "ab"), &fclose);
         if (!dat_fp) {
             verror("Cannot open %s for appending: %s", dat_path.c_str(), strerror(errno));
         }
 
         // Get current position (will be the offset for this chromosome)
-        long offset = ftell(dat_fp);
+        long offset = ftell(dat_fp.get());
         if (offset < 0) {
-            fclose(dat_fp);
             verror("Failed to get file position: %s", strerror(errno));
         }
 
-        // Serialize the intervals dataframe
-        RSaneSerialize(_intervals, dat_fp);
+        // Serialize the intervals dataframe (an R error in it unwinds here)
+        RSaneSerialize(_intervals, dat_fp.get());
 
         // Get new position to calculate length
-        long new_pos = ftell(dat_fp);
+        long new_pos = ftell(dat_fp.get());
         if (new_pos < 0) {
-            fclose(dat_fp);
             verror("Failed to get file position after write: %s", strerror(errno));
         }
 
-        bool write_failed = ferror(dat_fp);
-        if (fclose(dat_fp) || write_failed)
+        bool write_failed = ferror(dat_fp.get());
+        if (fclose(dat_fp.release()) || write_failed)
             verror("Failed to write %s: %s", dat_path.c_str(), write_failed ? "write error" : strerror(errno));
 
         uint64_t length = new_pos - offset;
@@ -784,22 +782,21 @@ SEXP gbigintervs_2d_indexed_create(SEXP _intervset_path, SEXP _num_pairs, SEXP _
         string dat_path = intervset_path + "/intervals2d.dat.tmp";
         string idx_path = intervset_path + "/intervals2d.idx.tmp";
 
-        FILE *dat_fp = fopen(dat_path.c_str(), "wb");
+        OutFile dat_fp(fopen(dat_path.c_str(), "wb"), &fclose);
         if (!dat_fp) {
             verror("Cannot create %s: %s", dat_path.c_str(), strerror(errno));
         }
 
-        FILE *idx_fp = fopen(idx_path.c_str(), "wb");
+        OutFile idx_fp(fopen(idx_path.c_str(), "wb"), &fclose);
         if (!idx_fp) {
-            fclose(dat_fp);
             verror("Cannot create %s: %s", idx_path.c_str(), strerror(errno));
         }
 
         // Write index header with placeholder checksum
-        write_2d_index_header(idx_fp, num_pairs, 0);
+        write_2d_index_header(idx_fp.get(), num_pairs, 0);
 
-        fclose(dat_fp);
-        fclose(idx_fp);
+        fclose(dat_fp.release());
+        fclose(idx_fp.release());
 
         // Return paths
         SEXP result;

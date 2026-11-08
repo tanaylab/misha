@@ -1172,3 +1172,26 @@ test_that("a failed conversion to the indexed format leaves no file behind to fl
     expect_null(attr(out, "status"), label = paste(out, collapse = "\n"))
     expect_equal(unname(file.size(user_files)), rep(nchar("user line\n"), length(user_files)))
 })
+
+test_that("a chromosome of an indexed intervals set whose write stops leaves no file behind to flush at exit", {
+    skip_on_os("windows")
+    skip_if_not(file.exists(system.file("Meta", "package.rds", package = "misha")), "misha is not loaded from an installed library")
+    dir <- withr::local_tempdir()
+    dat <- file.path(dir, "intervals.dat.tmp")
+    user_files <- file.path(dir, sprintf("user%d.txt", 1:8))
+    script <- file.path(dir, "write.R")
+    # The serialization stops on the C stack limit, part of the object still in the FILE's buffer
+    writeLines(c(
+        sprintf("suppressPackageStartupMessages(library(misha, lib.loc = '%s'))", dirname(system.file(package = "misha"))),
+        "deep <- list()",
+        "for (i in 1:1e6) deep <- list(deep)",
+        sprintf("res <- try(misha:::.gcall('gbigintervs_indexed_write_chrom', '%s', deep, misha:::.misha_env()), silent = TRUE)", dat),
+        "rm(deep)",
+        "if (!inherits(res, 'try-error')) cat('NOT STOPPED\\n')",
+        sprintf("cons <- lapply(c(%s), function(f) { con <- file(f, 'w'); writeLines('user line', con); con })", paste0("'", user_files, "'", collapse = ", "))
+    ), script)
+    out <- system2(file.path(R.home("bin"), "R"), c("--no-echo", "-f", script), stdout = TRUE, stderr = TRUE)
+    expect_null(attr(out, "status"), label = paste(out, collapse = "\n"))
+    skip_if(any(grepl("NOT STOPPED", out)), "the serialization did not reach the C stack limit")
+    expect_equal(unname(file.size(user_files)), rep(nchar("user line\n"), length(user_files)))
+})

@@ -275,8 +275,9 @@ SEXP gtrack_create_empty_indexed(SEXP _track, SEXP _envir) {
         }
         fclose(dat_fp);
 
-        // Create track.idx with empty contig list
-        FILE *idx_fp = fopen(idx_path.c_str(), "wb");
+        // Create track.idx with empty contig list (closed when an error unwinds, as in
+        // gtrack_convert_to_indexed_format)
+        std::unique_ptr<FILE, int (*)(FILE *)> idx_fp(fopen(idx_path.c_str(), "wb"), &fclose);
         if (!idx_fp) {
             unlink(dat_path.c_str());
             TGLError<GenomeTrack>("Failed to create %s: %s", idx_path.c_str(), strerror(errno));
@@ -287,9 +288,9 @@ SEXP gtrack_create_empty_indexed(SEXP _track, SEXP _envir) {
         // placeholder checksum=0 (which TrackIndexWriter::write_header
         // writes) is correct here - no entries to checksum, no
         // finalize_checksum call needed.
-        TrackIndexWriter::write_header(idx_fp, MishaTrackType::SPARSE, 0);
+        TrackIndexWriter::write_header(idx_fp.get(), MishaTrackType::SPARSE, 0);
 
-        fclose(idx_fp);
+        fclose(idx_fp.release());
 
         return R_NilValue;
     } catch (TGLException &e) {
