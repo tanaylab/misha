@@ -293,6 +293,25 @@ test_that("bigwig export works when converter is available", {
     expect_true(file.info(outfile)$size > 0)
 })
 
+test_that("bigwig export works when the genome order is not the C order of the chromosome names", {
+    has_converter <- nzchar(Sys.which("bedGraphToBigWig")) || file.exists(system.file("bedGraphToBigWig", package = "misha"))
+    skip_if_not(has_converter, "bedGraphToBigWig not available")
+    local_db_state()
+    withr::with_tempdir({
+        sizes <- c("1" = 1000, "2" = 1000, "10" = 1000)
+        create_test_db("num_db", chrom_sizes = data.frame(chrom = names(sizes), size = unname(sizes)))
+        writeLines(paste0(names(sizes), "\t", sizes), file.path("num_db", "chrom_sizes.txt"))
+        gdb.init("num_db")
+        skip_if_not(identical(as.character(gintervals.all()$chrom), names(sizes)), "the database sorts its chromosomes")
+        gtrack.create_dense("t", "", gintervals.all(), c(1, 2, 3), 100)
+        # bedGraphToBigWig refuses "10" after "2"
+        f <- file.path(getwd(), "t.bw")
+        gtrack.export_bigwig("t", f)
+        gtrack.import("back", "", f, binsize = 100)
+        expect_identical(gextract("back", gintervals.all(), iterator = 100)$back, gextract("t", gintervals.all(), iterator = 100)$t)
+    })
+})
+
 test_that("bigwig export errors on 2D track", {
     expect_error(
         gtrack.export_bigwig("rects_track", tempfile(fileext = ".bw")),

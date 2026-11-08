@@ -55,6 +55,11 @@ gtrack.export_bedgraph <- function(track, file, intervals = NULL, iterator = NUL
             call. = FALSE
         )
     }
+    .gtrack_export_bedgraph(track, file, intervals, iterator, name)
+}
+
+# gtrack.export_bedgraph with the chromosomes written in the order of chroms (names), genome order if NULL
+.gtrack_export_bedgraph <- function(track, file, intervals, iterator, name, chroms = NULL) {
     .gcheckroot()
 
     if (!is.character(track) || length(track) != 1) {
@@ -128,11 +133,11 @@ gtrack.export_bedgraph <- function(track, file, intervals = NULL, iterator = NUL
         )
     }
 
-    # Rows in genome order: chromosome as in the genome database, then start. NULL when they
-    # already are (gextract's output usually is). NaN rows are dropped while writing.
+    # Rows in genome order (chromosome as in the genome database, or as in chroms), then start.
+    # NULL when they already are (gextract's output usually is). NaN rows are dropped while writing.
     ord <- NULL
     if (!is.null(data) && nrow(data) > 1) {
-        genome_chroms <- as.character(gintervals.all()$chrom)
+        genome_chroms <- if (is.null(chroms)) as.character(gintervals.all()$chrom) else chroms
         chroms <- data$chrom
         chrom_order <- if (is.factor(chroms)) {
             match(levels(chroms), genome_chroms)[as.integer(chroms)]
@@ -363,9 +368,10 @@ gtrack.export_bigwig <- function(track, file, intervals = NULL, iterator = NULL)
     )
 
     # Write bedGraph (uncompressed temp file)
-    gtrack.export_bedgraph(track, tmp_bedgraph,
-        intervals = intervals,
-        iterator = iterator
+    # bedGraphToBigWig wants the chromosomes sorted by name in the C locale ("10" before "9"),
+    # which is not the genome order of a database whose chromosomes are 1, 2, ..., 10
+    .gtrack_export_bedgraph(track, tmp_bedgraph, intervals, iterator, NULL,
+        chroms = sort(as.character(gintervals.all()$chrom), method = "radix")
     )
 
     # Write chrom.sizes from the genome database
