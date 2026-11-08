@@ -117,22 +117,29 @@ gtrack.export_bedgraph <- function(track, file, intervals = NULL, iterator = NUL
     # The value column name is the track expression itself
     value_col <- track
 
-    # Remove rows with NaN values
-    non_nan <- !is.nan(data[[value_col]])
-    data <- data[non_nan, , drop = FALSE]
-
-    if (nrow(data) == 0) {
-        warning("All values are NaN; output file will contain only the header",
+    # gextract returns NULL when the intervals hold no values (e.g. a sparse track)
+    if (is.null(data)) {
+        warning("The track has no values in the intervals; output file will contain only the header",
             call. = FALSE
         )
-    }
+    } else {
+        # Remove rows with NaN values
+        non_nan <- !is.nan(data[[value_col]])
+        data <- data[non_nan, , drop = FALSE]
 
-    # Sort by chromosome (genome order) then by start
-    # Get chromosome order from the genome database
-    genome_chroms <- gintervals.all()$chrom
-    chrom_order <- match(data$chrom, genome_chroms)
-    ord <- order(chrom_order, data$start)
-    data <- data[ord, , drop = FALSE]
+        if (nrow(data) == 0) {
+            warning("All values are NaN; output file will contain only the header",
+                call. = FALSE
+            )
+        }
+
+        # Sort by chromosome (genome order) then by start
+        # Get chromosome order from the genome database
+        genome_chroms <- gintervals.all()$chrom
+        chrom_order <- match(data$chrom, genome_chroms)
+        ord <- order(chrom_order, data$start)
+        data <- data[ord, , drop = FALSE]
+    }
 
     # Write output
     use_gz <- grepl("\\.gz$", file)
@@ -146,7 +153,7 @@ gtrack.export_bedgraph <- function(track, file, intervals = NULL, iterator = NUL
     # Coordinates are doubles; format as plain integers so large round values
     # (e.g. 1e8) are not written in scientific notation, which bedGraphToBigWig
     # parses as 1 -> out-of-order intervals / corrupt bigwig.
-    if (nrow(data) > 0) {
+    if (!is.null(data) && nrow(data) > 0) {
         lines <- paste(data$chrom,
             sprintf("%.0f", data$start),
             sprintf("%.0f", data$end),

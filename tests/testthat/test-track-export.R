@@ -183,6 +183,16 @@ test_that("bedGraph export sorts by chromosome order then start", {
     }
 })
 
+test_that("bedGraph export over intervals with no values writes the header only", {
+    outfile <- tempfile(fileext = ".bedgraph")
+    withr::defer(unlink(outfile))
+    # sparse_track has no values there
+    empty <- gintervals(1, 0, 10)
+    expect_null(gextract("sparse_track", intervals = empty))
+    expect_warning(gtrack.export_bedgraph("sparse_track", outfile, intervals = empty), "no values in the intervals")
+    expect_identical(readLines(outfile), 'track type=bedGraph name="sparse_track"')
+})
+
 test_that("bedGraph export errors on missing arguments", {
     expect_error(gtrack.export_bedgraph(), "Usage")
 })
