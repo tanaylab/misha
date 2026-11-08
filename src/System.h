@@ -13,4 +13,11 @@
 // !!!! COMPATIBILITY: only Linux, on other platforms returns 0. !!!!
 uint64_t get_unique_mem_usage(pid_t pid = 0);
 
+// Resident size of pid in bytes, from /proc/<pid>/statm: kernel counters, read without walking
+// the page tables. It counts every resident page, shared ones included, so it is an upper
+// bound of get_unique_mem_usage() (up to the few pages the kernel's counters may lag by).
+//
+// !!!! COMPATIBILITY: only Linux, on other platforms returns 0. !!!!
+uint64_t get_resident_mem_usage(pid_t pid);
+
 #endif

@@ -152,3 +152,18 @@ test_that("gseq.extract multitasking still enforces gmax.data.size", {
     expect_match(parallel_err, "gmax.data.size")
     expect_match(sequential_err, "Result sequence size")
 })
+
+test_that("gseq.extract keeps long intervals read from the page cache in one process", {
+    # A read from the page cache costs per byte: ~0.5 Mb intervals used to cross the probe's
+    # threshold although nothing waited on I/O, and forking made the call ~20% slower. Only the
+    # read time beyond the cached cost per byte counts now, so even a 1 us threshold keeps the
+    # call in one process (no child CPU time). The first call puts the reads in the cache.
+    set.seed(23)
+    iv <- rand_intervs(600, size = 400000, chroms = c("chr1", "chr2"))
+    expected <- extract_seq(iv)
+    before <- proc.time()
+    got <- withr::with_options(list(gmultitasking = TRUE, gseq.extract.probe.usec = 1, gmax.processes = 4), gseq.extract(iv))
+    used <- proc.time() - before
+    expect_identical(got, expected)
+    expect_equal(used[["user.child"]] + used[["sys.child"]], 0)
+})

@@ -56,7 +56,7 @@ static std::string index_file_stamp(const std::string &path)
 std::shared_ptr<TrackIndex> GenomeTrack::get_track_index(const std::string &track_dir) {
 	std::lock_guard<std::mutex> lock(s_cache_mutex);
 
-	// Check if already in cache
+	// Check if already in cache (a null entry: the track has no track.idx)
 	auto it = s_index_cache.find(track_dir);
 	if (it != s_index_cache.end()) {
 		return it->second;
@@ -69,7 +69,10 @@ std::shared_ptr<TrackIndex> GenomeTrack::get_track_index(const std::string &trac
 	// stamped before the load: a file replaced in between is seen as replaced
 	std::string stamp = index_file_stamp(idx_path);
 	if (!idx->load(idx_path)) {
-		// Index file doesn't exist - return nullptr
+		// Index file doesn't exist. Cached as such (a per-chromosome track is opened once per
+		// chromosome); drop_stale_index() drops the entry once a track.idx is there.
+		if (stamp.empty())
+			s_index_cache[track_dir] = nullptr;
 		return nullptr;
 	}
 
@@ -94,21 +97,28 @@ void GenomeTrack::clear_index_cache() {
 
 bool GenomeTrack::drop_stale_index(const std::string &track_dir) {
 	std::string cached;
+	bool cached_absent;
 	{
 		std::lock_guard<std::mutex> lock(s_cache_mutex);
-		if (s_index_cache.find(track_dir) == s_index_cache.end())
+		auto ic = s_index_cache.find(track_dir);
+		if (ic == s_index_cache.end())
 			return false;
+		cached_absent = !ic->second;
 		auto it = s_index_stamp.find(track_dir);
 		if (it != s_index_stamp.end())
 			cached = it->second;
 	}
-	// the file is read without holding the lock
-	if (!cached.empty() && index_file_stamp(track_dir + "/track.idx") == cached)
+	// the file is read without holding the lock. A track cached as having no track.idx is stale
+	// once it has one.
+	std::string stamp = index_file_stamp(track_dir + "/track.idx");
+	if (cached_absent ? stamp.empty() : (!cached.empty() && stamp == cached))
 		return false;
 	std::lock_guard<std::mutex> lock(s_cache_mutex);
+	auto ic = s_index_cache.find(track_dir);
 	auto it = s_index_stamp.find(track_dir);
 	// dropped unless another thread reloaded it meanwhile (then it is current already)
-	if (s_index_cache.find(track_dir) != s_index_cache.end() && (it == s_index_stamp.end() ? cached.empty() : it->second == cached)) {
+	if (ic != s_index_cache.end() &&
+		(cached_absent ? !ic->second : (it == s_index_stamp.end() ? cached.empty() : it->second == cached))) {
 		s_index_cache.erase(track_dir);
 		s_index_stamp.erase(track_dir);
 	}

@@ -487,6 +487,7 @@ void RdbInitializer::wait_for_kids(rdb::IntervUtils &iu)
 
 	struct timespec timeout, last_progress_time, last_delay_change_time;
 	int last_progress = -1;
+	int64_t last_resident_usage = -1;
 
 	clock_gettime(CLOCK_REALTIME, &timeout);
 	last_progress_time = last_delay_change_time = timeout;
@@ -519,16 +520,21 @@ void RdbInitializer::wait_for_kids(rdb::IntervUtils &iu)
         nanosleep(&timeout, NULL);
 
         int64_t total_mem_usage = s_shm->total_mem_usage;
+        bool counted;
 
-        update_kids_mem_usage();
+        int64_t mem_usage = update_kids_mem_usage(counted);
 
         // Check the memory consumption increase from the last measurement. If the memory limit is going to be
-        // breached till the next measurement => increase the monitoring rate.
-        int64_t delta_mem_usage = s_shm->total_mem_usage - total_mem_usage;
+        // breached till the next measurement => increase the monitoring rate. A round that only read the
+        // kids' resident sizes watches those instead, compared with the previous such round.
+        int64_t delta_mem_usage = counted ? s_shm->total_mem_usage - total_mem_usage :
+            (last_resident_usage >= 0 ? mem_usage - last_resident_usage : 0);
         int64_t time2reach_limit = -1;
 
-        if (delta_mem_usage > 0 && (uint64_t)s_shm->total_mem_usage <= (uint64_t)s_max_mem_usage)
-            time2reach_limit = delay_msec * ((s_max_mem_usage - s_shm->total_mem_usage) / delta_mem_usage);
+        last_resident_usage = counted ? -1 : mem_usage;
+
+        if (delta_mem_usage > 0 && (uint64_t)mem_usage <= (uint64_t)s_max_mem_usage)
+            time2reach_limit = delay_msec * ((s_max_mem_usage - mem_usage) / delta_mem_usage);
 
         if (time2reach_limit >= 0 && time2reach_limit < delay_msec) {
             delay_msec = min(MEM_SYNC_DELAY / 2, delay_msec);
@@ -572,8 +578,52 @@ void RdbInitializer::wait_for_kids(rdb::IntervUtils &iu)
 		REprintf("100%%\n");
 }
 
-int64_t RdbInitializer::update_kids_mem_usage()
+// Updates the memory usage of the kids that the limiter compares with gmax.mem.usage and returns
+// the amount this round watched: the counted total ("counted" is true) or the kids' resident sizes.
+//
+// Counting a kid's private memory (get_unique_mem_usage) walks its page tables, at a cost that
+// grows with all the memory it maps, including what it shares with R: on mm10, 16 tracks
+// genome-wide, about 2 ms per kid, 75 ms per round of 32 kids, so that polling took about half
+// a core. A kid's resident size is a cheap upper bound of its count. While the resident sizes of
+// the kids together stay within the limit, so do their counts, and the limiter acts on neither:
+// the walk is skipped. The counts kept from the last walk are then capped by the resident sizes,
+// so the total the kids compare with the limit is within it, as the count would be. Once the
+// resident sizes can exceed the limit, every round counts, as before.
+int64_t RdbInitializer::update_kids_mem_usage(bool &counted)
 {
+	// The kernel updates a process's resident counters in batches, up to 64 page faults per
+	// thread late, so a kid's resident size may trail its count by a few MB; the margin is
+	// generous, as a margin too small would let a count over the limit go unseen.
+	static const uint64_t RESIDENT_SLACK = (uint64_t)256 << 20;
+
+	vector<uint64_t> resident(s_running_pids.size());
+	uint64_t total_resident = 0;
+	bool resident_known = true;
+
+	for (size_t i = 0; i < s_running_pids.size(); ++i) {
+		resident[i] = get_resident_mem_usage(s_running_pids[i].pid);
+		if (!resident[i]) {
+			resident_known = false;
+			break;
+		}
+		resident[i] += RESIDENT_SLACK;
+		total_resident += resident[i];
+	}
+
+	if (resident_known && !s_running_pids.empty() && total_resident <= s_max_mem_usage) {
+		int64_t total_mem_usage = 0;
+
+		for (size_t i = 0; i < s_running_pids.size(); ++i) {
+			int64_t &mem_usage = s_shm->mem_usage[s_running_pids[i].index];
+
+			mem_usage = min(mem_usage, (int64_t)resident[i]);
+			total_mem_usage += mem_usage;
+		}
+		s_shm->total_mem_usage = total_mem_usage;
+		counted = false;
+		return total_resident;
+	}
+
 	// Update the memory usage of the kids with precise number.
 	// Usually the kids maintain their own usage based on their own rough estimation.
 	int64_t total_mem_usage = 0;
@@ -591,7 +641,8 @@ int64_t RdbInitializer::update_kids_mem_usage()
 	if (total_mem_usage) 
 		s_shm->total_mem_usage = total_mem_usage;
 
-	return total_mem_usage;
+	counted = true;
+	return s_shm->total_mem_usage;
 }
 
 void RdbInitializer::report_kid_write_error()

@@ -18,6 +18,7 @@
 #include "GenomeTrackArrays.h"
 #include "GenomeTrackComputed.h"
 #include "GenomeTrackFixedBin.h"
+#include "TrackNameIndex.h"
 #include "GenomeTrackRects.h"
 #include "GenomeTrackSparse.h"
 #include "TrackExpressionVars.h"
@@ -240,25 +241,25 @@ void TrackExpressionVars::parse_exprs(const vector<string> &track_exprs)
     // objects of its own that must outlive this function.
     runprotect(gwds);
 
+	// The names each expression holds, in the order of GTRACKS and then of the virtual tracks
+	const TrackNameIndex &track_index = TrackNameIndex::gtracks(rtracknames[TRACK]);
+	unique_ptr<TrackNameIndex> vtrack_index;
+	if (Rf_isString(rtracknames[VTRACK]))
+		vtrack_index.reset(new TrackNameIndex(rtracknames[VTRACK]));
+	vector<int> found;
+
 	for (vector<string>::const_iterator iexpr = track_exprs.begin(); iexpr != track_exprs.end(); ++iexpr) {
 		for (int var_type = 0; var_type < NUM_VAR_TYPES; ++var_type) {
 			if (!Rf_isString(rtracknames[var_type]))
 				continue;
 
-			for (int itrack = 0; itrack < Rf_length(rtracknames[var_type]); ++itrack) {
+			(var_type == TRACK ? track_index : *vtrack_index).find_names(*iexpr, rtracknames[var_type], found);
+			for (int itrack : found) {
 				string track = CHAR(STRING_ELT(rtracknames[var_type], itrack));
-				uint64_t pos = 0;
-
-				while ((pos = iexpr->find(track, pos)) != string::npos) {
-					if (is_var(*iexpr, pos, pos + track.size())) {
-						if (var_type == TRACK)
-							add_track_var(track);
-						else
-                            add_vtrack_var(track, VECTOR_ELT(vtracks, itrack));
-						break;
-					}
-					pos += track.size();
-				}
+				if (var_type == TRACK)
+					add_track_var(track);
+				else
+					add_vtrack_var(track, VECTOR_ELT(vtracks, itrack));
 			}
 		}
 	}
@@ -966,17 +967,10 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
     {
         string track(CHAR(STRING_ELT(rsrc, 0)));
 
-        SEXP gtracks = find_in_misha(m_iu.get_env(), "GTRACKS");
-        if (Rf_isString(gtracks))
+        if (TrackNameIndex::gtracks(find_in_misha(m_iu.get_env(), "GTRACKS")).find(track))
         {
-            for (int itrack = 0; itrack < Rf_length(gtracks); itrack++)
-            {
-                if (!strcmp(CHAR(STRING_ELT(gtracks, itrack)), track.c_str()))
-                {
-                    add_vtrack_var_src_track(rvtrack, vtrack, track);
-                    return;
-                }
-            }
+            add_vtrack_var_src_track(rvtrack, vtrack, track);
+            return;
         }
     }
 
@@ -1744,6 +1738,14 @@ void TrackExpressionVars::register_track_functions()
 
 void TrackExpressionVars::init(const TrackExpressionIteratorBase &expr_itr)
 {
+	m_has_sequence_vars = m_has_track_vars = false;
+	for (const Track_var &var : m_track_vars) {
+		if (is_sequence_based_function(var.val_func))
+			m_has_sequence_vars = true;
+		else
+			m_has_track_vars = true;
+	}
+
 	// First validate iterator compatibility
 	for (Track_vars::const_iterator itrack_var = m_track_vars.begin(); itrack_var != m_track_vars.end(); ++itrack_var)
 	{
@@ -2249,18 +2251,66 @@ void TrackExpressionVars::set_vars(unsigned idx)
 		}
 
 	// Process sequence-based variables first (PWM, kmer, masked)
-	m_sequence_processor->process_sequence_vars(m_track_vars, m_interval1d, idx);
+	if (m_has_sequence_vars)
+		m_sequence_processor->process_sequence_vars(m_track_vars, m_interval1d, idx);
 
 	// Process regular track variables
-	m_track_processor->process_track_vars(m_track_vars, m_interval1d, m_interval2d, m_band, idx);
+	if (m_has_track_vars)
+		m_track_processor->process_track_vars(m_track_vars, m_interval1d, m_interval2d, m_band, idx);
 
 	// Process interval variables
-	m_interv_processor->process_interv_vars(m_interv_vars, m_interval1d, idx);
+	if (!m_interv_vars.empty())
+		m_interv_processor->process_interv_vars(m_interv_vars, m_interval1d, idx);
 
 	// Process value variables
-	m_value_processor->process_value_vars(m_value_vars, m_interval1d, idx);
+	if (!m_value_vars.empty())
+		m_value_processor->process_value_vars(m_value_vars, m_interval1d, idx);
 }
 
+
+bool TrackExpressionVars::dense_tracks_only() const
+{
+	if (!m_interv_vars.empty() || !m_value_vars.empty())
+		return false;
+
+	for (const Track_var &var : m_track_vars) {
+		if (var.val_func != Track_var::REG || var.requires_pv || var.filter)
+			return false;
+
+		const Track_n_imdf &track_n_imdf = *var.track_n_imdf;
+		if (var.var_name != track_n_imdf.name || track_n_imdf.type != GenomeTrack::FIXED_BIN ||
+			track_n_imdf.imdf1d || track_n_imdf.imdf2d || !track_n_imdf.slice.empty())
+			return false;
+	}
+	return true;
+}
+
+void TrackExpressionVars::set_vars_bins(const GInterval &interval, int64_t first_bin, unsigned num_bins, unsigned idx)
+{
+	if (m_interval1d.chromid != interval.chromid)
+		start_chrom(interval);
+
+	m_interval1d = interval;
+
+	for (Track_var &var : m_track_vars) {
+		int64_t num_read = 0;
+
+		try {
+			num_read = ((GenomeTrackFixedBin *)var.track_n_imdf->track.get())->read_bins_bulk(first_bin, num_bins, m_bin_vals);
+		} catch (TGLException &e) {
+			verror("%s", e.msg());
+		}
+
+		// The value read_interval() gives for one bin (read_interval_single_function, AVG) is
+		// (float)(0. + v): NaN for a stored NaN or inf, and -0 becomes 0. A bin past the end of
+		// the data is NaN.
+		double *vals = var.var + idx;
+		for (int64_t i = 0; i < num_read; ++i)
+			vals[i] = std::isnan(m_bin_vals[i]) ? numeric_limits<float>::quiet_NaN() : 0. + m_bin_vals[i];
+		for (int64_t i = num_read; i < (int64_t)num_bins; ++i)
+			vals[i] = numeric_limits<float>::quiet_NaN();
+	}
+}
 
 std::vector<std::pair<int64_t, int64_t>> TrackExpressionVars::seq_read_offsets() const
 {

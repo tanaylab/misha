@@ -343,3 +343,30 @@ test_that("gtrack.copy invalidates the destination's cached index", {
     )
     expect_true(nrow(ext) > 0L)
 })
+
+test_that("a per-chromosome track that another session converts to indexed is read from its index", {
+    # "Not indexed" is cached too (a per-chromosome track is opened once per chromosome); the
+    # cached answer must not outlive a track.idx that appears behind this session's back.
+    local_db_state()
+    test_db <- build_perchrom_test_db()
+    withr::defer(unlink(test_db, recursive = TRUE))
+    gsetroot(test_db)
+
+    ivs <- make_sparse_data(n = 200L)
+    gtrack.create_dense("pc_track", "test", ivs, rep(1, nrow(ivs)), binsize = 200L, defval = NaN)
+    gtrack.create_dense("ix_track", "test", ivs, rep(2, nrow(ivs)), binsize = 200L, defval = NaN)
+    gtrack.convert_to_indexed("ix_track")
+    iv <- data.frame(chrom = c("chr1", "chr2"), start = 0L, end = 5000L)
+    before <- gextract("pc_track", iv, iterator = 200L, colnames = "v")
+    expect_setequal(unique(before$v[!is.na(before$v)]), 1)
+
+    # what another session's conversion leaves: track.idx + track.dat, no per-chromosome files
+    pc_dir <- file.path(test_db, "tracks", "pc_track.track")
+    ix_dir <- file.path(test_db, "tracks", "ix_track.track")
+    unlink(file.path(pc_dir, c("chr1", "chr2", "chr3")))
+    expect_true(all(file.copy(file.path(ix_dir, c("track.idx", "track.dat")), pc_dir)))
+
+    after <- gextract("pc_track", iv, iterator = 200L, colnames = "v")
+    expect_equal(nrow(after), nrow(before))
+    expect_setequal(unique(after$v[!is.na(after$v)]), 2)
+})

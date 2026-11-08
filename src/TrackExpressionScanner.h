@@ -6,6 +6,7 @@
 
 #include <vector>
 #include <string>
+#include <unordered_map>
 
 #include "GenomeTrack.h"
 #include "GenomeTrackFixedBin.h"
@@ -98,6 +99,10 @@ private:
 	vector<int64_t> m_expr_itr_scope_chrom_idx;
 	bool            m_isend;
 	bool            m_do_report_progress;
+	// the bin size of each dense track that create_expr_iterator() checked, by track name
+	unordered_map<string, unsigned> m_dense_bin_sizes;
+	// whether eval_next() fills the 1D buffers with fill_bins_bulk() (see can_fill_bins_bulk())
+	bool            m_bulk_bins{false};
 
 	struct {
 		GIntervals   intervals;  // iterator intervals
@@ -136,7 +141,11 @@ private:
 	void define_r_vars(unsigned eval_buf_limit);
 	static unsigned get_eval_buf_size();
 
+	bool next_batch();
 	bool eval_next();
+	void fill_slot1d(unsigned idx);
+	bool can_fill_bins_bulk() const;
+	void fill_bins_bulk();
 	void report_progress();
 
 	void verify_1d_iter(GIntervalsFetcher1D *scope1d, GIntervalsFetcher2D *scope2d) const;
@@ -150,6 +159,18 @@ private:
 
 
 //------------------------------ IMPLEMENTATION ----------------------------------------
+
+// A step to the next interval of the evaluated batch is inline, the rest is next_batch(): a scan
+// of a 1 bp track takes a step per base pair.
+inline bool TrackExprScanner::next()
+{
+	if (!m_isend && m_eval_buf_idx + 1 < m_eval_buf_size) {
+		monitor_memusage();
+		++m_eval_buf_idx;
+		return true;
+	}
+	return next_batch();
+}
 
 inline double TrackExprScanner::last_real(int idx) const
 {

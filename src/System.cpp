@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "BufferedFile.h"
 #include "System.h"
@@ -46,3 +47,21 @@ uint64_t get_unique_mem_usage(pid_t pid)
 	return mem_usage * 1024;
 }
 
+uint64_t get_resident_mem_usage(pid_t pid)
+{
+	char filename[100];
+	snprintf(filename, sizeof(filename), "/proc/%ld/statm", (long)pid);
+
+	FILE *fp = fopen(filename, "r");
+	if (!fp)
+		return 0;
+
+	unsigned long size = 0, resident = 0;
+	int n = fscanf(fp, "%lu %lu", &size, &resident);
+	fclose(fp);
+
+	long page_size = sysconf(_SC_PAGESIZE);
+	if (n != 2 || page_size <= 0)
+		return 0;
+	return (uint64_t)resident * (uint64_t)page_size;
+}

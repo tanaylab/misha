@@ -29,6 +29,7 @@
 #include "GIntervalsBigSet2D.h"
 #include "GTrackIntervalsFetcher1D.h"
 #include "GTrackIntervalsFetcher2D.h"
+#include "TrackNameIndex.h"
 
 using namespace std;
 
@@ -194,17 +195,7 @@ const GenomeTrack::ChromFiles &IntervUtils::get_chrom_files(const string &dir) c
 
 bool IntervUtils::track_exists(const char *track_name)
 {
-	SEXP all_track_names = R_NilValue;
-	SEXPCleaner all_track_names_cleaner(all_track_names);
-
-	rprotect(all_track_names = find_in_misha(get_env(), "GTRACKS"));
-	if (Rf_isString(all_track_names)) {
-		for (int i = 0; i < Rf_length(all_track_names); ++i) {
-			if (!strcmp(track_name, CHAR(STRING_ELT(all_track_names, i))))
-				return true;
-		}
-	}
-	return false;
+	return TrackNameIndex::gtracks(find_in_misha(get_env(), "GTRACKS")).find(track_name) != NULL;
 }
 
 // Process-wide cache for the genome interval lists. Keyed on the SEXP

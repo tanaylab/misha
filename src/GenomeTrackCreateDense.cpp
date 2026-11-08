@@ -1,6 +1,8 @@
 #include <cstdint>
 #include <cmath>
 #include <cstring>
+#include <algorithm>
+#include <limits>
 
 #include "rdbinterval.h"
 #include "rdbprogress.h"
@@ -84,27 +86,40 @@ SEXP gtrack_create_dense(SEXP _track, SEXP _data_frame, SEXP _binsize, SEXP _def
         }
 
         // Sort intervals
-        vector<int> sorted_idx(data.size());
-        for (size_t i = 0; i < sorted_idx.size(); ++i)
-            sorted_idx[i] = i;
-
-        sort(sorted_idx.begin(), sorted_idx.end(),
-            [&data](int i1, int i2) {
-                // Compare chromid first
-                if (data[i1].chromid != data[i2].chromid)
-                    return data[i1].chromid < data[i2].chromid;
-                // Then start coordinate
-                if (data[i1].start != data[i2].start)
-                    return data[i1].start < data[i2].start;
-                // Then end coordinate
-                return data[i1].end < data[i2].end;
-            });
+        auto less_interv = [](const GInterval &a, const GInterval &b) {
+            // Compare chromid first
+            if (a.chromid != b.chromid)
+                return a.chromid < b.chromid;
+            // Then start coordinate
+            if (a.start != b.start)
+                return a.start < b.start;
+            // Then end coordinate
+            return a.end < b.end;
+        };
 
         GIntervals sorted_data;
         vector<float> sorted_values;
-        for (int idx : sorted_idx) {
-            sorted_data.push_back(data[idx]);
-            sorted_values.push_back(values[idx]);
+        // Intervals from gextract or giterator.intervals come sorted and distinct: no sort then.
+        // Equal intervals still go through the sort, whose order of them is the order their values
+        // are summed in.
+        if (adjacent_find(data.begin(), data.end(),
+                [&less_interv](const GInterval &a, const GInterval &b) { return !less_interv(a, b); }) == data.end()) {
+            sorted_data.swap(data);
+            sorted_values.swap(values);
+        } else {
+            vector<int> sorted_idx(data.size());
+            for (size_t i = 0; i < sorted_idx.size(); ++i)
+                sorted_idx[i] = i;
+
+            sort(sorted_idx.begin(), sorted_idx.end(),
+                [&data, &less_interv](int i1, int i2) { return less_interv(data[i1], data[i2]); });
+
+            sorted_data.reserve(data.size());
+            sorted_values.reserve(data.size());
+            for (int idx : sorted_idx) {
+                sorted_data.push_back(data[idx]);
+                sorted_values.push_back(values[idx]);
+            }
         }
 
         // Get all genome intervals
@@ -141,6 +156,44 @@ SEXP gtrack_create_dense(SEXP _track, SEXP _data_frame, SEXP _binsize, SEXP _def
                 data_idx++;
             }
             active.clear();
+
+            // Fast path: the chromosome's intervals lie on the bin grid (one per bin at most, starting
+            // at a multiple of binsize and ending at the bin's end), so a bin holds one contribution:
+            // its interval's value, or defval where there is none or it is NaN. aggregate_single_value
+            // computes what aggregate_values does for one contribution.
+            size_t chrom_end_idx = data_idx;
+            while (chrom_end_idx < sorted_data.size() && sorted_data[chrom_end_idx].chromid == chromid)
+                ++chrom_end_idx;
+            bool on_grid = has_single_value_form(agg_type);
+            for (size_t i = data_idx; on_grid && i < chrom_end_idx; ++i) {
+                const GInterval &interv = sorted_data[i];
+                if (interv.start < 0 || (uint64_t)interv.start % binsize ||
+                    (uint64_t)interv.end != min((uint64_t)interv.start + binsize, chromsize) ||
+                    (i > data_idx && sorted_data[i - 1].start == interv.start))
+                    on_grid = false;
+            }
+            if (on_grid) {
+                size_t i = data_idx;
+                for (uint64_t start_coord = 0; start_coord < chromsize; ) {
+                    for (; start_coord < chromsize && bin_batch.size() < 10000; start_coord += binsize) {
+                        double len = (double)(min(start_coord + (uint64_t)binsize, chromsize) - start_coord);
+                        double v = numeric_limits<double>::quiet_NaN();
+                        if (i < chrom_end_idx && (uint64_t)sorted_data[i].start == start_coord)
+                            v = (double)sorted_values[i++];
+                        if (std::isnan(v))
+                            v = defvalue;
+                        double agg_value = std::isnan(v) ? v : aggregate_single_value(agg_type, v, len);
+                        bin_batch.push_back(std::isnan(agg_value) ? numeric_limits<float>::quiet_NaN() : (float)agg_value);
+                    }
+                    gtrack.write_next_bins(bin_batch.data(), bin_batch.size());
+                    bin_batch.clear();
+                    progress.report(0);
+                    check_interrupt();
+                }
+                data_idx = chrom_end_idx;
+                progress.report(1);
+                continue;
+            }
 
             AggregationState state;
 

@@ -722,7 +722,7 @@ private:
 	static pid_t   launch_process();
     static void    check_kids_state(bool ignore_errors);
 	static void    wait_for_kids(rdb::IntervUtils &iu);
-	static int64_t update_kids_mem_usage();
+	static int64_t update_kids_mem_usage(bool &counted);
 	static int     get_num_kids() { return s_kid_index; }
 	[[noreturn]] static void handle_error(const char *msg);
 	static void    update_progress(unsigned char progress);

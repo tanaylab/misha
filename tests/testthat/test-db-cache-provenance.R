@@ -96,3 +96,47 @@ test_that("cache is still written incrementally in the normal single-database fl
     expect_setequal(read_db_cache(dbs$A)[[2]], "ivA")
     expect_false(.gdb.cache_is_dirty(dbs$A))
 })
+
+test_that("creating a track inserts its name into the track lists without sorting them again", {
+    local_db_state()
+    dbs <- make_two_dbs()
+    suppressMessages(gsetroot(dbs$A))
+    gdir.create("a1")
+    for (nm in c("b1", "c_1", "a1.x", "zz", "B2")) {
+        gtrack.create(nm, "t", "1", iterator = gintervals("chrA", 0, 10))
+    }
+    # a database can list ~10^5 tracks: sort() over them cost 0.36 s per list and track
+    sorts_of_new <- 0L
+    record <- function(x) if (is.character(x) && "m_new" %in% x) sorts_of_new <<- sorts_of_new + 1L
+    suppressMessages(trace("sort.int", tracer = bquote(.(record)(x)), where = baseenv(), print = FALSE))
+    withr::defer(suppressMessages(untrace("sort.int", where = baseenv())))
+    gtrack.create("m_new", "t", "1", iterator = gintervals("chrA", 0, 10))
+    suppressMessages(untrace("sort.int", where = baseenv()))
+
+    expect_equal(sorts_of_new, 0L)
+    want <- sort(c("trackA", "b1", "c_1", "a1.x", "zz", "B2", "m_new"))
+    expect_identical(get("GTRACKS", envir = misha:::.misha), want)
+    expect_identical(read_db_cache(dbs$A)[[1]], want)
+})
+
+test_that(".gdb.sorted_insert() is sort(unique(c(x, name))), or NULL", {
+    set.seed(5)
+    chars <- c(letters, LETTERS, 0:9, ".", "_")
+    rand_name <- function() paste(sample(chars, sample(1:8, 1), replace = TRUE), collapse = "")
+    for (i in 1:200) {
+        x <- sort(unique(vapply(seq_len(sample(0:40, 1)), function(j) rand_name(), "")))
+        name <- if (length(x) && i %% 4 == 0) sample(x, 1) else rand_name()
+        got <- misha:::.gdb.sorted_insert(x, name)
+        if (!is.null(got)) {
+            expect_identical(got, sort(unique(c(x, name))))
+        }
+        expect_identical(misha:::.gdb.cache_list_add(x, name), misha:::.gdb.normalize_cache_list(c(x, name)))
+    }
+    expect_identical(misha:::.gdb.sorted_insert(character(0), "a"), "a")
+    expect_identical(misha:::.gdb.sorted_insert(c("a", "c"), "b"), c("a", "b", "c"))
+    expect_identical(misha:::.gdb.sorted_insert(c("a", "c"), "c"), c("a", "c"))
+    # not sorted, NA: left to sort()
+    expect_null(misha:::.gdb.sorted_insert(c("c", "a"), "b"))
+    expect_null(misha:::.gdb.sorted_insert(c("a", NA), "b"))
+    expect_identical(misha:::.gdb.cache_list_add(c("c", "a"), "b"), c("a", "b", "c"))
+})
