@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <exception>
 #include <string>
 #include <thread>
 #include <vector>
@@ -164,22 +165,39 @@ void append_double(string &out, double x, int scipen, const string &dec)
 	}
 }
 
+// The low 32 bits of NA_real_, which R_IsNA() compares on a NaN. Set by the calling thread before
+// any worker starts: the workers use no R API.
+uint32_t s_na_low_word = 1954;
+
+// R_IsNA(), on the bits
+inline bool is_na_real(double x)
+{
+	if (!std::isnan(x))
+		return false;
+	uint64_t bits;
+	memcpy(&bits, &x, sizeof(bits));
+	return (uint32_t)(bits & 0xffffffff) == s_na_low_word;
+}
+
 // as.character() of a double, NaN aside (the caller drops NaN rows)
 void append_value(string &out, double x, int scipen, const string &dec)
 {
-	if (R_IsNA(x))
+	if (is_na_real(x))
 		out += "NA";
-	else if (x == R_PosInf)
-		out += "Inf";
-	else if (x == R_NegInf)
-		out += "-Inf";
+	else if (std::isinf(x))
+		out += x > 0 ? "Inf" : "-Inf";
 	else
 		append_double(out, x, scipen, dec);
 }
 
-// sprintf("%.0f", x) of R
-void append_coord(string &out, double x)
+// sprintf("%.0f", x) of R; "NA" if na
+void append_coord(string &out, double x, bool na = false)
 {
+	if (na) {
+		out += "NA";
+		return;
+	}
+
 	char buf[NB];
 
 	if (x == floor(x) && fabs(x) < 9e15 && !(x == 0 && signbit(x))) {
@@ -195,7 +213,7 @@ void append_coord(string &out, double x)
 		if (negative)
 			*--p = '-';
 		out.append(p, buf + sizeof(buf) - p);
-	} else if (R_IsNA(x))
+	} else if (is_na_real(x))
 		out += "NA";
 	else {
 		snprintf(buf, sizeof(buf), "%.0f", x);
@@ -219,6 +237,7 @@ struct BedgraphRows {
 	const double           *value;
 	int                     scipen;
 	const string           *dec;
+	int                     na_integer;    // NA_INTEGER, read by the calling thread
 
 	void append(string &out, R_xlen_t begin, R_xlen_t end, bool &bad_row) const
 	{
@@ -231,12 +250,12 @@ struct BedgraphRows {
 			}
 
 			double v = value[row];
-			if (std::isnan(v) && !R_IsNA(v))
+			if (std::isnan(v) && !is_na_real(v))
 				continue;
 
 			if (chrom_codes) {
 				int code = chrom_codes[row];
-				if (code == NA_INTEGER || code < 1 || code > (int)levels->size())
+				if (code == na_integer || code < 1 || code > (int)levels->size())
 					out += "NA";
 				else
 					out += (*levels)[code - 1];
@@ -245,9 +264,15 @@ struct BedgraphRows {
 				out += s == NA_STRING ? "NA" : CHAR(s);
 			}
 			out += '\t';
-			append_coord(out, start_real ? start_real[row] : start_int[row] == NA_INTEGER ? NA_REAL : (double)start_int[row]);
+			if (start_real)
+				append_coord(out, start_real[row]);
+			else
+				append_coord(out, start_int[row], start_int[row] == na_integer);
 			out += '\t';
-			append_coord(out, end_real ? end_real[row] : end_int[row] == NA_INTEGER ? NA_REAL : (double)end_int[row]);
+			if (end_real)
+				append_coord(out, end_real[row]);
+			else
+				append_coord(out, end_int[row], end_int[row] == na_integer);
 			out += '\t';
 			append_value(out, v, scipen, *dec);
 			out += '\n';
@@ -321,6 +346,13 @@ SEXP gtrack_bedgraph_lines(SEXP _chrom, SEXP _start, SEXP _end, SEXP _value, SEX
 		rows.value = REAL(_value);
 		rows.scipen = INTEGER(_scipen)[0] == NA_INTEGER ? 0 : INTEGER(_scipen)[0];
 		rows.dec = &dec;
+		rows.na_integer = NA_INTEGER;
+		{
+			double na = NA_REAL;
+			uint64_t bits;
+			memcpy(&bits, &na, sizeof(bits));
+			s_na_low_word = (uint32_t)(bits & 0xffffffff);
+		}
 
 		// Threads only when the rows hold no R strings: STRING_ELT is not for threads
 		unsigned num_threads = 1;
@@ -330,30 +362,44 @@ SEXP gtrack_bedgraph_lines(SEXP _chrom, SEXP _start, SEXP _end, SEXP _value, SEX
 			num_threads = min<unsigned>({ hw ? hw : 1, (unsigned)max<uint64_t>(iu.get_max_processes(), 1), 8 });
 		}
 
+		// A part's exception (bad_alloc, say) is kept and raised here once every thread is joined:
+		// one escaping a thread, or a joinable thread destroyed while unwinding, would abort R
 		vector<string> parts(num_threads);
 		vector<char> bad(num_threads, 0);
+		vector<exception_ptr> errors(num_threads);
 		auto work = [&](unsigned t) {
-			R_xlen_t b = begin + (end - begin) * t / num_threads;
-			R_xlen_t e = begin + (end - begin) * (t + 1) / num_threads;
-			bool bad_row = false;
-			parts[t].reserve((e - b) * 40);
-			rows.append(parts[t], b, e, bad_row);
-			bad[t] = bad_row;
+			try {
+				R_xlen_t b = begin + (end - begin) * t / num_threads;
+				R_xlen_t e = begin + (end - begin) * (t + 1) / num_threads;
+				bool bad_row = false;
+				parts[t].reserve((e - b) * 40);
+				rows.append(parts[t], b, e, bad_row);
+				bad[t] = bad_row;
+			} catch (...) {
+				errors[t] = current_exception();
+			}
 		};
 
-		if (num_threads == 1)
-			work(0);
-		else {
-			vector<thread> threads;
+		// Parts 1.. in threads, as many as start (none if the process may not start more, e.g.
+		// under a limit of processes); this thread takes part 0 and the parts of the threads that
+		// did not start
+		vector<thread> threads;
+		try {
+			threads.reserve(num_threads - 1);
 			for (unsigned t = 1; t < num_threads; ++t)
 				threads.emplace_back(work, t);
-			work(0);
-			for (thread &th : threads)
-				th.join();
+		} catch (...) {
 		}
+		work(0);
+		for (unsigned t = threads.size() + 1; t < num_threads; ++t)
+			work(t);
+		for (thread &th : threads)
+			th.join();
 
 		uint64_t size = 0;
 		for (unsigned t = 0; t < num_threads; ++t) {
+			if (errors[t])
+				rethrow_exception(errors[t]);
 			if (bad[t])
 				verror("order holds a row out of range");
 			size += parts[t].size();

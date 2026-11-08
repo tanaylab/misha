@@ -266,6 +266,24 @@ test_that("a value near the float limit survives binning", {
     expect_identical(track_values("big_v"), rep(float32(3.4e38), 51))
 })
 
+test_that("field metadata holding a NUL byte is left out with a warning, and the track imports", {
+    db <- local_pq_db()
+    # column a's field metadata: model = "m1", nul = "a\0b" (make_fixtures.py)
+    expect_warning(
+        gtrack.import_parquet("test", pq_fixture("nul_metadata.parquet"), 32, track.prefix = "n_"),
+        "Field metadata \"nul\" of column \"a\" of .*nul_metadata.parquet was left out: it holds a NUL byte"
+    )
+    expect_identical(track_values("n_a"), expected_values("a"))
+    expect_identical(gtrack.attr.get("n_a", "model"), "m1")
+    expect_identical(gtrack.attr.get("n_a", "nul"), "")
+    # only the metadata of the columns imported is read
+    expect_no_warning(gtrack.import_parquet("test", pq_fixture("nul_metadata.parquet"), 32, track.prefix = "b_", columns = "b"))
+    # gtrack.import of a one-column file
+    expect_warning(gtrack.import("one", "test", pq_fixture("nul_metadata_single.parquet"), 32), "Field metadata \"nul\" of column \"a\"")
+    expect_identical(track_values("one"), expected_values("a"))
+    expect_identical(gtrack.attr.get("one", "model"), "m1")
+})
+
 test_that("arguments are checked before anything is read", {
     db <- local_pq_db()
     pq_path <- pq_fixture("pandas_default.parquet")

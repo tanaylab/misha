@@ -163,3 +163,67 @@ test_that("records past the chromosome end are clipped, or dropped, with one war
         }
     })
 })
+
+test_that("WIG records at coordinates near 2^63 are dropped like any record past the chromosome end", {
+    local_db_state()
+    withr::with_tempdir({
+        create_test_db("ovf_db", chrom_sizes = data.frame(chrom = "chr1", size = 1000))
+        gdb.init("ovf_db")
+        files <- list(
+            # start + span would overflow
+            variableStep = c("variableStep chrom=chr1 span=10", "11\t7", "9223372036854775800\t1"),
+            # start, and start + step, would overflow
+            fixedStep = c("fixedStep chrom=chr1 start=11 step=10 span=1", "7", "fixedStep chrom=chr1 start=9223372036854775800 step=10", "1", "2", "3")
+        )
+        dropped <- c(variableStep = 1, fixedStep = 3)
+        for (fmt in names(files)) {
+            f <- file.path(getwd(), paste0(fmt, ".wig"))
+            writeLines(files[[fmt]], f)
+            for (binsize in c(0, 10)) {
+                label <- paste(fmt, "binsize", binsize)
+                expect_warning(
+                    gtrack.import("ovf", "", f, binsize = binsize),
+                    sprintf("0 record(s) running past the end of their chromosome were clipped to it, and %d record(s) starting at or past", dropped[[fmt]]),
+                    fixed = TRUE, label = label
+                )
+                x <- gextract("ovf", gintervals.all(), iterator = if (binsize) binsize else "ovf", colnames = "v")
+                x <- x[!is.nan(x$v), ]
+                expect_equal(x$start, 10, label = label)
+                expect_equal(x$v, 7, label = label)
+                gtrack.rm("ovf", force = TRUE)
+            }
+        }
+    })
+})
+
+test_that("the record past the chromosome end that the warning names is the first in the file", {
+    local_db_state()
+    withr::with_tempdir({
+        sizes <- c(chr1 = 1000, chr2 = 600)
+        create_test_db("first_db", chrom_sizes = data.frame(chrom = names(sizes), size = unname(sizes)))
+        gdb.init("first_db")
+        # chr2 comes first in the files, after chr1 in the database
+        files <- list(
+            bedGraph = c("chr2\t576\t608\t1", "chr1\t992\t1024\t2"),
+            tab = c("chrom\tstart\tend\tvalue", "chr2\t576\t608\t1", "chr1\t992\t1024\t2"),
+            fixedStep = c("fixedStep chrom=chr2 start=577 step=32 span=32", "1", "fixedStep chrom=chr1 start=993 step=32 span=32", "2")
+        )
+        first <- c(bedGraph = "line 1: (chr2, 576, 608)", tab = "line 2: (chr2, 576, 608)", fixedStep = "line 2: (chr2, 576, 608)")
+        for (fmt in names(files)) {
+            f <- file.path(getwd(), paste0(fmt, ".txt"))
+            writeLines(files[[fmt]], f)
+            expect_warning(gtrack.import("first", "", f, binsize = 32), paste0("the first: ", first[[fmt]]), fixed = TRUE, label = fmt)
+            gtrack.rm("first", force = TRUE)
+        }
+
+        # an array import of several files: the first such record of the first file that has one
+        a1 <- file.path(getwd(), "a1.tsv")
+        a2 <- file.path(getwd(), "a2.tsv")
+        a3 <- file.path(getwd(), "a3.tsv")
+        writeLines(c("chrom\tstart\tend\tx", "chr1\t0\t10\t1"), a1)
+        writeLines(c("chrom\tstart\tend\ty", "chr2\t576\t608\t1", "chr1\t992\t1024\t2"), a2)
+        writeLines(c("chrom\tstart\tend\tz", "chr1\t992\t1024\t3"), a3)
+        expect_warning(gtrack.array.import("first_arr", "", a1, a2), paste0("File ", a2, ": 2 record(s) running past the end of their chromosome were clipped to it, and 0 record(s) starting at or past the chromosome end were dropped; the first: line 2: (chr2, 576, 608)"), fixed = TRUE)
+        expect_warning(gtrack.array.import("first_arr3", "", a1, a2, a3), paste0("Files ", a2, ", ", a3, ": 3 record(s) running past the end of their chromosome were clipped to it, and 0 record(s) starting at or past the chromosome end were dropped; the first: file ", a2, ", line 2: (chr2, 576, 608)"), fixed = TRUE)
+    })
+})

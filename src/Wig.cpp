@@ -138,6 +138,7 @@ void Wig::init(const GenomeChromKey &chromkey, const string &filename, bool igno
 	m_unknown_chroms.clear();
 	m_num_clipped = m_num_dropped = 0;
 	m_first_clipped.clear();
+	m_first_clipped_line = -1;
 
 	// read the file to determine the positions of first chrom appearences
 	int last_chromid = -1;
@@ -201,11 +202,19 @@ void Wig::init(const GenomeChromKey &chromkey, const string &filename, bool igno
 	}
 }
 
+// a + b for a, b >= 0, capped at INT64_MAX: a record that far is past the chromosome end and dropped
+static inline int64_t add_capped(int64_t a, int64_t b)
+{
+	return b > INT64_MAX - a ? INT64_MAX : a + b;
+}
+
 bool Wig::clip(int chromid, int64_t start, int64_t end, int64_t lineno)
 {
 	int64_t chromsize = m_chromkey->get_chrom_size(chromid);
 
-	if (m_first_clipped.empty()) {
+	// get_data() reads the chromosomes in database order: the first is the one of the lowest line
+	if (m_first_clipped_line < 0 || lineno < m_first_clipped_line) {
+		m_first_clipped_line = lineno;
 		char buf[1000];
 		snprintf(buf, sizeof(buf), "line %lld: (%s, %lld, %lld), chromosome size %lld", (long long)lineno,
 		         m_chromkey->id2chrom(chromid).c_str(), (long long)start, (long long)end, (long long)chromsize);
@@ -272,9 +281,10 @@ bool Wig::get_data(int chromid, GIntervals &intervals)
 						m_bfile.file_name().c_str(), lineno - 1);
 
 			int64_t chromsize = m_chromkey->get_chrom_size(chromid);
-			if (start + span <= chromsize || !clip(chromid, start, start + span, lineno - 1))
-				intervals.push_back(GInterval(chromid, start, min(start + span, chromsize), 0, GInterval::cast2udata(rec.val)));
-			start += step;
+			int64_t end = add_capped(start, span);
+			if (end <= chromsize || !clip(chromid, start, end, lineno - 1))
+				intervals.push_back(GInterval(chromid, start, min(end, chromsize), 0, GInterval::cast2udata(rec.val)));
+			start = add_capped(start, step);
 		} else if (rec.type == COORD_VAL_REC) {
 			if (span < 0)
 				TGLError<Wig>(INVALID_FORMAT, "Invalid format of WIG file %s, line %ld: value is not preceeded by variableStep header",
@@ -282,8 +292,9 @@ bool Wig::get_data(int chromid, GIntervals &intervals)
 
 			int64_t chromsize = m_chromkey->get_chrom_size(chromid);
 			int64_t coord = rec.coord_val.coord;
-			if (coord + span <= chromsize || !clip(chromid, coord, coord + span, lineno - 1))
-				intervals.push_back(GInterval(chromid, coord, min(coord + span, chromsize), 0, GInterval::cast2udata(rec.coord_val.val)));
+			int64_t end = add_capped(coord, span);
+			if (end <= chromsize || !clip(chromid, coord, end, lineno - 1))
+				intervals.push_back(GInterval(chromid, coord, min(end, chromsize), 0, GInterval::cast2udata(rec.coord_val.val)));
 		} else if (rec.type == BEDGRAPH_REC) {
 			if (rec.bedgraph.chromid != chromid)
 				break;

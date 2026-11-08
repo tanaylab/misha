@@ -156,10 +156,17 @@ SEXP gtrack_create_sparse(SEXP _track, SEXP _intervs, SEXP _values, SEXP _envir)
 							write_empty_sparse_signature(paths[i], sig, first_errno);
 						}
 					};
+					// As many threads as start: a thread that cannot start (e.g. under a limit of
+					// processes) leaves its files to the others and to this thread, as the workers
+					// take the next path until none is left. An exception here with joinable threads
+					// alive would abort R.
 					std::vector<std::thread> threads;
-					threads.reserve(nworkers - 1);
-					for (unsigned t = 0; t < nworkers - 1; ++t)
-						threads.emplace_back(worker);
+					try {
+						threads.reserve(nworkers - 1);
+						for (unsigned t = 0; t < nworkers - 1; ++t)
+							threads.emplace_back(worker);
+					} catch (...) {
+					}
 					worker();
 					for (auto &th : threads)
 						th.join();
