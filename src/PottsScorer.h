@@ -204,6 +204,49 @@ private:
     std::vector<int32_t> m_nbad;
     std::vector<int8_t> m_block_codes;
 
+    // What the anchor loops read: the current target's codes, prefix counts of
+    // non-ACGT bases and block codes, index 0 at the target's first base. They
+    // point either into m_codes / m_nbad / m_block_codes (a target fetched and
+    // encoded for this call) or into m_chunk below. m_bc_ready says m_bc already
+    // holds every block code; otherwise block_codes_for() computes the ones a
+    // loop is about to read, as potts_block_codes() always did.
+    const int8_t *m_c = nullptr;
+    const int32_t *m_nb = nullptr;
+    const int8_t *m_bc = nullptr;
+    bool m_bc_ready = false;
+    void block_codes_for(size_t lo, size_t hi);
+
+    // An encoded stretch of the current chromosome, in this scorer's
+    // orientation (reverse-complemented for strand -1), so that a scan whose
+    // targets are short and move forward - iterator = 1 with a 1 bp vtrack, the
+    // usual shape of a per-bp screen - reads and encodes each base once instead
+    // of fetching, copying and encoding a W bp target per call. The codes are
+    // the ones the fetched target would give (a complemented code is 3 - code,
+    // as basepair2complementary() maps only ACGTacgt), so every score is
+    // bit-identical. Built only after two calls step forward by a few bases on
+    // one chromosome, and only while no substitution is set on the shared
+    // GenomeSeqFetch (gextract.variants), whose reads it would not see.
+    struct SeqChunk {
+        int chromid = -1;
+        int64_t start = 0; // genomic [start, end), forward coordinates
+        int64_t end = 0;
+        std::vector<int8_t> codes;
+        std::vector<int32_t> nbad;
+        std::vector<int8_t> block_codes;
+        int last_chromid = -1;  // the previous call's target, for the forward-step test
+        int64_t last_start = -1;
+        size_t next_len = 0;    // length of the next chunk, doubled per refill
+    };
+    static constexpr int64_t CHUNK_MAX_TARGET = 4096;   // longer targets take the fetch path
+    static constexpr int64_t CHUNK_MAX_STEP = 256;      // a forward step up to this builds a chunk
+    static constexpr size_t CHUNK_MIN_LEN = 1024;
+    static constexpr size_t CHUNK_MAX_LEN = 1 << 18;
+    SeqChunk m_chunk;
+    // Points m_c / m_nb / m_bc at the chunk's copy of `expanded`, building or
+    // refilling the chunk as needed; false (nothing changed) when the call
+    // should fetch instead.
+    bool target_from_chunk(const GInterval &expanded, const GenomeChromKey &chromkey);
+
     SlideCache m_slide;
     // Seed scratch in window-slot order: the value for every mode but
     // MOTIF_COUNT, the winning strand for MAX_LIKELIHOOD_POS, the hit bit for
