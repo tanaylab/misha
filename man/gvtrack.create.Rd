@@ -170,13 +170,13 @@ interval after all modifier adjustments.
 \strong{Mutation count summarizers}
 \tabular{llll}{
   Source \tab func \tab Key params \tab Description \cr
-  NULL (sequence) \tab pwm.n_mutations \tab pssm, score.thresh, score.min, score.max, direction, bidirect, prior, extend, strand \tab Number of single-base substitutions that independently cross \code{score.thresh}. Returns 0 if threshold already satisfied, NA if no single edit suffices. \cr
+  NULL (sequence) \tab pwm.n_mutations \tab pssm, score.thresh, score.min, score.max, direction, bidirect, prior, extend, strand \tab For each window, the number of single-base substitutions that each on its own bring the window to \code{score.thresh} (0 when the window already satisfies it, none counted when no single substitution does); the interval value is the largest of these over its windows (and strands), and NA when no window has a value. An interval that already holds a match therefore returns more than 0 when another of its windows is one substitution away. \cr
 }
 
 \strong{LSE edit distance summarizers}
 \tabular{llll}{
   Source \tab func \tab Key params \tab Description \cr
-  NULL (sequence) \tab pwm.edit_distance.lse \tab pssm, score.thresh, max_edits, score.min, score.max, direction, bidirect, prior, extend, strand \tab Minimum number of substitution edits needed to raise the LSE score (log-sum-exp of per-window PWM scores) above \code{score.thresh}. Exhaustive for k<=2, greedy heuristic for k>=3. \cr
+  NULL (sequence) \tab pwm.edit_distance.lse \tab pssm, score.thresh, max_edits, score.min, score.max, direction, bidirect, prior, extend, strand \tab Minimum number of substitution edits needed to bring the LSE score (log-sum-exp of per-window PWM scores) to \code{score.thresh}. Exhaustive for k<=2; for k>=3 a heuristic (beam) search, whose count can exceed the true minimum and whose NA can mean that it found no solution rather than that none exists. \cr
   NULL (sequence) \tab pwm.edit_distance.lse.pos \tab pssm, score.thresh, max_edits, score.min, score.max, direction, bidirect, prior, extend, strand \tab 1-based position of an edit in the optimal edit set for raising the LSE score. Exactly "the most impactful single edit" only when one edit suffices; when the optimum needs two or more edits this is one member of that set, and which member is reported depends on scan orientation. \cr
 }
 
@@ -198,7 +198,7 @@ The sections below provide additional notes for motif, potts, interval, k-mer, a
 
 \strong{Motif (PWM) notes}
 \itemize{
-  \item \code{pssm}: Position-specific scoring matrix (matrix or data frame) with columns \code{A}, \code{C}, \code{G}, \code{T}; extra columns are ignored.
+  \item \code{pssm}: Position-specific scoring matrix (matrix or data frame) with columns \code{A}, \code{C}, \code{G}, \code{T}; extra columns are ignored. Each row holds the probabilities or counts of the four bases at one motif position (rows are normalized to sum to 1); log-odds or log-probability matrices are rejected, as are \code{NA} values and rows that sum to 0.
   \item \code{bidirect}: When TRUE (default), both strands are scanned and combined per genomic start (per-position union). The \code{strand} argument is ignored. When FALSE, only the strand specified by \code{strand} is scanned.
   \item \code{prior}: Pseudocount added to frequencies (default 0.01). Set to 0 to disable.
   \item \code{extend}: Extends the fetched sequence so boundary-anchored motifs retain full context (default TRUE). The END coordinate is padded by motif_length - 1 for all strand modes. Anchors must still start inside the iterator, so with \code{extend = FALSE} an iterator interval narrower than the model holds no anchor at all and every value comes back \code{NA}; under the default \code{extend = TRUE} the END padding supplies the missing context and such an interval is scored.
@@ -209,8 +209,8 @@ The sections below provide additional notes for motif, potts, interval, k-mer, a
     PWM scores are log-likelihoods, so the usable range depends on the PSSM, the prior and any spatial
     weights; calibrate with a \code{pwm} or \code{pwm.max} virtual track over the same intervals before
     choosing one. \code{pwm}, \code{pwm.max} and \code{pwm.max.pos} accept \code{score.thresh} but ignore it.
-  \item Spatial weighting (\code{spat_factor}, \code{spat_bin}, \code{spat_min}, \code{spat_max}): optional position-dependent weights applied in log-space. Provide a positive numeric vector \code{spat_factor}; \code{spat_bin} (integer > 0) defines bin width; \code{spat_min}/\code{spat_max} restrict the scanning window.
-  \item \code{pwm.max.pos}: Positions are reported 1-based relative to the final scan window (after iterator shifts and spatial trimming). Values are signed when \code{bidirect = TRUE} (positive for forward, negative for reverse). Ties are broken by scan order, which is strand-dependent: with \code{strand = 1} (and under \code{bidirect = TRUE}) the most 5' tied anchor wins and the forward strand wins a tie at the same coordinate, but \code{bidirect = FALSE, strand = -1} scans the reverse-complemented sequence and so keeps the most 3' tied anchor in forward coordinates.
+  \item Spatial weighting (\code{spat_factor}, \code{spat_bin}, \code{spat_min}, \code{spat_max}): optional position-dependent weights applied in log-space. Provide a positive numeric vector \code{spat_factor}; \code{spat_bin} (integer > 0) defines bin width; \code{spat_min}/\code{spat_max} (1-based positions counted from the iterator interval start) restrict the scan to anchors at or after \code{spat_min} whose window ends at or before \code{spat_max}, and the spatial bins are counted from \code{spat_min}.
+  \item \code{pwm.max.pos}: Positions are reported 1-based relative to the iterator interval start (after any \code{gvtrack.iterator()} shifts); \code{spat_min}/\code{spat_max} restrict which anchors are scanned but do not move this origin. Values are signed when \code{bidirect = TRUE} (positive for forward, negative for reverse). Ties are broken by scan order, which is strand-dependent: with \code{strand = 1} (and under \code{bidirect = TRUE}) the most 5' tied anchor wins and the forward strand wins a tie at the same coordinate, but \code{bidirect = FALSE, strand = -1} scans the reverse-complemented sequence and so keeps the most 3' tied anchor in forward coordinates.
 }
 
 \strong{Potts (pairwise energy) notes}
@@ -256,7 +256,10 @@ the direction:
     complement). To truly disrupt a binding site you must bring \emph{both} strands below the
     threshold, so the harder strand determines the answer. For example, if the forward strand
     needs 3 edits to go below the threshold and the reverse needs 1, the result is 3 — after
-    just 1 edit the forward strand would still have a match.
+    just 1 edit the forward strand would still have a match. A strand that cannot be brought
+    below within \code{max_edits} makes the window NA; only a strand that \code{score.min} /
+    \code{score.max} leave out (not a current match) is ignored. \code{pwm.n_mutations} likewise
+    counts the substitutions that bring both strands below the threshold.
 }
 Then, across all windows in the iterator interval, the minimum is reported (the position
 where it is easiest to create or disrupt a match).
@@ -276,7 +279,10 @@ changes more.
     or exceed; for \code{direction = "below"}, this is the score to fall below.
   \item \code{score.min}, \code{score.max}: Optional numeric pre-filters on the \strong{current}
     (unedited) PWM score. Windows scoring outside the [\code{score.min}, \code{score.max}]
-    range are skipped (edit distance returns NA). Default NULL (no filter).
+    range are skipped (edit distance returns NA). Default NULL (no filter). The score is the
+    window's ungapped score (the PSSM-length window from its start), also with
+    \code{max_indels > 0}; a window whose first PSSM-length bases are not all A, C, G or T has
+    no such score and is skipped when a filter is set.
     These are independent of \code{score.thresh} — they control \emph{which windows to
     evaluate}, not the target score.
 
@@ -292,15 +298,21 @@ changes more.
     Default NULL (exact computation, no cap).
   \item \code{max_indels}: Optional non-negative integer (default 0). When > 0, allows
     insertions and deletions in addition to substitutions, using a banded Needleman-Wunsch DP.
-    Typical values are 1-2. Only supported by the non-LSE variants
+    Each insertion or deletion counts as one edit. An inserted base scores the best its motif
+    column allows (the column maximum for \code{"above"}, the minimum for \code{"below"}), and a
+    deleted base scores nothing. A window may then hold fewer bases than the PSSM (down to
+    PSSM length minus \code{max_indels}, the rest inserted): such windows are scanned where the
+    A, C, G, T run they start in ends, before an \code{N} or other non-ACGT base, and at a
+    chromosome end (with \code{extend = TRUE}). Typical values are 1-2. Only supported by the non-LSE variants
     (\code{pwm.edit_distance}, \code{pwm.edit_distance.pos}, \code{pwm.max.edit_distance}).
   \item \code{direction}: \code{"above"} (default) or \code{"below"}. See Direction above.
 }
 
 \strong{Spatial weighting}
 enables position-dependent weighting for modeling positional biases. Bins are 0-indexed from the
-scan start. When using \code{gvtrack.iterator()} shifts (e.g., \code{sshift = -50}, \code{eshift = 50}), bins index from
-the expanded scan window start, not the original interval. Both strands use the same bin at each
+start of the scanned range: the iterator interval start, or position \code{spat_min} of it when
+\code{spat_min} is set. When using \code{gvtrack.iterator()} shifts (e.g., \code{sshift = -50}, \code{eshift = 50}), the
+interval is the shifted one, so bins index from the expanded scan window start, not the original interval. Both strands use the same bin at each
 genomic position. Positions beyond the last bin reuse the final bin's weight. If the window size is
 not divisible by \code{spat_bin}, the last bin is shorter (e.g., scanning 500 bp with 40 bp bins yields
 bins 0-11 of 40 bp plus bin 12 of 20 bp). Use \code{spat_min} and \code{spat_max} to restrict scanning to a

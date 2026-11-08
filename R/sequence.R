@@ -141,7 +141,9 @@ gseq.comp <- function(seq) {
 #' All reported positions are on the full input sequence.
 #'
 #' @param seqs character vector of DNA sequences (A/C/G/T/N; case-insensitive)
-#' @param pssm numeric matrix or data frame with columns named A, C, G, T (additional columns are allowed and will be ignored)
+#' @param pssm numeric matrix or data frame with columns named A, C, G, T (additional columns are allowed and will be ignored).
+#'   Each row holds the probabilities or counts of the four bases at one motif position; log-odds matrices, \code{NA}
+#'   values and rows summing to 0 are rejected.
 #' @param mode character; one of "lse", "max", "pos", or "count"
 #' @param bidirect logical; if TRUE, scans both strands (default: TRUE)
 #' @param strand integer; \code{1} for the forward strand, \code{-1} for the
@@ -607,22 +609,32 @@ gseq.potts <- function(seqs, model, mode = c("lse", "max", "pos", "count"),
 #'
 #' @param seqs character vector of DNA sequences, OR a data frame of genomic
 #'   intervals (with columns chrom, start, end). When intervals are provided,
-#'   sequences are extracted automatically via \code{gseq.extract}.
+#'   sequences are extracted automatically via \code{gseq.extract}, and the
+#'   windows scanned are those the \code{pwm.edit_distance} virtual track scans
+#'   for the same interval. A \code{strand} column is ignored, as by the virtual
+#'   track: the strand scanned is set by \code{bidirect} and \code{strand}.
 #' @param pssm numeric matrix or data frame with columns A, C, G, T. Each row
-#'   is a motif position.
+#'   is a motif position and holds the probabilities or counts of the four
+#'   bases; log-odds matrices, \code{NA} values and rows summing to 0 are
+#'   rejected.
 #' @param score.thresh single number; target PWM log-likelihood score to reach.
 #' @param max_edits integer or NULL; maximum number of edits to search. NULL
 #'   means no cap. Default NULL.
 #' @param max_indels integer or NULL; maximum number of insertions and deletions
 #'   allowed (default NULL, substitutions only). When > 0, a banded
 #'   Needleman-Wunsch DP is used. Edits are reported with \code{edit_type}
-#'   "sub", "ins", or "del".
+#'   "sub", "ins", or "del". An inserted base is the best its motif column
+#'   allows (the column maximum for \code{"above"}, the minimum for
+#'   \code{"below"}) and is scored as such.
 #' @param bidirect logical; scan both strands? Default TRUE.
 #' @param prior numeric; pseudocount for PSSM frequencies. Default 0.01.
 #' @param score.min numeric or NULL; skip windows with PWM score below this.
-#'   Default NULL (no filter).
+#'   Default NULL (no filter). The score is the window's ungapped score (the
+#'   PSSM-length window from its start), also with \code{max_indels > 0}; a
+#'   window without one (a non-ACGT base among its first PSSM-length bases) is
+#'   skipped when a filter is set.
 #' @param score.max numeric or NULL; skip windows with PWM score above this.
-#'   Default NULL (no filter).
+#'   Default NULL (no filter). Same score as \code{score.min}.
 #' @param extend logical or integer; extend sequence for boundary motifs.
 #'   Default TRUE.
 #' @param strand integer; which strand to scan when \code{bidirect=FALSE}.
@@ -630,7 +642,12 @@ gseq.potts <- function(seqs, model, mode = c("lse", "max", "pos", "count"),
 #' @param direction character; direction of the edit distance query.
 #'   \code{"above"} (default) finds minimum edits to bring score above
 #'   \code{score.thresh}; \code{"below"} finds minimum edits to bring score
-#'   below \code{score.thresh}.
+#'   below \code{score.thresh}. With \code{"below"} and \code{bidirect = TRUE},
+#'   as in the \code{pwm.edit_distance} virtual track, both strand readings of a
+#'   window must end up below the threshold, so the strand needing more edits
+#'   decides \code{n_edits} (a strand that cannot be brought below makes the
+#'   window unreachable); the reported edits and \code{strand} are those of that
+#'   strand's reading, and the edits are what disrupts that reading.
 #' @return A data frame (long format) with one row per edit, containing columns:
 #' \describe{
 #'   \item{seq_idx}{Index into input sequences/intervals (1-based)}
@@ -684,6 +701,14 @@ gseq.pwm_edits <- function(seqs,
                            extend = TRUE,
                            strand = 1L,
                            direction = "above") {
+    # Validate PSSM
+    pssm <- .coerce_pssm_matrix(
+        pssm,
+        numeric_msg = "pssm must be a numeric matrix or data frame with numeric columns",
+        ncol_msg = "pssm must have columns named A, C, G, T",
+        colnames_msg = "pssm must have columns named A, C, G, T"
+    )
+
     # Handle interval input: extract sequences
     is_intervals <- is.data.frame(seqs) &&
         all(c("chrom", "start", "end") %in% colnames(seqs))
@@ -704,6 +729,11 @@ gseq.pwm_edits <- function(seqs,
         indel_extra <- if (!is.null(max_indels)) as.integer(max_indels) else 0L
         ext <- if (isTRUE(extend)) w - 1L + indel_extra else if (isFALSE(extend)) 0L else as.integer(extend) + indel_extra
         extended_intervals <- intervals_df
+        # A strand column is ignored, as the vtrack ignores it: gseq.extract()
+        # would return strand = -1 rows reverse-complemented, and the scan
+        # (and, with indels, its extra bases at the END) would then run over
+        # the other strand. The strand scanned is set by bidirect / strand.
+        extended_intervals$strand <- NULL
         extended_intervals$end <- extended_intervals$end + ext
         # Clamp to chromosome boundaries (vectorized: O(N) total, not O(N*M))
         chrom_sizes <- gintervals.all()
@@ -739,14 +769,6 @@ gseq.pwm_edits <- function(seqs,
         roi_end <- NULL
     }
 
-    # Validate PSSM
-    pssm <- .coerce_pssm_matrix(
-        pssm,
-        numeric_msg = "pssm must be a numeric matrix or data frame with numeric columns",
-        ncol_msg = "pssm must have columns named A, C, G, T",
-        colnames_msg = "pssm must have columns named A, C, G, T"
-    )
-
     # Validate parameters
     # Same contract as the pwm.edit_distance vtracks and pwm.count: one value,
     # numbers and character/factor spellings of numbers accepted, everything
@@ -760,7 +782,9 @@ gseq.pwm_edits <- function(seqs,
         max_indels <- as.integer(max_indels)
         if (max_indels < 0) stop("max_indels must be NULL or a non-negative integer")
     }
-    if (!is.logical(bidirect)) stop("bidirect must be TRUE or FALSE")
+    if (!is.logical(bidirect) || length(bidirect) != 1L || is.na(bidirect)) {
+        stop("bidirect must be TRUE or FALSE", call. = FALSE)
+    }
     if (!is.numeric(prior) || prior < 0 || prior > 1) stop("prior must be between 0 and 1")
     if (strand != 1 && strand != -1) stop("strand must be 1 or -1")
     if (!direction %in% c("above", "below")) stop("direction must be 'above' or 'below'")
