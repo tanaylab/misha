@@ -590,11 +590,10 @@ private:
 // (BASE_ENCODE folds case). nbad[p] counts non-ACGT bases in [0, p), so anchor
 // i of width W is scorable iff nbad[i + W] - nbad[i] == 0 - O(1) per anchor
 // instead of re-walking W bases. nbad has size codes.size() + 1.
-inline void potts_encode(const std::string &target,
+inline void potts_encode(const char *target, std::size_t n,
                          std::vector<int8_t> &codes,
                          std::vector<int32_t> &nbad)
 {
-    const std::size_t n = target.size();
     codes.resize(n);
     nbad.resize(n + 1);
     nbad[0] = 0;
@@ -603,6 +602,13 @@ inline void potts_encode(const std::string &target,
         codes[p] = c;
         nbad[p + 1] = nbad[p] + (c < 0 ? 1 : 0);
     }
+}
+
+inline void potts_encode(const std::string &target,
+                         std::vector<int8_t> &codes,
+                         std::vector<int32_t> &nbad)
+{
+    potts_encode(target.data(), target.size(), codes, nbad);
 }
 
 // block_codes[p] = 4 * codes[p] + codes[p + 1], the code of a block that

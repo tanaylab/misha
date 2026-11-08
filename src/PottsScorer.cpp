@@ -701,25 +701,29 @@ bool PottsScorer::target_from_chunk(const GInterval &expanded, const GenomeChrom
     const int64_t s = expanded.start;
     const int64_t e = expanded.end;
     const int64_t len = e - s;
-    const int64_t chrom_size = (int64_t)chromkey.get_chrom_size(expanded.chromid);
-    const bool eligible = s >= 0 && e <= chrom_size && len >= (int64_t)m_model.width() &&
-                          len <= CHUNK_MAX_TARGET;
 
-    const bool forward = ch.last_chromid == expanded.chromid && s > ch.last_start &&
-                         s - ch.last_start <= CHUNK_MAX_STEP;
+    // A target that overlaps the previous one, further along: the bins of a
+    // per-base scan, or windows that share bases.
+    const bool overlaps = ch.last_chromid == expanded.chromid && s > ch.last_start && s < ch.last_end;
+    ch.run = overlaps ? ch.run + 1 : 0;
     ch.last_chromid = expanded.chromid;
     ch.last_start = s;
-    if (!eligible)
+    ch.last_end = e;
+    if (len < (int64_t)m_model.width() || len > CHUNK_MAX_TARGET)
         return false;
 
     if (!(ch.chromid == expanded.chromid && s >= ch.start && e <= ch.end)) {
-        // Not in the chunk. Build one only for a scan that is stepping forward:
-        // a call that jumped (the first of a scan, a sparse set of intervals)
-        // fetches its few bases rather than encode a chunk it would not use.
-        if (!forward) {
+        // Not in the chunk. Build one only for a scan that has been reading
+        // overlapping targets for a while: a short interval's few bins, or
+        // targets with gaps between them, fetch their bases rather than encode
+        // a chunk no call would read.
+        if (ch.run < CHUNK_MIN_RUN) {
             ch.next_len = CHUNK_MIN_LEN;
             return false;
         }
+        const int64_t chrom_size = (int64_t)chromkey.get_chrom_size(expanded.chromid);
+        if (s < 0 || e > chrom_size)
+            return false;
         if (ch.next_len < CHUNK_MIN_LEN)
             ch.next_len = CHUNK_MIN_LEN;
         const int64_t cend = std::min(chrom_size, s + std::max<int64_t>(len, (int64_t)ch.next_len));
@@ -805,11 +809,13 @@ double PottsScorer::score_interval(const GInterval &interval, const GenomeChromK
             // chromosome, which a fetch would return whole.
             tlen = (size_t)(expanded.end - expanded.start);
         } else {
-            std::vector<char> seq;
-            m_seqfetch_ptr->read_interval(expanded, chromkey, seq);
-            const std::string target(seq.begin(), seq.end());
-            tlen = target.size();
-            potts_encode(target, m_codes, m_nbad);
+            // Read into a buffer kept across calls and encoded where it lies:
+            // no allocation and no copy per call. A large read is not kept.
+            m_seqfetch_ptr->read_interval(expanded, chromkey, m_seq);
+            tlen = m_seq.size();
+            potts_encode(m_seq.data(), tlen, m_codes, m_nbad);
+            if (m_seq.capacity() > SEQ_BUFFER_KEEP)
+                std::vector<char>().swap(m_seq);
             m_c = m_codes.data();
             m_nb = m_nbad.data();
             m_bc_ready = false;

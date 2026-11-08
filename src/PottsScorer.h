@@ -204,6 +204,8 @@ private:
     double m_last_max_score = -std::numeric_limits<double>::infinity();
 
     // Scratch, reused across calls so a per-bp iterator does not reallocate.
+    std::vector<char> m_seq; // the fetched target, kept up to SEQ_BUFFER_KEEP bytes
+    static constexpr size_t SEQ_BUFFER_KEEP = 1 << 16;
     std::vector<int8_t> m_codes;
     std::vector<int32_t> m_nbad;
     std::vector<int8_t> m_block_codes;
@@ -222,14 +224,18 @@ private:
 
     // An encoded stretch of the current chromosome, in this scorer's
     // orientation (reverse-complemented for strand -1), so that a scan whose
-    // targets are short and move forward - iterator = 1 with a 1 bp vtrack, the
+    // targets are short and overlap - iterator = 1 with a 1 bp vtrack, the
     // usual shape of a per-bp screen - reads and encodes each base once instead
     // of fetching, copying and encoding a W bp target per call. The codes are
     // the ones the fetched target would give (a complemented code is 3 - code,
     // as basepair2complementary() maps only ACGTacgt), so every score is
-    // bit-identical. Built only after two calls step forward by a few bases on
-    // one chromosome, and only while no substitution is set on the shared
-    // GenomeSeqFetch (gextract.variants), whose reads it would not see.
+    // bit-identical. Built only after CHUNK_MIN_RUN calls in a row whose target
+    // overlapped the one before, further along the same chromosome: a few bins of
+    // a short interval, or targets with gaps between them, fetch as before
+    // rather than encode bases no call reads. Never built while a substitution
+    // is set on the shared GenomeSeqFetch (gextract.variants), whose reads it
+    // would not see. It starts at CHUNK_MIN_LEN bases and doubles per refill up
+    // to CHUNK_MAX_LEN.
     struct SeqChunk {
         int chromid = -1;
         int64_t start = 0; // genomic [start, end), forward coordinates
@@ -237,18 +243,20 @@ private:
         std::vector<int8_t> codes;
         std::vector<int32_t> nbad;
         std::vector<int8_t> block_codes;
-        int last_chromid = -1;  // the previous call's target, for the forward-step test
+        int last_chromid = -1;  // the previous call's target, for the overlap test
         int64_t last_start = -1;
+        int64_t last_end = -1;
+        int run = 0;            // calls in a row whose target overlapped the one before
         size_t next_len = 0;    // length of the next chunk, doubled per refill
     };
     static constexpr int64_t CHUNK_MAX_TARGET = 4096;   // longer targets take the fetch path
-    static constexpr int64_t CHUNK_MAX_STEP = 256;      // a forward step up to this builds a chunk
-    static constexpr size_t CHUNK_MIN_LEN = 1024;
+    static constexpr int CHUNK_MIN_RUN = 16;
+    static constexpr size_t CHUNK_MIN_LEN = 256;
     static constexpr size_t CHUNK_MAX_LEN = 1 << 18;
     SeqChunk m_chunk;
     // Points m_c / m_nb / m_bc at the chunk's copy of `expanded`, building or
     // refilling the chunk as needed; false when the call should fetch instead
-    // (the pointers are left as they were; the forward-step record is updated
+    // (the pointers are left as they were; the overlap record is updated
     // either way).
     bool target_from_chunk(const GInterval &expanded, const GenomeChromKey &chromkey);
 
