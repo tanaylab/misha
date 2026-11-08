@@ -549,10 +549,9 @@ double TrackVarProcessor::aggregate_sample_with_filter(GenomeTrack1D &track, con
 	if (draws.empty())
 		return numeric_limits<double>::quiet_NaN();
 
-	// Use R's random number generator for reproducibility
-	GetRNGstate();
-	double u = unif_rand() * total;
-	PutRNGstate();
+	// R's generator through rdb::r_unif_rand(), like every other draw of the call: .gcall() saves
+	// the state when the call returns, so R's next draw does not repeat this one
+	double u = rdb::r_unif_rand() * total;
 
 	for (size_t i = 0; i < draws.size(); ++i) {
 		if (u < counts[i])

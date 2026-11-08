@@ -1230,3 +1230,24 @@ test_that("with a filter, size and exists are 0 when the unmasked parts hold no 
         expect_true(is.na(gextract("vf", iv, iterator = iv)$vf), info = s)
     }
 })
+
+test_that("with a filter, sample advances .Random.seed like an R draw", {
+    # A filtered sample used to reload .Random.seed in the middle of the call, so R's next draw
+    # repeated one of the call's draws. [150,160) splits [0,400) into two parts holding values;
+    # the call makes at most 3 draws (one per part, one to pick a part), so R's next draw must not
+    # be one of the first 3 of the stream.
+    local_db_state()
+    vf_sources(vf_blocks(1))
+    q <- gintervals("chr1", 0, 400)
+    repeats <- 0
+    for (s in 1:40) {
+        gvtrack.create("filt_samp", "vf_sp", "sample", filter = gintervals("chr1", 150, 160))
+        set.seed(s)
+        u <- runif(3)
+        set.seed(s)
+        v <- withr::with_options(list(gmultitasking = FALSE), gextract("filt_samp", q, iterator = q)$filt_samp)
+        expect_true(v %in% c(1, 2, 6))
+        repeats <- repeats + (runif(1) %in% u)
+    }
+    expect_equal(repeats, 0)
+})
