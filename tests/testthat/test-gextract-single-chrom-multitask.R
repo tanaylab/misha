@@ -124,3 +124,24 @@ test_that("small multi-chrom extraction still enters multitask path when enabled
     ord_parallel <- order(parallel$chrom, parallel$start, parallel$end, parallel$intervalID)
     expect_equal(parallel[ord_parallel, ], serial[ord_serial, ])
 })
+
+test_that("the multitask range split gives every process its share, the last one too", {
+    # 1000 intervals of 1 kb into 6 processes: 166.7 kb each. Dividing only what
+    # was left after a process's own intervals made each stop at 1/7 of the rest
+    # and left the last one 2/7 of the whole, so a scan of a genome of many
+    # contigs waited on one process doing twice the work of the others.
+    shares <- .Call("C_split_by_range_shares", rep(1000, 1000), 6L, 1L, PACKAGE = "misha")
+    expect_length(shares, 6L)
+    expect_equal(sum(shares), 1e6)
+    expect_lte(max(shares) / mean(shares), 1.01)
+    # one interval, split within itself
+    one <- .Call("C_split_by_range_shares", 1e6, 6L, 1L, PACKAGE = "misha")
+    expect_lte(max(one) / mean(one), 1.01)
+    # contigs of unequal lengths into 16 processes
+    set.seed(3)
+    len <- as.numeric(round(stats::rexp(5000, 1 / 2e4)) + 1)
+    s <- .Call("C_split_by_range_shares", len, 16L, 1L, PACKAGE = "misha")
+    expect_length(s, 16L)
+    expect_equal(sum(s), sum(len))
+    expect_lte(max(s) / mean(s), 1.01)
+})
