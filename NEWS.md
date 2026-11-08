@@ -1,3 +1,17 @@
+# misha 5.17.0
+
+This release fixes the defects found in the review of 5.16.1, makes common large computations faster, and adds features for work with sequence-to-function models. Fixes that change results are marked **Behavior fix**; recompute anything that depends on them.
+
+* Faster, with the same results: genome-wide `gextract()` of many virtual tracks (about 1.5-2x, with about half the peak memory); dense tracks read at their own bin size (about 4x, e.g. a 1 bp `gsummary()` of the genome); sums over shifted windows that cut bins; `gquantiles()` (2-3x); `gtrack.create_dense()` (2x); `gextract.variants()` (4-7x); small calls on databases with many tracks (about 5x); creating a track in a database with many tracks (about 5x); `gseq.extract()` of long windows; Potts scans (about 2x, and `potts.max` with `max_edits = 1` about 2.4x).
+
+* Multitasked computations over many intervals (e.g. genomes of many contigs) split the work evenly; the last process got about twice the others' share, so such runs took up to twice as long. Sums and log-sum-exp values combined across processes can differ from earlier releases in the last bits.
+
+* A multitasked call warns once per session when the R session holds so much memory in 4 KB pages that starting the worker processes takes seconds (seen on RHEL 7 hosts), and says what helps.
+
+* `gquantiles()`, `gintervals.quantiles()` and `gbins.quantiles()` return 0, not -0, for a zero quantile. `gseq.extract()` over `gmax.data.size` stops before reading anything.
+
+* A worker thread that cannot start, or that fails, no longer aborts R. A sequence byte above 127 read on the reverse strand no longer stops `gseq.extract()` with "embedded nul in string".
+
 # misha 5.16.1
 
 * **Behavior fix:** a numeric `strand` other than -1, 0 or 1 is an error, as in `gintervals()`; functions that read intervals took 255 as -1 (e.g. `gseq.extract()` returned the reverse complement) and 2 as 1.
