@@ -949,10 +949,12 @@ gseq.kmer <- function(seqs,
 #' Counts the occurrence of all k-mers (of size k) within the specified
 #' genomic intervals, optionally excluding masked regions.
 #'
-#' @param intervals Genomic intervals to analyze
+#' @param intervals Genomic intervals to analyze. Overlapping intervals are
+#'        unified first, so each position is counted once; a k-mer that crosses
+#'        from an interval into an adjacent one is not counted.
 #' @param k Integer k-mer size (1-10). Default is 6.
-#' @param mask Optional intervals to exclude from counting. Positions within
-#'        the mask will not contribute to k-mer counts.
+#' @param mask Optional intervals to exclude from counting. A k-mer that
+#'        overlaps the mask is not counted.
 #'
 #' @return A data frame with columns:
 #'   \describe{
