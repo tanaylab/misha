@@ -6,15 +6,13 @@
 
 * `tgt_overlap_policy = "auto*"` returns a winning minus-strand chain interval as one interval.
 
-* **Behavior fix:** `gtrack.liftover()` on a sparse track: where lifted intervals overlap in the target, each overlapping stretch gets the aggregate of the intervals that cover it, as `gintervals.liftover(value_col =)` does. Before, the whole run of overlapping intervals became one interval with one aggregate.
+* **Behavior fix:** `gtrack.liftover()` of a sparse track aggregates each overlapping stretch separately, as `gintervals.liftover(value_col =)` does.
 
-* **Behavior fix:** `gtrack.liftover(multi_target_agg = "count")` on a dense track gives 0 in every bin nothing maps to; it was `NaN` on chromosomes nothing maps to (still `NaN` when `min_n` is above 0).
+* **Behavior fix:** `gtrack.liftover(multi_target_agg = "count")` of a dense track gives 0, not `NaN`, where nothing maps.
 
-* **Behavior fix:** 2D virtual tracks `avg`, `min`, `max` and `weighted.sum`, and 2D track expressions, skip NaN values, as 1D ones do. `min`/`max` depended on where a NaN cell sat and could be wrong numbers, and `avg`/`weighted.sum` were NaN. `area` still counts NaN cells. Recompute results from 2D tracks that contain NaN.
+* **Behavior fix:** 2D virtual tracks (`avg`, `min`, `max`, `weighted.sum`) and 2D track expressions skip NaN values.
 
-* **Behavior fix:** `gseq.kmer()` counts as `kmer.count` and `kmer.frac` do: `strand = 0` sums the two strands (a palindromic k-mer counts twice and warns, and `frac` divides by both strands' starts), and `extend` lets a match run past `end_pos` only, never start before `start_pos`.
-
-* **Behavior fix:** `gseq.pwm()`'s `extend` lets a window run past `end_pos` only, never start before `start_pos`, as the pwm virtual tracks do. For both functions an integer `extend` is the number of bases a match may run past `end_pos`.
+* **Behavior fix:** `gseq.kmer()` and `gseq.pwm()` match the kmer and pwm virtual tracks: `gseq.kmer(strand = 0)` sums both strands, and `extend` lets a match run past `end_pos` only.
 
 # misha 5.17.0
 
