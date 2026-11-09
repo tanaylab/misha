@@ -90,10 +90,12 @@ gtrack.2d.create <- function(track = NULL, description = NULL, intervals = NULL,
 
     # Capture the deparsed argument expressions for `created.by` BEFORE reassigning
     # `intervals` below - otherwise substitute(intervals) deparses the data frame value.
-    intervalsstr <- deparse(substitute(intervals), width.cutoff = 500)[1]
-    valuesstr <- deparse(substitute(values), width.cutoff = 500)[1]
+    # nlines = 1: the first line is all that is kept, and a data frame or a vector passed by
+    # value (do.call) would be deparsed whole - seconds per million values.
+    intervalsstr <- deparse(substitute(intervals), width.cutoff = 500, nlines = 1)
+    valuesstr <- deparse(substitute(values), width.cutoff = 500, nlines = 1)
 
-    intervals <- .gscope_expand_2d(rescue_ALLGENOME(intervals, as.character(substitute(intervals))))
+    intervals <- .gscope_expand_2d(rescue_ALLGENOME(intervals, substitute(intervals)))
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
     .gconfirmtrackcreate(trackstr)

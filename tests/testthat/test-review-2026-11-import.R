@@ -50,6 +50,23 @@ for (format in c("indexed", "per-chromosome")) {
     })
 }
 
+test_that("gtrack.array.import clips records past the chromosome end, with one warning", {
+    import_test_db("indexed")
+
+    # chrM is 500 bp: the second record is clipped, the third dropped
+    f <- write_file("chrom\tstart\tend\ta\tb\nchrM\t0\t400\t1\t2\nchrM\t400\t600\t3\t4\nchrM\t700\t800\t5\t6\n", ".tsv")
+    expect_warning(
+        gtrack.array.import("arr_clip", "", f),
+        "1 record(s) running past the end of their chromosome were clipped to it, and 1 record(s) starting at or past the chromosome end were dropped; the first: line 3: (chrM, 400, 600), chromosome size 500",
+        fixed = TRUE
+    )
+    res <- gtrack.array.extract("arr_clip", NULL, gintervals.all())
+    expect_equal(res$start, c(0, 400))
+    expect_equal(res$end, c(400, 500))
+    expect_equal(res$a, c(1, 3))
+    expect_equal(res$b, c(2, 4))
+})
+
 test_that("gtrack.2d.import_contacts reads a fends file not sorted by fend id", {
     import_test_db("indexed")
 
@@ -75,6 +92,41 @@ test_that("gtrack.2d.import_contacts reads a fends file not sorted by fend id", 
     neg <- write_file("fend\tchr\tcoord\n-1\tchr1\t1000\n2\tchr1\t2000\n", ".tsv")
     expect_error(gtrack.2d.import_contacts("neg_fend", "", contacts, neg), "fend -1 is out of range")
     expect_false(gtrack.exists("neg_fend"))
+})
+
+test_that("gtrack.2d.import_contacts takes memory by the number of fends, not by the largest fend id", {
+    skip_if_not(identical(Sys.info()[["sysname"]], "Linux"), "uses ulimit -v of a Linux shell")
+    db <- import_test_db("indexed")
+
+    big_ids <- c(2147483000, 2147483001, 1e9, 5)
+    fends_text <- function(ids) {
+        paste0("fend\tchr\tcoord\n", paste0(sprintf("%.0f", ids), "\t", c("chr1", "chr1", "chr2", "chrX"), "\t", c(1000, 2000, 300, 40), collapse = "\n"), "\n")
+    }
+    contacts_text <- function(ids) {
+        pairs <- rbind(c(1, 2, 3), c(1, 3, 4), c(2, 4, 1), c(3, 4, 2))
+        paste0("fend1\tfend2\tcount\n", paste0(sprintf("%.0f", ids[pairs[, 1]]), "\t", sprintf("%.0f", ids[pairs[, 2]]), "\t", pairs[, 3], collapse = "\n"), "\n")
+    }
+    gtrack.2d.import_contacts("small_ids", "", write_file(contacts_text(1:4), ".tsv"), write_file(fends_text(1:4), ".tsv"))
+
+    # in a process limited to 3 GB of address space: arrays indexed by the fend id would take 24 GB
+    fends <- write_file(fends_text(big_ids), ".tsv")
+    contacts <- write_file(contacts_text(big_ids), ".tsv")
+    script <- tempfile(fileext = ".R")
+    writeLines(c(
+        sprintf(".libPaths(%s)", paste(deparse(.libPaths()), collapse = "")),
+        "suppressMessages(library(misha))",
+        sprintf("suppressMessages(gsetroot(%s))", deparse(db)),
+        "options(gmultitasking = FALSE)",
+        sprintf("gtrack.2d.import_contacts('big_ids', '', %s, %s)", deparse(contacts), deparse(fends))
+    ), script)
+    r <- shQuote(file.path(R.home("bin"), "R"))
+    out <- suppressWarnings(system2("sh", c("-c", shQuote(sprintf("ulimit -v 3000000 && %s --no-echo --no-restore -f %s 2>&1", r, shQuote(script)))),
+        stdout = TRUE, env = "R_TESTS="
+    ))
+    expect_null(attr(out, "status"), label = paste(out, collapse = "\n"))
+
+    gdb.reload()
+    expect_identical(gextract("big_ids", gintervals.2d.all(), colnames = "v"), gextract("small_ids", gintervals.2d.all(), colnames = "v"))
 })
 
 test_that("gtrack.create_dense validates the intervals as gtrack.create_sparse does", {
@@ -464,4 +516,19 @@ test_that("2D imports count only the chromosomes that got data as imported", {
     f <- write_file("chrom1\tstart1\tend1\tchrom2\tstart2\tend2\tvalue\nchr1\t0\t10\tchrUn_q\t0\t10\t1\nchr2\t0\t10\tchr2\t20\t30\t2\n", ".tsv")
     expect_message(gtrack.2d.import("data_chroms", "", f), "remaining 1 chromosome\\(s\\)")
     expect_message(gtrack.2d.import_contacts("data_chroms_c", "", f), "remaining 1 chromosome\\(s\\)")
+})
+
+test_that("gtrack.array.import of a file whose every record starts past the chromosome end is an error", {
+    # as for BED: nothing would be left to import; the records are dropped, so the track would be empty
+    local_db_state()
+    cs <- gintervals.all()
+    chr1_end <- cs$end[cs$chrom == "chr1"]
+    f <- tempfile(fileext = ".tsv")
+    withr::defer(unlink(f))
+    write.table(data.frame(chrom = "chr1", start = chr1_end + c(10, 100), end = chr1_end + c(20, 110), a = 1:2),
+        f,
+        sep = "\t", quote = FALSE, row.names = FALSE
+    )
+    expect_error(suppressWarnings(gtrack.array.import("test.past_end_arr", "x", f)), "nothing to import")
+    expect_false(gtrack.exists("test.past_end_arr"))
 })

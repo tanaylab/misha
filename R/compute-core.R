@@ -22,7 +22,7 @@
 #' 'gtrack.import' or 'gtrack.array.import' functions.
 #'
 #' A 'file' name ending in '.parquet' (in any case) writes a Parquet file
-#' instead: columns 'chrom', 'start' and 'end', then one float32 column per
+#' instead: columns 'chrom', 'start' and 'end', then one double column per
 #' track expression, named as in the text file. 'start' and 'end' are 32-bit
 #' integers unless a chromosome of the scope is 2^31 bp or longer. NaN values
 #' are written as NaN, not as missing values. Only 1D iterators are supported,
@@ -31,7 +31,10 @@
 #' symbolic link is followed, and the file it points to is replaced) and
 #' renamed when complete, so an error or an interrupt leaves an existing file
 #' as it was. With a numeric 'iterator' the file is a table of dense bins
-#' that pyarrow reads directly.
+#' that pyarrow reads directly. A column whose track expression is exactly the
+#' name of a track carries the track's attributes as its field metadata (Arrow
+#' field metadata: in pyarrow, \code{pq.read_schema(file).field(name).metadata});
+#' \code{\link{gtrack.import_parquet}} restores them.
 #'
 #' If 'intervals.set.out' is not 'NULL' the result is saved as an intervals
 #' set. Similarly to 'file' parameter 'intervals.set.out' can be useful to
@@ -50,7 +53,7 @@
 #' @param band track expression band. If 'NULL' no band is used.
 #' @param file file name where the function result is optionally outputted:
 #' GZIP-compressed Parquet if the name ends in '.parquet' (chrom, start, end
-#' and one float32 column per expression, all nullable as in arrow-written
+#' and one double column per expression, all nullable as in arrow-written
 #' files), tab-delimited otherwise
 #' @param intervals.set.out intervals set name where the function result is
 #' optionally outputted
@@ -110,7 +113,7 @@ gextract <- function(..., intervals = NULL, colnames = NULL, iterator = NULL, ba
     }
     .gcheckroot()
 
-    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+    intervals <- rescue_ALLGENOME(intervals, substitute(intervals))
 
     if (is.null(intervals)) {
         intervals <- eval.parent(args[[length(args)]])
@@ -264,7 +267,7 @@ gquantiles <- function(expr = NULL, percentiles = 0.5, intervals = get("ALLGENOM
     }
     .gcheckroot()
 
-    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+    intervals <- rescue_ALLGENOME(intervals, substitute(intervals))
 
     exprstr <- do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame())
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
@@ -312,7 +315,7 @@ gsummary <- function(expr = NULL, intervals = NULL, iterator = NULL, band = NULL
     }
     .gcheckroot()
 
-    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+    intervals <- rescue_ALLGENOME(intervals, substitute(intervals))
 
     if (is.null(intervals)) {
         intervals <- get("ALLGENOME", envir = .misha)
@@ -387,7 +390,7 @@ gcor <- function(expr1 = NULL, expr2 = NULL, ..., intervals = NULL, iterator = N
     }
     .gcheckroot()
 
-    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+    intervals <- rescue_ALLGENOME(intervals, substitute(intervals))
 
     eval_env <- parent.frame()
     args <- c(list(substitute(expr1)), list(substitute(expr2)), as.list(substitute(list(...)))[-1L])

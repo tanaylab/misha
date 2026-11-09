@@ -4,10 +4,14 @@
 \alias{gseq.extract}
 \title{Returns DNA sequences}
 \usage{
-gseq.extract(intervals = NULL)
+gseq.extract(intervals = NULL, pad = FALSE)
 }
 \arguments{
 \item{intervals}{intervals for which DNA sequence is returned}
+
+\item{pad}{if TRUE, the part of an interval outside its chromosome is
+returned as "N" (see Details). If FALSE (the default), an interval that runs
+past a chromosome end is an error.}
 }
 \value{
 An array of character strings representing DNA sequence.
@@ -19,6 +23,20 @@ Returns DNA sequences for given intervals
 This function returns an array of sequence strings for each interval from
 'intervals'. If intervals contain an additional 'strand' column and its
 value is '-1', the reverse-complementary sequence is returned.
+
+By default ('pad = FALSE') each interval must lie within its chromosome: an
+interval that starts before 0 or ends past the end of the chromosome is an
+error.
+
+With 'pad = TRUE' an interval may run past either end of its chromosome
+('start' below 0, 'end' above the chromosome length). The positions outside
+the chromosome come back as "N", so each sequence is 'end - start' long, and
+an interval wholly outside its chromosome comes back as all "N". 'start' must
+still be below 'end', and the chromosome must exist. For a row with strand -1
+the padded sequence is reverse complemented as a whole, so the "N" run of the
+chromosome start comes last. The bases inside the chromosome are returned as
+stored, lowercase included. This gives fixed-width windows near chromosome
+ends, e.g. for sequence models (see the examples).
 
 Each interval costs one disk read, so large interval sets are dominated by
 I/O latency rather than by the sequence data itself. When the sequence files
@@ -52,6 +70,15 @@ options(gmax.processes = 2)
 gdb.init_examples()
 intervs <- gintervals(c(1, 2), 10000, 10020)
 gseq.extract(intervs)
+
+# Fixed-width windows centred on positions. The second window starts 30 bp
+# before the start of chr1, so its first 30 bases are N.
+w <- 100
+centers <- c(250000, 20)
+windows <- data.frame(chrom = "chr1", start = centers - w / 2, end = centers + w / 2)
+seqs <- gseq.extract(windows, pad = TRUE)
+nchar(seqs)
+seqs[2]
 
 }
 \seealso{

@@ -12,6 +12,8 @@
 #include <cstring>
 #include <fcntl.h>
 #include <limits>
+#include <map>
+#include <stdexcept>
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <unistd.h>
@@ -217,6 +219,16 @@ void FileMetaData::encode(string &out) const
 	put_struct_list(out, last, 2, schema);
 	put_i64(out, last, 3, num_rows);
 	put_struct_list(out, last, 4, row_groups);
+	if (!key_value_metadata.empty()) {
+		// list<KeyValue>, KeyValue { 1: key; 2: value }
+		put_list(out, last, 5, CT_STRUCT, key_value_metadata.size());
+		for (const auto &kv : key_value_metadata) {
+			int16_t kv_last = 0;
+			put_binary(out, kv_last, 1, kv.first);
+			put_binary(out, kv_last, 2, kv.second);
+			put_stop(out);
+		}
+	}
 	put_binary(out, last, 6, created_by);
 	// ColumnOrder is a union: field 1 (TYPE_ORDER) holding an empty TypeDefinedOrder struct
 	put_list(out, last, 7, CT_STRUCT, schema.empty() ? 0 : schema.size() - 1);
@@ -530,6 +542,23 @@ void FileMetaData::decode(ThriftIn &in)
 		case 2: in.read_struct_list(ct, schema); return true;
 		case 3: num_rows = in.i64(ct); return true;
 		case 4: in.read_struct_list(ct, row_groups); return true;
+		case 5:
+			key_value_metadata.clear();
+			in.read_list(ct, [&](int elem_type) {
+				in.expect(elem_type, CT_STRUCT);
+				pair<string, string> kv;
+				in.read_struct([&](int16_t kv_id, int kv_ct) {
+					if (kv_id == 1)
+						kv.first = in.binary(kv_ct);
+					else if (kv_id == 2)
+						kv.second = in.binary(kv_ct);
+					else
+						return false;
+					return true;
+				});
+				key_value_metadata.push_back(kv);
+			});
+			return true;
 		case 6: created_by = in.binary(ct); return true;
 		}
 		return false;
@@ -585,10 +614,316 @@ static void put_rle_hybrid(string &out, const vector<uint32_t> &v, int bit_width
 
 template <typename T> static string plain(T v) { return string((const char *)&v, sizeof(T)); }
 
+//------------------------------ Arrow schema ------------------------------
+
+// pyarrow keeps an Arrow schema in a Parquet file's key-value metadata, under this key: an Arrow
+// IPC message (a FlatBuffer: https://github.com/apache/arrow/blob/main/format/Schema.fbs and
+// Message.fbs) prefixed by 0xFFFFFFFF and its length, base64-encoded. Its fields carry the field
+// metadata pyarrow shows as schema.field(name).metadata.
+static const char *ARROW_SCHEMA_KEY = "ARROW:schema";
+
+// Arrow's union ids and enums used here
+enum { ARROW_MESSAGE_SCHEMA = 1 };                                // MessageHeader
+enum { ARROW_TYPE_INT = 2, ARROW_TYPE_FLOAT = 3, ARROW_TYPE_UTF8 = 5 };  // Type
+enum { ARROW_METADATA_V4 = 3 };                                   // MetadataVersion: read by pyarrow 0.15 and later
+enum { ARROW_PRECISION_DOUBLE = 2 };
+
+static const char BASE64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+static string base64_encode(const string &in)
+{
+	string out;
+	size_t i = 0;
+	for (; i + 2 < in.size(); i += 3) {
+		uint32_t v = (uint8_t)in[i] << 16 | (uint8_t)in[i + 1] << 8 | (uint8_t)in[i + 2];
+		for (int k = 3; k >= 0; --k)
+			out += BASE64[(v >> (6 * k)) & 63];
+	}
+	if (i + 1 == in.size()) {
+		uint32_t v = (uint8_t)in[i] << 16;
+		out += BASE64[v >> 18];
+		out += BASE64[(v >> 12) & 63];
+		out += "==";
+	} else if (i + 2 == in.size()) {
+		uint32_t v = (uint8_t)in[i] << 16 | (uint8_t)in[i + 1] << 8;
+		out += BASE64[v >> 18];
+		out += BASE64[(v >> 12) & 63];
+		out += BASE64[(v >> 6) & 63];
+		out += '=';
+	}
+	return out;
+}
+
+// false if in is not base64
+static bool base64_decode(const string &in, string &out)
+{
+	uint32_t v = 0;
+	int bits = 0;
+
+	out.clear();
+	for (char c : in) {
+		if (c == '=' || c == '\n' || c == '\r')
+			continue;
+		const char *p = strchr(BASE64, c);
+		if (!c || !p)
+			return false;
+		v = v << 6 | (uint32_t)(p - BASE64);
+		bits += 6;
+		if (bits >= 8) {
+			bits -= 8;
+			out += (char)((v >> bits) & 0xff);
+		}
+	}
+	return true;
+}
+
+// Builds a FlatBuffer front to back: an object is written before the objects it refers to, so every
+// offset points forward, and the referring field is set once its target is written (link()).
+class FlatBufferBuilder {
+public:
+	struct Field {
+		int      slot;   // the field's index in the table's vtable
+		int      size;   // 1, 2, 4 or 8; 0 for an offset to another object
+		uint64_t value;  // of a scalar
+	};
+
+	string buf;
+
+	FlatBufferBuilder() : buf(4, '\0') {}  // the offset to the root table
+
+	void align(size_t a) { while (buf.size() % a) buf += '\0'; }
+
+	template <typename T> void set(size_t at, T v) { memcpy(&buf[at], &v, sizeof(T)); }
+
+	// Sets the offset at position at to the object at target, which follows it
+	void link(size_t at, size_t target) { set<uint32_t>(at, (uint32_t)(target - at)); }
+
+	// Writes a table (its vtable first) and returns its position; offset_pos[slot] is the position
+	// of each offset field, to link() once its object is written
+	size_t table(const vector<Field> &fields, vector<size_t> &offset_pos)
+	{
+		int num_slots = 0;
+		size_t max_align = 4;
+		for (const Field &f : fields) {
+			num_slots = max(num_slots, f.slot + 1);
+			max_align = max(max_align, (size_t)(f.size ? f.size : 4));
+		}
+
+		align(2);
+		size_t vtable = buf.size();
+		buf.append(4 + 2 * num_slots, '\0');
+		align(max_align);
+		size_t table = buf.size();
+		buf.append(4, '\0');
+		set<int32_t>(table, (int32_t)(table - vtable));
+
+		// the largest fields first, which needs no padding between them
+		vector<Field> sorted(fields);
+		stable_sort(sorted.begin(), sorted.end(), [](const Field &a, const Field &b) { return (a.size ? a.size : 4) > (b.size ? b.size : 4); });
+		offset_pos.assign(num_slots, 0);
+		for (const Field &f : sorted) {
+			int size = f.size ? f.size : 4;
+			align(size);
+			size_t pos = buf.size();
+			buf.append((char *)&f.value, size);  // little-endian: the low bytes of value
+			set<uint16_t>(vtable + 4 + 2 * f.slot, (uint16_t)(pos - table));
+			if (!f.size)
+				offset_pos[f.slot] = pos;
+		}
+		set<uint16_t>(vtable, (uint16_t)(4 + 2 * num_slots));
+		set<uint16_t>(vtable + 2, (uint16_t)(buf.size() - table));
+		return table;
+	}
+
+	size_t add_string(const string &s)
+	{
+		align(4);
+		size_t pos = buf.size();
+		buf.append(4, '\0');
+		set<uint32_t>(pos, (uint32_t)s.size());
+		buf += s;
+		buf += '\0';
+		return pos;
+	}
+
+	// A vector of n offsets; elem_pos[i] is the position of element i, to link()
+	size_t offset_vector(size_t n, vector<size_t> &elem_pos)
+	{
+		align(4);
+		size_t pos = buf.size();
+		buf.append(4 + 4 * n, '\0');
+		set<uint32_t>(pos, (uint32_t)n);
+		elem_pos.resize(n);
+		for (size_t i = 0; i < n; ++i)
+			elem_pos[i] = pos + 4 + 4 * i;
+		return pos;
+	}
+};
+
+// The ARROW:schema value of a file of the columns of schema (the root first; chrom a string,
+// start and end INT32 or INT64, the rest DOUBLE), all nullable, with the field metadata of the
+// value columns
+static string arrow_schema(const vector<SchemaElement> &schema, const vector<vector<pair<string, string>>> &value_metadata)
+{
+	typedef FlatBufferBuilder::Field F;
+	FlatBufferBuilder b;
+	vector<size_t> pos, elems;
+
+	size_t message = b.table({ F{ 0, 2, ARROW_METADATA_V4 }, F{ 1, 1, ARROW_MESSAGE_SCHEMA }, F{ 2, 0, 0 } }, pos);
+	b.link(0, message);
+	size_t header_pos = pos[2];
+	size_t schema_table = b.table({ F{ 1, 0, 0 } }, pos);  // endianness: Little, the default
+	b.link(header_pos, schema_table);
+	size_t fields_pos = pos[1];
+	vector<size_t> field_elems;
+	b.link(fields_pos, b.offset_vector(schema.size() - 1, field_elems));
+
+	for (size_t i = 1; i < schema.size(); ++i) {
+		const SchemaElement &col = schema[i];
+		const vector<pair<string, string>> *md = i >= 4 && i - 4 < value_metadata.size() && !value_metadata[i - 4].empty() ? &value_metadata[i - 4] : NULL;
+		int type = col.type == Type::BYTE_ARRAY ? ARROW_TYPE_UTF8 : col.type == Type::DOUBLE ? ARROW_TYPE_FLOAT : ARROW_TYPE_INT;
+		vector<F> fields = { F{ 0, 0, 0 }, F{ 1, 1, 1 }, F{ 2, 1, (uint64_t)type }, F{ 3, 0, 0 }, F{ 5, 0, 0 } };
+		if (md)
+			fields.push_back(F{ 6, 0, 0 });
+
+		size_t field = b.table(fields, pos);
+		vector<size_t> field_pos = pos;
+		b.link(field_elems[i - 1], field);
+		b.link(field_pos[0], b.add_string(col.name));
+
+		if (type == ARROW_TYPE_UTF8)
+			b.link(field_pos[3], b.table({}, pos));
+		else if (type == ARROW_TYPE_FLOAT)
+			b.link(field_pos[3], b.table({ F{ 0, 2, ARROW_PRECISION_DOUBLE } }, pos));
+		else
+			b.link(field_pos[3], b.table({ F{ 0, 4, (uint64_t)(col.type == Type::INT64 ? 64 : 32) }, F{ 1, 1, 1 } }, pos));
+
+		b.link(field_pos[5], b.offset_vector(0, elems));  // children: none, but present (pyarrow < 4 requires it)
+
+		if (md) {
+			vector<size_t> kv_elems;
+			b.link(field_pos[6], b.offset_vector(md->size(), kv_elems));
+			for (size_t k = 0; k < md->size(); ++k) {
+				size_t kv = b.table({ F{ 0, 0, 0 }, F{ 1, 0, 0 } }, pos);
+				vector<size_t> kv_pos = pos;
+				b.link(kv_elems[k], kv);
+				b.link(kv_pos[0], b.add_string((*md)[k].first));
+				b.link(kv_pos[1], b.add_string((*md)[k].second));
+			}
+		}
+	}
+	b.align(8);
+
+	string message_bytes = "\xff\xff\xff\xff";
+	uint32_t len = b.buf.size();
+	message_bytes.append((const char *)&len, 4);
+	message_bytes += b.buf;
+	return base64_encode(message_bytes);
+}
+
+// Reads a FlatBuffer; any offset out of the buffer throws
+class FlatBufferReader {
+public:
+	FlatBufferReader(const string &buf) : m_buf(buf) {}
+
+	template <typename T> T get(size_t at) const
+	{
+		if (at > m_buf.size() || m_buf.size() - at < sizeof(T))
+			throw out_of_range("flatbuffer");
+		T v;
+		memcpy(&v, m_buf.data() + at, sizeof(T));
+		return v;
+	}
+
+	size_t deref(size_t at) const { return at + get<uint32_t>(at); }
+
+	// The position of field slot of the table at table, 0 if absent
+	size_t field(size_t table, int slot) const
+	{
+		size_t vtable = table - get<int32_t>(table);
+		uint16_t vtable_size = get<uint16_t>(vtable);
+		if (4 + 2 * slot >= vtable_size)
+			return 0;
+		uint16_t off = get<uint16_t>(vtable + 4 + 2 * slot);
+		return off ? table + off : 0;
+	}
+
+	string str(size_t at) const
+	{
+		uint32_t n = get<uint32_t>(at);
+		if (m_buf.size() - at - 4 < n)
+			throw out_of_range("flatbuffer");
+		return m_buf.substr(at + 4, n);
+	}
+
+	// The tables of a vector of offsets at at
+	vector<size_t> tables(size_t at) const
+	{
+		vector<size_t> res;
+		uint32_t n = get<uint32_t>(at);
+		for (uint32_t i = 0; i < n; ++i)
+			res.push_back(deref(at + 4 + 4 * i));
+		return res;
+	}
+
+private:
+	const string &m_buf;
+};
+
+map<string, vector<pair<string, string>>> arrow_field_metadata(const FileMetaData &meta)
+{
+	map<string, vector<pair<string, string>>> res;
+
+	for (const auto &kv : meta.key_value_metadata) {
+		if (kv.first != ARROW_SCHEMA_KEY)
+			continue;
+
+		string msg;
+		if (!base64_decode(kv.second, msg))
+			return res;
+
+		try {
+			// 0xFFFFFFFF and the length, or only the length (before Arrow 0.15)
+			size_t start = msg.size() >= 4 && !memcmp(msg.data(), "\xff\xff\xff\xff", 4) ? 8 : 4;
+			if (msg.size() < start)
+				return res;
+			string fb = msg.substr(start);
+			FlatBufferReader r(fb);
+
+			size_t message = r.deref(0);
+			size_t header_type = r.field(message, 1);
+			size_t header = r.field(message, 2);
+			if (!header_type || r.get<uint8_t>(header_type) != ARROW_MESSAGE_SCHEMA || !header)
+				return res;
+			size_t schema = r.deref(header);
+			size_t fields = r.field(schema, 1);
+			if (!fields)
+				return res;
+			for (size_t field : r.tables(r.deref(fields))) {
+				size_t name = r.field(field, 0);
+				size_t md = r.field(field, 6);
+				if (!name || !md)
+					continue;
+				vector<pair<string, string>> &out = res[r.str(r.deref(name))];
+				for (size_t kv_table : r.tables(r.deref(md))) {
+					size_t key = r.field(kv_table, 0);
+					size_t value = r.field(kv_table, 1);
+					if (key)
+						out.push_back(make_pair(r.str(r.deref(key)), value ? r.str(r.deref(value)) : string()));
+				}
+			}
+		} catch (const out_of_range &) {
+			res.clear();
+		}
+		return res;
+	}
+	return res;
+}
+
 //------------------------------ ParquetWriter ------------------------------
 
 // Column chunks with more distinct values (by bit pattern) are written PLAIN: arrow's 1 MB
-// dictionary page limit, in floats
+// dictionary page limit, counted in 4-byte values
 static const uint32_t MAX_DICTIONARY_SIZE = 262144;
 
 const uint64_t ParquetWriter::MAX_ROW_GROUP_ROWS;
@@ -599,7 +934,8 @@ ParquetWriter::~ParquetWriter()
 		::close(m_fd);
 }
 
-void ParquetWriter::open(const string &filename, const vector<string> &value_names, bool int64_coords, const string &created_by, const string &name)
+void ParquetWriter::open(const string &filename, const vector<string> &value_names, bool int64_coords, const string &created_by, const string &name,
+                         const vector<vector<pair<string, string>>> &value_metadata)
 {
 	const char *coords[] = { "chrom", "start", "end" };
 
@@ -622,17 +958,24 @@ void ParquetWriter::open(const string &filename, const vector<string> &value_nam
 	for (size_t i = 1; i < m_meta.schema.size(); ++i) {
 		SchemaElement &col = m_meta.schema[i];
 		col.repetition_type = FieldRepetitionType::OPTIONAL;  // nullable, as arrow writes them
-		col.type = i == 1 ? Type::BYTE_ARRAY : i <= 3 ? (int64_coords ? Type::INT64 : Type::INT32) : Type::FLOAT;
+		col.type = i == 1 ? Type::BYTE_ARRAY : i <= 3 ? (int64_coords ? Type::INT64 : Type::INT32) : Type::DOUBLE;
 		col.name = i <= 3 ? coords[i - 1] : value_names[i - 4];
 	}
 	m_meta.schema[1].converted_type = ConvertedType::UTF8;
 	m_meta.schema[1].logical_type = LogicalType::STRING;
 
+	for (const auto &md : value_metadata) {
+		if (!md.empty()) {
+			m_meta.key_value_metadata.push_back(make_pair(string(ARROW_SCHEMA_KEY), arrow_schema(m_meta.schema, value_metadata)));
+			break;
+		}
+	}
+
 	m_int64_coords = int64_coords;
 	m_chrom.clear();
 	m_starts.clear();
 	m_ends.clear();
-	m_values.assign(value_names.size(), vector<uint32_t>());
+	m_values.assign(value_names.size(), vector<uint64_t>());
 	create(filename, name);
 }
 
@@ -713,9 +1056,8 @@ void ParquetWriter::add_row(const string &chrom, int64_t start, int64_t end, con
 	m_starts.push_back(start);
 	m_ends.push_back(end);
 	for (size_t i = 0; i < m_values.size(); ++i) {
-		float v = (float)values[i];
-		uint32_t bits;
-		memcpy(&bits, &v, sizeof(bits));
+		uint64_t bits;
+		memcpy(&bits, &values[i], sizeof(bits));
 		m_values[i].push_back(bits);
 	}
 }
@@ -760,7 +1102,7 @@ void ParquetWriter::flush_row_group()
 	write_coord_column(rg.columns[1], "start", m_starts);
 	write_coord_column(rg.columns[2], "end", m_ends);
 	for (size_t i = 0; i < m_values.size(); ++i)
-		write_fixed_column(rg.columns[i + 3], Type::FLOAT, m_meta.schema[i + 4].name, m_values[i]);
+		write_fixed_column(rg.columns[i + 3], Type::DOUBLE, m_meta.schema[i + 4].name, m_values[i]);
 
 	for (const ColumnChunk &cc : rg.columns) {
 		rg.total_byte_size += cc.meta_data.total_uncompressed_size;
@@ -771,7 +1113,7 @@ void ParquetWriter::flush_row_group()
 
 	m_starts.clear();
 	m_ends.clear();
-	for (vector<uint32_t> &v : m_values)
+	for (vector<uint64_t> &v : m_values)
 		v.clear();
 }
 

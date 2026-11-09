@@ -177,7 +177,7 @@ giterator.intervals <- function(expr = NULL, intervals = .misha$ALLGENOME, itera
         stop("Usage: giterator.intervals(expr = NULL, intervals = .misha$ALLGENOME, iterator = NULL, band = NULL, intervals.set.out = NULL, interval_relative = FALSE, partial_bins = 'clip')", call. = FALSE)
     }
 
-    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+    intervals <- rescue_ALLGENOME(intervals, substitute(intervals))
 
     if (is.null(substitute(expr))) {
         exprstr <- "0"
@@ -196,6 +196,9 @@ giterator.intervals <- function(expr = NULL, intervals = .misha$ALLGENOME, itera
     if (partial_bins_code == 2L) partial_bins_code <- 1L # "drop" is alias for "exact"
 
     # Validate interval_relative mode
+    if (!is.logical(interval_relative) || length(interval_relative) != 1 || is.na(interval_relative)) {
+        stop("interval_relative must be TRUE or FALSE", call. = FALSE)
+    }
     if (interval_relative) {
         if (!is.numeric(.iterator) || length(.iterator) != 1) {
             stop("interval_relative mode requires a numeric iterator (binsize)", call. = FALSE)

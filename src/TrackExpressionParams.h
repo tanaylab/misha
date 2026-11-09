@@ -101,8 +101,8 @@ struct PWMParams {
             if (bidirect_idx >= 0) {
                 SEXP rbidirect = VECTOR_ELT(rparams, bidirect_idx);
                 if (rbidirect != R_NilValue) {
-                    if (!Rf_isLogical(rbidirect))
-                        rdb::verror("Virtual track %s: bidirect parameter must be logical", vtrack.c_str());
+                    if (!rdb::is_true_or_false(rbidirect))
+                        rdb::verror("Virtual track %s: bidirect parameter must be TRUE or FALSE", vtrack.c_str());
                     params.core.bidirect = LOGICAL(rbidirect)[0];
                 }
             }
@@ -115,8 +115,10 @@ struct PWMParams {
                 SEXP rextend = VECTOR_ELT(rparams, extend_idx);
                 if (rextend != R_NilValue) {
                     if (Rf_isLogical(rextend)) {
+                        if (!rdb::is_true_or_false(rextend))
+                            rdb::verror("Virtual track %s: extend parameter must be TRUE, FALSE or a non-negative integer", vtrack.c_str());
                         params.extend_flag = LOGICAL(rextend)[0];
-                    } else if (Rf_isInteger(rextend) && Rf_length(rextend) == 1) {
+                    } else if (Rf_isInteger(rextend) && Rf_length(rextend) == 1 && INTEGER(rextend)[0] != NA_INTEGER && INTEGER(rextend)[0] >= 0) {
                         params.extend_flag = INTEGER(rextend)[0] > 0;
                     } else if (Rf_isReal(rextend) && Rf_length(rextend) == 1 && REAL(rextend)[0] == (int)REAL(rextend)[0] && REAL(rextend)[0] >= 0) {
                         params.extend_flag = (int)REAL(rextend)[0] > 0;
@@ -271,8 +273,8 @@ struct KmerParams {
             // Handle as list params
             SEXP rextend = VECTOR_ELT(rparams, findListElementIndex(rparams, "extend"));
             if (rextend != R_NilValue) {
-                if (!Rf_isLogical(rextend))
-                    rdb::verror("Virtual track %s: extend parameter must be logical", vtrack.c_str());
+                if (!rdb::is_true_or_false(rextend))
+                    rdb::verror("Virtual track %s: extend parameter must be TRUE or FALSE", vtrack.c_str());
                 params.extend = LOGICAL(rextend)[0];
             }
 

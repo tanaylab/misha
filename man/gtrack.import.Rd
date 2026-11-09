@@ -20,8 +20,9 @@ gtrack.import(
 
 \item{file}{file path. A Parquet file (recognized by its first bytes, whatever its name)
 is imported when it has exactly one value column besides 'chrom', 'start' and 'end';
-it always makes a dense track, so 'binsize' must be > 0. Use
-\code{\link{gtrack.import_parquet}} for several columns.}
+it always makes a dense track, so 'binsize' must be > 0, and the column's field metadata
+becomes attributes of the track as in \code{\link{gtrack.import_parquet}} ('attrs' wins
+over it). Use \code{\link{gtrack.import_parquet}} for several columns.}
 
 \item{binsize}{bin size of the newly created 'Dense' track or '0' for a
 'Sparse' track}
@@ -70,10 +71,12 @@ column (5th column) exists and is numeric, it is used as the interval value;
 otherwise a constant value of 1 is used. For BED inputs, 'binsize' controls
 the output type: if 'binsize' is 0 the track is 'Sparse'; otherwise the track
 is 'Dense' with bin-averaged values based on overlaps with BED intervals (and
-'defval' for regions not covered). BED records that run past the end of
-their chromosome are clipped to it, and records left empty (zero length, or
-starting at or past the chromosome end) are dropped, with one warning giving
-the counts; a BED file with no record left is an error.
+'defval' for regions not covered). Empty BED records (zero length) are
+dropped; a BED file with no record left is an error.
+
+In every format, records that run past the end of their chromosome are
+clipped to it, and records that start at or past the end are dropped, with
+one warning giving the counts.
 
 If 'binsize' is 0 the resulted track is created in 'Sparse' format.
 Otherwise the 'Dense' format is chosen with a bin size equal to 'binsize'.

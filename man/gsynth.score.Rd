@@ -25,11 +25,15 @@ gsynth.score(
 \item{description}{Optional track description.}
 
 \item{intervals}{Intervals to score. Defaults to
-\code{gintervals.all()}. Best results when interval
-starts are aligned to multiples of
-\code{model$iterator}; otherwise the first stratum
-window is shorter than \code{model$iterator} and
-its bin label may differ from training.}
+\code{gintervals.all()}. Overlapping intervals are
+unified first, so each position is scored once. The
+stratum of a position comes from the iterator windows
+of its own interval, extended upstream by one
+\code{model$iterator}: a window cut by the interval
+end (or by the start of the extension) is evaluated on
+its part inside, so its bin may differ from the one
+training saw on the whole window. Intervals aligned to
+multiples of \code{model$iterator} avoid this.}
 
 \item{mask}{Optional intervals to NA-out in the output (e.g.
 repeats). Intersects with \code{intervals} per bp;

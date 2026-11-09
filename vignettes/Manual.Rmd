@@ -548,7 +548,7 @@ Interval sets can be saved in the Genomic Database. Use the `gintervals.save` an
 
 Internally, interval sets can be stored in two different formats: **small interval set** or **big interval set**. The specific format is chosen depending on the size of the interval set. Big format is selected for interval sets that contain more than `gbig.intervals.size` intervals (default: 1,000,000; set via `options`), while smaller sets are stored in the small format. Use `gintervals.is.bigset` to determine the format of the stored interval set.
 
-> **Note:** `gbig.intervals.size` controls *storage format* for interval sets (disk-based vs. in-memory), while `gmax.data.size` controls *buffer sizes* for streaming operations like `gextract` and `gquantiles`. These are independent thresholds serving different purposes.
+> **Note:** `gbig.intervals.size` controls *storage format* for interval sets (disk-based vs. in-memory), while `gmax.data.size` limits the *number of records* (rows of a result, values) that operations like `gextract` and `gquantiles` hold in memory. These are independent thresholds serving different purposes.
 
 Saved interval sets in the small format can be seamlessly used in all functions and track expressions without the need to explicitly load them.
 
@@ -987,13 +987,13 @@ The package detects the number of CPU cores and sets `gmax.processes = 70% of co
 - On a 16-core workstation: `gmax.processes = 11` (70% of 16)
 - On a 128-core server: `gmax.processes = 89` (70% of 128)
 
-**Automatic Buffer Size:**
-The package coordinates buffer size with process limits to ensure `gmax.processes * gmax.data.size <= 70% of RAM`. Specifically, it sets `gmax.data.size = min((RAM * 0.7) / gmax.processes, 10GB)`. This ensures that when all processes are running at full capacity, total memory usage stays within safe limits. For example:
-- On a 4-core, 8GB laptop: `gmax.processes = 2`, `gmax.data.size = 2.8GB` (total: 5.6GB = 70% of 8GB)
-- On a 16-core, 32GB workstation: `gmax.processes = 11`, `gmax.data.size = 2.0GB` (total: 22.4GB = 70% of 32GB)
-- On a 128-core, 256GB server: `gmax.processes = 89`, `gmax.data.size = 2.0GB` (total: 179.2GB = 70% of 256GB)
+**Automatic Limit on Records:**
+`gmax.data.size` is a maximal number of records (rows of a result, values, bases) that a call holds in memory: `gextract`, `gscreen` and the like fail above it, and `gquantiles` samples. It is a count, not a size in bytes. The package sets it from RAM and cores to the number `min(RAM in bytes * 0.7 / (70% of the cores), 1e10)`. For example:
+- On a 4-core, 8GB laptop: `gmax.data.size = 2.8e9` records
+- On a 16-core, 32GB workstation: `gmax.data.size = 2.0e9` records
+- On a 128-core, 256GB server: `gmax.data.size = 2.0e9` records
 
-The 10GB cap is empirically determined - larger shared memory allocations can fail even when system limits appear to allow them. This cap is rarely hit on multi-core systems due to the per-process division.
+A record takes more than one byte (a row of `gextract` holds its coordinates and one double per expression), so this bounds memory only loosely. A result too big for memory can be written to a file instead (`gextract(..., file = "x.tsv")` or `file = "x.parquet"`), which the limit does not bound.
 
 **Small Workloads:**
 Some functions may choose to run single-threaded for very small workloads to avoid fork overhead. This behavior can be function-specific. To disable multitasking entirely, set `options(gmultitasking = FALSE)`.
@@ -1002,14 +1002,14 @@ Some functions may choose to run single-threaded for very small workloads to avo
 You can still manually set these options if needed:
 ```r
 options(gmax.processes = 32)        # Override process limit
-options(gmax.data.size = 5e9)       # Override buffer size (5GB)
+options(gmax.data.size = 5e9)       # Override the limit (5e9 records)
 options(gmultitasking = FALSE)      # Disable multitasking entirely
 ```
 
 To check current auto-configured values:
 ```r
 getOption("gmax.processes")         # Current process limit
-getOption("gmax.data.size") / 1e9   # Current buffer size in GB
+getOption("gmax.data.size")         # Current limit, in records
 ```
 
 ### Limiting the Memory Consumption

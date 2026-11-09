@@ -6,6 +6,7 @@
  */
 
 #include <cstdint>
+#include <cstring>
 #include <memory>
 #include <string>
 #include <vector>
@@ -38,6 +39,23 @@ struct ImportedInterval {
 
 typedef std::vector<ImportedInterval> ImportedIntervals;
 
+
+// True when two character vectors (or two NULLs) hold the same strings. CHARSXPs are cached, so
+// equal strings are almost always the same pointer; strcmp covers the rest without allocating.
+static bool same_strings(SEXP a, SEXP b)
+{
+	if (a == b)
+		return true;
+	if (!Rf_isString(a) || !Rf_isString(b) || Rf_xlength(a) != Rf_xlength(b))
+		return false;
+	for (R_xlen_t i = 0; i < Rf_xlength(a); ++i) {
+		SEXP x = STRING_ELT(a, i);
+		SEXP y = STRING_ELT(b, i);
+		if (x != y && (x == NA_STRING || y == NA_STRING || strcmp(CHAR(x), CHAR(y))))
+			return false;
+	}
+	return true;
+}
 
 extern "C" {
 
@@ -84,8 +102,14 @@ SEXP grbind(SEXP _objs, SEXP _envir)
 			SEXP obj = VECTOR_ELT(_objs, i);
 			uint64_t srcnumrows = Rf_length(VECTOR_ELT(obj, 0));
 
-			for (int j = 0; j < Rf_length(obj); ++j) 
+			for (int j = 0; j < Rf_length(obj); ++j) {
 				src_cols[j] = VECTOR_ELT(obj, j);
+				// The codes of a factor are copied as they are, so they must index the same levels
+				// as the result's (the first object's). .grbind() gives all the objects one set.
+				if (i && Rf_isFactor(src_cols[j]) && Rf_isFactor(tgt_cols[j]) &&
+					!same_strings(Rf_getAttrib(src_cols[j], R_LevelsSymbol), Rf_getAttrib(tgt_cols[j], R_LevelsSymbol)))
+					verror("Data frames for grbind differ in the levels of factor column %d", j + 1);
+			}
 
 			iu.copy_data_frame_rows(src_cols, 0, srcnumrows, tgt_cols, tgtrow, 0);
 			tgtrow += srcnumrows;
@@ -279,8 +303,8 @@ SEXP gintervcanonic(SEXP _intervs, SEXP _unify_touching_intervals, SEXP _envir)
 	try {
         RdbInitializer rdb_init;
 
-        if (!Rf_isLogical(_unify_touching_intervals) || Rf_xlength(_unify_touching_intervals) != 1)
-            verror("unify_touching_intervals argument is not logical");
+        if (!is_true_or_false(_unify_touching_intervals))
+            verror("unify_touching_intervals argument must be TRUE or FALSE");
 
         bool unify_touching_intervals = LOGICAL(_unify_touching_intervals)[0] == 1;
         IntervUtils iu(_envir);
@@ -749,7 +773,8 @@ SEXP gintervals_normalize(SEXP _intervals, SEXP _size, SEXP _envir)
 			// Calculate center
 			int64_t center = (interv.start + interv.end) / 2;
 
-			// Create normalized interval ensuring exact size
+			// The window of current_size around the center, clipped at the chromosome ends below,
+			// so it can be shorter there.
 			// For even sizes: center is exactly in the middle
 			// For odd sizes: extra bp goes to the right side
 			int64_t new_start = center - (current_size / 2);

@@ -9,6 +9,7 @@
 #define PARQUET_H_
 
 #include <cstdint>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -139,11 +140,12 @@ struct RowGroup {
 // encode() also writes column_orders: TYPE_ORDER for every leaf column, which is what tells
 // readers that min_value / max_value follow the type's own order.
 struct FileMetaData {
-	int32_t               version = 2;
-	vector<SchemaElement> schema;  // the root, then one leaf per column
-	int64_t               num_rows = 0;
-	vector<RowGroup>      row_groups;
-	string                created_by;
+	int32_t                      version = 2;
+	vector<SchemaElement>        schema;  // the root, then one leaf per column
+	int64_t                      num_rows = 0;
+	vector<RowGroup>             row_groups;
+	vector<pair<string, string>> key_value_metadata;
+	string                       created_by;
 
 	void encode(string &out) const;
 	void decode(ThriftIn &in);
@@ -152,7 +154,7 @@ struct FileMetaData {
 }
 
 // Writes a Parquet file of intervals and values: chrom (string), start, end (INT32, or INT64
-// with int64_coords) and one FLOAT column per value name, all OPTIONAL (nullable, though no
+// with int64_coords) and one DOUBLE column per value name, all OPTIONAL (nullable, though no
 // value is null) and GZIP-compressed, as arrow writes them. Rows must arrive grouped by
 // chromosome; a row group holds one chromosome and at most MAX_ROW_GROUP_ROWS rows.
 // The file is complete only after close(); the destructor closes the file without finishing it.
@@ -172,8 +174,11 @@ public:
 	~ParquetWriter();
 
 	// created_by: the file's created_by, "misha <version>"; name: what messages call the file
-	// (the target that filename, a temporary file, stands for)
-	void open(const string &filename, const vector<string> &value_names, bool int64_coords, const string &created_by, const string &name);
+	// (the target that filename, a temporary file, stands for). value_metadata, if not empty, holds
+	// key-value pairs for each value column: written as the Arrow field metadata of the columns
+	// (an Arrow schema in the file's key-value metadata, as pyarrow writes it), when any has some.
+	void open(const string &filename, const vector<string> &value_names, bool int64_coords, const string &created_by, const string &name,
+	          const vector<vector<pair<string, string>>> &value_metadata = vector<vector<pair<string, string>>>());
 	void add_row(const string &chrom, int64_t start, int64_t end, const double *values);
 	void close();
 
@@ -191,7 +196,7 @@ private:
 	string                   m_chrom;
 	vector<int64_t>          m_starts;
 	vector<int64_t>          m_ends;
-	vector<vector<uint32_t>> m_values;  // float bit patterns, one vector per value column
+	vector<vector<uint64_t>> m_values;  // double bit patterns, one vector per value column
 
 	void create(const string &filename, const string &name);
 	void flush_row_group();
@@ -202,6 +207,11 @@ private:
 	void write(const string &bytes);
 	void append(int fd, const string &filename, uint64_t offset, uint64_t size);
 };
+
+// The Arrow field metadata of the columns of a Parquet file, by column name: what pyarrow keeps in
+// the Arrow schema it writes into the file's key-value metadata ("ARROW:schema"). Columns without
+// metadata are left out; a file without an Arrow schema, or with one that cannot be read, has none.
+map<string, vector<pair<string, string>>> arrow_field_metadata(const parquet::FileMetaData &meta);
 
 struct ParquetColumn {
 	string name;

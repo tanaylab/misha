@@ -47,9 +47,9 @@
 .gintervals.needs_bigset <- function(intervals = NULL, size = NULL) {
     if (!is.null(intervals)) {
         chromsizes <- gintervals.chrom_sizes(intervals)
-        nrow(chromsizes) && sum(chromsizes$size) > min(.ggetOption("gmax.data.size"), .ggetOption("gbig.intervals.size"))
+        nrow(chromsizes) && sum(chromsizes$size) > min(.gmax_data_size(), .ggetOption("gbig.intervals.size"))
     } else {
-        size > min(.ggetOption("gmax.data.size"), .ggetOption("gbig.intervals.size"))
+        size > min(.gmax_data_size(), .ggetOption("gbig.intervals.size"))
     }
 }
 
@@ -58,18 +58,18 @@
         chromsizes <- gintervals.chrom_sizes(intervals)
         if (nrow(chromsizes)) {
             if (!is.null(chrom)) {
-                chromsizes <- chromsizes[chromsizes$chrom == chrom, ]
+                chromsizes <- chromsizes[as.character(chromsizes$chrom) == as.character(chrom), ]
             }
             if (!is.null(chrom1)) {
-                chromsizes <- chromsizes[chromsizes$chrom1 == chrom1, ]
+                chromsizes <- chromsizes[as.character(chromsizes$chrom1) == as.character(chrom1), ]
             }
             if (!is.null(chrom2)) {
-                chromsizes <- chromsizes[chromsizes$chrom2 == chrom2, ]
+                chromsizes <- chromsizes[as.character(chromsizes$chrom2) == as.character(chrom2), ]
             }
         }
-        !nrow(chromsizes) || sum(chromsizes$size) <= .ggetOption("gmax.data.size")
+        !nrow(chromsizes) || sum(chromsizes$size) <= .gmax_data_size()
     } else {
-        size <= .ggetOption("gmax.data.size")
+        size <= .gmax_data_size()
     }
 }
 
@@ -226,9 +226,9 @@
         unlink(filename, recursive = TRUE)
     } else {
         if (!is.null(chrom)) {
-            intervs <- intervs[intervs$chrom == chrom, ]
+            intervs <- intervs[as.character(intervs$chrom) == as.character(chrom), ]
         } else {
-            intervs <- intervs[intervs$chrom1 == chrom1 & intervs$chrom2 == chrom2, ]
+            intervs <- intervs[as.character(intervs$chrom1) == as.character(chrom1) & as.character(intervs$chrom2) == as.character(chrom2), ]
         }
         .gintervals.save_file(filename, intervs)
     }

@@ -9,7 +9,8 @@ gintervals.normalize(intervals = NULL, size = NULL, intervals.set.out = NULL)
 \arguments{
 \item{intervals}{intervals set}
 
-\item{size}{target size(s) for normalized intervals. Can be either:
+\item{size}{target size(s) for normalized intervals, before the clipping at
+chromosome ends. Can be either:
 \itemize{
   \item A single positive integer: all intervals normalized to this size
   \item A numeric vector: each interval normalized to its corresponding size.
@@ -27,6 +28,12 @@ Normalized intervals set with fixed or variable sizes, or NULL if result is save
 \description{
 This function normalizes intervals by computing their centers and then expanding
 them to fixed or variable sizes, while ensuring they don't cross chromosome boundaries.
+}
+\details{
+A window that would cross a chromosome end is clipped at that end, so near
+the start or the end of a chromosome the returned interval is shorter than
+'size' (no warning is given). Filter on \code{end - start} if the windows must
+all have the full size.
 }
 \examples{
 \dontshow{

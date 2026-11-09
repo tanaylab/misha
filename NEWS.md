@@ -2,6 +2,52 @@
 
 This release fixes defects found in a review of 5.16.1, speeds up large computations, and adds features for sequence-to-function models. Fixes marked **Behavior fix** change results; recompute anything that depends on them.
 
+* **Behavior fix:** an indexed track read with two different shifts in one call (e.g. two virtual tracks on it with different `sshift`/`eshift`) gave the first shift the other's values on the first chromosome of each process. Present since 5.6.15.
+
+* **Behavior fix:** `gintervals.rbind()` no longer mixes up rows when the inputs' factor levels differ.
+
+* **Behavior fix:** `gintervals.neighbors()` breaks ties by coordinates, so results no longer depend on input order, and no longer returns a farther 2D neighbor.
+
+* **Behavior fix:** a 2D `gintervals.annotate()` returns `dist1` and `dist2`; `max_dist` limits their sum.
+
+* **Behavior fix:** virtual tracks with a filter: `first`, `last`, `sample` and `nearest` use all unmasked values; value-based `size` and `exists` are 0 when nothing unmasked has a value.
+
+* **Behavior fix:** PWM edit distance with `max_indels > 0` no longer underestimates the edits needed; `score.min` and `score.max` apply with indels; `gseq.pwm_edits()` agrees with the virtual track.
+
+* **Behavior fix:** random draws (`gsample()`, sampled quantiles, `sample` virtual tracks) follow `set.seed()` and differ between parallel processes.
+
+* **Behavior fix:** gsynth: saved models keep their iterator, `gsynth.random()` follows `nuc_probs` everywhere, and overlapping or masked regions are counted correctly.
+
+* **Behavior fix:** `gdb.create(format = "per-chromosome")` makes one chromosome per FASTA record.
+
+* **Behavior fix:** `gextract(file = "*.parquet")` writes values as double; float32 rounded large positions.
+
+* **Behavior fix:** a parallel `gextract()` stops with an error when a worker dies, instead of dropping its columns.
+
+* **Behavior fix:** imports clip a record that runs past a chromosome end, with a warning, in every format.
+
+* **Behavior fix:** with `gmulticontig.2d.cache = TRUE`, a change of `gmulticontig.2d.mode` takes effect.
+
+* `gseq.extract(pad = TRUE)` returns fixed-width windows past chromosome ends, padded with "N".
+
+* New virtual track function `weighted.sum`: value times overlapping bp, for windows that cut bins (`sum` counts every touched bin in full).
+
+* Track attributes travel through Parquet export and import. Suggested attribute names for model predictions: `value.scale`, `model`, `checkpoint`, `heldout.chroms`.
+
+* PSSM input is checked: counts are accepted; log-odds, `NA` and all-zero rows are errors.
+
+* An error inside a misha call no longer leaves the rest of the session running in one process.
+
+* `NA` logical arguments and `NA` or infinite coordinates are errors.
+
+* Intervals passed by value (e.g. through `do.call()`) are no longer slow (about 80x faster for 2M intervals).
+
+* Database fixes: stale `.db.cache` locks, refused dataset re-loads, copies into datasets and failed overwrites no longer leave the database in a bad state.
+
+* `gtrack.export_bigwig()` works on databases whose chromosome order is not alphabetical. bedGraph export is about 10x faster and bedGraph/WIG import about 6x.
+
+* `gtrack.2d.import_contacts(fends =)` needs memory for the fends only, not up to the largest id. `gmax.data.size` is documented as a number of records, and the `gtrack.smooth()` window rule is documented.
+
 * Faster, with the same results: genome-wide `gextract()` of many virtual tracks (about 2x, with about half the memory), dense tracks read at their own bin size (about 4x), `gquantiles()`, `gtrack.create_dense()`, `gextract.variants()`, small calls on databases with many tracks, and Potts scans.
 
 * Parallel computations over many intervals, such as genomes of many contigs, split the work evenly; the last process did twice the others' work. Sums combined across processes can differ in the last digits.

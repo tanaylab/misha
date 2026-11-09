@@ -83,6 +83,8 @@ void GenomeTrackFixedBin::copy_state_from_master()
 		m_last_last = m_master_obj->m_last_last;
 	if (has_function(LAST_POS))
 		m_last_last_pos = m_master_obj->m_last_last_pos;
+	if (has_function(WEIGHTED_SUM))
+		m_last_weighted_sum = m_master_obj->m_last_weighted_sum;
 	if (m_use_quantile)
 		m_sp = m_master_obj->m_sp;
 }
@@ -100,8 +102,12 @@ void GenomeTrackFixedBin::classify_fast_path_mode()
 	// vtrack scan pattern (e.g. func="lse" with sshift/eshift scanned bin-by-bin
 	// genome-wide - the motif-energy quantile workload). Let those fall through
 	// to the reducer classification so they keep the sliding-window fast path.
-	if (!m_use_quantile && __builtin_popcount(m_func_mask) == 1) {
-		const Functions f = static_cast<Functions>(__builtin_ctz(m_func_mask));
+	//
+	// WEIGHTED_SUM is computed apart from the other functions (read_interval_weighted_sum) and plays no
+	// part in choosing their path.
+	const uint32_t func_mask = m_func_mask & ~(1u << WEIGHTED_SUM);
+	if (!m_use_quantile && __builtin_popcount(func_mask) == 1) {
+		const Functions f = static_cast<Functions>(__builtin_ctz(func_mask));
 		if (f != SUM && f != LSE && f != EXISTS && f != SIZE) {
 			m_fast_path_mode = 3;
 			m_single_func = f;
@@ -115,7 +121,7 @@ void GenomeTrackFixedBin::classify_fast_path_mode()
 	uint32_t bits = 0;
 
 	for (int i = 0; i < NUM_FUNCS; ++i) {
-		if (!(m_func_mask & (1u << i)))
+		if (!(func_mask & (1u << i)))
 			continue;
 
 		const int func = i;
@@ -690,6 +696,12 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 		return;
 	}
 
+	if (has_function(WEIGHTED_SUM)) {
+		read_interval_weighted_sum(interval);
+		if (m_func_mask == (1u << WEIGHTED_SUM) && !m_use_quantile)
+			return;
+	}
+
 	if (m_fast_path_mode == 0)
 		classify_fast_path_mode();
 
@@ -1032,6 +1044,59 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 			}
 		}
 	}
+
+void GenomeTrackFixedBin::read_interval_weighted_sum(const GInterval &interval)
+{
+	// Each bin that the interval touches adds its value times the bp it shares with the interval: the first
+	// and the last bin may be cut, the bins between them count bin_size bp. The interval never runs past the
+	// chromosome end, so the last bin of the chromosome, shorter than bin_size or not, is cut right too.
+	// Reads the bins without moving the read cursor of the other functions when the track is mmap'd.
+	m_last_weighted_sum = numeric_limits<double>::quiet_NaN();
+	if (interval.start >= interval.end || !m_bin_size)
+		return;
+
+	const int64_t bin_size = m_bin_size;
+	const int64_t sbin = interval.start / bin_size;
+	int64_t ebin = (interval.end + bin_size - 1) / bin_size;
+	const float *vals;
+
+	if (m_mmap_data) {
+		ebin = std::min(ebin, m_mmap_num_bins);
+		vals = m_mmap_data + sbin;
+	} else {
+		m_scratch_wsum_vals.clear();
+		ebin = sbin + read_bins_bulk(sbin, ebin - sbin, m_scratch_wsum_vals);
+		vals = m_scratch_wsum_vals.data();
+	}
+	if (ebin <= sbin)
+		return;
+
+	auto overlap = [&](int64_t bin) {
+		return (double)(std::min(interval.end, (bin + 1) * bin_size) - std::max(interval.start, bin * bin_size));
+	};
+
+	// a stored inf is read as NaN, as by read_next_bin
+	double edges = 0, inner = 0;
+	bool has_value = false;
+	const int64_t num_bins = ebin - sbin;
+	if (std::isfinite(vals[0])) {
+		edges += vals[0] * overlap(sbin);
+		has_value = true;
+	}
+	if (num_bins > 1 && std::isfinite(vals[num_bins - 1])) {
+		edges += vals[num_bins - 1] * overlap(ebin - 1);
+		has_value = true;
+	}
+	for (int64_t i = 1; i < num_bins - 1; ++i) {
+		if (std::isfinite(vals[i])) {
+			inner += vals[i];
+			has_value = true;
+		}
+	}
+
+	if (has_value)
+		m_last_weighted_sum = edges + inner * bin_size;
+}
 
 double GenomeTrackFixedBin::last_max_pos() const
 {

@@ -1063,3 +1063,191 @@ test_that("gvtrack.filter works with gvtrack.create", {
     # The result should NOT be NA for the unmasked interval
     expect_false(is.na(result_uncovered$test_filter[1]))
 })
+
+# Blocks of 400 bp on chr1, each with the values 1, 2 and 6 at [0,50), [100,150) and [250,300) of the block
+vf_blocks <- function(nblocks) {
+    off <- rep((seq_len(nblocks) - 1) * 400, each = 3)
+    data.frame(chrom = "chr1", start = off + c(0, 100, 250), end = off + c(50, 150, 300), score = rep(c(1, 2, 6), nblocks))
+}
+
+# A sparse, a dense (50 bp bins, the bins between the values hold none) and an array track of the values of vv,
+# in a new per-chromosome database (so the tracks are written per chromosome); returns the sources to compare, the
+# value-based vtrack included
+vf_sources <- function(vv, env = parent.frame()) {
+    d <- tempfile("vf_")
+    dir.create(d)
+    withr::defer(unlink(d, recursive = TRUE), envir = testthat::teardown_env())
+    set.seed(1)
+    s1 <- paste(sample(c("A", "C", "G", "T"), max(vv$end) + 1000, TRUE), collapse = "")
+    cat(sprintf(">chr1\n%s\n", s1), file = file.path(d, "chr1.fasta"))
+    cat(">chr2\nACGTACGTACGT\n", file = file.path(d, "chr2.fasta"))
+    suppressMessages(gdb.create(groot = file.path(d, "db"), fasta = file.path(d, c("chr1.fasta", "chr2.fasta")), format = "per-chromosome"))
+    gdb.init(file.path(d, "db"))
+    gtrack.create_sparse("vf_sp", "x", vv[, 1:3], vv$score)
+    gtrack.create_dense("vf_dn", "x", vv[, 1:3], vv$score, 50, NaN)
+    f <- tempfile(fileext = ".tsv")
+    write.table(setNames(vv, c("chrom", "start", "end", "a")), f, sep = "\t", quote = FALSE, row.names = FALSE)
+    suppressMessages(gtrack.array.import("vf_arr", "x", f))
+    unlink(f)
+    withr::defer(
+        {
+            gvtrack.clear()
+            for (tr in c("vf_sp", "vf_dn", "vf_arr")) gtrack.rm(tr, force = TRUE)
+        },
+        envir = env
+    )
+    list(sp = "vf_sp", dn = "vf_dn", arr = "vf_arr", vv = vv)
+}
+
+test_that("with a filter, first and last and their positions skip unmasked parts that hold no value", {
+    local_db_state()
+    srcs <- vf_sources(vf_blocks(2))
+    iv <- gintervals("chr1", 400, 800)
+    # parts [460,470) and [480,800): the first part holds no value
+    m_first <- gintervals("chr1", c(400, 470), c(460, 480))
+    # parts [400,550), [560,720) and [730,800): the last part holds no value
+    m_last <- gintervals("chr1", c(550, 720), c(560, 730))
+    expected <- list(
+        first = list(m_first, 2), first.pos.abs = list(m_first, 500), first.pos.relative = list(m_first, 100),
+        last = list(m_last, 6), last.pos.abs = list(m_last, 650), last.pos.relative = list(m_last, 250)
+    )
+    check <- function(label) {
+        for (f in names(expected)) {
+            for (s in names(srcs)) {
+                gvtrack.create("vf", srcs[[s]], f, filter = expected[[f]][[1]])
+                expect_equal(gextract("vf", iv, iterator = iv)$vf, expected[[f]][[2]], info = paste(label, s, f))
+            }
+        }
+    }
+    track_files <- function(tr) list.files(file.path(.misha$GROOT, "tracks", paste0(tr, ".track")))
+    expect_true("chr1" %in% track_files("vf_sp"))
+    check("per-chromosome")
+    withr::with_options(list(gshared.track.backend = TRUE), check("shared backend"))
+    for (tr in c("vf_sp", "vf_dn", "vf_arr")) {
+        suppressMessages(gtrack.convert_to_indexed(tr))
+        expect_true("track.idx" %in% track_files(tr))
+    }
+    check("indexed")
+    withr::with_options(list(gshared.track.backend = TRUE), check("indexed, shared backend"))
+})
+
+test_that("with a filter, nearest is the average of the unmasked values, each counted once", {
+    local_db_state()
+    srcs <- vf_sources(vf_blocks(2))
+    iv <- gintervals("chr1", 400, 800)
+    # [420,430) splits the first value; [460,470) falls between the first two
+    for (mask in list(gintervals("chr1", 420, 430), gintervals("chr1", 460, 470))) {
+        for (s in names(srcs)) {
+            gvtrack.create("vf", srcs[[s]], "nearest", filter = mask)
+            expect_equal(gextract("vf", iv, iterator = iv)$vf, mean(c(1, 2, 6)), info = paste(s, mask$start))
+            withr::with_options(
+                list(gshared.track.backend = TRUE),
+                expect_equal(gextract("vf", iv, iterator = iv)$vf, mean(c(1, 2, 6)), info = paste(s, mask$start, "shared"))
+            )
+        }
+    }
+})
+
+test_that("with a filter, nearest without an unmasked value in the interval is the nearest unmasked value", {
+    local_db_state()
+    vv <- vf_blocks(2)
+    srcs <- vf_sources(vv)
+    # the values: 1 at [0,50), 2 at [100,150), 6 at [250,300), and the same again 400 bp later
+    cases <- list(
+        # the mask leaves [100,140) of the value 2, 20 bp from the interval; 6 is 10 bp away
+        list(gintervals("chr1", 160, 240), gintervals("chr1", 140, 155), 6),
+        # the value 2 lies inside the mask, not a candidate
+        list(gintervals("chr1", 80, 240), gintervals("chr1", 80, 160), 6),
+        # 1 and 2 both 10 bp away: the left one, as without a filter
+        list(gintervals("chr1", 60, 90), gintervals("chr1", 1500, 1510), 1),
+        # distances are from the nearest unmasked part: [170,195) to 2 is 20 bp, [205,240) to 6 is 10 bp
+        list(gintervals("chr1", 160, 240), gintervals("chr1", c(160, 195), c(170, 205)), 6),
+        # every value of the chromosome is masked
+        list(gintervals("chr1", 160, 240), rbind(vv[, 1:3], gintervals("chr1", 170, 180)), NA_real_),
+        # the chromosome holds no value
+        list(gintervals("chr2", 0, 12), gintervals("chr2", 3, 5), NA_real_)
+    )
+    check <- function(label) {
+        for (k in seq_along(cases)) {
+            for (s in names(srcs)) {
+                gvtrack.create("vf", srcs[[s]], "nearest", filter = cases[[k]][[2]])
+                # nearest on a dense track does not look outside the interval, with or without a filter
+                expected <- if (s == "dn") NA_real_ else cases[[k]][[3]]
+                iv <- cases[[k]][[1]]
+                expect_equal(gextract("vf", iv, iterator = iv)$vf, expected, info = paste(label, s, "case", k))
+            }
+        }
+    }
+    check("per-chromosome")
+    withr::with_options(list(gshared.track.backend = TRUE), check("shared backend"))
+    for (tr in c("vf_sp", "vf_dn", "vf_arr")) suppressMessages(gtrack.convert_to_indexed(tr))
+    check("indexed")
+    withr::with_options(list(gshared.track.backend = TRUE), check("indexed, shared backend"))
+})
+
+test_that("with a filter, sample draws each unmasked value with the same chance", {
+    local_db_state()
+    nblocks <- 1200
+    srcs <- vf_sources(vf_blocks(nblocks))
+    starts <- (seq_len(nblocks) - 1) * 400
+    iv <- gintervals("chr1", starts, starts + 400)
+    set.seed(11)
+    # [150,160) leaves two values in the first part and one in the second; [120,130) splits the second value,
+    # which is still one value
+    for (cut in list(c(150, 160), c(120, 130))) {
+        mask <- gintervals("chr1", starts + cut[1], starts + cut[2])
+        for (s in names(srcs)) {
+            gvtrack.create("vf", srcs[[s]], "sample", filter = mask)
+            gvtrack.create("vf_pos", srcs[[s]], "sample.pos.relative", filter = mask)
+            for (shared in c(FALSE, TRUE)) {
+                r <- withr::with_options(list(gshared.track.backend = shared), gextract(c("vf", "vf_pos"), iv, iterator = iv))
+                expect_equal(nrow(r), nblocks)
+                # with 1200 draws the standard error of each share is about 0.014
+                share <- as.numeric(table(factor(r$vf, levels = c(1, 2, 6)))) / nblocks
+                expect_true(all(abs(share - 1 / 3) < 0.06), info = paste(s, cut[1], shared, toString(round(share, 3))))
+                share <- as.numeric(table(factor(r$vf_pos, levels = c(0, 100, 250)))) / nblocks
+                expect_true(all(abs(share - 1 / 3) < 0.06), info = paste(s, cut[1], shared, "pos", toString(round(share, 3))))
+            }
+        }
+    }
+})
+
+test_that("with a filter, size and exists are 0 when the unmasked parts hold no value", {
+    local_db_state()
+    vv <- data.frame(chrom = "chr1", start = c(100, 500), end = c(110, 510), score = c(1, 2))
+    srcs <- vf_sources(vv)
+    iv <- gintervals("chr1", 200, 300)
+    # parts [200,250) and [260,300), neither holds a value
+    mask <- gintervals("chr1", 250, 260)
+    for (s in names(srcs)) {
+        for (f in c("size", "exists", "avg", "sum")) {
+            gvtrack.create("vf", srcs[[s]], f, filter = mask)
+            expected <- if (f %in% c("size", "exists")) 0 else NA_real_
+            expect_equal(gextract("vf", iv, iterator = iv)$vf, expected, info = paste(s, f))
+        }
+        # an interval masked entirely gives NA, as documented
+        gvtrack.create("vf", srcs[[s]], "size", filter = gintervals("chr1", 150, 350))
+        expect_true(is.na(gextract("vf", iv, iterator = iv)$vf), info = s)
+    }
+})
+
+test_that("with a filter, sample advances .Random.seed like an R draw", {
+    # A filtered sample used to reload .Random.seed in the middle of the call, so R's next draw
+    # repeated one of the call's draws. [150,160) splits [0,400) into two parts holding values;
+    # the call makes at most 3 draws (one per part, one to pick a part), so R's next draw must not
+    # be one of the first 3 of the stream.
+    local_db_state()
+    vf_sources(vf_blocks(1))
+    q <- gintervals("chr1", 0, 400)
+    repeats <- 0
+    for (s in 1:40) {
+        gvtrack.create("filt_samp", "vf_sp", "sample", filter = gintervals("chr1", 150, 160))
+        set.seed(s)
+        u <- runif(3)
+        set.seed(s)
+        v <- withr::with_options(list(gmultitasking = FALSE), gextract("filt_samp", q, iterator = q)$filt_samp)
+        expect_true(v %in% c(1, 2, 6))
+        repeats <- repeats + (runif(1) %in% u)
+    }
+    expect_equal(repeats, 0)
+})

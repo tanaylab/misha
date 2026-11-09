@@ -201,7 +201,7 @@ gtrack.array.extract <- function(track = NULL, slice = NULL, intervals = NULL, f
     }
     .gcheckroot()
 
-    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+    intervals <- rescue_ALLGENOME(intervals, substitute(intervals))
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
     slice <- .gslice(trackstr, slice)
@@ -298,6 +298,10 @@ gtrack.array.get_colnames <- function(track = NULL) {
 #' through the chromosome alias chain, with the lines of other chromosomes
 #' skipped and their names reported. A file that names chromosomes and matches
 #' none of them is an error.
+#'
+#' As in \code{\link{gtrack.import}}, records of a file that run past the end
+#' of their chromosome are clipped to it, and records that start at or past
+#' the end are dropped, with one warning giving the counts.
 #'
 #' 'description' is added as a track attribute.
 #'

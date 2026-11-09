@@ -20,6 +20,13 @@ Loads a previously saved Markov model. Auto-detects the format:
         falls back to legacy RDS format
 }
 }
+\details{
+A .gsm model saved by a misha version whose \code{gsynth.save} did not
+store the iterator has none: before \code{\link{gsynth.sample}} or
+\code{\link{gsynth.score}} can use a stratified model, set
+\code{model$iterator} to the iterator used in \code{\link{gsynth.train}}.
+An unstratified model samples without it.
+}
 \seealso{
 \code{\link{gsynth.save}}, \code{\link{gsynth.train}},
          \code{\link{gsynth.convert}}

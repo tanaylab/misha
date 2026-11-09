@@ -77,6 +77,8 @@ void GenomeTrackInMemory::read_interval(const GInterval &interval)
 		m_last_last = numeric_limits<float>::quiet_NaN();
 	if (has_function(LAST_POS))
 		m_last_last_pos = numeric_limits<double>::quiet_NaN();
+	if (has_function(WEIGHTED_SUM))
+		m_last_weighted_sum = numeric_limits<double>::quiet_NaN();
 
 	if (m_use_quantile)
 		m_sp.reset();
@@ -155,6 +157,7 @@ void GenomeTrackInMemory::calc_vals_coverage_weighted(const GInterval &interval)
 	double stddev_mean = 0;
 	double stddev_m2 = 0;
 	double sum_accum = 0;
+	double wsum_accum = 0;
 	float v;
 
 	// For sampling
@@ -187,6 +190,8 @@ void GenomeTrackInMemory::calc_vals_coverage_weighted(const GInterval &interval)
 
 		if (!std::isnan(v)) {
 			sum_accum += v;
+			if (has_function(WEIGHTED_SUM))
+				wsum_accum += (double)v * (std::min(iinterv->end, interval.end) - std::max(iinterv->start, interval.start));
 
 			// Min/Max tracking
 			if (v < m_last_min) {
@@ -273,6 +278,9 @@ void GenomeTrackInMemory::calc_vals_coverage_weighted(const GInterval &interval)
 		if (has_function(MIN_POS))
 			m_last_min_pos = numeric_limits<double>::quiet_NaN();
 	}
+
+	if (has_function(WEIGHTED_SUM))
+		m_last_weighted_sum = num_vs > 0 ? wsum_accum : numeric_limits<double>::quiet_NaN();
 
 	// Handle min/max edge cases
 	if (m_last_min == numeric_limits<float>::max())

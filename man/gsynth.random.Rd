@@ -50,9 +50,8 @@ intervals take precedence.}
 
 \item{n_samples}{Number of samples to generate per interval. Default is 1.}
 
-\item{iterator}{Iterator for position resolution. Default is 1 (base-pair resolution).
-Larger values may speed up processing but are typically not needed for
-random sampling.}
+\item{iterator}{Not used: every base is drawn independently of its position.
+Kept for compatibility.}
 }
 \value{
 When output_format is "misha" or "fasta", returns invisible NULL and

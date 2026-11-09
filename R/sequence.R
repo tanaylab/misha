@@ -106,7 +106,10 @@ gseq.comp <- function(seq) {
     roi_start <- if (is.null(start_pos)) rep.int(1L, n) else rep_len(as.integer(start_pos), n)
     roi_end <- if (is.null(end_pos)) L else rep_len(as.integer(end_pos), n)
 
-    # Handle extend parameter
+    # Handle extend parameter; an NA would act as TRUE in C_gseq_pwm/C_gseq_kmer
+    if (length(extend) != 1 || is.na(extend)) {
+        stop("extend must be FALSE, TRUE, or a non-negative integer")
+    }
     E <- if (isFALSE(extend)) {
         0L
     } else if (isTRUE(extend)) {
@@ -141,7 +144,9 @@ gseq.comp <- function(seq) {
 #' All reported positions are on the full input sequence.
 #'
 #' @param seqs character vector of DNA sequences (A/C/G/T/N; case-insensitive)
-#' @param pssm numeric matrix or data frame with columns named A, C, G, T (additional columns are allowed and will be ignored)
+#' @param pssm numeric matrix or data frame with columns named A, C, G, T (additional columns are allowed and will be ignored).
+#'   Each row holds the probabilities or counts of the four bases at one motif position; log-odds matrices, \code{NA}
+#'   values and rows summing to 0 are rejected.
 #' @param mode character; one of "lse", "max", "pos", or "count"
 #' @param bidirect logical; if TRUE, scans both strands (default: TRUE)
 #' @param strand integer; \code{1} for the forward strand, \code{-1} for the
@@ -607,30 +612,49 @@ gseq.potts <- function(seqs, model, mode = c("lse", "max", "pos", "count"),
 #'
 #' @param seqs character vector of DNA sequences, OR a data frame of genomic
 #'   intervals (with columns chrom, start, end). When intervals are provided,
-#'   sequences are extracted automatically via \code{gseq.extract}.
+#'   sequences are extracted automatically via \code{gseq.extract}, and the
+#'   windows scanned are those the \code{pwm.edit_distance} virtual track scans
+#'   for the same interval. A \code{strand} column is ignored, as by the virtual
+#'   track: the strand scanned is set by \code{bidirect} and \code{strand}.
 #' @param pssm numeric matrix or data frame with columns A, C, G, T. Each row
-#'   is a motif position.
+#'   is a motif position and holds the probabilities or counts of the four
+#'   bases; log-odds matrices, \code{NA} values and rows summing to 0 are
+#'   rejected.
 #' @param score.thresh single number; target PWM log-likelihood score to reach.
 #' @param max_edits integer or NULL; maximum number of edits to search. NULL
 #'   means no cap. Default NULL.
 #' @param max_indels integer or NULL; maximum number of insertions and deletions
 #'   allowed (default NULL, substitutions only). When > 0, a banded
 #'   Needleman-Wunsch DP is used. Edits are reported with \code{edit_type}
-#'   "sub", "ins", or "del".
+#'   "sub", "ins", or "del". An inserted base is the best its motif column
+#'   allows (the column maximum for \code{"above"}, the minimum for
+#'   \code{"below"}) and is scored as such.
 #' @param bidirect logical; scan both strands? Default TRUE.
 #' @param prior numeric; pseudocount for PSSM frequencies. Default 0.01.
 #' @param score.min numeric or NULL; skip windows with PWM score below this.
-#'   Default NULL (no filter).
+#'   Default NULL (no filter). The score is the window's ungapped score (the
+#'   PSSM-length window from its start), also with \code{max_indels > 0}; a
+#'   window without one (a non-ACGT base among its first PSSM-length bases) is
+#'   skipped when a filter is set.
 #' @param score.max numeric or NULL; skip windows with PWM score above this.
-#'   Default NULL (no filter).
+#'   Default NULL (no filter). Same score as \code{score.min}.
 #' @param extend logical or integer; extend sequence for boundary motifs.
-#'   Default TRUE.
+#'   Default TRUE. For interval input it means what it means for the
+#'   \code{pwm.edit_distance} virtual track: \code{TRUE} or a positive integer
+#'   lets a window start at every position of the interval and read bases past
+#'   its end; \code{FALSE} or 0 keeps every window (deletions included) inside
+#'   the interval.
 #' @param strand integer; which strand to scan when \code{bidirect=FALSE}.
 #'   1=forward, -1=reverse. Default 1.
 #' @param direction character; direction of the edit distance query.
 #'   \code{"above"} (default) finds minimum edits to bring score above
 #'   \code{score.thresh}; \code{"below"} finds minimum edits to bring score
-#'   below \code{score.thresh}.
+#'   below \code{score.thresh}. With \code{"below"} and \code{bidirect = TRUE},
+#'   as in the \code{pwm.edit_distance} virtual track, both strand readings of a
+#'   window must end up below the threshold, so the strand needing more edits
+#'   decides \code{n_edits} (a strand that cannot be brought below makes the
+#'   window unreachable); the reported edits and \code{strand} are those of that
+#'   strand's reading, and the edits are what disrupts that reading.
 #' @return A data frame (long format) with one row per edit, containing columns:
 #' \describe{
 #'   \item{seq_idx}{Index into input sequences/intervals (1-based)}
@@ -684,6 +708,14 @@ gseq.pwm_edits <- function(seqs,
                            extend = TRUE,
                            strand = 1L,
                            direction = "above") {
+    # Validate PSSM
+    pssm <- .coerce_pssm_matrix(
+        pssm,
+        numeric_msg = "pssm must be a numeric matrix or data frame with numeric columns",
+        ncol_msg = "pssm must have columns named A, C, G, T",
+        colnames_msg = "pssm must have columns named A, C, G, T"
+    )
+
     # Handle interval input: extract sequences
     is_intervals <- is.data.frame(seqs) &&
         all(c("chrom", "start", "end") %in% colnames(seqs))
@@ -691,19 +723,25 @@ gseq.pwm_edits <- function(seqs,
     intervals_df <- NULL
     if (is_intervals) {
         intervals_df <- seqs
-        # Extend END only — matching vtrack's calculate_expanded_interval.
-        # The motif window starts within the interval and extends rightward,
-        # so we need extra sequence after the interval end.
-        # With this extension, the valid window starts are exactly
-        # offsets 0..(interval_length-1) in the extracted sequence.
-        # When indels are enabled, deletions produce windows of length
-        # L + max_indels, so we need max_indels additional bases beyond
-        # the standard extension (matching PWMEditDistanceScorer which
-        # calls calculate_expanded_interval with motif_len + max_indels).
+        # The windows scanned are the pwm.edit_distance vtrack's for the same
+        # interval and extend value. The vtrack reads extend = TRUE or a
+        # positive integer as TRUE: the sequence is padded at the END by
+        # (motif length + max_indels - 1), clipped at the chromosome end, and a
+        # window starts at every interval position. With extend = FALSE or 0
+        # nothing is padded and a window must fit in the interval: the last
+        # start is interval length - motif length, and with indels a deletion
+        # window may not run past the interval end either.
         w <- nrow(pssm)
         indel_extra <- if (!is.null(max_indels)) as.integer(max_indels) else 0L
-        ext <- if (isTRUE(extend)) w - 1L + indel_extra else if (isFALSE(extend)) 0L else as.integer(extend) + indel_extra
+        ext_flag <- isTRUE(extend) ||
+            (is.numeric(extend) && length(extend) == 1 && !is.na(extend) && extend > 0)
+        ext <- if (ext_flag) w - 1L + indel_extra else 0L
         extended_intervals <- intervals_df
+        # A strand column is ignored, as the vtrack ignores it: gseq.extract()
+        # would return strand = -1 rows reverse-complemented, and the scan
+        # (and, with indels, its extra bases at the END) would then run over
+        # the other strand. The strand scanned is set by bidirect / strand.
+        extended_intervals$strand <- NULL
         extended_intervals$end <- extended_intervals$end + ext
         # Clamp to chromosome boundaries (vectorized: O(N) total, not O(N*M))
         chrom_sizes <- gintervals.all()
@@ -712,40 +750,21 @@ gseq.pwm_edits <- function(seqs,
         keep <- !is.na(max_end)
         extended_intervals$end[keep] <- pmin(extended_intervals$end[keep], max_end[keep])
         seqs <- gseq.extract(extended_intervals)
-        # Without indels: the extended sequence has length
-        # interval_length + w - 1, and C++ scans positions 0..(seqlen-w)
-        # = 0..(interval_length-1), giving exactly interval_length windows.
-        # No ROI constraint needed.
-        #
-        # With indels: we extend by an extra indel_extra bases so that
-        # deletion windows (length up to w + max_indels) at the last
-        # interval position have enough sequence. But without ROI, the
-        # C++ would scan extra window starts beyond the interval.
-        # We constrain via ROI so that valid window starts are exactly
-        # 0..(interval_length-1), matching the vtrack behavior.
-        # ROI is 1-based: roi_end = interval_length + w - 1 means
-        # the last valid start is roi_end - w = interval_length - 1.
-        if (indel_extra > 0L) {
-            interval_lengths <- intervals_df$end - intervals_df$start
-            roi_start <- rep(1L, length(seqs))
-            roi_end <- as.integer(interval_lengths + w - 1L)
-        } else {
-            roi_start <- NULL
-            roi_end <- NULL
-        }
+        # Window starts are limited through the ROI (1-based; C++ lets a window
+        # start up to roi_end - w, and no later than where fewer than the
+        # shortest window's bases remain). Padded: roi_end = length + w - 1, so
+        # the last start is length - 1; where the padding was clipped at the
+        # chromosome end, windows of fewer than w bases (indels) start there as
+        # in the vtrack. Not padded: roi_end = length, so the last start is
+        # length - w.
+        interval_lengths <- intervals_df$end - intervals_df$start
+        roi_start <- rep(1L, length(seqs))
+        roi_end <- as.integer(if (ext_flag) interval_lengths + w - 1L else interval_lengths)
     } else {
         seqs <- as.character(seqs)
         roi_start <- NULL
         roi_end <- NULL
     }
-
-    # Validate PSSM
-    pssm <- .coerce_pssm_matrix(
-        pssm,
-        numeric_msg = "pssm must be a numeric matrix or data frame with numeric columns",
-        ncol_msg = "pssm must have columns named A, C, G, T",
-        colnames_msg = "pssm must have columns named A, C, G, T"
-    )
 
     # Validate parameters
     # Same contract as the pwm.edit_distance vtracks and pwm.count: one value,
@@ -760,7 +779,9 @@ gseq.pwm_edits <- function(seqs,
         max_indels <- as.integer(max_indels)
         if (max_indels < 0) stop("max_indels must be NULL or a non-negative integer")
     }
-    if (!is.logical(bidirect)) stop("bidirect must be TRUE or FALSE")
+    if (!is.logical(bidirect) || length(bidirect) != 1L || is.na(bidirect)) {
+        stop("bidirect must be TRUE or FALSE", call. = FALSE)
+    }
     if (!is.numeric(prior) || prior < 0 || prior > 1) stop("prior must be between 0 and 1")
     if (strand != 1 && strand != -1) stop("strand must be 1 or -1")
     if (!direction %in% c("above", "below")) stop("direction must be 'above' or 'below'")
@@ -949,10 +970,12 @@ gseq.kmer <- function(seqs,
 #' Counts the occurrence of all k-mers (of size k) within the specified
 #' genomic intervals, optionally excluding masked regions.
 #'
-#' @param intervals Genomic intervals to analyze
+#' @param intervals Genomic intervals to analyze. Overlapping intervals are
+#'        unified first, so each position is counted once; a k-mer that crosses
+#'        from an interval into an adjacent one is not counted.
 #' @param k Integer k-mer size (1-10). Default is 6.
-#' @param mask Optional intervals to exclude from counting. Positions within
-#'        the mask will not contribute to k-mer counts.
+#' @param mask Optional intervals to exclude from counting. A k-mer that
+#'        overlaps the mask is not counted.
 #'
 #' @return A data frame with columns:
 #'   \describe{

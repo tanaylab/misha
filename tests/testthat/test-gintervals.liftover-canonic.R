@@ -233,3 +233,19 @@ test_that("gintervals.liftover default behavior unchanged (canonic=FALSE)", {
     expect_equal(nrow(result_explicit), 2)
     expect_true("intervalID" %in% colnames(result_explicit))
 })
+
+test_that("gintervals.liftover refuses an NA canonic or include_metadata", {
+    local_db_state()
+    setup_db(list(paste0(">chr1\n", paste(rep("A", 300), collapse = ""), "\n")))
+    chain_file <- new_chain_file()
+    cat("chain 1000 source1 300 + 0 200 chr1 300 + 0 100 1\n", file = chain_file)
+    cat("50\t100\t0\n", file = chain_file, append = TRUE)
+    cat("50\n\n", file = chain_file, append = TRUE)
+    chain <- gintervals.load_chain(chain_file)
+    src_intervals <- data.frame(chrom = "source1", start = 0, end = 200, stringsAsFactors = FALSE)
+
+    # an NA was read as TRUE
+    expect_error(gintervals.liftover(src_intervals, chain, canonic = NA), "canonic must be TRUE or FALSE")
+    expect_error(gintervals.liftover(src_intervals, chain, include_metadata = NA), "include_metadata must be TRUE or FALSE")
+    expect_equal(nrow(gintervals.liftover(src_intervals, chain, canonic = TRUE)), 1)
+})

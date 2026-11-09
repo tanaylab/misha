@@ -52,6 +52,10 @@ static void log_gextract_timing(const char *label, double ms) {
 using namespace std;
 using namespace rdb;
 
+// The first suggestion of the error about a result over gmax.data.size: a file output is not limited
+static const char *GEXTRACT_FILE_SUGGESTION =
+	"  - Write the result to a file, which gmax.data.size does not limit: gextract(..., file = \"x.tsv\") or file = \"x.parquet\"\n";
+
 static uint64_t estimate_records_for_expr(
 	IntervUtils &iu,
 	SEXP exprs,
@@ -832,9 +836,33 @@ static string parquet_created_by()
 	return string("misha version ") + CHAR(STRING_ELT(version, 0));
 }
 
+// The attributes of each expression that is exactly the name of a track (none for any other
+// expression), written as the field metadata of its Parquet column
+static vector<vector<pair<string, string>>> parquet_value_metadata(IntervUtils &iu, SEXP _exprs)
+{
+	vector<vector<pair<string, string>>> res(Rf_length(_exprs));
+	SEXP gtracks = find_in_misha(iu.get_env(), "GTRACKS");
+
+	if (!Rf_isString(gtracks))
+		return res;
+	for (int i = 0; i < Rf_length(_exprs); ++i) {
+		const char *expr = CHAR(STRING_ELT(_exprs, i));
+		bool is_track = false;
+
+		for (R_xlen_t j = 0; j < Rf_xlength(gtracks) && !is_track; ++j)
+			is_track = !strcmp(CHAR(STRING_ELT(gtracks, j)), expr);
+		if (is_track) {
+			GenomeTrack::TrackAttrs attrs;
+			GenomeTrack::load_attrs(expr, track2attrs_path(iu.get_env(), expr).c_str(), attrs);
+			res[i].assign(attrs.begin(), attrs.end());
+		}
+	}
+	return res;
+}
+
 // Writes the rows of a begun scan to a new Parquet file, path; messages call it target
 static void write_parquet_rows(TrackExprScanner &scanner, IntervUtils &iu, const string &path, const char *target, const vector<string> &names,
-							   bool int64_coords, const string &created_by)
+							   bool int64_coords, const string &created_by, const vector<vector<pair<string, string>>> &metadata)
 {
 	if (!scanner.get_iterator()->is_1d())
 		verror("Parquet output does not support 2D iterators");
@@ -842,7 +870,7 @@ static void write_parquet_rows(TrackExprScanner &scanner, IntervUtils &iu, const
 	ParquetWriter writer;
 	vector<double> values(names.size());
 
-	writer.open(path, names, int64_coords, created_by, target);
+	writer.open(path, names, int64_coords, created_by, target, metadata);
 	for (; !scanner.isend(); scanner.next()) {
 		const GInterval &interval = scanner.last_interval1d();
 		for (unsigned iexpr = 0; iexpr < values.size(); ++iexpr)
@@ -862,7 +890,8 @@ static void write_parquet(TrackExprScanner &scanner, IntervUtils &iu, const char
 
 	ParquetOutput out = parquet_output(filename);
 	TmpFiles tmp { { out.tmp } };
-	write_parquet_rows(scanner, iu, out.tmp, filename, parquet_value_names(_exprs, _colnames), parquet_int64_coords(iu, intervals1d), parquet_created_by());
+	write_parquet_rows(scanner, iu, out.tmp, filename, parquet_value_names(_exprs, _colnames), parquet_int64_coords(iu, intervals1d), parquet_created_by(),
+					   parquet_value_metadata(iu, _exprs));
 	commit_parquet(out);
 	tmp.paths.clear();
 }
@@ -1125,7 +1154,7 @@ SEXP C_gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_pol
 					interv_ids.push_back(iu.get_orig_interv_idx(scanner.last_scope_interval2d()) + 1);
 				}
 
-				iu.verify_max_data_size(values[0].size(), "Result");
+				iu.verify_max_data_size(values[0].size(), "Result", true, GEXTRACT_FILE_SUGGESTION, "rows");
 				check_interrupt();
 			}
 
@@ -1337,7 +1366,7 @@ SEXP C_gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_pol
 				p_row_names[row] = (int)(row + 1);
 				row++;
 
-				iu.verify_max_data_size(row, "Result");
+				iu.verify_max_data_size(row, "Result", true, GEXTRACT_FILE_SUGGESTION, "rows");
 				check_interrupt();
 			}
 
@@ -1405,7 +1434,7 @@ SEXP C_gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_pol
 				p_row_names[row] = (int)(row + 1);
 				row++;
 
-				iu.verify_max_data_size(row, "Result");
+				iu.verify_max_data_size(row, "Result", true, GEXTRACT_FILE_SUGGESTION, "rows");
 				check_interrupt();
 			}
 
@@ -1561,6 +1590,7 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 			vector<string> names = parquet_value_names(_exprs, _colnames);
 			bool int64_coords = parquet_int64_coords(iu, intervals1d);
 			string created_by = parquet_created_by();
+			vector<vector<pair<string, string>>> metadata = parquet_value_metadata(iu, _exprs);
 			ParquetOutput out = parquet_output(filename);
 			vector<string> parts;
 
@@ -1573,7 +1603,7 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 				TrackExprScanner scanner(iu);
 
 				scanner.begin(_exprs, iu.get_kid_intervals1d(), iu.get_kid_intervals2d(), _iterator_policy, _band);
-				write_parquet_rows(scanner, iu, parts[RdbInitializer::get_kid_idx()], filename, names, int64_coords, created_by);
+				write_parquet_rows(scanner, iu, parts[RdbInitializer::get_kid_idx()], filename, names, int64_coords, created_by, metadata);
 				rreturn(R_NilValue);
 			}
 
@@ -1869,7 +1899,7 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 					interv_ids.push_back(iu.get_orig_interv_idx(scanner.last_scope_interval2d()) + 1);
 				}
 			
-				iu.verify_max_data_size(values[0].size(), "Result");
+				iu.verify_max_data_size(values[0].size(), "Result", true, GEXTRACT_FILE_SUGGESTION, "rows");
 			}
 			
 			// now we finally know the result size => pack the result into shared memory

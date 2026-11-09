@@ -11,7 +11,10 @@
 #' \itemize{
 #'   \item \strong{indexed}: Single genome.seq + genome.idx (default). Recommended for
 #'         genomes with many contigs. Provides better performance and scalability.
-#'   \item \strong{per-chromosome}: Separate .seq file per contig.
+#'   \item \strong{per-chromosome}: Separate .seq file per contig. A FASTA file
+#'         holding one record gives one contig, named after the file; a file
+#'         holding several records gives one contig per record, named after its
+#'         header as in the indexed format.
 #' }
 #'
 #' If 'genes.file' is not 'NULL' four sets of intervals are created in the

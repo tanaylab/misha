@@ -35,6 +35,15 @@ public:
 		return interval_at(m_chrom_begin, m_chrom_end, coord, start, end);
 	}
 
+	// The intervals and values of every chromosome; [begin, end) are those of chromid
+	const GIntervals &get_intervals() const { return m_intervals; }
+	const vector<float> &get_vals() const { return m_vals; }
+	void chrom_range(int chromid, size_t &begin, size_t &end) {
+		select_chrom(chromid);
+		begin = m_chrom_begin - m_intervals.cbegin();
+		end = m_chrom_end - m_intervals.cbegin();
+	}
+
 protected:
 	GIntervals    m_intervals;
 	vector<float> m_vals;

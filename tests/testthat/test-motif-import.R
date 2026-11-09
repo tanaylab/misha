@@ -368,6 +368,24 @@ test_that("gseq.read_homer handles duplicate consensus sequences with warning", 
     unlink(tmp)
 })
 
+test_that("de-duplicated motif IDs do not collide with the other IDs", {
+    tmp <- tempfile(fileext = ".motif")
+    withr::defer(unlink(tmp))
+    writeLines(c(
+        ">ACGT\tm1\t5.0", "0.97\t0.01\t0.01\t0.01",
+        ">ACGT\tm2\t5.0", "0.01\t0.97\t0.01\t0.01",
+        ">ACGT.1\tm3\t5.0", "0.01\t0.01\t0.97\t0.01"
+    ), tmp)
+    expect_warning(motifs <- gseq.read_homer(tmp), "Duplicate motif IDs")
+    expect_equal(names(motifs), c("ACGT.2", "ACGT.3", "ACGT.1"))
+    # the motif read as ACGT.1 is the one with that ID in the file
+    expect_equal(unname(motifs[["ACGT.1"]][1, ]), c(0.01, 0.01, 0.97, 0.01))
+
+    expect_warning(ids <- misha:::.dedup_motif_ids(c("A", "A", "A.1", "A.1", "B")), "Duplicate motif IDs")
+    expect_false(anyDuplicated(ids) > 0)
+    expect_equal(ids[5], "B")
+})
+
 test_that("gseq.read_meme handles file with only header, no motifs", {
     tmp <- tempfile(fileext = ".meme")
     writeLines(c(

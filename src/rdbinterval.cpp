@@ -174,7 +174,7 @@ IntervUtils::IntervUtils(SEXP envir) :
 	// chromkey cache fix addressed.
 	m_allgenome = rprotect_ptr(find_in_misha(m_envir, "ALLGENOME"));
 
-	GenomeTrack::set_rnd_func(unif_rand);
+	GenomeTrack::set_rnd_func(r_unif_rand);
 }
 
 IntervUtils::~IntervUtils()

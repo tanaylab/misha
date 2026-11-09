@@ -51,6 +51,10 @@ void BigWig::init(const GenomeChromKey &chromkey, const string &filename)
 	m_blocks.clear();
 	m_bw_names.clear();
 	m_unknown_chroms.clear();
+	m_num_clipped = m_num_dropped = 0;
+	m_first_clipped.clear();
+	m_first_clipped_offset = 0;
+	m_first_clipped_item = 0;
 
 	if (m_bfile.open(filename.c_str(), "rb"))
 		TGLError<BigWig>(FILE_ERROR, "Failed to open bigWig file %s: %s", filename.c_str(), strerror(errno));
@@ -292,10 +296,25 @@ bool BigWig::get_data(int chromid, uint64_t iblock, GIntervals &intervals)
 		if (s >= e)   // bedGraphToBigWig stores zero-length records; bigWigToWig skipped them
 			continue;
 
-		// As in the WIG parser: a bedGraph record must fit the chromosome, a step record is clipped to it.
-		if (s >= chromsize || (type == 1 && e > chromsize))
-			TGLError<BigWig>(BAD_COORD, "bigWig file %s: record %s:%lld-%lld exceeds chromosome %s boundaries",
-			                 fname, m_bw_names[bwid].c_str(), (long long)s, (long long)e, m_chromkey->id2chrom(chromid).c_str());
+		// As in the other importers: a record that runs past the end of the chromosome is clipped to it,
+		// and dropped if it starts at or past the end. The caller reports them.
+		if (e > chromsize) {
+			// the chromosomes are read in database order: the first is the one of the lowest offset
+			if (m_first_clipped.empty() || block.offset < m_first_clipped_offset ||
+			    (block.offset == m_first_clipped_offset && i < m_first_clipped_item)) {
+				m_first_clipped_offset = block.offset;
+				m_first_clipped_item = i;
+				char buf[1000];
+				snprintf(buf, sizeof(buf), "(%s, %lld, %lld), chromosome size %lld", m_bw_names[bwid].c_str(), (long long)s,
+				         (long long)e, (long long)chromsize);
+				m_first_clipped = buf;
+			}
+			if (s >= chromsize) {
+				++m_num_dropped;
+				continue;
+			}
+			++m_num_clipped;
+		}
 
 		if (s < m_last_end)
 			TGLError<BigWig>(INVALID_FORMAT, "bigWig file %s: records of %s are overlapping or unsorted at %lld",

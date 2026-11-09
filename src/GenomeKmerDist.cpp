@@ -77,6 +77,9 @@ SEXP C_gseq_kmer_dist(SEXP _intervals, SEXP _k, SEXP _mask, SEXP _envir) {
         iu.convert_rintervs(_intervals, &intervals, NULL);
         unique_ptr<GIntervalsFetcher1D> intervals_guard(intervals);
         intervals->sort();
+        // A position covered by several intervals is counted once. Touching intervals stay
+        // apart: a k-mer that crosses from one into the next is not counted, as before.
+        intervals->unify_overlaps(false);
 
         // Compute total range for progress
         uint64_t total_range = 0;

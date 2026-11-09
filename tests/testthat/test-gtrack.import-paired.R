@@ -283,3 +283,13 @@ test_that("the min.mapq error names cols.order = NULL for SAM files", {
         "cols.order = NULL"
     )
 })
+
+test_that("remove.dups = NA is an error, not TRUE", {
+    track <- random_track_name("test")
+    withr::defer(gtrack.rm(track, force = TRUE))
+    expect_error(
+        gtrack.import_mappedseq(track, "x", paired_sam_file(), binsize = 50, cols.order = NULL, paired = TRUE, remove.dups = NA),
+        "remove.dups argument must be TRUE or FALSE"
+    )
+    expect_false(gtrack.exists(track))
+})
