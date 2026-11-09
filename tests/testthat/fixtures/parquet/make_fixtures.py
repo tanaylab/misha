@@ -289,3 +289,14 @@ assert pq.ParquetFile(path("long_chrom.parquet")).metadata.row_group(0).column(0
 # data_page_offset 0); pandas also types the chrom column of an empty frame as null.
 pq.write_table(table(frame(bins())).slice(0, 0), path("empty_pyarrow.parquet"))
 frame([]).to_parquet(path("empty_pandas.parquet"), index=False)
+
+# field metadata of column a with a NUL byte in one value, which an R string cannot hold; the
+# same with column a alone
+def with_field_metadata(t, name, md):
+    fields = [f.with_metadata(md) if f.name == name else f for f in t.schema]
+    return pa.Table.from_arrays(t.columns, schema=pa.schema(fields, metadata=t.schema.metadata))
+
+
+nul_md = {b"model": b"m1", b"nul": b"a\x00b"}
+pq.write_table(with_field_metadata(table(df), "a", nul_md), path("nul_metadata.parquet"))
+pq.write_table(with_field_metadata(table(frame(rows, ("chrom", "start", "end", "a"))), "a", nul_md), path("nul_metadata_single.parquet"))

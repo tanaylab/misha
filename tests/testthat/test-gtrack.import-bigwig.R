@@ -63,13 +63,53 @@ test_that("step records are clipped at the database chromosome end, as in the te
     withr::with_tempdir({
         setup_short_db()
         for (binsize in c(0, 7)) {
-            gtrack.import("from_text", "", paths[["step.wig"]], binsize = binsize)
-            gtrack.import("from_bw", "", paths[["step.bw"]], binsize = binsize)
+            expect_warning(gtrack.import("from_text", "", paths[["step.wig"]], binsize = binsize), "1 record\\(s\\) running past the end of their chromosome were clipped to it")
+            expect_warning(gtrack.import("from_bw", "", paths[["step.bw"]], binsize = binsize), "1 record\\(s\\) running past the end of their chromosome were clipped to it")
             bw <- extract_all("from_bw", if (binsize == 0) "from_bw" else binsize)
             expect_identical(bw, extract_all("from_text", if (binsize == 0) "from_text" else binsize))
             expect_equal(max(bw$end[bw$chrom == "chr2"]), 9985)
             gtrack.rm("from_text", force = TRUE)
             gtrack.rm("from_bw", force = TRUE)
+        }
+    })
+})
+
+test_that("bedGraph records past the database chromosome end are clipped or dropped, as in the text route", {
+    local_db_state()
+    paths <- sapply(c("bg.bw", "bg.bedGraph"), bigwig_fixture)
+    withr::with_tempdir({
+        # chr2 ends inside the record 9870-9910, before the record 9933-9981
+        create_test_db("short_bg_db", chrom_sizes = data.frame(chrom = c("chr1", "chr2"), size = c(10000, 9900)))
+        gdb.init("short_bg_db")
+        msg <- "1 record\\(s\\) running past the end of their chromosome were clipped to it, and 1 record\\(s\\) starting at or past the chromosome end were dropped; the first: .*\\(chr2, 9870, 9910\\), chromosome size 9900"
+        for (binsize in c(0, 7)) {
+            suppressMessages({
+                expect_warning(gtrack.import("from_text", "", paths[["bg.bedGraph"]], binsize = binsize), msg)
+                expect_warning(gtrack.import("from_bw", "", paths[["bg.bw"]], binsize = binsize), msg)
+            })
+            bw <- extract_all("from_bw", if (binsize == 0) "from_bw" else binsize)
+            expect_identical(bw, extract_all("from_text", if (binsize == 0) "from_text" else binsize))
+            if (binsize == 0) {
+                expect_equal(tail(bw$end[bw$chrom == "chr2"], 1), 9900)
+            }
+            gtrack.rm("from_text", force = TRUE)
+            gtrack.rm("from_bw", force = TRUE)
+        }
+    })
+})
+
+test_that("the bigWig record past the chromosome end that the warning names is the first in the file", {
+    local_db_state()
+    paths <- sapply(c("bg.bw", "bg.bedGraph"), bigwig_fixture)
+    withr::with_tempdir({
+        # chr2 first in the database, chr1 first in the files; both end inside a record
+        create_test_db("rev_db", chrom_sizes = data.frame(chrom = c("chr2", "chr1"), size = c(9900, 9900)))
+        writeLines(c("chr2\t9900", "chr1\t9900"), file.path("rev_db", "chrom_sizes.txt"))
+        gdb.init("rev_db")
+        skip_if_not(identical(as.character(gintervals.all()$chrom), c("chr2", "chr1")), "the database sorts its chromosomes")
+        for (p in paths) {
+            suppressMessages(expect_warning(gtrack.import("first", "", p, binsize = 0), "the first: (line [0-9]+: )?\\(chr1, 9888, 9925\\)", label = basename(p)))
+            gtrack.rm("first", force = TRUE)
         }
     })
 })

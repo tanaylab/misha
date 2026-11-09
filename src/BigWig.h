@@ -42,6 +42,13 @@ public:
 	// Number of database chromosomes for which the file contains data.
 	uint64_t get_num_matched_chroms() const;
 
+	// Records read so far that ran past the end of their chromosome: clipped to it, or dropped
+	// when they start at or past it; and the first of them in the file, "(chrom, start, end),
+	// chromosome size N" ("" if none)
+	uint64_t get_num_clipped() const { return m_num_clipped; }
+	uint64_t get_num_dropped() const { return m_num_dropped; }
+	const string &get_first_clipped() const { return m_first_clipped; }
+
 private:
 	struct Block {
 		uint64_t offset;
@@ -59,6 +66,11 @@ private:
 	vector<char>           m_cbuf;
 	vector<char>           m_ubuf;
 	int64_t                m_last_end{0};     // end of the previous record of the chromosome
+	uint64_t               m_num_clipped{0};
+	uint64_t               m_num_dropped{0};
+	string                 m_first_clipped;
+	uint64_t               m_first_clipped_offset{0};  // of its data block
+	uint16_t               m_first_clipped_item{0};    // in the block
 
 	void read_at(uint64_t offset, void *buf, uint64_t size);
 	void read_chrom_tree(uint64_t offset, uint32_t keysize, int depth, vector<pair<uint32_t, string> > &chroms);

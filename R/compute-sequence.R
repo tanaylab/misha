@@ -154,9 +154,19 @@
 #' 'intervals'. If intervals contain an additional 'strand' column and its
 #' value is '-1', the reverse-complementary sequence is returned.
 #'
-#' Each interval must lie within its chromosome: an interval that starts
-#' before 0 or ends past the end of the chromosome is an error, and no
-#' sequence is padded.
+#' By default ('pad = FALSE') each interval must lie within its chromosome: an
+#' interval that starts before 0 or ends past the end of the chromosome is an
+#' error.
+#'
+#' With 'pad = TRUE' an interval may run past either end of its chromosome
+#' ('start' below 0, 'end' above the chromosome length). The positions outside
+#' the chromosome come back as "N", so each sequence is 'end - start' long, and
+#' an interval wholly outside its chromosome comes back as all "N". 'start' must
+#' still be below 'end', and the chromosome must exist. For a row with strand -1
+#' the padded sequence is reverse complemented as a whole, so the "N" run of the
+#' chromosome start comes last. The bases inside the chromosome are returned as
+#' stored, lowercase included. This gives fixed-width windows near chromosome
+#' ends, e.g. for sequence models (see the examples).
 #'
 #' Each interval costs one disk read, so large interval sets are dominated by
 #' I/O latency rather than by the sequence data itself. When the sequence files
@@ -181,6 +191,9 @@
 #' 'gmultitasking = FALSE' disables it entirely.
 #'
 #' @param intervals intervals for which DNA sequence is returned
+#' @param pad if TRUE, the part of an interval outside its chromosome is
+#' returned as "N" (see Details). If FALSE (the default), an interval that runs
+#' past a chromosome end is an error.
 #' @return An array of character strings representing DNA sequence.
 #' @seealso \code{\link{gextract}}
 #' @keywords ~extract ~DNA ~sequence
@@ -193,16 +206,116 @@
 #' intervs <- gintervals(c(1, 2), 10000, 10020)
 #' gseq.extract(intervs)
 #'
+#' # Fixed-width windows centred on positions. The second window starts 30 bp
+#' # before the start of chr1, so its first 30 bases are N.
+#' w <- 100
+#' centers <- c(250000, 20)
+#' windows <- data.frame(chrom = "chr1", start = centers - w / 2, end = centers + w / 2)
+#' seqs <- gseq.extract(windows, pad = TRUE)
+#' nchar(seqs)
+#' seqs[2]
+#'
 #' @export gseq.extract
-gseq.extract <- function(intervals = NULL) {
+gseq.extract <- function(intervals = NULL, pad = FALSE) {
     if (is.null(intervals)) {
-        stop("Usage: gseq.extract(intervals)", call. = FALSE)
+        stop("Usage: gseq.extract(intervals, pad = FALSE)", call. = FALSE)
+    }
+    if (!is.logical(pad) || length(pad) != 1 || is.na(pad)) {
+        stop("pad must be TRUE or FALSE", call. = FALSE)
     }
     .gcheckroot()
 
     intervals <- rescue_ALLGENOME(intervals, substitute(intervals))
 
-    res <- .gcall("gseqread", intervals, .misha_env())
+    if (pad) {
+        return(.gseq_extract_padded(intervals))
+    }
+    .gcall("gseqread", intervals, .misha_env())
+}
+
+# gseq.extract(pad = TRUE). The rows that run past a chromosome end are clipped to the
+# chromosome and read by gseqread with all the other rows, which validates them as usual; the N
+# runs are added here. A row wholly outside its chromosome reads a 1 bp placeholder at the
+# chromosome start, so that its chrom and strand are still validated, and is all N. Rows within
+# their chromosome are read as they are, and when there are only such rows the intervals go to
+# gseqread untouched.
+.gseq_extract_padded <- function(intervals) {
+    # a small named set may hold such intervals (gintervals.save does not check them); a big one
+    # cannot (its intervals are checked when it is saved), so it is passed on by name
+    if (is.character(intervals) && length(intervals) == 1 &&
+        intervals %in% get("GINTERVS", envir = .misha) && !.gintervals.is_bigset(intervals)) {
+        intervals <- gintervals.load(intervals)
+    }
+
+    # anything but a 1D intervals frame is left to gseqread, which reads or rejects it as without pad
+    if (!is.data.frame(intervals) || !nrow(intervals) || ncol(intervals) < 3 ||
+        !identical(names(intervals)[1:3], c("chrom", "start", "end")) ||
+        !is.numeric(intervals[[2]]) || !is.numeric(intervals[[3]])) {
+        return(.gcall("gseqread", intervals, .misha_env()))
+    }
+
+    chroms <- as.character(intervals[[1]])
+    starts <- intervals[[2]]
+    ends <- intervals[[3]]
+    allgenome <- get("ALLGENOME", envir = .misha)[[1]]
+    uchroms <- unique(chroms)
+    ulens <- allgenome$end[match(as.character(.gchroms(uchroms)), as.character(allgenome$chrom))]
+    chrom_lens <- ulens[match(chroms, uchroms)]
+
+    # rows with NA, NaN or infinite coordinates are left to gseqread, which rejects them
+    idx <- which(is.finite(starts) & is.finite(ends) & (starts < 0 | ends > chrom_lens))
+    if (!length(idx)) {
+        return(.gcall("gseqread", intervals, .misha_env()))
+    }
+
+    s <- starts[idx]
+    e <- ends[idx]
+    lens <- chrom_lens[idx]
+    bad <- which(s >= e)
+    if (length(bad)) {
+        i <- bad[1]
+        stop(sprintf(
+            "Interval (%s, %.0f, %.0f): start coordinate must be lesser than end coordinate",
+            chroms[idx[i]], as.numeric(s[i]), as.numeric(e[i])
+        ), call. = FALSE)
+    }
+
+    cs <- pmax(s, 0)
+    ce <- pmin(e, lens)
+    outside <- cs >= ce
+    left <- ifelse(outside, e - s, cs - s)
+    right <- ifelse(outside, 0, e - ce)
+    cs[outside] <- 0
+    ce[outside] <- 1
+
+    clipped <- data.frame(chrom = intervals[[1]], start = starts, end = ends, stringsAsFactors = FALSE)
+    strand <- intervals[["strand"]]
+    if (!is.null(strand)) {
+        clipped$strand <- strand
+    }
+    clipped$start[idx] <- cs
+    clipped$end[idx] <- ce
+
+    # an empty chromosome has nothing to read, not even the placeholder
+    read <- rep(TRUE, nrow(clipped))
+    read[idx[outside & lens == 0]] <- FALSE
+    res <- character(nrow(clipped))
+    if (any(read)) {
+        res[read] <- .gcall("gseqread", if (all(read)) clipped else clipped[read, , drop = FALSE], .misha_env())
+    }
+
+    # a strand -1 row comes back reverse complemented, so its N runs swap sides
+    neg <- if (is.null(strand)) {
+        logical(length(idx))
+    } else if (is.numeric(strand)) {
+        strand[idx] == -1
+    } else {
+        as.character(strand[idx]) == "-"
+    }
+    neg <- neg %in% TRUE
+    core <- res[idx]
+    core[outside] <- ""
+    res[idx] <- paste0(strrep("N", ifelse(neg, right, left)), core, strrep("N", ifelse(neg, left, right)))
     res
 }
 

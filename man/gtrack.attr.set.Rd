@@ -26,6 +26,14 @@ attribute already exists its value is overwritten.
 If 'value' is an empty string the attribute is removed.
 
 Error is reported on an attempt to modify a value of a read-only attribute.
+
+Tracks of model predictions conventionally carry these attributes, which
+misha only stores and carries along: 'value.scale', the scale of the values
+(e.g. "log2(x+1)" or "linear"); 'model', the model that made them;
+'checkpoint', the model checkpoint; and 'heldout.chroms', the chromosomes
+held out of training. Like any attribute, they are written with the track's
+column by \code{gextract(file = "x.parquet")} and restored by
+\code{\link{gtrack.import_parquet}}.
 }
 \examples{
 \dontshow{

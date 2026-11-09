@@ -254,44 +254,22 @@ rdb::MultitaskingMode ConfigurationManager::select_multitasking_mode(bool is_det
 	return rdb::MT_MODE_SINGLE;
 }
 
-void ConfigurationManager::verify_max_data_size(uint64_t data_size, const char *data_name, bool check_all_kids) const
+void ConfigurationManager::verify_max_data_size(uint64_t data_size, const char *data_name, bool check_all_kids,
+											  const char *suggestion, const char *unit) const
 {
 	if (data_size > get_max_data_size()) {
-		// Calculate a suggested size with headroom (see ConfigurationDefaults.h)
-		uint64_t suggested_size = (uint64_t)(data_size * misha::config::SUGGESTED_SIZE_MULTIPLIER);
-
-		// Format sizes as human-readable strings
-		char current_size_str[100], needed_size_str[100], suggested_size_str[100];
-		if (get_max_data_size() >= 1e9)
-			snprintf(current_size_str, sizeof(current_size_str), "%.1f GB", get_max_data_size() / 1e9);
-		else if (get_max_data_size() >= 1e6)
-			snprintf(current_size_str, sizeof(current_size_str), "%.1f MB", get_max_data_size() / 1e6);
-		else
-			snprintf(current_size_str, sizeof(current_size_str), "%lu bytes", (unsigned long)get_max_data_size());
-
-		if (data_size >= 1e9)
-			snprintf(needed_size_str, sizeof(needed_size_str), "%.1f GB", data_size / 1e9);
-		else if (data_size >= 1e6)
-			snprintf(needed_size_str, sizeof(needed_size_str), "%.1f MB", data_size / 1e6);
-		else
-			snprintf(needed_size_str, sizeof(needed_size_str), "%lu bytes", (unsigned long)data_size);
-
-		if (suggested_size >= 1e9)
-			snprintf(suggested_size_str, sizeof(suggested_size_str), "%.0f", (double)suggested_size);
-		else if (suggested_size >= 1e6)
-			snprintf(suggested_size_str, sizeof(suggested_size_str), "%.0f", (double)suggested_size);
-		else
-			snprintf(suggested_size_str, sizeof(suggested_size_str), "%lu", (unsigned long)suggested_size);
-
-		verror("%s size (%s) exceeded the maximum allowed (%s).\n\n"
+		// gmax.data.size is a number of records (rows of a result, values, bases), not of bytes.
+		// data_size is often the number reached so far, not the final one: no value to suggest.
+		verror("%s size (at least %llu %s) exceeded the maximum allowed (%llu %s, set by gmax.data.size).\n\n"
 			   "Suggestions:\n"
-			   "  1. Increase buffer size:\n"
-			   "     options(gmax.data.size = %s)\n"
-			   "  2. Reduce scope (use smaller genomic regions or filters)\n"
-			   "  3. Process data in smaller chunks\n\n"
+			   "%s"
+			   "  - Raise the limit: options(gmax.data.size = <a larger number of %s>), or Inf for no limit\n"
+			   "  - Reduce scope (use smaller genomic regions or filters)\n"
+			   "  - Process data in smaller chunks\n\n"
 			   "Note: gmax.data.size is auto-configured based on your system RAM.\n"
 			   "      You can check the current setting with getOption('gmax.data.size')",
-			   data_name, needed_size_str, current_size_str, suggested_size_str);
+			   data_name && *data_name ? data_name : "Result", (unsigned long long)data_size, unit,
+			   (unsigned long long)get_max_data_size(), unit, suggestion ? suggestion : "", unit);
 	}
 
 	if (check_all_kids)

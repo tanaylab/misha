@@ -62,6 +62,22 @@ overlap. Chromosome names are matched through the chromosome alias chain
 as in \code{\link{gtrack.import}}, with the same reporting of names the
 database does not have.
 
+Rows that run past the end of their chromosome (such as a last 32 bp bin
+written with 'end = start + 32') are clipped to it, and rows that start at
+or past the end are dropped, with one warning that gives the counts and the
+first such row. Messages number the rows of a file from 0, as pyarrow and
+pandas do.
+
+The field metadata of a column in the first file (Arrow field metadata, as
+\code{\link{gextract}} writes the attributes of a track column, or as
+pyarrow writes 'pa.field(name, type, metadata = ...)') becomes attributes
+of its track, except 'created.by', 'created.date' and 'created.user', which
+the import sets, 'type' and 'binsize', which describe how the source track
+was stored, and 'description' unless the 'description' argument is an
+empty string. A file without field metadata imports with only those
+attributes. See \code{\link{gtrack.attr.set}} for the attributes of model
+predictions.
+
 The import is all or nothing: if it fails or is interrupted, none of the
 tracks is created.
 

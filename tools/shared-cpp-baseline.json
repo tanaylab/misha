@@ -1,12 +1,14 @@
 {
   "BigWig.cpp": {
-    "identical": true,
-    "misha": "c91fdb8e73b7acdc",
+    "identical": false,
+    "misha": "89c7f0bf200d46c6",
+    "needs_port": true,
     "pymisha": "c91fdb8e73b7acdc"
   },
   "BigWig.h": {
-    "identical": true,
-    "misha": "29305b2b3494233f",
+    "identical": false,
+    "misha": "483ba859c199f477",
+    "needs_port": true,
     "pymisha": "29305b2b3494233f"
   },
   "BinFinder.cpp": {
@@ -239,13 +241,15 @@
     "pymisha": "2e762e6a6a764b98"
   },
   "Parquet.cpp": {
-    "identical": true,
-    "misha": "d659cabf2cffeb71",
+    "identical": false,
+    "misha": "712dc64d578d365f",
+    "needs_port": true,
     "pymisha": "d659cabf2cffeb71"
   },
   "Parquet.h": {
-    "identical": true,
-    "misha": "aafadec41aa0b524",
+    "identical": false,
+    "misha": "fade87a23b168c2e",
+    "needs_port": true,
     "pymisha": "aafadec41aa0b524"
   },
   "Point.h": {

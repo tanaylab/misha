@@ -19,7 +19,9 @@ class GenomeArraysCsv {
 public:
 	enum Errors { FILE_ERROR, FORMAT_ERROR };
 
-	void init(const char *filename, const GenomeChromKey &chromkey);
+	// With clip_to_chroms, get_intervals() clips a record that runs past the end of its chromosome
+	// to it, or drops it if it starts at or past the end; otherwise such a record is an error
+	void init(const char *filename, const GenomeChromKey &chromkey, bool clip_to_chroms = false);
 
 	const vector<string> &get_colnames() const { return m_colnames; }
 	const GIntervals &get_intervals(int chromid);
@@ -30,6 +32,13 @@ public:
 
 	// Number of database chromosomes for which the file contains data.
 	uint64_t get_num_matched_chroms() const;
+
+	// The records get_intervals() clipped and dropped, and the first of them in the file, "line N:
+	// (chrom, start, end), chromosome size N" ("" if none)
+	uint64_t get_num_clipped() const { return m_num_clipped; }
+	uint64_t get_num_dropped() const { return m_num_dropped; }
+	uint64_t get_num_kept() const { return m_num_kept; }
+	const string &get_first_clipped() const { return m_first_clipped; }
 
 protected:
 	struct Position {
@@ -50,6 +59,12 @@ protected:
 	vector<string>        m_colnames;
 	vector<string>        m_fields;
 	UnknownChroms         m_unknown_chroms;
+	bool                  m_clip_to_chroms{false};
+	uint64_t              m_num_clipped{0};
+	uint64_t              m_num_dropped{0};
+	uint64_t              m_num_kept{0};
+	string                m_first_clipped;
+	long                  m_first_clipped_line{-1};
 
 	int read_fields(const Position &pos);
 };
