@@ -21,9 +21,8 @@
 using namespace std;
 using namespace rdb;
 
-namespace {
-
-// Sanitize FASTA header to extract clean contig name
+// Sanitize FASTA header to extract clean contig name. Also used by the per-chromosome import
+// (GenomeSeqImport.cpp), which names the records of a multi-record file the same way.
 string sanitize_fasta_header(const string &header) {
     // Remove leading '>' if present
     string clean = header;
@@ -107,6 +106,8 @@ string sanitize_fasta_header(const string &header) {
 
     return clean;
 }
+
+namespace {
 
 // Compute checksum for index entries (same algorithm as GenomeIndex)
 uint64_t compute_index_checksum(const vector<ContigIndexEntry> &entries) {

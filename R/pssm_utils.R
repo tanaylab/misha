@@ -1,9 +1,16 @@
 # Internal helpers for PSSM handling shared across sequence utilities and virtual tracks
 
+# `probabilities = TRUE` (every PSSM entry point) also checks that the matrix
+# holds what the C++ side reads: per-position weights that it normalizes to
+# probabilities and takes the log of. A count matrix is fine (rows need not sum
+# to 1); a log-odds or log-probability matrix is not - its negative entries were
+# read as weights and gave NaN or -Inf scores with no message. The Potts `e`
+# matrix (energies, any sign) passes FALSE.
 .coerce_pssm_matrix <- function(pssm,
                                 numeric_msg = "pssm must be a numeric matrix",
                                 ncol_msg = "pssm must have columns named A, C, G, T",
-                                colnames_msg = "pssm columns must be named A, C, G, T") {
+                                colnames_msg = "pssm columns must be named A, C, G, T",
+                                probabilities = TRUE) {
     # Handle data frames by extracting required columns first
     if (is.data.frame(pssm)) {
         cols <- colnames(pssm)
@@ -24,7 +31,33 @@
         stop(colnames_msg)
     }
 
-    pssm[, c("A", "C", "G", "T"), drop = FALSE]
+    pssm <- pssm[, c("A", "C", "G", "T"), drop = FALSE]
+    # An integer (count) matrix is read by C++ as doubles
+    storage.mode(pssm) <- "double"
+
+    if (probabilities) {
+        if (any(!is.finite(pssm))) {
+            stop("pssm must not contain NA, NaN or infinite values", call. = FALSE)
+        }
+        if (any(pssm < 0)) {
+            # Floating-point noise in a probability matrix (e.g. -1e-18 from a
+            # subtraction) is 0: an entry this close below 0, relative to the
+            # largest entry of its row, is set to 0. Anything more negative is
+            # refused.
+            noise_tol <- 1e-9 * pmax(apply(pssm, 1, max), 0)
+            noise <- pssm < 0 & pssm >= -noise_tol[row(pssm)]
+            pssm[noise] <- 0
+        }
+        if (any(pssm < 0)) {
+            stop("pssm has negative values: it must hold probabilities or counts for each base (non-negative, one row per motif position), not log-odds or log-probabilities", call. = FALSE)
+        }
+        zero <- which(rowSums(pssm) == 0)
+        if (length(zero)) {
+            stop(sprintf("pssm row%s %s sum%s to 0: every motif position needs a positive probability or count for at least one base", if (length(zero) > 1) "s" else "", paste(zero, collapse = ", "), if (length(zero) > 1) "" else "s"), call. = FALSE)
+        }
+    }
+
+    pssm
 }
 
 # A J block's rows are indexed by the lower position's base and its columns by
@@ -74,7 +107,8 @@
         model[["e"]],
         numeric_msg = sprintf("%s: 'e' must be a numeric matrix or data frame with numeric columns", what),
         ncol_msg = sprintf("%s: 'e' must have columns named A, C, G, T", what),
-        colnames_msg = sprintf("%s: 'e' must have columns named A, C, G, T", what)
+        colnames_msg = sprintf("%s: 'e' must have columns named A, C, G, T", what),
+        probabilities = FALSE
     )
     if (nrow(e) < 1L) {
         stop(sprintf("%s: 'e' has no rows, so the model covers no positions", what), call. = FALSE)

@@ -943,3 +943,101 @@ test_that("pwm.edit_distance.lse.pos points at a real edit on the reverse strand
     # Assert rather than skip: no usable window means the test checked nothing.
     expect_gte(found, 1L)
 })
+
+
+test_that("PSSM input: counts are accepted, log-odds, NA and zero rows are refused", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    probs <- matrix(c(
+        0.7, 0.1, 0.1, 0.1,
+        0.1, 0.1, 0.7, 0.1,
+        0.25, 0.25, 0.25, 0.25,
+        0.1, 0.1, 0.1, 0.7
+    ), ncol = 4, byrow = TRUE, dimnames = list(NULL, c("A", "C", "G", "T")))
+    counts <- matrix(as.integer(probs * 20), 4, dimnames = dimnames(probs))
+    iv <- gintervals(1, c(0, 1000), c(100, 1100))
+
+    # An integer count matrix used to fail inside the vtrack with a C-level
+    # "REAL() can only be applied to a 'numeric', not a 'integer'" error
+    expect_true(is.integer(counts))
+    gvtrack.create("pssm_counts", NULL, "pwm.max", pssm = counts, prior = 0.01)
+    gvtrack.create("pssm_probs", NULL, "pwm.max", pssm = probs, prior = 0.01)
+    r <- gextract(c("pssm_counts", "pssm_probs"), iv, iterator = iv)
+    expect_equal(r$pssm_counts, r$pssm_probs, tolerance = 1e-5)
+    gvtrack.create("ed_counts", NULL, "pwm.edit_distance", pssm = counts, score.thresh = -3, prior = 0.01)
+    gvtrack.create("ed_probs", NULL, "pwm.edit_distance", pssm = probs, score.thresh = -3, prior = 0.01)
+    r <- gextract(c("ed_counts", "ed_probs"), iv, iterator = iv)
+    expect_equal(r$ed_counts, r$ed_probs)
+    expect_equal(
+        gseq.pwm("ACGTACGT", counts, mode = "max", prior = 0.01),
+        gseq.pwm("ACGTACGT", probs, mode = "max", prior = 0.01),
+        tolerance = 1e-6
+    )
+
+    # A log-odds matrix used to be accepted and scored as NaN / -Inf, with a
+    # plausible-looking pwm.count of 0
+    logodds <- log2(probs / 0.25)
+    bad <- list(
+        "log-odds" = logodds,
+        "NA" = replace(probs, 2, NA),
+        "zero row" = rbind(probs, c(A = 0, C = 0, G = 0, T = 0))
+    )
+    msg <- c("log-odds" = "negative values", "NA" = "NA, NaN or infinite", "zero row" = "row 5 sums to 0")
+    for (nm in names(bad)) {
+        m <- bad[[nm]]
+        expect_error(gvtrack.create("bad_pwm", NULL, "pwm", pssm = m), msg[[nm]], info = nm)
+        expect_error(gvtrack.create("bad_cnt", NULL, "pwm.count", pssm = m, score.thresh = -5), msg[[nm]], info = nm)
+        expect_error(gvtrack.create("bad_ed", NULL, "pwm.edit_distance", pssm = m, score.thresh = -5), msg[[nm]], info = nm)
+        expect_error(gvtrack.create("bad_lse", NULL, "pwm.edit_distance.lse", pssm = m, score.thresh = -5), msg[[nm]], info = nm)
+        expect_error(gvtrack.create("bad_nm", NULL, "pwm.n_mutations", pssm = m, score.thresh = -5), msg[[nm]], info = nm)
+        expect_error(gseq.pwm("ACGTACGT", m, mode = "max"), msg[[nm]], info = nm)
+        expect_error(gseq.pwm_edits("ACGTACGT", m, score.thresh = -5), msg[[nm]], info = nm)
+    }
+    expect_error(gvtrack.create("bad_pwm", NULL, "pwm", pssm = logodds), "log-odds")
+})
+
+test_that("PSSM input: floating-point noise below 0 is 0, a real negative is refused", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    probs <- matrix(c(
+        0.7, 0.1, 0.1, 0.1,
+        0.1, 0.1, 0.7, 0.1,
+        0.5, 0.5, 0, 0,
+        0.1, 0.1, 0.1, 0.7
+    ), ncol = 4, byrow = TRUE, dimnames = list(NULL, c("A", "C", "G", "T")))
+    noisy <- probs
+    noisy[3, 3] <- -1e-18 # e.g. left by 1 - sum(...)
+    counts <- probs * 50
+    counts_noisy <- counts
+    counts_noisy[3, 4] <- -1e-8 # below 1e-9 of the row maximum (25)
+
+    iv <- gintervals(1, c(0, 1000), c(100, 1100))
+    gvtrack.create("pssm_clean", NULL, "pwm.max", pssm = probs, prior = 0.01)
+    gvtrack.create("pssm_noisy", NULL, "pwm.max", pssm = noisy, prior = 0.01)
+    gvtrack.create("pssm_cnoisy", NULL, "pwm.max", pssm = counts_noisy, prior = 0.01)
+    r <- gextract(c("pssm_clean", "pssm_noisy", "pssm_cnoisy"), iv, iterator = iv)
+    expect_equal(r$pssm_noisy, r$pssm_clean)
+    expect_equal(r$pssm_cnoisy, r$pssm_clean, tolerance = 1e-6)
+    expect_equal(
+        gseq.pwm("ACGTACGT", noisy, mode = "max", prior = 0.01),
+        gseq.pwm("ACGTACGT", probs, mode = "max", prior = 0.01)
+    )
+    expect_equal(
+        gseq.pwm_edits("ACGTACGT", noisy, score.thresh = -3)$n_edits,
+        gseq.pwm_edits("ACGTACGT", probs, score.thresh = -3)$n_edits
+    )
+
+    # A negative beyond the noise tolerance is still refused, small or not
+    for (v in c(-1e-3, -1e-6, -0.2)) {
+        bad <- probs
+        bad[3, 3] <- v
+        expect_error(gvtrack.create("bad_neg", NULL, "pwm", pssm = bad), "negative values", info = v)
+        expect_error(gseq.pwm("ACGTACGT", bad, mode = "max"), "negative values", info = v)
+    }
+    # and so is a row with no positive entry
+    bad <- probs
+    bad[3, ] <- c(-1e-18, 0, 0, 0)
+    expect_error(gvtrack.create("bad_neg", NULL, "pwm", pssm = bad), "negative values")
+})

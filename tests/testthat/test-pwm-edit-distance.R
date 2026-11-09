@@ -2280,15 +2280,19 @@ describe("One-indel specialized solver", {
     it("deletion improves alignment: inserted extra base is removed by one-indel solver", {
         remove_all_vtracks()
 
-        # "ATCGT" is "ACGT" with an extra T inserted after A.
-        # Use a tight threshold equal to the perfect-match score so that
-        # no 4bp substitution-only window can reach it.
+        # "ACAGT" is "ACGT" with an extra A inserted after C.
+        # Use a tight threshold equal to the perfect-match score.
         # Perfect score = 4 * log(0.97) ~ -0.122
-        seq <- "ATCGT"
+        # (The sequence used to be "ATCGT", but there one substitution, TCGT ->
+        # ACGT, is just as good as the deletion; it was missed only because the
+        # summed float gains landed 1e-7 below a threshold set exactly at the
+        # maximum. "ACAGT" needs 2 substitutions in either 4-bp window, so the
+        # deletion is the one 1-edit answer.)
+        seq <- "ACAGT"
         threshold <- sum(log(c(0.97, 0.97, 0.97, 0.97)))
 
-        # Without indels: no 4bp window of "ATCGT" matches ACGT perfectly.
-        # Windows are "ATCG" and "TCGT", both have at least 1 mismatch.
+        # Without indels: no 4bp window of "ACAGT" is within one substitution of ACGT.
+        # Windows are "ACAG" and "CAGT", both have two mismatches.
         # At the tight threshold these are unreachable, so we get 0 rows.
         result_no_indel <- gseq.pwm_edits(seq, acgt_pssm,
             score.thresh = threshold,
@@ -2299,7 +2303,7 @@ describe("One-indel specialized solver", {
             info = "No sub-only window should reach the tight threshold"
         )
 
-        # With max_indels=1: the solver can delete the extra T to recover "ACGT"
+        # With max_indels=1: the solver can delete the extra A to recover "ACGT"
         result_with_indel <- gseq.pwm_edits(seq, acgt_pssm,
             score.thresh = threshold,
             max_indels = 1L, prior = 0, bidirect = FALSE
@@ -2308,10 +2312,10 @@ describe("One-indel specialized solver", {
             info = "Indel solver should find at least one alignment"
         )
 
-        # Expect exactly 1 edit: the deletion of the extra T
+        # Expect exactly 1 edit: the deletion of the extra A
         best_with_indel <- min(result_with_indel$n_edits)
         expect_equal(best_with_indel, 1,
-            info = "Should need exactly 1 deletion to recover ACGT from ATCGT"
+            info = "Should need exactly 1 deletion to recover ACGT from ACAGT"
         )
 
         # Confirm that the indel edit type is "del"
@@ -2346,7 +2350,7 @@ describe("One-indel specialized solver", {
         )
     })
 
-    it("score filter bypass: max_indels=1 still runs even when score.min rejects no-indel windows", {
+    it("score filter applies with indels: max_indels=1 is NA when score.min rejects every window", {
         remove_all_vtracks()
 
         # Use the vtrack interface on a genomic interval.
@@ -2382,7 +2386,8 @@ describe("One-indel specialized solver", {
             bidirect = FALSE, extend = FALSE, prior = 0
         )
 
-        # With indel: score.min is bypassed when max_indels > 0
+        # With indel: score.min filters on the same ungapped window score
+        # (it used to be ignored silently when max_indels > 0)
         gvtrack.create("edist_indel_filt", NULL,
             func = "pwm.edit_distance",
             pssm = acgt_pssm, score.thresh = threshold,
@@ -2400,11 +2405,31 @@ describe("One-indel specialized solver", {
             info = "No-indel with strict score.min should return NA"
         )
 
-        # With indel: score filter is bypassed, so it should produce a result
-        # (the interval contains ACGT, so threshold is reachable)
-        expect_false(is.na(result$edist_indel_filt[1]),
-            info = "max_indels=1 should bypass score.min filter"
+        # With indel: every window is filtered out as well, although the interval
+        # contains ACGT and the threshold is reachable
+        expect_true(is.na(result$edist_indel_filt[1]),
+            info = "max_indels=1 with strict score.min should return NA"
         )
+
+        # A score.min every window passes leaves the result unfiltered
+        gvtrack.create("edist_indel_nofilt", NULL,
+            func = "pwm.edit_distance",
+            pssm = acgt_pssm, score.thresh = threshold,
+            score.min = -Inf, max_indels = 1,
+            bidirect = FALSE, extend = FALSE, prior = 0
+        )
+        gvtrack.create("edist_indel_plain", NULL,
+            func = "pwm.edit_distance",
+            pssm = acgt_pssm, score.thresh = threshold,
+            max_indels = 1,
+            bidirect = FALSE, extend = FALSE, prior = 0
+        )
+        r2 <- gextract(c("edist_indel_nofilt", "edist_indel_plain"),
+            test_interval,
+            iterator = test_interval
+        )
+        expect_false(is.na(r2$edist_indel_plain[1]))
+        expect_equal(r2$edist_indel_nofilt[1], r2$edist_indel_plain[1])
     })
 
     it("backward compatibility: max_indels=0 produces identical results to omitted max_indels", {
@@ -3367,4 +3392,76 @@ describe("Reachability bound safety", {
             }
         }
     })
+})
+
+test_that("pwm.edit_distance.pos and pwm.edit_distance.lse.pos past 2^24 are exact", {
+    # Positions were kept in float, which holds consecutive integers only up to
+    # 2^24: a window 20,000,001 bases into the interval came back as 20,000,000.
+    # Reaching that needs an iterator interval longer than 16.7 Mb, so (as in
+    # test-potts.R) this runs only where a real assembly is at hand.
+    big <- Sys.getenv("MISHA_LARGE_GENOME", "")
+    skip_if(
+        big == "" || !dir.exists(big),
+        "set MISHA_LARGE_GENOME to a groot with a chromosome over 16.7 Mb"
+    )
+    old <- .misha$GROOT
+    withr::defer(gsetroot(old))
+    gsetroot(big)
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+    ci <- gintervals.all()
+    ci <- ci[ci$end > 16777218L + 1000L, , drop = FALSE]
+    skip_if(nrow(ci) == 0L, "no chromosome over 16.7 Mb in this genome")
+    chrom <- as.character(ci$chrom[1L])
+
+    L <- 16L
+    one_hot <- function(word) {
+        b <- strsplit(word, "")[[1]]
+        m <- matrix(0, L, 4, dimnames = list(NULL, c("A", "C", "G", "T")))
+        m[cbind(seq_len(L), match(b, colnames(m)))] <- 1
+        m
+    }
+    # 1-based positions must be ODD: floats represent only even integers between
+    # 2^24 and 2^25, so an even one would pass against the defect. off is
+    # 0-based, so it is even.
+    found <- FALSE
+    for (off in 16777218L + 2L * c(50L, 177L, 301L, 452L, 613L)) {
+        word <- toupper(gseq.extract(gintervals(chrom, off, off + L)))
+        if (grepl("[^ACGT]", word)) next
+        pssm <- one_hot(word)
+        # the planted window must be the first exact match: none before it
+        gvtrack.create("big_ed", NULL, "pwm.edit_distance",
+            pssm = pssm, score.thresh = 0, prior = 0, bidirect = FALSE
+        )
+        before <- gextract("big_ed", gintervals(chrom, 0, off), iterator = gintervals(chrom, 0, off))$big_ed
+        gvtrack.rm("big_ed")
+        if (isTRUE(before > 0)) {
+            found <- TRUE
+            break
+        }
+    }
+    skip_if(!found, "no first-occurrence 16-mer past 2^24 in this genome")
+
+    gvtrack.create("big_edpos", NULL, "pwm.edit_distance.pos",
+        pssm = pssm, score.thresh = 0, prior = 0, bidirect = FALSE
+    )
+    iv <- gintervals(chrom, 0, off + 1L)
+    expect_equal(gextract("big_edpos", iv, iterator = iv)$big_edpos, off + 1)
+
+    # LSE: a PSSM one substitution away from the window at `off` (column 2), so
+    # the one edit that reaches the threshold is at 1-based off + 3 (odd). It is
+    # the unique such window if no other window is within 2 substitutions.
+    j <- 2L
+    alt <- setdiff(c("A", "C", "G", "T"), substr(word, j + 1, j + 1))[1]
+    lse_word <- paste0(substr(word, 1, j), alt, substr(word, j + 2, L))
+    lse_pssm <- one_hot(lse_word)
+    gvtrack.create("big_near", NULL, "pwm.edit_distance",
+        pssm = lse_pssm, score.thresh = 0, prior = 0, bidirect = FALSE
+    )
+    near <- gextract("big_near", gintervals(chrom, 0, off), iterator = gintervals(chrom, 0, off))$big_near
+    skip_if(!isTRUE(near >= 2), "the near-match window is not unique")
+    gvtrack.create("big_lsepos", NULL, "pwm.edit_distance.lse.pos",
+        pssm = lse_pssm, score.thresh = -1, prior = 0.01, bidirect = FALSE
+    )
+    expect_equal(gextract("big_lsepos", iv, iterator = iv)$big_lsepos, off + j + 1)
 })

@@ -36,9 +36,18 @@ void ValueVarProcessor::process_single_value_var(
 	}
 
 	// Apply filter if present
-	if (var.filter) {
+	if (var.filter && var.val_func == TrackExpressionVars::Value_var::WEIGHTED_SUM) {
+		// the unmasked parts do not overlap, so each unmasked bp of an interval counts once
+		std::vector<GInterval> parts;
+		var.filter->subtract(eval_interval, parts);
+		var.var[idx] = TrackVarProcessor::aggregate_weighted_sum_with_filter(*var.track, parts);
+	} else if (var.filter) {
 		std::vector<GInterval> eval_intervals;
 		var.filter->subtract(eval_interval, eval_intervals);
+		// "nearest" without a value in the parts falls back to an unmasked value outside them
+		std::vector<GInterval> nearest_parts;
+		if (var.val_func == TrackExpressionVars::Value_var::NEAREST)
+			nearest_parts = eval_intervals;
 		// The counting reductions read each value once even when the filter splits its interval;
 		// the other functions (min, max, positions, ...) read the parts as they are
 		switch (var.val_func) {
@@ -48,6 +57,7 @@ void ValueVarProcessor::process_single_value_var(
 			case TrackExpressionVars::Value_var::AVG:
 			case TrackExpressionVars::Value_var::STDDEV:
 			case TrackExpressionVars::Value_var::QUANTILE:
+			case TrackExpressionVars::Value_var::NEAREST:
 				eval_intervals = var.track->parts_reading_items_once(eval_intervals);
 				break;
 			default:
@@ -70,13 +80,10 @@ void ValueVarProcessor::process_single_value_var(
 			double max_val = numeric_limits<double>::quiet_NaN();
 			double first_val = numeric_limits<double>::quiet_NaN();
 			double last_val = numeric_limits<double>::quiet_NaN();
-			double sample_val = numeric_limits<double>::quiet_NaN();
 			double min_pos = numeric_limits<double>::quiet_NaN();
 			double max_pos = numeric_limits<double>::quiet_NaN();
 			double first_pos = numeric_limits<double>::quiet_NaN();
 			double last_pos = numeric_limits<double>::quiet_NaN();
-			double sample_pos = numeric_limits<double>::quiet_NaN();
-			double nearest_val = numeric_limits<double>::quiet_NaN();
 			double lse_val = -numeric_limits<double>::infinity();
 			bool exists = false;
 			bool has_value = false;
@@ -93,13 +100,10 @@ void ValueVarProcessor::process_single_value_var(
 				double part_max = track.last_max();
 				double part_first = track.last_first();
 				double part_last = track.last_last();
-				double part_sample = track.last_sample();
 				double part_min_pos = track.last_min_pos();
 				double part_max_pos = track.last_max_pos();
 				double part_first_pos = track.last_first_pos();
 				double part_last_pos = track.last_last_pos();
-				double part_sample_pos = track.last_sample_pos();
-				double part_nearest = track.last_nearest();
 				double part_exists = track.last_exists();
 
 				if (part_size > 0) {
@@ -136,18 +140,10 @@ void ValueVarProcessor::process_single_value_var(
 				if (!std::isnan(part_last))
 					last_val = part_last;
 
-				if (!std::isnan(part_sample) && std::isnan(sample_val))
-					sample_val = part_sample;
 				if (!std::isnan(part_first_pos) && std::isnan(first_pos))
 					first_pos = part_first_pos;
 				if (!std::isnan(part_last_pos))
 					last_pos = part_last_pos;
-
-				if (!std::isnan(part_sample_pos) && std::isnan(sample_pos))
-					sample_pos = part_sample_pos;
-
-				if (!std::isnan(part_nearest) && std::isnan(nearest_val))
-					nearest_val = part_nearest;
 
 				exists = exists || (!std::isnan(part_exists) && part_exists != 0);
 				has_value = true;
@@ -161,7 +157,13 @@ void ValueVarProcessor::process_single_value_var(
 
 		// Finalize result for filtered case
 		if (!agg.has_value) {
-			var.var[idx] = numeric_limits<double>::quiet_NaN();
+			// No unmasked value: size and exists count none, the other functions have nothing to report
+			if (var.val_func == TrackExpressionVars::Value_var::SIZE || var.val_func == TrackExpressionVars::Value_var::EXISTS)
+				var.var[idx] = 0;
+			else if (var.val_func == TrackExpressionVars::Value_var::NEAREST)
+				var.var[idx] = TrackVarProcessor::nearest_unmasked_value(*var.track, *var.filter, nearest_parts);
+			else
+				var.var[idx] = numeric_limits<double>::quiet_NaN();
 		} else {
 			switch (var.val_func) {
 				case TrackExpressionVars::Value_var::AVG:
@@ -198,7 +200,7 @@ void ValueVarProcessor::process_single_value_var(
 					var.var[idx] = agg.last_val;
 					break;
 				case TrackExpressionVars::Value_var::SAMPLE:
-					var.var[idx] = agg.sample_val;
+					var.var[idx] = TrackVarProcessor::aggregate_sample_with_filter(*var.track, eval_intervals, false);
 					break;
 				case TrackExpressionVars::Value_var::FIRST_POS_ABS:
 					var.var[idx] = agg.first_pos;
@@ -213,10 +215,10 @@ void ValueVarProcessor::process_single_value_var(
 					var.var[idx] = std::isnan(agg.last_pos) ? numeric_limits<double>::quiet_NaN() : agg.last_pos - eval_interval.start;
 					break;
 				case TrackExpressionVars::Value_var::SAMPLE_POS_ABS:
-					var.var[idx] = agg.sample_pos;
+					var.var[idx] = TrackVarProcessor::aggregate_sample_with_filter(*var.track, eval_intervals, true);
 					break;
 				case TrackExpressionVars::Value_var::SAMPLE_POS_REL:
-					var.var[idx] = std::isnan(agg.sample_pos) ? numeric_limits<double>::quiet_NaN() : agg.sample_pos - eval_interval.start;
+					var.var[idx] = TrackVarProcessor::aggregate_sample_with_filter(*var.track, eval_intervals, true) - eval_interval.start;
 					break;
 				case TrackExpressionVars::Value_var::MIN_POS_ABS:
 					var.var[idx] = agg.min_pos;
@@ -231,7 +233,8 @@ void ValueVarProcessor::process_single_value_var(
 					var.var[idx] = std::isnan(agg.max_pos) ? numeric_limits<double>::quiet_NaN() : agg.max_pos - eval_interval.start;
 					break;
 				case TrackExpressionVars::Value_var::NEAREST:
-					var.var[idx] = agg.nearest_val;
+					// the average of the unmasked values, as "nearest" is the average when the interval holds values
+					var.var[idx] = agg.total_size > 0 ? agg.total_sum / agg.total_size : numeric_limits<double>::quiet_NaN();
 					break;
 				case TrackExpressionVars::Value_var::QUANTILE:
 					var.var[idx] = TrackVarProcessor::aggregate_quantile_with_filter(*var.track, eval_intervals, var.percentile, m_iu);
@@ -258,6 +261,9 @@ void ValueVarProcessor::process_single_value_var(
 				break;
 			case TrackExpressionVars::Value_var::SUM:
 				var.var[idx] = var.track->last_sum();
+				break;
+			case TrackExpressionVars::Value_var::WEIGHTED_SUM:
+				var.var[idx] = var.track->last_weighted_sum();
 				break;
 			case TrackExpressionVars::Value_var::LSE:
 				var.var[idx] = var.track->last_lse();

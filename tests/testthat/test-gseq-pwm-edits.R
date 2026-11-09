@@ -891,3 +891,102 @@ test_that("gseq.pwm_edits takes the same score.thresh values as the rest of the 
     expect_error(edits(TRUE), "score.thresh must be a single number")
     expect_error(edits("loose"), "score.thresh must be a single number")
 })
+
+test_that("gseq.pwm_edits ignores a strand column, as the vtrack does", {
+    gdb.init_examples()
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    pssm <- matrix(c(
+        0.7, 0.1, 0.1, 0.1,
+        0.1, 0.7, 0.1, 0.1,
+        0.1, 0.1, 0.7, 0.1,
+        0.1, 0.1, 0.1, 0.7
+    ), ncol = 4, byrow = TRUE, dimnames = list(NULL, c("A", "C", "G", "T")))
+    thr <- -3
+
+    set.seed(613)
+    starts <- sort(sample(1000:400000, 12))
+    iv <- gintervals(1, starts, starts + sample(1:6, 12, TRUE))
+    stranded <- iv
+    stranded$strand <- -1
+
+    # A strand = -1 row used to be scanned reverse-complemented, and with
+    # indels over windows shifted by max_indels
+    for (cfg in list(
+        list(bidirect = FALSE, strand = 1, max_indels = NULL),
+        list(bidirect = FALSE, strand = -1, max_indels = NULL),
+        list(bidirect = TRUE, strand = 1, max_indels = 1L),
+        list(bidirect = FALSE, strand = 1, max_indels = 2L)
+    )) {
+        args <- list(pssm = pssm, score.thresh = thr, prior = 0.01, bidirect = cfg$bidirect, strand = cfg$strand)
+        if (!is.null(cfg$max_indels)) args$max_indels <- cfg$max_indels
+        plain <- do.call(gseq.pwm_edits, c(list(iv), args))
+        with_strand <- do.call(gseq.pwm_edits, c(list(stranded), args))
+        n_plain <- rep(NA_integer_, nrow(iv))
+        n_plain[plain$seq_idx] <- plain$n_edits
+        n_strand <- rep(NA_integer_, nrow(iv))
+        n_strand[with_strand$seq_idx] <- with_strand$n_edits
+        expect_equal(n_strand, n_plain)
+
+        vt <- c(list(pssm = pssm, score.thresh = thr, prior = 0.01, bidirect = cfg$bidirect, strand = cfg$strand))
+        if (!is.null(cfg$max_indels)) vt$max_indels <- cfg$max_indels
+        gvtrack.create("ed_strandcol", NULL, "pwm.edit_distance", params = vt)
+        v <- gextract("ed_strandcol", stranded, iterator = stranded)
+        v <- v[order(v$intervalID), ]
+        expect_equal(n_strand, as.integer(v$ed_strandcol))
+        gvtrack.rm("ed_strandcol")
+    }
+})
+
+test_that("gseq.pwm_edits refuses a bidirect that is not TRUE or FALSE", {
+    pssm <- matrix(c(0.7, 0.1, 0.1, 0.1, 0.1, 0.7, 0.1, 0.1), 2,
+        byrow = TRUE,
+        dimnames = list(NULL, c("A", "C", "G", "T"))
+    )
+    for (b in list(NA, c(TRUE, FALSE), logical(0), "TRUE")) {
+        expect_error(
+            gseq.pwm_edits("GTGT", pssm, score.thresh = -1, prior = 0, bidirect = b),
+            "bidirect must be TRUE or FALSE",
+            info = deparse(b)
+        )
+    }
+})
+
+test_that("gseq.pwm_edits on intervals scans the vtrack's windows for every extend value", {
+    gdb.init_examples()
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    # With extend = FALSE and max_indels > 0 windows used to start up to
+    # length - (L - max_indels), past the vtrack's last start (length - L), and
+    # an integer extend was read as a number of extra bases where the vtrack
+    # reads any positive value as TRUE.
+    set.seed(808)
+    L <- 8
+    pssm <- matrix(rgamma(4 * L, 0.4), L)
+    pssm <- pssm / rowSums(pssm)
+    colnames(pssm) <- c("A", "C", "G", "T")
+    starts <- sort(sample(seq(1000, 150000, 50), 120))
+    iv <- gintervals(1, starts, starts + sample(5:40, 120, TRUE))
+    for (ext in list(TRUE, FALSE, 3L, 0L)) {
+        for (d in 0:3) {
+            for (direction in c("above", "below")) {
+                thr <- if (direction == "above") -8 else -14
+                va <- list(pssm = pssm, score.thresh = thr, extend = ext, direction = direction)
+                if (d > 0) va$max_indels <- d
+                gvtrack.create("ed_ext", NULL, "pwm.edit_distance", params = va)
+                v <- gextract("ed_ext", iv, iterator = iv)
+                v <- v$ed_ext[order(v$intervalID)]
+                g <- gseq.pwm_edits(iv, pssm,
+                    score.thresh = thr, max_indels = if (d > 0) d else NULL,
+                    extend = ext, direction = direction
+                )
+                n <- rep(NA_real_, nrow(iv))
+                n[g$seq_idx] <- g$n_edits
+                expect_equal(n, v, info = sprintf("extend=%s D=%d %s", format(ext), d, direction))
+                gvtrack.rm("ed_ext")
+            }
+        }
+    }
+})

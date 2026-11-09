@@ -10,6 +10,20 @@ This release fixes the defects found in the review of 5.16.1, makes common large
 
 * **Behavior fix:** with `options(gmulticontig.2d.cache = TRUE)`, a later change of `gmulticontig.2d.mode` is honoured.
 
+* **Behavior fix:** an indexed track read under two different shifts in one call (e.g. two virtual tracks on it with different `sshift`/`eshift`) gave the first shift the last one's values on the first chromosome of each process. Present since 5.6.15; recompute such results on indexed databases.
+
+* **Behavior fix:** virtual tracks with a filter: `first`, `last` and their positions skip unmasked parts that hold no value; `sample` draws each unmasked value with the same chance; `nearest` is the average of the unmasked values, else the nearest unmasked value; value-based `size` and `exists` are 0 when nothing unmasked holds a value.
+
+* **Behavior fix:** PWM edit distance with `max_indels > 0` scores the inserted base (it counted as 0) and searches 3 or more indels exactly, so edit counts are no longer too low. `score.min` and `score.max` apply with indels; with `direction = "below"` and `bidirect = TRUE` both strands must go below; `pwm.edit_distance.lse` finds reachable thresholds past a local optimum; positions past 2^24 are exact; with indels, short windows at chromosome ends are scanned.
+
+* **Behavior fix:** `gseq.pwm_edits()` gives the virtual track's answer: same windows for every `extend`, a strand column ignored, the harder strand reported for `direction = "below"` with `bidirect = TRUE`.
+
+* **Behavior fix:** misha's random draws (`gsample()`, sampled `gquantiles()` and `gcor()`, `sample` and `quantile` virtual tracks) use and advance `.Random.seed`, and multitask processes no longer draw identical streams.
+
+* **Behavior fix:** gsynth: `gsynth.save()`/`gsynth.load()` keep the model's iterator, and a model trained with the implicit iterator stores its bin size, so loaded models sample and score; `gsynth.random()` draws every base from `nuc_probs`; `gsynth.train()` leaves out k-mers that reach into the mask; `gsynth.train()` and `gseq.kmer.dist()` count positions covered by overlapping intervals once; `gsynth.sample()` and `gsynth.score()` of several intervals no longer depend on each other.
+
+* **Behavior fix:** `gdb.create(format = "per-chromosome")` makes a chromosome of each record of a multi-FASTA file.
+
 * An error inside a misha call (e.g. `gintervals.rbind()` of mismatched columns) no longer turns multitasking off for the rest of the session or leaves the umask at 007.
 
 * An `NA` logical argument (`unify_touching_intervals`, `bidirect`, `extend`, `canonic`, `include_metadata`, `interval_relative`, `remove.dups`, `allow.duplicates`) is an error; it was read as `TRUE` or `FALSE`. An `NA`, infinite or integer-`NA` coordinate is an invalid interval.
@@ -21,6 +35,12 @@ This release fixes the defects found in the review of 5.16.1, makes common large
 * Databases: a stale `.db.cache.lock` that cannot be read is broken by its age; a refused re-load of a dataset leaves it loaded; `gtrack.copy(db =)` into a dataset no longer hides the working database's own track; when a `gtrack.copy(overwrite = TRUE)` fails because another session wrote the name, the replaced track goes to the trash instead of a hidden directory; a failed conversion to the indexed format no longer leaves buffered bytes to be written into other files at exit.
 
 * `gintervals.normalize()` documents that windows are clipped at chromosome ends.
+
+* PSSM input is checked: counts are accepted; `NA`, negative values (log-odds) and rows of zeros are an error.
+
+* New virtual track function `weighted.sum`: the sum of value x overlapping bp, for windows that cut bins (e.g. 20 bp tracks summed over shifted 32 bp windows). `sum` is unchanged; its docs say that it counts every bin the window touches in full.
+
+* Motif ID de-duplication no longer leaves duplicate names; `gsynth.replace_kmer()` with a replacement that differs from the target only by case no longer hangs; large-genome FASTA output of `gsynth.random()` and `gsynth.replace_kmer()` gets a `.fai`.
 
 # misha 5.16.1
 

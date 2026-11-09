@@ -114,6 +114,39 @@ vector<RdbInitializer::LiveStat>     RdbInitializer::s_running_pids;
 // Cleared by the outermost RdbInitializer.
 static set<string> s_once_per_call_keys;
 
+// True once r_unif_rand() has loaded R's generator state (GetRNGstate()) in this process and the
+// state has not been saved back to .Random.seed since (C_save_rng_state, or the next top-level call).
+static bool s_rng_state_loaded = false;
+
+// GetRNGstate() and PutRNGstate() can raise an R error or warning (a .Random.seed of the wrong
+// type or length; an allocation): they run under R_ToplevelExec, which catches it (C3, C4).
+static void put_rng_state_callback(void *)
+{
+	PutRNGstate();
+}
+
+struct LoadRngStateData {
+	bool reseed;   // a kid: move to a stream of its own
+	int  kid_idx;
+};
+
+static void load_rng_state_callback(void *_data)
+{
+	LoadRngStateData *data = (LoadRngStateData *)_data;
+
+	GetRNGstate();
+	if (data->reseed) {
+		// Every kid starts from the same state. Seed each one from a draw of that state mixed with
+		// its kid index, so that the kids draw different numbers and a set.seed() before the call
+		// still reproduces them.
+		uint32_t seed = (uint32_t)(unif_rand() * 4294967296.0) ^ (0x9E3779B9u * (uint32_t)(data->kid_idx + 1));
+		SEXP arg = PROTECT(Rf_ScalarInteger((int)(seed & 0x7fffffff)));
+		SEXP call = PROTECT(Rf_lang2(Rf_findFun(Rf_install("set.seed"), R_BaseEnv), arg));
+		Rf_eval(call, R_BaseEnv);
+		UNPROTECT(2);
+	}
+}
+
 RdbInitializer::Shm *RdbInitializer::s_shm = (RdbInitializer::Shm *)MAP_FAILED;
 struct sigaction     RdbInitializer::s_old_sigint_act;
 struct sigaction     RdbInitializer::s_old_sigchld_act;
@@ -132,6 +165,14 @@ RdbInitializer::RdbInitializer()
 	s_sigint_fired = 0;
 
 	if (!s_ref_count) {
+		// A previous call drew random numbers, and .gcall() did not save the generator state
+		// (the function was called through .Call() directly): save it now, before anything that
+		// could fail is set up, so that this call does not draw the same numbers again.
+		if (s_rng_state_loaded) {
+			R_ToplevelExec(put_rng_state_callback, NULL);
+			s_rng_state_loaded = false;
+		}
+
 		s_old_umask = umask(07);
 
 		s_shm_size = 0;
@@ -406,6 +447,8 @@ pid_t RdbInitializer::launch_process()
 		s_kid_index++;
 	} else {   // a child process
 		s_is_kid = true;
+		// the first draw of the kid reseeds it (see r_unif_rand)
+		s_rng_state_loaded = false;
 
 		sigaction(SIGINT, &s_old_sigint_act, NULL);
 		sigaction(SIGCHLD, &s_old_sigchld_act, NULL);
@@ -864,6 +907,19 @@ void rdb::check_interrupt()
 bool rdb::is_kid()
 {
 	return RdbInitializer::is_kid();
+}
+
+double rdb::r_unif_rand()
+{
+	if (!s_rng_state_loaded) {
+		LoadRngStateData data;
+		data.reseed = RdbInitializer::is_kid();
+		data.kid_idx = RdbInitializer::get_kid_idx();
+		if (!R_ToplevelExec(load_rng_state_callback, &data))
+			verror("Failed to load the state of the random number generator (.Random.seed)");
+		s_rng_state_loaded = true;
+	}
+	return unif_rand();
 }
 
 bool rdb::once_per_call(const char *key)
@@ -1366,6 +1422,19 @@ SEXP C_lifetime_counters()
 SEXP C_lifetime_repair()
 {
 	return Rf_ScalarLogical(RdbInitializer::repair_leaked_scope());
+}
+
+// Saves R's generator state to .Random.seed (PutRNGstate()) if a draw of r_unif_rand() loaded it
+// and it has not been saved since. Called by .gcall() when a call returns, so that R's next draw
+// continues after the numbers the call drew. No RdbInitializer, like C_lifetime_counters: it only
+// reads and writes a static.
+SEXP C_save_rng_state()
+{
+	if (s_rng_state_loaded && !RdbInitializer::is_kid()) {
+		PutRNGstate();
+		s_rng_state_loaded = false;
+	}
+	return R_NilValue;
 }
 
 // Returns the write error BufferedFile recorded (see BufferedFile::write_error), or NULL, and

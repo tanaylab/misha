@@ -1827,9 +1827,9 @@ test_that("gseq.kmer.dist handles overlapping intervals correctly", {
 
     result <- gseq.kmer.dist(intervals, k = 2)
 
-    # Should count k-mers from both intervals (including overlap region twice)
-    # Total: (1000-1) + (1000-1) = 1998 dinucleotides
-    expect_equal(sum(result$count), 1998)
+    # The overlap is counted once: the k-mers of chr1:0-1500, 1500 - 1 = 1499 dinucleotides
+    expect_equal(sum(result$count), 1499)
+    expect_equal(result, gseq.kmer.dist(data.frame(chrom = "chr1", start = 0, end = 1500), k = 2))
 })
 
 test_that("gseq.kmer.dist handles multiple mask intervals", {

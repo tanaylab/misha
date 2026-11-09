@@ -9,6 +9,10 @@
 #include "GenomeTrack.h"
 #include "GenomeTrack1D.h"
 #include "GenomeTrack2D.h"
+#include "GenomeTrackArrays.h"
+#include "GenomeTrackInMemory.h"
+#include "GenomeTrackSparse.h"
+#include "Filter.h"
 #include "StreamPercentiler.h"
 #include "rdbutils.h"
 
@@ -75,7 +79,9 @@ void TrackVarProcessor::process_single_track_var_1d(
 		}
 	}
 
-	if (has_filter && unmasked_parts.size() > 1) {
+	// "nearest" with a filter is never read from a single part alone: without a value in the parts it falls back to
+	// an unmasked value outside them
+	if (has_filter && (unmasked_parts.size() > 1 || var.val_func == TrackExpressionVars::Track_var::REG_NEAREST)) {
 		// Multiple unmasked parts - aggregate across them
 		var.var[idx] = aggregate_multi_value(var, track, unmasked_parts, base_start);
 
@@ -141,6 +147,8 @@ double TrackVarProcessor::extract_single_value(
 		return track.last_stddev();
 	case TrackExpressionVars::Track_var::SUM:
 		return track.last_sum();
+	case TrackExpressionVars::Track_var::WEIGHTED_SUM:
+		return track.last_weighted_sum();
 	case TrackExpressionVars::Track_var::LSE:
 		return track.last_lse();
 	case TrackExpressionVars::Track_var::QUANTILE:
@@ -191,6 +199,9 @@ double TrackVarProcessor::aggregate_multi_value(
 		return aggregate_sum_with_filter(track, track.parts_reading_items_once(parts));
 	case TrackExpressionVars::Track_var::LSE:
 		return aggregate_lse_with_filter(track, track.parts_reading_items_once(parts));
+	// The parts do not overlap, so each unmasked bp of an item counts once
+	case TrackExpressionVars::Track_var::WEIGHTED_SUM:
+		return aggregate_weighted_sum_with_filter(track, parts);
 	case TrackExpressionVars::Track_var::REG_MIN:
 	case TrackExpressionVars::Track_var::PV_MIN:
 		return aggregate_min_with_filter(track, parts);
@@ -205,10 +216,13 @@ double TrackVarProcessor::aggregate_multi_value(
 		return aggregate_min_pos_abs_with_filter(track, parts);
 	case TrackExpressionVars::Track_var::MIN_POS_REL:
 		return aggregate_min_pos_rel_with_filter(track, parts, base_start);
-	case TrackExpressionVars::Track_var::REG_NEAREST:
-		// For nearest, use the first unmasked part (closest to start)
-		track.read_interval(parts[0]);
-		return track.last_nearest();
+	case TrackExpressionVars::Track_var::REG_NEAREST: {
+		// The average of the unmasked values, as "nearest" is the average when the interval holds values
+		const double avg = aggregate_avg_with_filter(track, parts);
+		if (!std::isnan(avg))
+			return avg;
+		return nearest_unmasked_value(track, *var.filter, parts);
+	}
 	case TrackExpressionVars::Track_var::QUANTILE:
 		return aggregate_quantile_with_filter(track, track.parts_reading_items_once(parts), var.percentile, m_iu);
 	case TrackExpressionVars::Track_var::EXISTS:
@@ -216,31 +230,23 @@ double TrackVarProcessor::aggregate_multi_value(
 	case TrackExpressionVars::Track_var::SIZE:
 		return aggregate_size_with_filter(track, track.parts_reading_items_once(parts));
 	case TrackExpressionVars::Track_var::SAMPLE:
-		return aggregate_sample_with_filter(track, parts);
+		return aggregate_sample_with_filter(track, parts, false);
 	case TrackExpressionVars::Track_var::SAMPLE_POS_ABS:
-		return aggregate_sample_pos_abs_with_filter(track, parts);
+		return aggregate_sample_with_filter(track, parts, true);
 	case TrackExpressionVars::Track_var::SAMPLE_POS_REL:
-		return aggregate_sample_pos_rel_with_filter(track, parts, base_start);
+		return aggregate_sample_with_filter(track, parts, true) - base_start;
 	case TrackExpressionVars::Track_var::FIRST:
-		// For first, use the first unmasked part
-		track.read_interval(parts[0]);
-		return track.last_first();
+		return aggregate_first_with_filter(track, parts, false);
 	case TrackExpressionVars::Track_var::FIRST_POS_ABS:
-		track.read_interval(parts[0]);
-		return track.last_first_pos();
+		return aggregate_first_with_filter(track, parts, true);
 	case TrackExpressionVars::Track_var::FIRST_POS_REL:
-		track.read_interval(parts[0]);
-		return track.last_first_pos() - base_start;
+		return aggregate_first_with_filter(track, parts, true) - base_start;
 	case TrackExpressionVars::Track_var::LAST:
-		// For last, use the last unmasked part
-		track.read_interval(parts.back());
-		return track.last_last();
+		return aggregate_last_with_filter(track, parts, false);
 	case TrackExpressionVars::Track_var::LAST_POS_ABS:
-		track.read_interval(parts.back());
-		return track.last_last_pos();
+		return aggregate_last_with_filter(track, parts, true);
 	case TrackExpressionVars::Track_var::LAST_POS_REL:
-		track.read_interval(parts.back());
-		return track.last_last_pos() - base_start;
+		return aggregate_last_with_filter(track, parts, true) - base_start;
 	default:
 		if (!TrackExpressionVars::is_sequence_based_function(var.val_func))
 			verror("Internal error: unsupported function %d", var.val_func);
@@ -521,61 +527,139 @@ double TrackVarProcessor::aggregate_size_with_filter(GenomeTrack1D &track, const
 	return total_size;
 }
 
-double TrackVarProcessor::aggregate_sample_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts)
+double TrackVarProcessor::aggregate_sample_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts, bool pos)
 {
-	// Collect all non-NaN values from all parts and sample one
-	vector<float> all_values;
-	for (const auto& part : parts) {
+	// A uniform draw over the values the parts hold, each value once: each part draws one of its values
+	// uniformly, and one of these draws is kept with chance proportional to its part's value count
+	vector<double> draws;
+	vector<double> counts;
+	double total = 0;
+
+	for (const auto &part : track.parts_reading_items_once(parts)) {
 		track.read_interval(part);
-		float val = track.last_sample();
-		if (!std::isnan(val)) {
-			all_values.push_back(val);
+		const double part_n = track.last_size();
+		const double draw = pos ? track.last_sample_pos() : (double)track.last_sample();
+		if (!(part_n > 0) || std::isnan(draw))
+			continue;
+		draws.push_back(draw);
+		counts.push_back(part_n);
+		total += part_n;
+	}
+
+	if (draws.empty())
+		return numeric_limits<double>::quiet_NaN();
+
+	// R's generator through rdb::r_unif_rand(), like every other draw of the call: .gcall() saves
+	// the state when the call returns, so R's next draw does not repeat this one
+	double u = rdb::r_unif_rand() * total;
+
+	for (size_t i = 0; i < draws.size(); ++i) {
+		if (u < counts[i])
+			return draws[i];
+		u -= counts[i];
+	}
+	return draws.back();
+}
+
+double TrackVarProcessor::nearest_unmasked_value(GenomeTrack1D &track, const Genome1DFilter &filter, const vector<GInterval> &parts)
+{
+	// The sorted, non-overlapping intervals of the chromosome that the track holds, [begin, end) of items, and
+	// their values; a dense track has none ("nearest" on a dense track is the average inside the interval only)
+	const GIntervals *items = nullptr;
+	size_t begin = 0, end = 0;
+	const vector<float> *vals = nullptr;
+	GenomeTrackArrays *arrays = nullptr;
+
+	if (GenomeTrackSparse *sparse = dynamic_cast<GenomeTrackSparse *>(&track)) {
+		items = &sparse->get_intervals();
+		vals = &sparse->get_vals();
+		end = items->size();
+	} else if ((arrays = dynamic_cast<GenomeTrackArrays *>(&track))) {
+		items = &arrays->get_intervals();
+		end = items->size();
+	} else if (GenomeTrackInMemory *inmem = dynamic_cast<GenomeTrackInMemory *>(&track)) {
+		items = &inmem->get_intervals();
+		vals = &inmem->get_vals();
+		inmem->chrom_range(parts.front().chromid, begin, end);
+	} else
+		return numeric_limits<double>::quiet_NaN();
+
+	auto value = [&](size_t i) { return vals ? (*vals)[i] : arrays->get_sliced_val(i); };
+	const int chromid = parts.front().chromid;
+	const int64_t first_start = parts.front().start;
+	const int64_t last_end = parts.back().end;
+	vector<GInterval> stretches;
+
+	// Left: the last value with an unmasked stretch before the first part (the parts themselves hold no value)
+	bool has_left = false;
+	float left_val = 0;
+	int64_t left_dist = 0;
+	auto ileft = std::upper_bound(items->begin() + begin, items->begin() + end, first_start,
+	                              [](int64_t coord, const GInterval &item) { return coord < item.start; });
+	for (size_t i = ileft - items->begin(); i-- > begin; ) {
+		const GInterval &item = (*items)[i];
+		const float v = value(i);
+		if (std::isnan(v))
+			continue;
+		filter.subtract(GInterval(chromid, item.start, std::min(item.end, first_start), 0), stretches);
+		if (!stretches.empty()) {
+			has_left = true;
+			left_val = v;
+			left_dist = first_start - stretches.back().end;
+			break;
 		}
 	}
 
-	if (all_values.empty()) {
-		return numeric_limits<double>::quiet_NaN();
-	}
-
-	// Use R's random number generator for reproducibility
-	GetRNGstate();
-	int idx = (int)(unif_rand() * all_values.size());
-	PutRNGstate();
-
-	return all_values[idx];
-}
-
-double TrackVarProcessor::aggregate_sample_pos_abs_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts)
-{
-	// Collect all non-NaN positions from all parts and sample one
-	vector<double> all_positions;
-	for (const auto& part : parts) {
-		track.read_interval(part);
-		double pos = track.last_sample_pos();
-		if (!std::isnan(pos)) {
-			all_positions.push_back(pos);
+	// Right: the first value with an unmasked stretch after the last part
+	bool has_right = false;
+	float right_val = 0;
+	int64_t right_dist = 0;
+	auto iright = std::lower_bound(items->begin() + begin, items->begin() + end, last_end,
+	                               [](const GInterval &item, int64_t coord) { return item.end <= coord; });
+	for (size_t i = iright - items->begin(); i < end; ++i) {
+		const GInterval &item = (*items)[i];
+		const float v = value(i);
+		if (std::isnan(v))
+			continue;
+		filter.subtract(GInterval(chromid, std::max(item.start, last_end), item.end, 0), stretches);
+		if (!stretches.empty()) {
+			has_right = true;
+			right_val = v;
+			right_dist = stretches.front().start - last_end;
+			break;
 		}
 	}
 
-	if (all_positions.empty()) {
-		return numeric_limits<double>::quiet_NaN();
-	}
-
-	// Use R's random number generator for reproducibility
-	GetRNGstate();
-	int idx = (int)(unif_rand() * all_positions.size());
-	PutRNGstate();
-
-	return all_positions[idx];
+	// At the same distance the left value wins, as without a filter
+	if (has_left && (!has_right || left_dist <= right_dist))
+		return left_val;
+	if (has_right)
+		return right_val;
+	return numeric_limits<double>::quiet_NaN();
 }
 
-double TrackVarProcessor::aggregate_sample_pos_rel_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts, int64_t base_start)
+double TrackVarProcessor::aggregate_first_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts, bool pos)
 {
-	double abs_pos = aggregate_sample_pos_abs_with_filter(track, parts);
-	if (std::isnan(abs_pos)) {
-		return abs_pos;
+	// The first part that holds a value has the first value
+	for (const auto &part : parts) {
+		track.read_interval(part);
+		const double v = pos ? track.last_first_pos() : (double)track.last_first();
+		if (!std::isnan(v))
+			return v;
 	}
-	return abs_pos - base_start;
+	return numeric_limits<double>::quiet_NaN();
+}
+
+double TrackVarProcessor::aggregate_last_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts, bool pos)
+{
+	// The last part that holds a value has the last value
+	for (auto ipart = parts.rbegin(); ipart != parts.rend(); ++ipart) {
+		track.read_interval(*ipart);
+		const double v = pos ? track.last_last_pos() : (double)track.last_last();
+		if (!std::isnan(v))
+			return v;
+	}
+	return numeric_limits<double>::quiet_NaN();
 }
 
 double TrackVarProcessor::aggregate_lse_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts)
@@ -593,4 +677,21 @@ double TrackVarProcessor::aggregate_lse_with_filter(GenomeTrack1D &track, const 
 	}
 
 	return has_value ? lse : numeric_limits<double>::quiet_NaN();
+}
+
+double TrackVarProcessor::aggregate_weighted_sum_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts)
+{
+	double total = 0;
+	bool has_value = false;
+
+	for (const auto &part : parts) {
+		track.read_interval(part);
+		const double part_wsum = track.last_weighted_sum();
+		if (!std::isnan(part_wsum)) {
+			total += part_wsum;
+			has_value = true;
+		}
+	}
+
+	return has_value ? total : numeric_limits<double>::quiet_NaN();
 }

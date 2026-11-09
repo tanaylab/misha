@@ -29,7 +29,9 @@ gseq.pwm(
 \arguments{
 \item{seqs}{character vector of DNA sequences (A/C/G/T/N; case-insensitive)}
 
-\item{pssm}{numeric matrix or data frame with columns named A, C, G, T (additional columns are allowed and will be ignored)}
+\item{pssm}{numeric matrix or data frame with columns named A, C, G, T (additional columns are allowed and will be ignored).
+Each row holds the probabilities or counts of the four bases at one motif position; log-odds matrices, \code{NA}
+values and rows summing to 0 are rejected.}
 
 \item{mode}{character; one of "lse", "max", "pos", or "count"}
 

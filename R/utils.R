@@ -39,6 +39,9 @@
     completed <- FALSE
     on.exit(
         {
+            # Random numbers the call drew advance .Random.seed, as an R function's draws do
+            # (rdb::r_unif_rand); otherwise R's next draw would repeat them.
+            .Call("C_save_rng_state")
             mine <- .gtake_pending_diagnostics()
             # A file the call failed to finish writing (see BufferedFile::write_error): the
             # final flush happens when C++ closes the file, often in a destructor that cannot

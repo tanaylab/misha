@@ -137,10 +137,12 @@ protected:
 	std::vector<float> m_scratch_all_values;
 	std::vector<double> m_scratch_all_positions;
 	std::vector<float> m_scratch_bin_vals;
+	std::vector<float> m_scratch_wsum_vals;
 
 	void read_interval_reducers_only(const GInterval &interval);
 	void read_interval_avg_nearest_only(const GInterval &interval);
 	void read_interval_single_function(const GInterval &interval);
+	void read_interval_weighted_sum(const GInterval &interval);
 	void sync_master_state_from_dependent();
 	void copy_state_from_master();
 	void classify_fast_path_mode();

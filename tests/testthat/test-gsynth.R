@@ -135,6 +135,44 @@ test_that("gsynth.train respects mask", {
     gvtrack.rm("test_vt")
 })
 
+test_that("gsynth.train leaves out (k+1)-mers that reach into the mask, as gseq.kmer.dist does", {
+    gdb.init_examples()
+    k <- 2
+    iv <- gintervals(1, 1000, 61000)
+    mask <- gintervals(1, c(5000, 20000), c(5100, 20007))
+    model <- gsynth.train(intervals = iv, mask = mask, iterator = 1000, k = k)
+
+    # the forward and reverse-complement (k+1)-mer counts gseq.kmer.dist gives
+    kd <- gseq.kmer.dist(iv, k = k + 1, mask = mask)
+    expected <- matrix(0, 4^k, 4)
+    code <- function(s) match(strsplit(s, "")[[1]], c("A", "C", "G", "T")) - 1
+    for (i in seq_len(nrow(kd))) {
+        w <- kd$kmer[i]
+        for (x in list(code(w), 3 - rev(code(w)))) {
+            ctx <- sum(x[1:k] * 4^((k - 1):0)) + 1
+            expected[ctx, x[k + 1] + 1] <- expected[ctx, x[k + 1] + 1] + kd$count[i]
+        }
+    }
+    expect_equal(unname(as.matrix(model$model_data$counts[[1]])), expected)
+    expect_equal(model$total_kmers, 2 * sum(kd$count))
+})
+
+test_that("gsynth.train counts a position covered by overlapping intervals once", {
+    gdb.init_examples()
+    one <- gsynth.train(intervals = gintervals(1, 0, 4000), iterator = 100, k = 2)
+    overlapping <- gsynth.train(intervals = gintervals(c(1, 1), c(0, 1000), c(3000, 4000)), iterator = 100, k = 2)
+    expect_equal(overlapping$total_kmers, one$total_kmers)
+    expect_equal(overlapping$model_data$counts, one$model_data$counts)
+
+    if ("g_frac_ov" %in% gvtrack.ls()) gvtrack.rm("g_frac_ov")
+    gvtrack.create("g_frac_ov", NULL, "kmer.frac", kmer = "G")
+    withr::defer(gvtrack.rm("g_frac_ov"))
+    one <- gsynth.train(list(expr = "g_frac_ov", breaks = c(0, 0.25, 1)), intervals = gintervals(1, 0, 4000), iterator = 100, k = 2)
+    overlapping <- gsynth.train(list(expr = "g_frac_ov", breaks = c(0, 0.25, 1)), intervals = gintervals(c(1, 1), c(0, 1000), c(3000, 4000)), iterator = 100, k = 2)
+    expect_equal(overlapping$per_bin_kmers, one$per_bin_kmers)
+    expect_equal(overlapping$model_data$counts, one$model_data$counts)
+})
+
 test_that("gsynth.save and gsynth.load work correctly", {
     gdb.init_examples()
 
@@ -2685,6 +2723,22 @@ test_that("gsynth.random error handling", {
     )
 })
 
+test_that("gsynth.random draws every base from nuc_probs, the first bases of an interval and those after an N too", {
+    gdb.init_examples()
+    only_a <- c(A = 1, C = 0, G = 0, T = 0)
+    seqs <- gsynth.random(
+        intervals = gintervals(1, seq(0, 9000, 1000), seq(20, 9020, 1000)),
+        output_format = "vector", nuc_probs = only_a, seed = 1
+    )
+    expect_equal(seqs, rep(strrep("A", 20), 10))
+
+    # around the N run at chr1:167280-217280, which preserve_n keeps
+    iv <- gintervals(1, 167200, 217400)
+    s <- gsynth.random(intervals = iv, output_format = "vector", nuc_probs = only_a, seed = 1)
+    expect_equal(s, gsub("[^Nn]", "A", gseq.extract(iv)))
+    expect_true(grepl("N", s))
+})
+
 test_that("gsynth.random produces uniform distribution with default probs", {
     gdb.init_examples()
 
@@ -2966,6 +3020,20 @@ test_that("gsynth.replace_kmer validates inputs correctly", {
             intervals = gintervals(1, 0, 100)
         ),
         "output_path is required"
+    )
+})
+
+test_that("gsynth.replace_kmer refuses a replacement equal to the target in another case", {
+    gdb.init_examples()
+    # used to replace every CG by CG forever
+    expect_error(
+        gsynth.replace_kmer("cg", "CG", output_format = "vector", intervals = gintervals(1, 0, 200), check_composition = FALSE),
+        "cannot be identical"
+    )
+    # the composition check ignores case too
+    expect_equal(
+        gsynth.replace_kmer("cg", "GC", output_format = "vector", intervals = gintervals(1, 0, 2000)),
+        gsynth.replace_kmer("CG", "GC", output_format = "vector", intervals = gintervals(1, 0, 2000))
     )
 })
 

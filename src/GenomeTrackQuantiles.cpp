@@ -168,7 +168,7 @@ SEXP C_gquantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _iterator
 			float val = scanner.last_real(0);
 
 			if (!std::isnan(val))
-				sp.add(val, unif_rand);
+				sp.add(val, r_unif_rand);
 		}
 
 		vector<double> medians(percentiles.size(), numeric_limits<float>::quiet_NaN());
@@ -340,7 +340,7 @@ SEXP gquantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 					float val = scanner.last_real(0);
 
 					if (!std::isnan(val))
-						sp.add(val, unif_rand);
+						sp.add(val, r_unif_rand);
 				}
 
 				// Sort kid sample buffer in place so the parent can perform a
@@ -520,7 +520,7 @@ SEXP gquantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 						else {
 							double sampling_ratio = min_sampling_rate / kid_sampling_rate;
 							for (uint64_t j = 0; j < kids_samples_size[i]; ++j) {
-								if (unif_rand() < sampling_ratio)
+								if (r_unif_rand() < sampling_ratio)
 									samples.push_back(kid_samples[j]);
 							}
 						}
@@ -760,7 +760,7 @@ SEXP gintervals_quantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 				scanner.next();
 
 				if (!std::isnan(val))
-					sp.add(val, unif_rand);
+					sp.add(val, r_unif_rand);
 
 				// interval has finished => calculate the percentile
 				if (cur_interval_idx != scanner.last_scope_idx() || scanner.isend()) {
@@ -843,7 +843,7 @@ SEXP gintervals_quantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 				scanner.next();
 
 				if (!std::isnan(val))
-					sp.add(val, unif_rand);
+					sp.add(val, r_unif_rand);
 
 				// interval has finished => calculate the percentile
 				if (cur_interval_idx != scanner.last_scope_idx() || scanner.isend())
@@ -1016,7 +1016,7 @@ SEXP gintervals_quantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentil
 					scanner.next();
 
 					if (!std::isnan(val))
-						sp.add(val, unif_rand);
+						sp.add(val, r_unif_rand);
 
 					// interval has finished => calculate the percentile
 					if (cur_interval_idx != scanner.last_scope_idx() || scanner.isend()) {
@@ -1149,7 +1149,7 @@ SEXP gintervals_quantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentil
 					scanner.next();
 
 					if (!std::isnan(val))
-						sp.add(val, unif_rand);
+						sp.add(val, r_unif_rand);
 
 					// interval has finished => calculate the percentile
 					if (cur_interval_idx != scanner.last_scope_idx() || scanner.isend()) {
@@ -1305,7 +1305,7 @@ SEXP gbins_quantiles(SEXP _track_exprs, SEXP _breaks, SEXP _include_lowest, SEXP
 				if (index >= 0) {
 					StreamPercentiler<double> &sp = sps[index];
 					uint64_t old_buf_size = sp.cur_rnd_sampling_buf_size();
-					sp.add(val, unif_rand);
+					sp.add(val, r_unif_rand);
 					data_size += sp.cur_rnd_sampling_buf_size() - old_buf_size;
 					if ((uint64_t)data_size > iu.get_max_data_size())
 						verror("Memory limit was reached. To reduce memory usage you can lower down the number of bins.\n"
