@@ -114,14 +114,16 @@ const GIntervals &GenomeArraysCsv::get_intervals(int chromid)
 		}
 
 		m_intervals.push_back(GInterval(chromid, start, end, 0, (void *)&*ipos));
+		++m_num_kept;
 	}
 
 	m_intervals.sort();
 
-	for (GIntervals::const_iterator iinterv = m_intervals.begin() + 1; iinterv < m_intervals.end(); ++iinterv) {
-		if (((iinterv - 1)->end > iinterv->start))
+	// by index: clipping can leave a chromosome with no interval, and begin() + 1 of an empty vector is undefined
+	for (size_t i = 1; i < m_intervals.size(); ++i) {
+		if (m_intervals[i - 1].end > m_intervals[i].start)
 			TGLError<GenomeArraysCsv>(FORMAT_ERROR, "File %s, lines %ld and %ld: intervals overlap",
-								 m_bfile.file_name().c_str(), ((Position *)(iinterv - 1)->udata)->lineno + 1, ((Position *)iinterv->udata)->lineno + 1);
+								 m_bfile.file_name().c_str(), ((Position *)m_intervals[i - 1].udata)->lineno + 1, ((Position *)m_intervals[i].udata)->lineno + 1);
 	}
 
 	return m_intervals;

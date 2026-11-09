@@ -517,3 +517,18 @@ test_that("2D imports count only the chromosomes that got data as imported", {
     expect_message(gtrack.2d.import("data_chroms", "", f), "remaining 1 chromosome\\(s\\)")
     expect_message(gtrack.2d.import_contacts("data_chroms_c", "", f), "remaining 1 chromosome\\(s\\)")
 })
+
+test_that("gtrack.array.import of a file whose every record starts past the chromosome end is an error", {
+    # as for BED: nothing would be left to import; the records are dropped, so the track would be empty
+    local_db_state()
+    cs <- gintervals.all()
+    chr1_end <- cs$end[cs$chrom == "chr1"]
+    f <- tempfile(fileext = ".tsv")
+    withr::defer(unlink(f))
+    write.table(data.frame(chrom = "chr1", start = chr1_end + c(10, 100), end = chr1_end + c(20, 110), a = 1:2),
+        f,
+        sep = "\t", quote = FALSE, row.names = FALSE
+    )
+    expect_error(suppressWarnings(gtrack.array.import("test.past_end_arr", "x", f)), "nothing to import")
+    expect_false(gtrack.exists("test.past_end_arr"))
+})

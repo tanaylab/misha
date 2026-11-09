@@ -308,6 +308,13 @@ SEXP garrays_import(SEXP _track, SEXP _src, SEXP _colnames, SEXP _envir)
 			}
 			clipped_files += (num_clipped_files++ ? ", " : "") + string(source->get_src());
 		}
+		// as for BED: a file whose every record started past the end of its chromosome leaves nothing to import
+		for (Source *source : sources) {
+			if (source->is_csv() && !source->get_csv().get_num_kept() && source->get_csv().get_num_dropped())
+				verror("File %s: all of its %llu record(s) start at or past the end of their chromosome: nothing to import",
+				       source->get_src(), (unsigned long long)source->get_csv().get_num_dropped());
+		}
+
 		if (num_clipped_files) {
 			char msg[10000];
 			snprintf(msg, sizeof(msg),
