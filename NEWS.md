@@ -4,6 +4,8 @@
 
 * New overlap policy `"discard_intervals"`, on both sides, drops every chain interval involved in an overlap.
 
+* `tgt_overlap_policy` `"auto*"`: a minus-strand chain interval that wins an overlap comes back as one interval instead of several.
+
 # misha 5.17.0
 
 This release fixes defects found in a review of 5.16.1, speeds up large computations, and adds features for sequence-to-function models. Fixes marked **Behavior fix** change results; recompute anything that depends on them.

@@ -570,6 +570,21 @@ test_that("src_overlap_policy 'discard' maps the kept part of a minus-strand int
     expect_equal(c(res$start, res$end), c(5094, 5095))
 })
 
+test_that("auto_score keeps a winning minus-strand interval in one piece", {
+    local_db_state()
+    setup_db(list(paste0(">chr2\n", paste(rep("ACGT", 75), collapse = ""), "\n")))
+
+    # A: srcA [1000,1100) -> chr2 [0,100) reversed, score 2000; B: srcB -> chr2 [40,60), score 10.
+    # A wins all of [0,100); its three segments must merge back into one interval.
+    chain_file <- new_chain_file()
+    cat("chain 2000 srcA 5000 + 1000 1100 chr2 300 - 200 300 1\n100\n\n", file = chain_file)
+    cat("chain 10 srcB 5000 + 0 20 chr2 300 + 40 60 2\n20\n\n", file = chain_file, append = TRUE)
+
+    chain <- gintervals.load_chain(chain_file, tgt_overlap_policy = "auto_score")
+    expect_equal(nrow(chain), 1)
+    expect_equal(c(chain$start, chain$end, chain$startsrc, chain$endsrc), c(0, 100, 1000, 1100))
+})
+
 test_that("tgt_overlap_policy 'discard' keeps the target bases a single interval covers", {
     local_db_state()
     setup_db(list(paste0(">chr1\n", paste(rep("ACGT", 250), collapse = ""), "\n")))

@@ -41,7 +41,7 @@ gintervals.liftover(
   discard \tab Removes the target bases covered by more than one chain interval and keeps the rest of each chain interval. \cr
   discard_intervals \tab Discards any chain interval that has a target overlap with another chain interval. \cr
   agg \tab Segments overlaps into smaller disjoint regions where each region contains all contributing chains, allowing downstream aggregation to process multiple values per region. \cr
-  best_source_cluster \tab Best source cluster strategy based on source overlap. When multiple chains map a source interval, clusters them by source overlap: if chain source intervals overlap (indicating true duplications), all mappings are retained; if chain source intervals are disjoint (indicating conflicting/alternative mappings), only the cluster with the largest total target length is kept. \cr
+  best_source_cluster \tab Best source cluster strategy based on source overlap. When multiple chains map a source interval, clusters them by source overlap: if chain source intervals overlap (indicating true duplications), all mappings are retained; if chain source intervals are disjoint (indicating conflicting/alternative mappings), only the cluster with the largest total target length is kept. Supported by gintervals.liftover only, not gtrack.liftover. \cr
 }}
 
 \item{min_score}{optional minimum alignment score threshold. Chains with scores below this value are filtered out. Useful for excluding low-quality alignments.}

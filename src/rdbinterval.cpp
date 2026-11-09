@@ -1118,15 +1118,22 @@ void ChainIntervals::handle_tgt_overlaps(const string &policy, const GenomeChrom
 
 		if (allow_merge && !out.empty()) {
 			ChainInterval &prev = out.back();
+			// On a reversed interval the next target slice lies just before the
+			// previous one in source coordinates
+			const bool src_adjacent = slice.strand == 0 ? prev.end_src == slice.start_src
+			                                            : prev.start_src == slice.end_src;
 			if (prev.chromid == slice.chromid &&
 			    prev.chain_id == slice.chain_id &&
 			    prev.strand == slice.strand &&
 			    prev.chromid_src == slice.chromid_src &&
 			    prev.strand_src == slice.strand_src &&
 			    prev.end == slice.start &&
-			    prev.end_src == slice.start_src) {
+			    src_adjacent) {
 				prev.end = slice.end;
-				prev.end_src = slice.end_src;
+				if (slice.strand == 0)
+					prev.end_src = slice.end_src;
+				else
+					prev.start_src = slice.start_src;
 				return;
 			}
 		}
