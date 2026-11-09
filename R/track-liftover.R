@@ -34,7 +34,7 @@
 #' @param src.track.dir path to the directory of the source track. An indexed
 #' source track (one with a 'track.idx') must be in the 'tracks' directory of its
 #' database: it is read by the chromosome ids of that database.
-#' @param multi_target_agg aggregation/selection policy for contributors that land on the same target locus. When multiple source intervals map to overlapping regions in the target genome (after applying tgt_overlap_policy), their values must be combined into a single value.
+#' @param multi_target_agg aggregation/selection policy for contributors that land on the same target locus. When multiple source intervals map to overlapping regions in the target genome (after applying tgt_overlap_policy), their values must be combined into a single value. On a dense track "count" gives 0 in a bin that nothing lands in (NaN if 'min_n' is above 0), where the other aggregators give NaN.
 #' @param params additional parameters for aggregation (e.g., for "nth" aggregation)
 #' @param na.rm logical indicating whether NA values should be removed before aggregation (default: TRUE)
 #' @param min_n minimum number of non-NA values required for aggregation. If fewer values are available, the result will be NA.

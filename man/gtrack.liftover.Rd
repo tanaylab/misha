@@ -49,7 +49,7 @@ database: it is read by the chromosome ids of that database.}
   best_source_cluster \tab Best source cluster strategy based on source overlap. When multiple chains map a source interval, clusters them by source overlap: if chain source intervals overlap (indicating true duplications), all mappings are retained; if chain source intervals are disjoint (indicating conflicting/alternative mappings), only the cluster with the largest total target length is kept. Supported by gintervals.liftover only, not gtrack.liftover. \cr
 }}
 
-\item{multi_target_agg}{aggregation/selection policy for contributors that land on the same target locus. When multiple source intervals map to overlapping regions in the target genome (after applying tgt_overlap_policy), their values must be combined into a single value.}
+\item{multi_target_agg}{aggregation/selection policy for contributors that land on the same target locus. When multiple source intervals map to overlapping regions in the target genome (after applying tgt_overlap_policy), their values must be combined into a single value. On a dense track "count" gives 0 in a bin that nothing lands in (NaN if 'min_n' is above 0), where the other aggregators give NaN.}
 
 \item{params}{additional parameters for aggregation (e.g., for "nth" aggregation)}
 

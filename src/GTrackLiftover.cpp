@@ -855,6 +855,11 @@ SEXP gtrack_liftover(SEXP _track,
 					GenomeTrackFixedBin::pack_header(fixedbin_header_bytes, binsize);
 			}
 
+			// A bin that nothing landed in: what aggregate_values gives no contributions, i.e. NaN, or
+			// 0 under "count" (NaN below min_n). The bins of a chromosome that nothing landed on too.
+			double empty_aggregated = aggregate_values(agg_cfg, AggregationState());
+			float empty_bin_val = std::isnan(empty_aggregated) ? numeric_limits<float>::quiet_NaN() : (float)empty_aggregated;
+
 			for (int chromid = 0; chromid < (int)iu.get_chromkey().get_num_chroms(); ++chromid) {
 				// Create empty file if this chromosome has no data
 				if (chrom_intervals.find(chromid) == chrom_intervals.end()) {
@@ -870,11 +875,11 @@ SEXP gtrack_liftover(SEXP _track,
 								iw.write_bytes(fixedbin_header_bytes.data(), fixedbin_header_bytes.size());
 								if (end_bin > 0) {
 									const int64_t chunk_size = 65536;
-									vector<float> na_chunk((size_t)min<int64_t>(end_bin, chunk_size), numeric_limits<float>::quiet_NaN());
+									vector<float> empty_chunk((size_t)min<int64_t>(end_bin, chunk_size), empty_bin_val);
 									int64_t remaining = end_bin;
 									while (remaining > 0) {
-										uint64_t to_write = (uint64_t)min<int64_t>(remaining, (int64_t)na_chunk.size());
-										iw.write_bytes(&na_chunk[0], to_write * sizeof(float));
+										uint64_t to_write = (uint64_t)min<int64_t>(remaining, (int64_t)empty_chunk.size());
+										iw.write_bytes(&empty_chunk[0], to_write * sizeof(float));
 										remaining -= to_write;
 									}
 								}
@@ -883,14 +888,14 @@ SEXP gtrack_liftover(SEXP _track,
 								snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), chromid).c_str());
 								GenomeTrackFixedBin gtrack;
 								gtrack.init_write(filename, binsize, chromid);
-								// Fill the chromosome with NaN values so the bin count matches the chromosome size
+								// Fill the chromosome so the bin count matches the chromosome size
 								if (end_bin > 0) {
 									const int64_t chunk_size = 65536;
-									vector<float> na_chunk((size_t)min<int64_t>(end_bin, chunk_size), numeric_limits<float>::quiet_NaN());
+									vector<float> empty_chunk((size_t)min<int64_t>(end_bin, chunk_size), empty_bin_val);
 									int64_t remaining = end_bin;
 									while (remaining > 0) {
-										uint64_t to_write = (uint64_t)min<int64_t>(remaining, (int64_t)na_chunk.size());
-										gtrack.write_next_bins(&na_chunk[0], to_write);
+										uint64_t to_write = (uint64_t)min<int64_t>(remaining, (int64_t)empty_chunk.size());
+										gtrack.write_next_bins(&empty_chunk[0], to_write);
 										remaining -= to_write;
 									}
 								}
