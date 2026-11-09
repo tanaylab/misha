@@ -514,9 +514,14 @@ static ScoreResult score_pwm_over_range(
 
 // Score k-mer over a range (with optional gap support)
 // Returns count or fraction depending on return_frac
+// Allowed starts follow the kmer.count / kmer.frac virtual tracks (KmerCounter):
+// a match on either strand is anchored at its first base, and the anchor must lie
+// in the ROI. extend_val is how many bases past roi_end0 a match may run (k - 1
+// for extend = TRUE, so every anchor in the ROI counts, 0 for FALSE), clipped to
+// the sequence end. With skip_gaps these are non-gap bases.
 static ScoreResult score_kmer_over_range(
     const std::string& seq,
-    int start_min0, int start_max0,
+    int roi_start0, int roi_end0, int extend_val,
     const std::string& kmer,
     int strand_mode,
     bool return_frac,
@@ -543,6 +548,9 @@ static ScoreResult score_kmer_over_range(
     // Branch on gap-skipping mode
     if (!skip_gaps || gaps == nullptr) {
         // ========== Original contiguous path ==========
+        const int start_min0 = roi_start0;
+        const int start_max0 = static_cast<int>(std::min<int64_t>(
+            static_cast<int64_t>(seq.length()) - w, static_cast<int64_t>(roi_end0) - w + 1 + extend_val));
         // Handle empty range
         if (start_max0 < start_min0) {
             result.value = 0.0;
@@ -579,18 +587,21 @@ static ScoreResult score_kmer_over_range(
 
     } else {
         // ========== Gap-skipping path ==========
-        // Compute the full physical range that windows can span
-        int end_lim_phys0 = start_max0 + w - 1;
+        // Non-gap bases from the ROI start to the sequence end; a window may
+        // run past the ROI end by up to extend_val of them.
+        GapProjector gp = GapProjector::build(seq, *gaps, roi_start0, static_cast<int>(seq.length()) - 1);
+        const int n_log = static_cast<int>(gp.comp.size());
 
-        // Build gap projector over the full physical range
-        GapProjector gp = GapProjector::build(seq, *gaps, start_min0, end_lim_phys0);
+        // The last non-gap base in the ROI (-1 if none)
+        const int roi_last = static_cast<int>(
+            std::upper_bound(gp.log_to_phys.begin(), gp.log_to_phys.end(), roi_end0) - gp.log_to_phys.begin()) - 1;
 
-        // Compute logical bounds
-        int j_min = gp.first_log_ge_phys(start_min0);
-        int j_max = gp.last_log_window_end_le_phys(end_lim_phys0, w);
+        const int j_min = 0;
+        const int j_max = static_cast<int>(std::min<int64_t>(
+            n_log - w, static_cast<int64_t>(roi_last) - w + 1 + extend_val));
 
         // Check if we have enough non-gap bases
-        if (j_min < 0 || j_max < j_min || static_cast<int>(gp.comp.size()) < w) {
+        if (j_max < j_min || n_log < w) {
             result.value = 0.0;
             return result;
         }
@@ -956,14 +967,10 @@ SEXP C_gseq_kmer(SEXP r_seqs, SEXP r_kmer, SEXP r_mode, SEXP r_strand_mode,
                 continue;
             }
             
-            // Compute allowed window starts
-            int start_min0, start_max0;
-            compute_bounds(L, w, roi_start, roi_end, extend_val, start_min0, start_max0);
-            
             // Score the sequence
             bool return_frac = (mode == "frac");
             ScoreResult result = score_kmer_over_range(
-                seq, start_min0, start_max0, kmer, strand_mode, return_frac,
+                seq, roi_start - 1, roi_end - 1, extend_val, kmer, strand_mode, return_frac,
                 skip_gaps, skip_gaps ? &gap_charset : nullptr
             );
             

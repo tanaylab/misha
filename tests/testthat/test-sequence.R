@@ -894,21 +894,34 @@ test_that("gseq.kmer handles ROI bounds correctly", {
     expect_equal(result, 0)
 })
 
-test_that("gseq.kmer extend parameter works correctly", {
+test_that("gseq.kmer extend lets a match run past the ROI end, never before its start", {
     seq <- "GGGGACGGGG"
     #      123456789..
 
-    # ROI at 6-6 (just "C"), no extend: should not find AC
-    result <- gseq.kmer(seq, "AC", mode = "count", start_pos = 6, end_pos = 6, extend = FALSE)
-    expect_equal(result, 0)
+    # ROI at 5-5 (just "A"): the AC at 5-6 starts in the ROI and ends past it
+    expect_equal(gseq.kmer(seq, "AC", strand = 1, start_pos = 5, end_pos = 5, extend = FALSE), 0)
+    expect_equal(gseq.kmer(seq, "AC", strand = 1, start_pos = 5, end_pos = 5, extend = TRUE), 1)
+    expect_equal(gseq.kmer(seq, "AC", strand = 1, start_pos = 5, end_pos = 5, extend = 1), 1)
 
-    # ROI at 6-6, extend=TRUE (k-1=1): should find AC starting at position 5
-    result <- gseq.kmer(seq, "AC", mode = "count", start_pos = 6, end_pos = 6, extend = TRUE)
-    expect_equal(result, 1)
+    # ROI at 6-6 (just "C"): the AC starts before the ROI, so no extend counts it
+    expect_equal(gseq.kmer(seq, "AC", strand = 1, start_pos = 6, end_pos = 6, extend = TRUE), 0)
+    expect_equal(gseq.kmer(seq, "AC", strand = 1, start_pos = 6, end_pos = 6, extend = 5), 0)
+    # a minus-strand match is anchored at its first base too: GT at 5-6 is AC's reverse complement
+    expect_equal(gseq.kmer("GGGGGTGGGG", "AC", strand = -1, start_pos = 6, end_pos = 6, extend = TRUE), 0)
+    expect_equal(gseq.kmer("GGGGGTGGGG", "AC", strand = -1, start_pos = 5, end_pos = 5, extend = TRUE), 1)
 
-    # ROI at 6-6, extend=1 (explicit): same as extend=TRUE
-    result <- gseq.kmer(seq, "AC", mode = "count", start_pos = 6, end_pos = 6, extend = 1)
-    expect_equal(result, 1)
+    # An integer extend is how many bases a match may run past end_pos
+    expect_equal(gseq.kmer(seq, "AC", strand = 1, start_pos = 1, end_pos = 4, extend = 1), 0)
+    expect_equal(gseq.kmer(seq, "AC", strand = 1, start_pos = 1, end_pos = 4, extend = 2), 1)
+
+    # frac with extend = TRUE divides by every start in the ROI whose k-mer fits
+    # in the sequence: 9 when the ROI reaches the sequence end, 10 when a base follows it
+    expect_equal(gseq.kmer(seq, "AC", mode = "frac", strand = 1, start_pos = 1, end_pos = 10, extend = TRUE), 1 / 9)
+    expect_equal(gseq.kmer(paste0(seq, "G"), "AC", mode = "frac", strand = 1, start_pos = 1, end_pos = 10, extend = TRUE), 1 / 10)
+
+    # With skip_gaps the run past the end counts non-gap bases: A at 3 then C at 5
+    expect_equal(gseq.kmer("GGA-CG", "AC", strand = 1, start_pos = 3, end_pos = 3, extend = TRUE), 1)
+    expect_equal(gseq.kmer("GGA-CG", "AC", strand = 1, start_pos = 3, end_pos = 4, extend = FALSE), 0)
 })
 
 test_that("gseq.kmer strand parameter works", {
@@ -1273,30 +1286,60 @@ test_that("gseq.kmer matches gextract kmer vtrack: both strands", {
     expect_equal(gseq_rev, vtrack_result$count_rev)
 })
 
-test_that("gseq.kmer strand = 0 matches the kmer vtracks for palindromic and other k-mers", {
+test_that("gseq.kmer matches the kmer vtracks on random intervals", {
     remove_all_vtracks()
     withr::defer(remove_all_vtracks())
+    withr::local_seed(17)
 
-    test_interval <- gintervals(1, 10000, 10200)
-    seq <- toupper(gseq.extract(test_interval))
+    chrom_sizes <- gintervals.all()
+    chr20_end <- chrom_sizes$end[chrom_sizes$chrom == "chr20"]
+    starts <- sort(sample(0:199, 15)) * 1000 + 10000
+    # short and long intervals on chr1, plus both ends of chr20
+    iv <- rbind(
+        data.frame(chrom = "chr1", start = starts, end = starts + c(1:5, sample(20:300, 10))),
+        data.frame(chrom = "chr20", start = c(0, chr20_end - 41), end = c(37, chr20_end))
+    )
+    iv_size <- chrom_sizes$end[match(iv$chrom, chrom_sizes$chrom)]
 
-    # CG is its own reverse complement, AC is not
-    for (kmer in c("CG", "AC")) {
-        suppressWarnings(gvtrack.create("kc", NULL, "kmer.count", kmer = kmer, strand = 0, extend = FALSE))
-        suppressWarnings(gvtrack.create("kf", NULL, "kmer.frac", kmer = kmer, strand = 0, extend = FALSE))
-        vt <- gextract(c("kc", "kf"), test_interval, iterator = test_interval)
-        expect_gt(vt$kc, 0)
+    # palindromic: CG, GATC; not: A, C, AC, TTA, CAGG
+    for (kmer in c("A", "C", "CG", "AC", "TTA", "GATC", "CAGG")) {
+        # gseq.kmer gets the interval padded by k - 1 on each side (clipped to
+        # the chromosome), with start_pos / end_pos marking the interval
+        w <- nchar(kmer) - 1
+        pad <- iv
+        pad$start <- pmax(0, iv$start - w)
+        pad$end <- pmin(iv_size, iv$end + w)
+        seqs <- gseq.extract(pad)
+        roi_start <- iv$start - pad$start + 1
+        roi_end <- iv$end - pad$start
 
-        # skip_gaps = TRUE and FALSE take different scanning paths
-        for (skip in c(TRUE, FALSE)) {
-            args <- list(seq, kmer, strand = 0, extend = FALSE, skip_gaps = skip)
-            expect_equal(do.call(gseq.kmer, c(args, mode = "count")), vt$kc, info = kmer)
-            expect_equal(do.call(gseq.kmer, c(args, mode = "frac")), vt$kf, tolerance = 1e-6, info = kmer)
+        for (ext in c(FALSE, TRUE)) {
+            for (strand in c(-1, 0, 1)) {
+                for (mode in c("count", "frac")) {
+                    suppressWarnings(gvtrack.create("v", NULL, paste0("kmer.", mode), kmer = kmer, strand = strand, extend = ext))
+                    vt <- gextract("v", iv, iterator = iv)
+                    vt <- vt$v[order(vt$intervalID)]
+                    for (skip in c(TRUE, FALSE)) {
+                        gs <- suppressWarnings(gseq.kmer(seqs, kmer,
+                            mode = mode, strand = strand, start_pos = roi_start, end_pos = roi_end,
+                            extend = ext, skip_gaps = skip
+                        ))
+                        expect_equal(gs, vt, tolerance = 1e-6, info = paste(kmer, ext, strand, mode, skip))
+                    }
+                }
+            }
         }
     }
 
     # Both strands are summed: a palindrome counts twice per site
-    expect_equal(gseq.kmer("CGCGCGCGCG", "CG", strand = 0, extend = FALSE), 10)
+    expect_equal(suppressWarnings(gseq.kmer("CGCGCGCGCG", "CG", strand = 0)), 10)
+})
+
+test_that("gseq.kmer warns for a palindromic k-mer on strand 0, as the vtracks do", {
+    expect_warning(gseq.kmer("ACGT", "CG"), "kmer sequence 'CG' is palindromic, please set strand to 1 or -1 to avoid double counting", fixed = TRUE)
+    expect_warning(gseq.kmer("ACGT", "cg", strand = 0), "palindromic")
+    expect_no_warning(gseq.kmer("ACGT", "CG", strand = 1))
+    expect_no_warning(gseq.kmer("ACGT", "AC", strand = 0))
 })
 
 # ============================================================================

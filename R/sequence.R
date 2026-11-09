@@ -846,7 +846,10 @@ gseq.pwm_edits <- function(seqs,
 #' @param strand integer; 1=forward, -1=reverse, 0=both strands, summed (default: 0)
 #' @param start_pos integer or NULL; 1-based inclusive start of ROI (default: 1)
 #' @param end_pos integer or NULL; 1-based inclusive end of ROI (default: sequence length)
-#' @param extend logical or integer; extension of allowed window starts (default: FALSE)
+#' @param extend logical or integer; if TRUE, counts k-mers whose anchor lies in the ROI
+#'   even if the k-mer extends beyond its end; if FALSE (default), only k-mers fully
+#'   contained in the ROI are considered. An integer is the number of bases a k-mer may
+#'   run past \code{end_pos}: TRUE is k-1 and FALSE is 0.
 #' @param skip_gaps logical; if TRUE, treat gap characters as holes and skip them while
 #'   scanning. Windows are k consecutive non-gap bases (default: TRUE)
 #' @param gap_chars character vector; which characters count as gaps (default: c("-", "."))
@@ -859,18 +862,25 @@ gseq.pwm_edits <- function(seqs,
 #' a genomics database. For detailed documentation on k-mer counting parameters, see
 #' \code{\link{gvtrack.create}} (functions "kmer.count" and "kmer.frac").
 #'
-#' The ROI (region of interest) is defined by \code{start_pos} and \code{end_pos}.
-#' The \code{extend} parameter controls whether k-mer matches can extend beyond the ROI boundaries.
+#' The ROI (region of interest) is defined by \code{start_pos} and \code{end_pos}. As in the
+#' k-mer virtual tracks, a match on either strand is anchored at its first (leftmost) base,
+#' which must not lie before \code{start_pos}. \code{extend} sets how many bases past
+#' \code{end_pos} a match may run (k-1 with TRUE, so every anchor in the ROI counts), never
+#' past the end of the sequence.
+#'
 #' With \code{strand=0} the matches on the two strands are summed, as in the k-mer virtual
-#' tracks, so a palindromic k-mer (its own reverse complement) counts twice per site; use
-#' \code{strand=1} or \code{-1} to count it once. The \code{frac} denominator is the number
-#' of allowed starts, doubled with \code{strand=0}, so the fraction stays in [0, 1].
+#' tracks, so a palindromic k-mer (its own reverse complement) counts twice per site and
+#' \code{strand=0} issues a warning; use \code{strand=1} or \code{-1} to count it once.
+#'
+#' For \code{mode="frac"} the denominator is the number of possible anchors in the ROI:
+#' every anchor with \code{extend=TRUE} (minus the last k-1 at the end of the sequence), the
+#' first n-k+1 of an n-base ROI with \code{extend=FALSE}; with \code{strand=0} anchors on
+#' both strands are counted, so the fraction stays in [0, 1].
 #'
 #' When \code{skip_gaps=TRUE}, characters specified in \code{gap_chars} are treated as gaps.
-#' Windows are defined as k consecutive non-gap bases. The \code{frac} denominator counts the
-#' number of possible logical starts (non-gap windows) in the region, doubled with
-#' \code{strand=0}. \code{start_pos} and \code{end_pos} are interpreted as physical
-#' coordinates on the full sequence.
+#' Windows are k consecutive non-gap bases, anchored at their first base, and \code{extend}
+#' and the \code{frac} denominator count non-gap bases and windows. \code{start_pos} and
+#' \code{end_pos} are interpreted as physical coordinates on the full sequence.
 #'
 #' @seealso \code{\link{gvtrack.create}} for detailed k-mer parameter documentation
 #'
@@ -879,20 +889,21 @@ gseq.pwm_edits <- function(seqs,
 #' # Example sequences
 #' seqs <- c("CGCGCGCGCG", "ATATATATAT", "ACGTACGTACGT")
 #'
-#' # Count CG dinucleotides on both strands
+#' # Count CG dinucleotides on both strands (CG is its own reverse complement, so
+#' # each site counts twice and a warning is given)
 #' gseq.kmer(seqs, "CG", mode = "count", strand = 0)
 #'
 #' # Count on forward strand only
 #' gseq.kmer(seqs, "CG", mode = "count", strand = 1)
 #'
 #' # Get CG fraction
-#' gseq.kmer(seqs, "CG", mode = "frac", strand = 0)
+#' gseq.kmer(seqs, "CG", mode = "frac", strand = 1)
 #'
 #' # Count in a specific region
-#' gseq.kmer(seqs, "CG", mode = "count", start_pos = 2, end_pos = 8)
+#' gseq.kmer(seqs, "CG", mode = "count", strand = 1, start_pos = 2, end_pos = 8)
 #'
-#' # Allow k-mer to extend beyond ROI boundaries
-#' gseq.kmer(seqs, "CG", mode = "count", start_pos = 2, end_pos = 8, extend = TRUE)
+#' # Also count k-mers that start in the region and end past it
+#' gseq.kmer(seqs, "CG", mode = "count", strand = 1, start_pos = 2, end_pos = 8, extend = TRUE)
 #'
 #' # Calculate GC content by summing G and C fractions
 #' g_frac <- gseq.kmer(seqs, "G", mode = "frac", strand = 1)
@@ -937,6 +948,11 @@ gseq.kmer <- function(seqs,
     strand <- as.integer(strand)
     if (!strand %in% c(-1L, 0L, 1L)) {
         stop("strand must be -1, 0, or 1")
+    }
+
+    # Same warning as the kmer vtracks (.vtrack_params_kmer)
+    if (strand == 0L && kmer == grevcomp(kmer)) {
+        warning(paste0("kmer sequence '", kmer, "' is palindromic, please set strand to 1 or -1 to avoid double counting"))
     }
 
     # Validate gap parameters
