@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <climits>
+#include <tuple>
 #include <cstdint>
 #include <cstring>
 #include <fstream>
@@ -93,26 +94,32 @@ extern "C" {
  * @param _breaks Numeric vector of bin boundaries
  * @param _bin_indices Integer vector of bin indices for each position
  * @param _iter_starts Integer vector of iterator interval start positions
- * @param _iter_chroms Integer vector of iterator interval chromosome IDs
+ * @param _iter_ends Integer vector of iterator interval end positions
+ * @param _iter_ivids Integer vector: the row of _intervals (0-based) each
+ *        iterator interval belongs to (gextract's intervalID - 1). A position
+ *        takes its bin from the iterator intervals of the interval being
+ *        sampled only, so that overlapping intervals do not see each other's.
  * @param _intervals R intervals object for output regions
  * @param _mask_copy R intervals object for regions to copy from original (NULL if none)
  * @param _output_path Output file path (ignored if output_format = 2)
  * @param _output_format Integer: 0 = misha .seq, 1 = FASTA, 2 = return vector
  * @param _n_samples Integer: number of samples to generate per interval
  * @param _k Integer: Markov order k
- * @param _iter_size Integer: iterator bin size in bp (e.g., model$iterator)
  * @param _preserve_n Logical: if TRUE, copy N (or n) from the original
  *        reference into the output instead of sampling at those positions
+ * @param _fallback_cdf Numeric CDF of 4 bases (A, C, G, T) for the bases that
+ *        have no valid context or bin (the first k bases of an interval,
+ *        bases after an N); NULL = uniform
  * @param _envir R environment
  *
  * @return R_NilValue on success for file output, or character vector for
  *         output_format = 2
  */
 SEXP C_gsynth_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
-                      SEXP _iter_starts, SEXP _iter_chroms, SEXP _intervals,
-                      SEXP _mask_copy, SEXP _output_path,
+                      SEXP _iter_starts, SEXP _iter_ends, SEXP _iter_ivids,
+                      SEXP _intervals, SEXP _mask_copy, SEXP _output_path,
                       SEXP _output_format, SEXP _n_samples, SEXP _k,
-                      SEXP _iter_size, SEXP _preserve_n, SEXP _envir) {
+                      SEXP _preserve_n, SEXP _fallback_cdf, SEXP _envir) {
     try {
         struct RNGStateGuard {
             bool active = false;
@@ -172,17 +179,39 @@ SEXP C_gsynth_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
 
         // Extract bin indices from track extraction
         int num_iter_positions = Rf_length(_bin_indices);
+        if (Rf_length(_iter_starts) != num_iter_positions ||
+            Rf_length(_iter_ends) != num_iter_positions ||
+            Rf_length(_iter_ivids) != num_iter_positions) {
+            verror("iterator starts, ends and interval ids must match the bin indices in length");
+        }
         int* bin_indices = INTEGER(_bin_indices);
         int* iter_starts = INTEGER(_iter_starts);
-        int* iter_chroms = INTEGER(_iter_chroms);
+        int* iter_ends = INTEGER(_iter_ends);
+        int* iter_ivids = INTEGER(_iter_ivids);
 
-        // Iterator bin size (in bp). Passed explicitly from R (e.g. model$iterator)
-        // so unaligned intervals are handled correctly (was silently inferred
-        // from the first same-chrom diff — see misha#94).
-        int iter_size = Rf_asInteger(_iter_size);
-        if (iter_size <= 0) {
-            verror("iter_size must be a positive integer; got %d", iter_size);
+        // Bases with no valid context or bin are drawn from this CDF (uniform if none)
+        bool has_fallback = !Rf_isNull(_fallback_cdf);
+        float fallback_cdf[NUM_BASES];
+        if (has_fallback) {
+            if (!Rf_isReal(_fallback_cdf) || Rf_length(_fallback_cdf) != NUM_BASES) {
+                verror("fallback_cdf must be a numeric vector of length %d", NUM_BASES);
+            }
+            for (int b = 0; b < NUM_BASES; ++b) {
+                fallback_cdf[b] = static_cast<float>(REAL(_fallback_cdf)[b]);
+            }
         }
+        auto draw_fallback_base = [&]() -> int {
+            if (!has_fallback) {
+                return static_cast<int>(unif_rand() * NUM_BASES);
+            }
+            float r = unif_rand();
+            for (int b = 0; b < NUM_BASES - 1; ++b) {
+                if (r < fallback_cdf[b]) {
+                    return b;
+                }
+            }
+            return NUM_BASES - 1;
+        };
 
         const GenomeChromKey& chromkey = iu.get_chromkey();
         int num_chroms = chromkey.get_num_chroms();
@@ -274,17 +303,24 @@ SEXP C_gsynth_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
         }
         // output_format == 2: vector mode, no file to open
 
-        // Build per-chromosome bin lookup
-        vector<vector<pair<int64_t, int>>> chrom_bins(num_chroms);
+        // Bin lookup per interval: (start, end, bin index) of the iterator
+        // intervals of each row of _intervals, sorted by start
+        typedef std::tuple<int64_t, int64_t, int> IterBin;
+        int max_ivid = -1;
         for (int i = 0; i < num_iter_positions; ++i) {
-            int chromid = iter_chroms[i];
-            if (chromid >= 0 && chromid < num_chroms) {
-                chrom_bins[chromid].push_back({iter_starts[i], bin_indices[i]});
+            max_ivid = max(max_ivid, iter_ivids[i]);
+        }
+        vector<vector<IterBin>> interval_bins(max_ivid + 1);
+        for (int i = 0; i < num_iter_positions; ++i) {
+            if (iter_ivids[i] >= 0) {
+                interval_bins[iter_ivids[i]].push_back(
+                    std::make_tuple((int64_t)iter_starts[i], (int64_t)iter_ends[i], bin_indices[i]));
             }
         }
-        for (int c = 0; c < num_chroms; ++c) {
-            sort(chrom_bins[c].begin(), chrom_bins[c].end());
+        for (auto& bins : interval_bins) {
+            sort(bins.begin(), bins.end());
         }
+        const vector<IterBin> no_bins;
 
         // Process each chromosome's requested intervals
         for (int chromid = 0; chromid < num_chroms; ++chromid) {
@@ -297,10 +333,12 @@ SEXP C_gsynth_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
 
             const string& chrom_name = chromkey.id2chrom(chromid);
             const vector<GInterval>& mask_copy_ivs = mask_copy_per_chrom[chromid];
-            const vector<pair<int64_t, int>>& bins = chrom_bins[chromid];
 
             for (size_t iv_idx = 0; iv_idx < sample_ivs.size(); ++iv_idx) {
                 const GInterval& iv = sample_ivs[iv_idx];
+                intptr_t ivid = (intptr_t)iv.udata;
+                const vector<IterBin>& bins =
+                    ivid >= 0 && ivid < (intptr_t)interval_bins.size() ? interval_bins[ivid] : no_bins;
                 int64_t interval_start = max<int64_t>(0, iv.start);
                 int64_t interval_end = min<int64_t>(chrom_size, iv.end);
                 if (interval_end <= interval_start) {
@@ -329,7 +367,7 @@ SEXP C_gsynth_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
                     int64_t first_query = interval_start;  // pos - k for pos = interval_start + k
                     if (!bins.empty()) {
                         while (bin_cursor + 1 < bins.size() &&
-                               first_query >= bins[bin_cursor + 1].first) {
+                               first_query >= std::get<0>(bins[bin_cursor + 1])) {
                             ++bin_cursor;
                         }
                     }
@@ -362,8 +400,7 @@ SEXP C_gsynth_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
                                 continue;
                             }
                         }
-                        synth_seq[i] = StratifiedMarkovModel::decode_base(
-                            static_cast<int>(unif_rand() * NUM_BASES));
+                        synth_seq[i] = StratifiedMarkovModel::decode_base(draw_fallback_base());
                     }
 
                     // Sample remaining bases using Markov chain
@@ -376,9 +413,8 @@ SEXP C_gsynth_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
                                 // Copy from original
                                 synth_seq[rel_pos] = original_seq[rel_pos];
                             } else {
-                                // No original sequence available, sample uniformly
-                                synth_seq[rel_pos] = StratifiedMarkovModel::decode_base(
-                                    static_cast<int>(unif_rand() * NUM_BASES));
+                                // No original sequence available, sample a fallback base
+                                synth_seq[rel_pos] = StratifiedMarkovModel::decode_base(draw_fallback_base());
                             }
                             continue;
                         }
@@ -402,13 +438,12 @@ SEXP C_gsynth_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
                         int bin_idx = -1;
                         if (!bins.empty()) {
                             while (bin_cursor + 1 < bins.size() &&
-                                   bin_query_pos >= bins[bin_cursor + 1].first) {
+                                   bin_query_pos >= std::get<0>(bins[bin_cursor + 1])) {
                                 ++bin_cursor;
                             }
-                            if (bin_query_pos >= bins[bin_cursor].first &&
-                                bin_query_pos <
-                                    bins[bin_cursor].first + iter_size) {
-                                bin_idx = bins[bin_cursor].second;
+                            if (bin_query_pos >= std::get<0>(bins[bin_cursor]) &&
+                                bin_query_pos < std::get<1>(bins[bin_cursor])) {
+                                bin_idx = std::get<2>(bins[bin_cursor]);
                             }
                         }
 
@@ -418,8 +453,8 @@ SEXP C_gsynth_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
 
                         int next_base;
                         if (context_idx < 0 || bin_idx < 0 || bin_idx >= num_bins) {
-                            // Invalid context or bin - sample uniformly
-                            next_base = static_cast<int>(unif_rand() * NUM_BASES);
+                            // Invalid context or bin - sample a fallback base
+                            next_base = draw_fallback_base();
                         } else {
                             // Sample from CDF (flat layout: ctx * NUM_BASES + base)
                             float r = unif_rand();

@@ -259,3 +259,36 @@ test_that("gintervals.annotate works with intervals.set.out", {
 
     expect_equal(res_file, res_mem)
 })
+
+test_that("gintervals.annotate returns both distances of a 2D neighbor", {
+    q <- gintervals.2d(1, 5000, 5100, 1, 9000, 9100)
+    a <- gintervals.2d(1, 7000, 7100, 1, 9500, 9600)
+    a$label <- "B"
+    nb <- gintervals.neighbors(q, a)
+    expect_equal(c(nb$dist1, nb$dist2), c(1900, 400))
+
+    res <- gintervals.annotate(q, a)
+    expect_equal(res$label, "B")
+    expect_equal(c(res$dist1, res$dist2), c(1900, 400))
+    expect_false("dist" %in% colnames(res))
+
+    res <- gintervals.annotate(q, a, dist_column = "d")
+    expect_equal(c(res$d1, res$d2), c(1900, 400))
+    res <- gintervals.annotate(q, a, dist_column = NULL)
+    expect_false(any(c("dist", "dist1", "dist2") %in% colnames(res)))
+
+    # no neighbor in range
+    res <- gintervals.annotate(q, a, maxdist1 = 10)
+    expect_true(is.na(res$label))
+    expect_true(is.na(res$dist1) && is.na(res$dist2))
+
+    # max_dist limits dist1 + dist2 (2300 here); dist1 alone (1900) is within 2000
+    res <- gintervals.annotate(q, a, max_dist = 2300)
+    expect_equal(res$label, "B")
+    res <- gintervals.annotate(q, a, max_dist = 2000)
+    expect_true(is.na(res$label))
+    expect_equal(c(res$dist1, res$dist2), c(1900, 400))
+
+    q$dist2 <- 1
+    expect_error(gintervals.annotate(q, a), "Distance column dist2 already exists")
+})

@@ -185,7 +185,7 @@ gtrack.modify <- function(track = NULL, expr = NULL, intervals = NULL) {
     }
     .gcheckroot()
 
-    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+    intervals <- rescue_ALLGENOME(intervals, substitute(intervals))
 
     if (is.null(intervals)) {
         intervals <- get("ALLGENOME", envir = .misha)

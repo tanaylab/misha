@@ -77,7 +77,7 @@ gcis_decay <- function(expr = NULL, breaks = NULL, src = NULL, domain = NULL, in
     }
     .gcheckroot()
 
-    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+    intervals <- rescue_ALLGENOME(intervals, substitute(intervals))
 
     if (is.null(intervals)) {
         intervals <- get("ALLGENOME", envir = .misha)
@@ -159,7 +159,7 @@ gdist <- function(..., intervals = NULL, include.lowest = FALSE, iterator = NULL
     }
     .gcheckroot()
 
-    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+    intervals <- rescue_ALLGENOME(intervals, substitute(intervals))
 
     if (length(args) %% 2 != 0) {
         if (!is.null(intervals)) {

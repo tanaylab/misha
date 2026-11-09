@@ -7,12 +7,14 @@
 gseq.kmer.dist(intervals, k = 6L, mask = NULL)
 }
 \arguments{
-\item{intervals}{Genomic intervals to analyze}
+\item{intervals}{Genomic intervals to analyze. Overlapping intervals are
+unified first, so each position is counted once; a k-mer that crosses
+from an interval into an adjacent one is not counted.}
 
 \item{k}{Integer k-mer size (1-10). Default is 6.}
 
-\item{mask}{Optional intervals to exclude from counting. Positions within
-the mask will not contribute to k-mer counts.}
+\item{mask}{Optional intervals to exclude from counting. A k-mer that
+overlaps the mask is not counted.}
 }
 \value{
 A data frame with columns:

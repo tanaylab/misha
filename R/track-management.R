@@ -755,7 +755,9 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
         # The existing track is set aside until the copy is in place and has succeeded, and comes
         # back if any step fails (bypassing gtrack.rm, which insists the database is loaded). Its name
         # is a hidden one no cleanup removes (not a staging or trash name): if the copy is killed
-        # between the two renames, it is the only copy of the track, kept there.
+        # between the two renames, it is the only copy of the track, kept there. If the copy fails
+        # after another session's track took the name, that track replaced it, and it goes to the
+        # trash.
         aside_path <- tempfile(".", dest_parent)
         tracks_before <- get("GTRACKS", envir = .misha)
         track_db_before <- get("GTRACK_DATASET", envir = .misha)
@@ -765,11 +767,13 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
                 # the failed copy is moved away first (it may not be removable at once, e.g. read-only
                 # files kept by copy.mode), then the existing track comes back, with the session's
                 # track list as it was. Only this call's copy: what another session put at the name
-                # meanwhile stays, and the track set aside is then kept where it is.
+                # meanwhile stays, and replaced the track set aside, which goes to the trash.
                 failed <- file.path(dest_parent, .gdb.staging_name(basename(dest_dir)))
                 if (!placed || (dir.exists(dest_dir) && !suppressWarnings(file.rename(dest_dir, failed)))) {
                     failed <- NULL
                 }
+                # this call's copy, placed, still holds the name: it could not be moved away
+                own_copy_there <- placed && is.null(failed) && dir.exists(dest_dir)
                 if (!dir.exists(dest_dir) && suppressWarnings(file.rename(aside, dest_dir))) {
                     .gdb.invalidate_dir_cache(dest_dir)
                     assign("GTRACKS", tracks_before, envir = .misha)
@@ -786,7 +790,20 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
                         assign("GTRACKS", tracks_before, envir = .misha)
                         assign("GTRACK_DATASET", track_db_before, envir = .misha)
                     }
-                    warning(sprintf("The copy over %s failed; the track that was there is kept at %s", dest_dir, aside), call. = FALSE)
+                    if (dir.exists(dest_dir) && !own_copy_there) {
+                        # given a staging name first, so that the sweep of staging directories removes it
+                        # if the trash fails
+                        replaced <- file.path(dest_parent, .gdb.staging_name(basename(dest_dir)))
+                        if (!suppressWarnings(file.rename(aside, replaced))) {
+                            replaced <- aside
+                        }
+                        .gdb.trash(replaced)
+                        warning(sprintf("The copy over %s failed, and another session's track holds the name now; the track that was there was moved to the trash", dest_dir), call. = FALSE)
+                    } else {
+                        # (the name holds nothing, or this call's failed copy: the track set aside is the
+                        # only copy of it)
+                        warning(sprintf("The copy over %s failed; the track that was there is kept at %s", dest_dir, aside), call. = FALSE)
+                    }
                 }
                 if (!is.null(failed) && dir.exists(failed)) {
                     .gdb.trash(failed)

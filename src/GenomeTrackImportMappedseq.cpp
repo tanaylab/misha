@@ -268,8 +268,8 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 			}
 		}
 
-		if (Rf_length(_remove_dups) > 1 || !Rf_isLogical(_remove_dups))
-			verror("remove.dups argument must be a logical value");
+		if (!is_true_or_false(_remove_dups))
+			verror("remove.dups argument must be TRUE or FALSE");
 
 		if (Rf_length(_paired) != 1 || !Rf_isLogical(_paired) || LOGICAL(_paired)[0] == NA_LOGICAL)
 			verror("paired argument must be TRUE or FALSE");

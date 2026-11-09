@@ -705,6 +705,39 @@ test_that("a stale .db.cache lock is broken, and a held one makes a writer mark 
     unlink(lock)
 })
 
+test_that("a stale .db.cache lock that cannot be read is broken by its age", {
+    skip_on_os("windows")
+    skip_if(Sys.info()[["user"]] == "root")
+    local_db_state()
+    db <- review_db(withr::local_tempdir())
+    lock <- file.path(db, ".db.cache.lock")
+    lock_files <- function() list.files(db, pattern = "^\\.db\\.cache\\.lock", all.files = TRUE)
+
+    # left two hours ago by a killed session whose umask kept it from this user
+    writeLines("n0 1 dead", lock)
+    Sys.setFileTime(lock, Sys.time() - 7200)
+    Sys.chmod(lock, "000")
+    withr::defer(if (file.exists(lock)) Sys.chmod(lock, "644"))
+    gtrack.create_sparse("after_unreadable", "", gintervals("chr1", 0, 10), 1)
+    expect_equal(lock_files(), character(0))
+    expect_true("after_unreadable" %in% read_cache(db)[[1]])
+    expect_false(.gdb.cache_is_dirty(db))
+
+    # a fresh one is held
+    writeLines("n0 2 alive", lock)
+    Sys.chmod(lock, "000")
+    expect_null(.gdb.cache_lock(db, wait = 0.2))
+    expect_equal(lock_files(), ".db.cache.lock")
+    # and one taken after the stale lock was judged stale is put back, readable or not
+    expect_false(.gdb.cache_break_lock(lock, Sys.time() - 7200))
+    expect_equal(lock_files(), ".db.cache.lock")
+    Sys.chmod(lock, "644")
+    expect_false(.gdb.cache_break_lock(lock, Sys.time() - 7200))
+    expect_equal(lock_files(), ".db.cache.lock")
+    expect_equal(readLines(lock), "n0 2 alive")
+    unlink(lock)
+})
+
 # Replaces a base function for the duration of the calling test
 mock_base <- function(name, fun, env = parent.frame()) {
     real <- get(name, envir = baseenv())
@@ -722,7 +755,7 @@ mock_base <- function(name, fun, env = parent.frame()) {
     real
 }
 
-test_that("a failed gtrack.copy(overwrite = TRUE) keeps what another session put at the name", {
+test_that("a failed gtrack.copy(overwrite = TRUE) keeps what another session put at the name, and trashes the track it replaced", {
     local_db_state()
     db <- review_db(withr::local_tempdir())
     tracks <- file.path(db, "tracks")
@@ -739,16 +772,15 @@ test_that("a failed gtrack.copy(overwrite = TRUE) keeps what another session put
         }
         rename(from, to)
     })
-    orig_bytes <- readBin(file.path(tracks, "orig.track", "track.dat"), "raw", 1e6)
-    expect_warning(expect_error(gtrack.copy("src", "orig", overwrite = TRUE), "Failed to rename"), "is kept at")
+    expect_warning(expect_error(gtrack.copy("src", "orig", overwrite = TRUE), "Failed to rename"), "was moved to the trash")
     expect_equal(readBin(file.path(tracks, "orig.track", "track.dat"), "raw", 1e6), other_bytes)
     # the session still lists the name, which a track holds
     expect_true(gtrack.exists("orig"))
-    # the track that was there is kept, under its hidden name: what took the name may be incomplete
-    # (an older misha writes in place) or go again (a copy that fails after it was placed)
-    kept <- list.files(tracks, pattern = "^\\.[0-9a-f]+$", all.files = TRUE, full.names = TRUE)
-    expect_length(kept, 1)
-    expect_equal(readBin(file.path(kept, "track.dat"), "raw", 1e6), orig_bytes)
+    expect_equal(gextract("orig", gintervals("chr1", 0, 1000))$orig, 99)
+    # the track that was there, replaced by the other session's, is not kept under a hidden name, nor
+    # under a staging one (the trash removes it in the background)
+    left <- setdiff(list.files(tracks, all.files = TRUE, no.. = TRUE), c("orig.track", "src.track", "other.track"))
+    expect_equal(grep("^\\.trash\\.", left, value = TRUE, invert = TRUE), character(0))
 })
 
 test_that("gtrack.copy stops on a short copy instead of committing it", {
@@ -849,8 +881,8 @@ test_that("an unbreakable stale lock or a root that cannot be written does not m
     lock <- file.path(db, ".db.cache.lock")
     writeLines("n0 1 dead", lock)
     Sys.setFileTime(lock, Sys.time() - 60)
-    Sys.chmod(lock, "000")
-    withr::defer(Sys.chmod(lock, "644"))
+    # a stale lock that cannot be renamed away (another user's, in a directory with the sticky bit)
+    local_mocked_bindings(.gdb.cache_break_lock = function(...) FALSE)
     # in a forked child, given 60 s (it hung, busy-waiting)
     job <- parallel::mcparallel(withr::with_options(list(gmultitasking = FALSE), {
         gtrack.create_sparse("t7", "", gintervals("chr1", 0, 10), 1)
@@ -865,7 +897,6 @@ test_that("an unbreakable stale lock or a root that cannot be written does not m
     expect_true(.gdb.cache_is_dirty(db))
 
     # a root that cannot be written (tracks/ can): no lock, no flag, no warning
-    Sys.chmod(lock, "644")
     unlink(lock)
     unlink(list.files(db, pattern = "^\\.db\\.cache\\.dirty", all.files = TRUE, full.names = TRUE))
     Sys.chmod(db, "555")
@@ -1045,7 +1076,38 @@ test_that("the whole-genome 2D scope built in C++ is kept with options(gmulticon
     s2 <- suppressWarnings(gsummary("rt"))
     expect_equal(s1, s2)
     expect_equal(built, 1)
-    expect_equal(attr(.misha$ALLGENOME[[2]], "mode"), "full")
+    expect_equal(names(.misha$ALLGENOME_2D_BUILT), "full")
+    # the placeholder stays, so that a later change of gmulticontig.2d.mode is seen
+    expect_equal(NROW(.misha$ALLGENOME[[2]]), 0)
+})
+
+test_that("a change of gmulticontig.2d.mode is honoured with options(gmulticontig.2d.cache)", {
+    local_db_state()
+    withr::local_options(list(gmulticontig.2d.threshold = 2, gmulticontig.2d.cache = TRUE))
+    db <- deferred_2d_db(withr::local_tempdir())
+    # "rt" has a cis rectangle (value 1) and a trans one (value 2)
+    for (mt in c(FALSE, TRUE)) {
+        withr::with_options(list(gmultitasking = mt, gmulticontig.2d.mode = "diagonal"), {
+            suppressMessages(gsetroot(db))
+            expect_null(.misha$ALLGENOME_2D_BUILT)
+            expect_equal(gsummary("rt")[["Total intervals"]], 1)
+            expect_equal(nrow(gintervals.2d.all()), 3)
+
+            options(gmulticontig.2d.mode = "full")
+            expect_equal(gsummary("rt")[["Total intervals"]], 2, label = paste("full, multitasking", mt))
+            expect_equal(unname(gquantiles("rt", 1)), 2)
+            expect_equal(nrow(gextract("rt", .misha$ALLGENOME)), 2)
+            expect_equal(nrow(suppressWarnings(gintervals.2d.all())), 9)
+
+            options(gmulticontig.2d.mode = "diagonal")
+            expect_equal(gsummary("rt")[["Total intervals"]], 1)
+            expect_equal(nrow(gintervals.2d.all()), 3)
+            expect_setequal(names(.misha$ALLGENOME_2D_BUILT), c("diagonal", "full"))
+
+            options(gmulticontig.2d.mode = NULL)
+            expect_error(gsummary("rt"), "gmulticontig.2d.mode", fixed = TRUE)
+        })
+    }
 })
 
 test_that("gintervals.save of the deferred 2D whole-genome intervals builds them or stops", {
@@ -1069,4 +1131,66 @@ test_that("a rescan removes a legacy flag it could not read", {
     suppressMessages(gdb.reload())
     expect_false(file.exists(legacy))
     expect_false(.gdb.cache_is_dirty(db))
+})
+
+test_that("a failed conversion to the indexed format leaves no file behind to flush at exit", {
+    skip_on_os("windows")
+    skip_if(Sys.info()[["user"]] == "root")
+    # the session below loads the installed package, so it has to be the one under test
+    skip_if_not(file.exists(system.file("Meta", "package.rds", package = "misha")), "misha is not loaded from an installed library")
+    local_db_state()
+    dir <- withr::local_tempdir()
+    db <- normalizePath(create_test_db(file.path(dir, "db")))
+    suppressMessages(gsetroot(db))
+    withr::with_options(list(gmulticontig.indexed_format = FALSE, gmax.data.size = 10), {
+        starts <- rep(seq(0, 1900, 100), 2)
+        chroms <- rep(c("chr1", "chr2"), each = 20)
+        gintervals.save("pc1d", gintervals(chroms, starts, starts + 50))
+        gintervals.save("pc2d", gintervals.2d(chroms, starts, starts + 50, chroms, 0, 100))
+        gtrack.create_sparse("pctrack", "", gintervals(c("chr1", "chr2"), 0, 10), 1:2)
+    })
+    # the second chromosome (pair) cannot be read: the conversion stops after writing the first
+    unreadable <- file.path(db, "tracks", c("pc1d.interv/chr2", "pc2d.interv/chr2-chr2", "pctrack.track/chr2"))
+    expect_true(all(file.exists(unreadable)))
+    Sys.chmod(unreadable, "000")
+    withr::defer(Sys.chmod(unreadable, "644"))
+
+    # In a session of its own, which ends after the failed conversions with files it wrote still open:
+    # a FILE of a conversion left unclosed would write its buffer into one of them at exit
+    user_files <- file.path(dir, sprintf("user%d.txt", 1:8))
+    script <- file.path(dir, "convert.R")
+    writeLines(c(
+        sprintf("suppressPackageStartupMessages(library(misha, lib.loc = '%s'))", dirname(system.file(package = "misha"))),
+        sprintf("suppressMessages(gsetroot('%s'))", db),
+        "stopifnot(inherits(try(gintervals.convert_to_indexed('pc1d'), silent = TRUE), 'try-error'))",
+        "stopifnot(inherits(try(gintervals.2d.convert_to_indexed('pc2d'), silent = TRUE), 'try-error'))",
+        "stopifnot(inherits(try(gtrack.convert_to_indexed('pctrack'), silent = TRUE), 'try-error'))",
+        sprintf("cons <- lapply(c(%s), function(f) { con <- file(f, 'w'); writeLines('user line', con); con })", paste0("'", user_files, "'", collapse = ", "))
+    ), script)
+    out <- system2(file.path(R.home("bin"), "R"), c("--no-echo", "-f", script), stdout = TRUE, stderr = TRUE)
+    expect_null(attr(out, "status"), label = paste(out, collapse = "\n"))
+    expect_equal(unname(file.size(user_files)), rep(nchar("user line\n"), length(user_files)))
+})
+
+test_that("a chromosome of an indexed intervals set whose write stops leaves no file behind to flush at exit", {
+    skip_on_os("windows")
+    skip_if_not(file.exists(system.file("Meta", "package.rds", package = "misha")), "misha is not loaded from an installed library")
+    dir <- withr::local_tempdir()
+    dat <- file.path(dir, "intervals.dat.tmp")
+    user_files <- file.path(dir, sprintf("user%d.txt", 1:8))
+    script <- file.path(dir, "write.R")
+    # The serialization stops on the C stack limit, part of the object still in the FILE's buffer
+    writeLines(c(
+        sprintf("suppressPackageStartupMessages(library(misha, lib.loc = '%s'))", dirname(system.file(package = "misha"))),
+        "deep <- list()",
+        "for (i in 1:1e6) deep <- list(deep)",
+        sprintf("res <- try(misha:::.gcall('gbigintervs_indexed_write_chrom', '%s', deep, misha:::.misha_env()), silent = TRUE)", dat),
+        "rm(deep)",
+        "if (!inherits(res, 'try-error')) cat('NOT STOPPED\\n')",
+        sprintf("cons <- lapply(c(%s), function(f) { con <- file(f, 'w'); writeLines('user line', con); con })", paste0("'", user_files, "'", collapse = ", "))
+    ), script)
+    out <- system2(file.path(R.home("bin"), "R"), c("--no-echo", "-f", script), stdout = TRUE, stderr = TRUE)
+    expect_null(attr(out, "status"), label = paste(out, collapse = "\n"))
+    skip_if(any(grepl("NOT STOPPED", out)), "the serialization did not reach the C stack limit")
+    expect_equal(unname(file.size(user_files)), rep(nchar("user line\n"), length(user_files)))
 })

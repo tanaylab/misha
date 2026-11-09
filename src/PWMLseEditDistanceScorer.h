@@ -20,7 +20,7 @@
  *
  * Algorithm:
  *  - Exhaustive search for k <= 2 (O(RL^2), provably optimal)
- *  - Greedy heuristic with partition function tracking for k >= 3
+ *  - Beam search with partition function tracking for k >= 3 (heuristic)
  *
  * Supported return modes:
  *  - LSE_EDIT_DISTANCE:     minimum edits to reach the threshold
@@ -126,12 +126,13 @@ private:
     /**
      * Encode position (1-based, signed by strand when bidirect)
      */
-    float encode_position(size_t index, size_t target_length, size_t motif_length, int direction) const;
+    double encode_position(size_t index, size_t target_length, size_t motif_length, int direction) const;
 
 
+    // best_pos is double: a float holds integers exactly only up to 2^24 (~16.7 Mb)
     struct LseResult {
         float min_edits = std::numeric_limits<float>::quiet_NaN();
-        float best_pos = std::numeric_limits<float>::quiet_NaN();
+        double best_pos = std::numeric_limits<double>::quiet_NaN();
         int best_edit_index = -1;    // genomic index of best single edit
         int best_edit_direction = 1; // direction for the best single edit position
     };
@@ -166,8 +167,8 @@ private:
 
     // Reported position of an edit at q to base y. direction is the pass (1 or -1) of a one-strand search;
     // 0 marks a joint search, where the edit moves both strands and is signed by the one it moves more.
-    float edit_position(int q, int y, const std::vector<int>& seq_bases, const std::vector<double>& A_p,
-                        int N, int L, int direction) const;
+    double edit_position(int q, int y, const std::vector<int>& seq_bases, const std::vector<double>& A_p,
+                         int N, int L, int direction) const;
 
     /**
      * Initialize per-start scores and partition function
@@ -233,18 +234,16 @@ private:
                                  int direction) const;
 
     /**
-     * Greedy heuristic for k >= 3
+     * Beam search for k >= 3: the best edit sets of d substitutions at d distinct positions, for d = 1, 2,
+     * ..., until one reaches the threshold. The count it returns is an upper bound on the minimum, and NaN
+     * means it found no solution within max_edits.
      */
-    LseResult greedy_search(std::vector<int>& seq_bases,
-                            std::vector<double>& S_p,
-                            std::vector<double>& A_p,
-                            double& Z, double& m, double& F,
-                            int N, int L, int R,
-                            int first_edit_pos, int first_edit_base,
-                            int second_edit_pos, int second_edit_base,
-                            int edits_so_far,
-                            size_t target_length, size_t motif_length,
-                            int direction);
+    LseResult beam_search(const std::vector<int>& seq_bases,
+                          const std::vector<double>& S_p,
+                          const std::vector<double>& A_p,
+                          double Z, double m,
+                          int N, int L, int R,
+                          int direction);
 };
 
 #endif // PWM_LSE_EDIT_DISTANCE_SCORER_H_

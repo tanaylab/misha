@@ -14,6 +14,7 @@
 #include <cstring>
 #include <limits>
 #include <memory>
+#include <tuple>
 #include <vector>
 
 #include "GenomeChromKey.h"
@@ -43,8 +44,13 @@ extern "C" {
  * @param _bin_indices  Integer vector of bin indices for each
  *                      iter-position (0-based; -1 = NA).
  * @param _iter_starts  Integer vector of iter-position start coords.
- * @param _iter_chroms  Integer vector of iter-position chrom IDs.
- * @param _intervals    R intervals object (regions to score).
+ * @param _iter_ends    Integer vector of iter-position end coords.
+ * @param _iter_ivids   Integer vector: the row of _intervals (0-based)
+ *                      each iter-position belongs to. A position takes
+ *                      its stratum from the iter-positions of its own
+ *                      interval only.
+ * @param _intervals    R intervals object (regions to score); must not
+ *                      overlap (the R wrapper unifies overlaps).
  * @param _track_name   String: misha track name (used to look up the
  *                      track dir via rdb::track2path).
  * @param _chromids     Integer vector of chromids (0-based) the kernel
@@ -52,7 +58,6 @@ extern "C" {
  *                      chroms in the chromkey.
  * @param _binsize      Integer: output bin size in bp (resolution).
  * @param _k            Integer: Markov order k.
- * @param _iter_size    Integer: stratum iterator bin size in bp.
  * @param _n_policy     Integer: context-N policy (0 = NA, 1 = uniform).
  *                      Predicted-base-N is always NA regardless of this
  *                      flag — the model has no log P for non-ACGT bases.
@@ -64,9 +69,9 @@ extern "C" {
  * @return R_NilValue on success.
  */
 SEXP C_gsynth_score(SEXP _log_p_list, SEXP _bin_indices,
-                    SEXP _iter_starts, SEXP _iter_chroms,
+                    SEXP _iter_starts, SEXP _iter_ends, SEXP _iter_ivids,
                     SEXP _intervals, SEXP _track_name, SEXP _chromids,
-                    SEXP _binsize, SEXP _k, SEXP _iter_size,
+                    SEXP _binsize, SEXP _k,
                     SEXP _n_policy, SEXP _sparse_policy, SEXP _mask,
                     SEXP _envir) {
     try {
@@ -84,11 +89,6 @@ SEXP C_gsynth_score(SEXP _log_p_list, SEXP _bin_indices,
 
         unsigned binsize = (unsigned)Rf_asInteger(_binsize);
         if (binsize <= 0) verror("binsize must be a positive integer");
-
-        int iter_size = Rf_asInteger(_iter_size);
-        if (iter_size <= 0)
-            verror("iter_size must be a positive integer; got %d",
-                   iter_size);
 
         int n_policy = Rf_asInteger(_n_policy);            // 0=NA,1=unif
         int sparse_policy = Rf_asInteger(_sparse_policy);  // 0=NA,1=unif
@@ -126,9 +126,14 @@ SEXP C_gsynth_score(SEXP _log_p_list, SEXP _bin_indices,
 
         // ---- Parse bin indices ----
         int num_iter_positions = Rf_length(_bin_indices);
+        if (Rf_length(_iter_starts) != num_iter_positions ||
+            Rf_length(_iter_ends) != num_iter_positions ||
+            Rf_length(_iter_ivids) != num_iter_positions)
+            verror("iterator starts, ends and interval ids must match the bin indices in length");
         int *bin_indices = INTEGER(_bin_indices);
         int *iter_starts = INTEGER(_iter_starts);
-        int *iter_chroms = INTEGER(_iter_chroms);
+        int *iter_ends = INTEGER(_iter_ends);
+        int *iter_ivids = INTEGER(_iter_ivids);
 
         // ---- Parse intervals ----
         const GenomeChromKey &chromkey = iu.get_chromkey();
@@ -185,17 +190,21 @@ SEXP C_gsynth_score(SEXP _log_p_list, SEXP _bin_indices,
             }
         }
 
-        // ---- Per-chromosome 200bp bin lookup (sorted by start) ----
-        vector<vector<pair<int64_t, int>>> chrom_bins(num_chroms);
+        // ---- Stratum bin lookup per interval: (start, end, bin index) of
+        //      the iter-positions of each row of _intervals, sorted by start ----
+        typedef std::tuple<int64_t, int64_t, int> IterBin;
+        int max_ivid = -1;
+        for (int i = 0; i < num_iter_positions; ++i)
+            max_ivid = max(max_ivid, iter_ivids[i]);
+        vector<vector<IterBin>> interval_bins(max_ivid + 1);
         for (int i = 0; i < num_iter_positions; ++i) {
-            int cid = iter_chroms[i];
-            if (cid >= 0 && cid < num_chroms) {
-                chrom_bins[cid].push_back({iter_starts[i], bin_indices[i]});
-            }
+            if (iter_ivids[i] >= 0)
+                interval_bins[iter_ivids[i]].push_back(std::make_tuple(
+                    (int64_t)iter_starts[i], (int64_t)iter_ends[i], bin_indices[i]));
         }
-        for (int c = 0; c < num_chroms; ++c) {
-            sort(chrom_bins[c].begin(), chrom_bins[c].end());
-        }
+        for (auto &bins : interval_bins)
+            sort(bins.begin(), bins.end());
+        const vector<IterBin> no_bins;
 
         GenomeSeqFetch seqfetch;
         seqfetch.set_seqdir(string(rdb::get_groot(_envir)) + "/seq");
@@ -235,11 +244,13 @@ SEXP C_gsynth_score(SEXP _log_p_list, SEXP _bin_indices,
             vector<int64_t> covered_bp(num_out_bins, 0);
 
             const vector<GInterval> &ivs = sample_per_chrom[chromid];
-            const vector<pair<int64_t, int>> &bins = chrom_bins[chromid];
             const vector<GInterval> &mask_ivs = mask_per_chrom[chromid];
 
             for (size_t iv_idx = 0; iv_idx < ivs.size(); ++iv_idx) {
                 const GInterval &iv = ivs[iv_idx];
+                intptr_t ivid = (intptr_t)iv.udata;
+                const vector<IterBin> &bins =
+                    ivid >= 0 && ivid < (intptr_t)interval_bins.size() ? interval_bins[ivid] : no_bins;
                 int64_t start = max<int64_t>(0, iv.start);
                 int64_t end = min<int64_t>(chrom_size, iv.end);
                 if (end <= start) continue;
@@ -259,7 +270,7 @@ SEXP C_gsynth_score(SEXP _log_p_list, SEXP _bin_indices,
                 int64_t first_query = start - k;
                 if (!bins.empty()) {
                     while (bin_cursor + 1 < bins.size() &&
-                           first_query >= bins[bin_cursor + 1].first) {
+                           first_query >= std::get<0>(bins[bin_cursor + 1])) {
                         ++bin_cursor;
                     }
                 }
@@ -315,13 +326,12 @@ SEXP C_gsynth_score(SEXP _log_p_list, SEXP _bin_indices,
                     int stratum_bin = -1;
                     if (!bins.empty()) {
                         while (bin_cursor + 1 < bins.size() &&
-                               bin_query_pos >= bins[bin_cursor + 1].first) {
+                               bin_query_pos >= std::get<0>(bins[bin_cursor + 1])) {
                             ++bin_cursor;
                         }
-                        if (bin_query_pos >= bins[bin_cursor].first &&
-                            bin_query_pos <
-                                bins[bin_cursor].first + iter_size) {
-                            stratum_bin = bins[bin_cursor].second;
+                        if (bin_query_pos >= std::get<0>(bins[bin_cursor]) &&
+                            bin_query_pos < std::get<1>(bins[bin_cursor])) {
+                            stratum_bin = std::get<2>(bins[bin_cursor]);
                         }
                     }
 

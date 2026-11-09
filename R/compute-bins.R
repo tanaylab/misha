@@ -69,7 +69,7 @@ gbins.quantiles <- function(..., expr = NULL, percentiles = 0.5, intervals = get
     }
     .gcheckroot()
 
-    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+    intervals <- rescue_ALLGENOME(intervals, substitute(intervals))
 
     exprs <- c()
     breaks <- list()
@@ -156,7 +156,7 @@ gbins.summary <- function(..., expr = NULL, intervals = get("ALLGENOME", envir =
     }
     .gcheckroot()
 
-    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+    intervals <- rescue_ALLGENOME(intervals, substitute(intervals))
 
     exprs <- c()
     breaks <- list()

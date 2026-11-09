@@ -21,6 +21,8 @@ Invisibly returns the file path.
 Saves a trained Markov model in the cross-platform .gsm format, which
 consists of a metadata YAML file and raw binary arrays for counts and CDFs.
 The .gsm format can be stored as a directory (default) or a ZIP archive.
+The model's iterator (\code{model$iterator}), which \code{\link{gsynth.sample}}
+and \code{\link{gsynth.score}} use, is saved when it is a bin size.
 }
 \seealso{
 \code{\link{gsynth.load}}, \code{\link{gsynth.train}},

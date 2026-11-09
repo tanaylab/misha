@@ -54,13 +54,10 @@
                     fasta <- fasta.unzipped
                 }
 
-                # Output without forcing chr prefix - use chromosome name as-is
-                seq <- sprintf("%s/seq/%s.seq", groot, chrom)
-
+                # Output without forcing chr prefix - use chromosome name as-is. A file of
+                # several records gives a chromosome per record, named after its header.
                 message(sprintf("%s", chrom))
-                .gcall("gseqimport", fasta, seq, .misha_env())
-
-                chroms <- c(chroms, chrom)
+                chroms <- c(chroms, .gcall("gseqimport", fasta, file.path(groot, "seq"), chrom, .misha_env()))
             }
         },
         finally = {
@@ -157,6 +154,10 @@
 #' 'intervals'. If intervals contain an additional 'strand' column and its
 #' value is '-1', the reverse-complementary sequence is returned.
 #'
+#' By default ('pad = FALSE') each interval must lie within its chromosome: an
+#' interval that starts before 0 or ends past the end of the chromosome is an
+#' error.
+#'
 #' With 'pad = TRUE' an interval may run past either end of its chromosome
 #' ('start' below 0, 'end' above the chromosome length). The positions outside
 #' the chromosome come back as "N", so each sequence is 'end - start' long, and
@@ -224,7 +225,7 @@ gseq.extract <- function(intervals = NULL, pad = FALSE) {
     }
     .gcheckroot()
 
-    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+    intervals <- rescue_ALLGENOME(intervals, substitute(intervals))
 
     if (pad) {
         return(.gseq_extract_padded(intervals))

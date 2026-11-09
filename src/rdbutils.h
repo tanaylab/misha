@@ -155,6 +155,15 @@ bool once_per_call(const char *key);
 // True inside a multitasking child process launched by distribute_task().
 bool is_kid();
 
+// R's uniform random number generator, for the C++ code of a misha function: draw through it
+// rather than through unif_rand(). The first draw of a call loads R's generator state from
+// .Random.seed (GetRNGstate()), and .gcall() saves the state back (PutRNGstate(), in
+// C_save_rng_state) when the call returns. Without that a set or restored .Random.seed would be
+// ignored, and R would hand the numbers the call drew out again. A forked kid inherits its
+// parent's state, so before its first draw it reseeds R's generator from a draw of that state and
+// its kid index; otherwise every kid would draw the same numbers.
+double r_unif_rand();
+
 // Use rprotect instead of PROTECT!
 SEXP rprotect(SEXP &expr);
 
@@ -587,7 +596,10 @@ template<typename T> void unpack_data(void *&ptr, T &data, uint64_t n) {
 //
 // C6  s_ref_count and s_protect_counter are back at their entry values on every exit. This is the
 //     observable consequence of C1 - C5 rather than a separate rule: if it does not hold, one of
-//     the five above was broken somewhere.
+//     the five above was broken somewhere. As a safety net, .gcall() calls
+//     RdbInitializer::repair_leaked_scope() before a call made when no misha call is running,
+//     so a broken rule costs the call that broke it, not the rest of the session. The net hides
+//     the break from later calls only: tests read the counters right after the call.
 //
 //---------------------------------------------------------------------------------------------
 
@@ -638,6 +650,12 @@ public:
 	// of it, such as the process umask.
 	static int      get_ref_count() { return s_ref_count; }
 	static unsigned get_protect_count() { return s_protect_counter; }
+
+	// The safety net for a broken C6: called by .gcall() when no misha call is running (see the
+	// R-level call depth there), so a counter above zero can only be left by a .Call that exited
+	// through a longjmp. Puts back what that call's ~RdbInitializer did not and zeroes both
+	// counters. Returns true if there was anything to repair.
+	static bool     repair_leaked_scope();
 
 	// allows to safely write to stdout even from a child process
 	// (before doing so please make sure launch_process() does not close stdout)
@@ -709,18 +727,23 @@ private:
 	static int                  s_sigint_fired;
 	static unsigned             s_protect_counter;
 
-	mode_t                      m_old_umask;
-	TGLException::Error_handler m_old_error_handler;
+	// Saved by the outermost RdbInitializer, put back when the last one ends (or by
+	// repair_leaked_scope())
+	static mode_t                      s_old_umask;
+	static TGLException::Error_handler s_old_error_handler;
+
 	unsigned                    m_old_protect_count;
 	set<int>                    m_old_open_fds;
 
 	static string  get_shm_sem_name();
 	static string  get_alloc_suspend_sem_name();
+	static void    release_process_state();
 	static void    sigint_handler(int);
 	static void    sigchld_handler(int);
 	static void    prepare4multitasking(uint64_t res_const_size, uint64_t res_var_size, uint64_t max_res_size, uint64_t max_mem_usage, unsigned num_planned_kids, bool res_size_from_ram = false);
 	static pid_t   launch_process();
     static void    check_kids_state(bool ignore_errors);
+	static void    forget_reaped_kids();
 	static void    wait_for_kids(rdb::IntervUtils &iu);
 	static int64_t update_kids_mem_usage();
 	static int     get_num_kids() { return s_kid_index; }

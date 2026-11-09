@@ -97,6 +97,9 @@ public:
 	}
 	void get_sliced_vals(GIntervals::const_iterator iinterval, vector<float> &vals, unsigned numcols);
 
+	// The value of the idx-th interval after the slice function
+	float get_sliced_val(uint64_t idx);
+
 protected:
 	void init_read_once(const char *filename, int chromid);
 
@@ -130,6 +133,7 @@ protected:
 	double                      m_stddev_mean;
 	double                      m_stddev_m2;
 	double                      m_sum_accum;
+	double                      m_wsum_accum;
 	vector<float>               m_sample_vals;      // values and positions that "sample" and "sample.pos" draw from
 	vector<double>              m_sample_positions;
 
@@ -137,7 +141,6 @@ protected:
 	void fail_writing();  // always throws TGLException
 	void read_array_vals(uint64_t idx);
 	float get_array_val(uint64_t islice);
-	float get_sliced_val(uint64_t idx);
 	void calc_vals(const GInterval &interval);
 	bool check_first_overlap(const GIntervals::const_iterator &iinterval1, const GInterval &interval2);
 };
@@ -180,6 +183,7 @@ inline void GenomeTrackArrays::calc_vals(const GInterval &interval)
 		(*itrack)->m_stddev_mean = 0;
 		(*itrack)->m_stddev_m2 = 0;
 		(*itrack)->m_sum_accum = 0;
+		(*itrack)->m_wsum_accum = 0;
 		(*itrack)->m_last_min = numeric_limits<float>::max();
 		(*itrack)->m_last_max = -numeric_limits<float>::max();
 		if ((*itrack)->has_function(MAX_POS))
@@ -200,6 +204,8 @@ inline void GenomeTrackArrays::calc_vals(const GInterval &interval)
 			v = (*itrack)->get_sliced_val(iinterv - m_intervals.begin());
 			if (!std::isnan(v)) {
 				(*itrack)->m_sum_accum += v;
+				if ((*itrack)->has_function(WEIGHTED_SUM))
+					(*itrack)->m_wsum_accum += (double)v * (std::min(iinterv->end, interval.end) - std::max(iinterv->start, interval.start));
 				if (v > (*itrack)->m_last_max) {
 					(*itrack)->m_last_max = v;
 					if ((*itrack)->has_function(MAX_POS))
@@ -244,6 +250,7 @@ inline void GenomeTrackArrays::calc_vals(const GInterval &interval)
 
 	for (vector<GenomeTrackArrays *>::iterator itrack = m_dependent_objs.begin(); itrack != m_dependent_objs.end(); ++itrack) {
 		(*itrack)->m_last_sum = (float)(*itrack)->m_sum_accum;
+		(*itrack)->m_last_weighted_sum = (*itrack)->m_num_vs > 0 ? (*itrack)->m_wsum_accum : numeric_limits<double>::quiet_NaN();
 		(*itrack)->m_last_size = (*itrack)->m_num_vs;
 		(*itrack)->m_last_exists = (*itrack)->m_num_vs > 0;
 		if ((*itrack)->m_num_vs > 0)

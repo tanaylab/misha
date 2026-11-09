@@ -1827,9 +1827,9 @@ test_that("gseq.kmer.dist handles overlapping intervals correctly", {
 
     result <- gseq.kmer.dist(intervals, k = 2)
 
-    # Should count k-mers from both intervals (including overlap region twice)
-    # Total: (1000-1) + (1000-1) = 1998 dinucleotides
-    expect_equal(sum(result$count), 1998)
+    # The overlap is counted once: the k-mers of chr1:0-1500, 1500 - 1 = 1499 dinucleotides
+    expect_equal(sum(result$count), 1499)
+    expect_equal(result, gseq.kmer.dist(data.frame(chrom = "chr1", start = 0, end = 1500), k = 2))
 })
 
 test_that("gseq.kmer.dist handles multiple mask intervals", {
@@ -2267,5 +2267,17 @@ test_that("gseq.pwm refuses strand = 0 when bidirect is FALSE", {
         gseq.pwm(seqs, p, mode = "max", bidirect = TRUE),
         gseq.pwm(seqs, p, mode = "max", bidirect = TRUE, strand = -1),
         ignore_attr = TRUE
+    )
+})
+
+test_that("an NA extend of gseq.pwm and gseq.kmer is an error, not TRUE", {
+    pssm <- create_test_pssm()
+    seq <- "GGGGGGGACGGGGG"
+    expect_error(gseq.pwm(seq, pssm, mode = "max", start_pos = 9, end_pos = 10, bidirect = FALSE, strand = 1, extend = NA), "extend must be")
+    expect_error(gseq.pwm(seq, pssm, mode = "max", start_pos = 9, end_pos = 10, bidirect = FALSE, strand = 1, extend = NA_integer_), "extend must be")
+    expect_error(gseq.kmer(seq, "AC", start_pos = 10, end_pos = 11, extend = NA), "extend must be")
+    expect_equal(
+        gseq.kmer(seq, "AC", start_pos = 10, end_pos = 11, extend = TRUE),
+        gseq.kmer(seq, "AC", start_pos = 10, end_pos = 11, extend = 1L)
     )
 })

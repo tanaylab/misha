@@ -314,3 +314,18 @@ test_that("sequence vtracks take integer strand, prior and spat_factor like thei
         }
     }
 })
+
+test_that("an NA bidirect or extend of a sequence vtrack is an error, not TRUE", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+    pssm <- matrix(c(.7, .1, .1, .1, .1, .7, .1, .1), 2, byrow = TRUE, dimnames = list(NULL, c("A", "C", "G", "T")))
+    na_vtrack <- function(...) {
+        gvtrack.create("v_na", NULL, ...)
+        gextract("v_na", gintervals(1, 10000, 10100), iterator = 100)
+    }
+    expect_error(na_vtrack("pwm", pssm = pssm, bidirect = NA), "bidirect parameter must be TRUE or FALSE")
+    expect_error(na_vtrack("pwm", pssm = pssm, extend = NA), "extend parameter must be TRUE, FALSE")
+    expect_error(na_vtrack("pwm.max", pssm = pssm, bidirect = FALSE, extend = NA), "extend parameter must be TRUE, FALSE")
+    expect_error(na_vtrack("kmer.count", kmer = "AC", extend = NA), "extend parameter must be TRUE or FALSE")
+    expect_identical(.glifetime_counters(), c(ref_count = 0L, protect_count = 0L))
+})

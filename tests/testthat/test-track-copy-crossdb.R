@@ -185,6 +185,45 @@ test_that("gtrack.copy with db= lands the track in the named dataset", {
     })
 })
 
+test_that("gtrack.copy with db= of a name another loaded database holds maps it as gdb.reload does", {
+    local_db_state()
+    withr::with_tempdir({
+        create_test_db("workdb")
+        create_test_db("ds1")
+        create_test_db("ds2")
+        work <- normalizePath("workdb")
+        ds1 <- normalizePath("ds1")
+        ds2 <- normalizePath("ds2")
+        intervs <- gintervals(1, 0, 1000)
+        gsetroot(ds2)
+        gtrack.create_sparse("in_ds2", "", intervs, 2)
+        gsetroot(work)
+        gtrack.create_sparse("both", "", intervs, 1)
+        gtrack.create_sparse("src", "", intervs, 9)
+        gdataset.load(ds1)
+        gdataset.load(ds2)
+        names_of <- function(x) unname(gtrack.dataset(x))
+        values_of <- function(x) vapply(x, function(t) gextract(t, intervs)[[t]][1], 0)
+
+        # the working database's name stays its own
+        gtrack.copy("src", "both", db = ds1)
+        # a name of ds2, loaded after ds1, stays ds2's; copied into ds2, a name of ds1 becomes ds2's
+        gtrack.copy("src", "in_ds2", db = ds1)
+        gtrack.copy("src", "new_t", db = ds1)
+        gtrack.copy("src", "new_t", db = ds2)
+        tracks <- c("both", "in_ds2", "new_t")
+        expect_equal(names_of(tracks), c(work, ds2, ds2))
+        expect_equal(values_of(tracks), c(both = 1, in_ds2 = 2, new_t = 9))
+
+        gdb.reload()
+        expect_equal(names_of(tracks), c(work, ds2, ds2))
+        # without the working database's track, the name is ds1's copy
+        gtrack.rm("both", force = TRUE)
+        expect_equal(names_of("both"), ds1)
+        expect_equal(values_of("both"), c(both = 9))
+    })
+})
+
 test_that("gtrack.copy: per-chrom src to indexed dest converts on the fly", {
     withr::with_tempdir({
         create_test_db("perchrom_src")

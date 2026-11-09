@@ -200,7 +200,7 @@ gintervals.covered_bp <- function(intervals = NULL) {
         return(0)
     }
 
-    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+    intervals <- rescue_ALLGENOME(intervals, substitute(intervals))
 
     # Canonicalize to remove overlaps
     canonical <- gintervals.canonic(intervals, unify_touching_intervals = TRUE)
@@ -259,7 +259,7 @@ gintervals.coverage_fraction <- function(intervals1 = NULL, intervals2 = NULL) {
         return(0)
     }
 
-    intervals1 <- rescue_ALLGENOME(intervals1, as.character(substitute(intervals1)))
+    intervals1 <- rescue_ALLGENOME(intervals1, substitute(intervals1))
 
     # If intervals2 is NULL, use entire genome
     if (is.null(intervals2)) {
@@ -269,7 +269,7 @@ gintervals.coverage_fraction <- function(intervals1 = NULL, intervals2 = NULL) {
         if (is.data.frame(intervals2) && nrow(intervals2) == 0) {
             return(0)
         }
-        intervals2 <- rescue_ALLGENOME(intervals2, as.character(substitute(intervals2)))
+        intervals2 <- rescue_ALLGENOME(intervals2, substitute(intervals2))
     }
 
     # Calculate total bp in intervals2

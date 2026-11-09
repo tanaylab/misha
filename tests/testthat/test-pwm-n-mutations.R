@@ -410,7 +410,7 @@ test_that("pwm.n_mutations bidirect=TRUE returns max across strands (direction=a
     }
 })
 
-test_that("pwm.n_mutations bidirect=TRUE with direction=below uses max across strands per position", {
+test_that("pwm.n_mutations bidirect=TRUE with direction=below counts substitutions that bring both strands below", {
     remove_all_vtracks()
 
     # Use a non-degenerate PSSM so scores are finite and direction=below is meaningful
@@ -426,22 +426,6 @@ test_that("pwm.n_mutations bidirect=TRUE with direction=below uses max across st
     test_interval <- gintervals(1, 200, 260)
     threshold <- -4.0
 
-    gvtrack.create("nmut_below_fwd", NULL,
-        func = "pwm.n_mutations",
-        pssm = pssm, score.thresh = threshold,
-        score.min = -Inf,
-        direction = "below",
-        bidirect = FALSE, strand = 1, extend = TRUE, prior = 0
-    )
-
-    gvtrack.create("nmut_below_rev", NULL,
-        func = "pwm.n_mutations",
-        pssm = pssm, score.thresh = threshold,
-        score.min = -Inf,
-        direction = "below",
-        bidirect = FALSE, strand = -1, extend = TRUE, prior = 0
-    )
-
     gvtrack.create("nmut_below_bidi", NULL,
         func = "pwm.n_mutations",
         pssm = pssm, score.thresh = threshold,
@@ -450,28 +434,86 @@ test_that("pwm.n_mutations bidirect=TRUE with direction=below uses max across st
         bidirect = TRUE, extend = TRUE, prior = 0
     )
 
-    result <- gextract(
-        c("nmut_below_fwd", "nmut_below_rev", "nmut_below_bidi"),
-        test_interval,
-        iterator = 1
-    )
+    result <- gextract("nmut_below_bidi", test_interval, iterator = 1)
 
-    # Verify we have data to compare
-    has_both <- !is.na(result$nmut_below_fwd) & !is.na(result$nmut_below_rev)
-    expect_true(any(has_both), info = "Should have at least some positions with both strands non-NA")
-
-    # For direction=below + bidirect, each position combines strands via max
-    # (a genomic substitution affects both strands)
-    for (i in which(has_both)) {
-        fwd <- result$nmut_below_fwd[i]
-        rev <- result$nmut_below_rev[i]
-        bidi <- result$nmut_below_bidi[i]
-
-        # Per-position combine = max of strands
-        expect_true(bidi >= max(fwd, rev) - 1e-6,
-            info = paste("pos", i, "fwd=", fwd, "rev=", rev, "bidi=", bidi)
-        )
+    # One genomic substitution changes both strands, so a window counts the
+    # substitutions after which BOTH strands score <= threshold (0 if both
+    # already do, NA if no single substitution does). It used to take the
+    # larger of the two per-strand counts, which counts substitutions that
+    # leave the other strand above the threshold.
+    lp <- log(pssm)
+    bases <- c("A", "C", "G", "T")
+    comp <- c(A = "T", C = "G", G = "C", T = "A")
+    score <- function(b) sum(lp[cbind(seq_along(b), match(b, bases))])
+    rc <- function(b) unname(comp[rev(b)])
+    expected_count <- function(b) {
+        if (score(b) <= threshold && score(rc(b)) <= threshold) {
+            return(0)
+        }
+        n <- 0
+        for (j in seq_along(b)) {
+            for (x in setdiff(bases, b[j])) {
+                m <- b
+                m[j] <- x
+                if (score(m) <= threshold && score(rc(m)) <= threshold) n <- n + 1
+            }
+        }
+        if (n == 0) NA_real_ else n
     }
+
+    seqs <- toupper(gseq.extract(gintervals(1, result$start, result$start + nrow(pssm))))
+    expected <- vapply(strsplit(seqs, ""), expected_count, numeric(1))
+    expect_true(any(!is.na(expected) & expected > 0))
+    expect_equal(result$nmut_below_bidi, expected)
+})
+
+test_that("pwm.n_mutations and pwm.edit_distance below + bidirect: a strand that cannot be disrupted decides", {
+    root <- tempfile("nmut_bidi_")
+    dir.create(root)
+    dir.create(file.path(root, "tracks"))
+    dir.create(file.path(root, "seq"))
+    # forward ACCAT scores -3.73 against the motif ACGAT, its reverse complement ATGGT -5.68
+    seq <- "NNNNNACCATNNNNN"
+    writeLines(sprintf("chr1\t%d", nchar(seq)), file.path(root, "chrom_sizes.txt"))
+    writeBin(charToRaw(seq), file.path(root, "seq", "chr1.seq"))
+    old_root <- .misha$GROOT
+    withr::defer(gsetroot(old_root))
+    gsetroot(root)
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    pssm <- rbind(c(.7, .1, .1, .1), c(.1, .7, .1, .1), c(.1, .1, .7, .1), c(.7, .1, .1, .1), c(.1, .1, .1, .7))
+    colnames(pssm) <- c("A", "C", "G", "T")
+    iv <- gintervals("chr1", 0, nchar(seq))
+    p <- list(pssm = pssm, score.thresh = -6, direction = "below", prior = 0)
+    gvtrack.create("ed_fwd", NULL, "pwm.edit_distance", params = c(p, list(bidirect = FALSE, strand = 1)))
+    gvtrack.create("ed_rev", NULL, "pwm.edit_distance", params = c(p, list(bidirect = FALSE, strand = -1)))
+    gvtrack.create("ed_bidi", NULL, "pwm.edit_distance", params = c(p, list(bidirect = TRUE)))
+    gvtrack.create("ed_bidi_cap1", NULL, "pwm.edit_distance", params = c(p, list(bidirect = TRUE, max_edits = 1)))
+    gvtrack.create("nm_bidi", NULL, "pwm.n_mutations", params = c(p, list(bidirect = TRUE)))
+    r <- gextract(c("ed_fwd", "ed_rev", "ed_bidi", "ed_bidi_cap1", "nm_bidi"), iv, iterator = iv)
+
+    expect_equal(r$ed_fwd, 2)
+    expect_equal(r$ed_rev, 1)
+    expect_equal(r$ed_bidi, 2)
+    # The forward strand needs 2 > max_edits: the window cannot be disrupted
+    # within the cap (it used to report the reverse strand's 1)
+    expect_true(is.na(r$ed_bidi_cap1))
+    # No single substitution brings both strands to <= -6 (it used to count the
+    # reverse strand's 9 alone)
+    expect_true(is.na(r$nm_bidi))
+
+    # A strand the score filter leaves out does not decide: with score.min above
+    # the reverse strand's score, only the forward strand counts
+    gvtrack.create("ed_bidi_fwdonly", NULL, "pwm.edit_distance",
+        params = c(p, list(bidirect = TRUE, score.min = -5))
+    )
+    gvtrack.create("ed_bidi_fwdonly_cap1", NULL, "pwm.edit_distance",
+        params = c(p, list(bidirect = TRUE, score.min = -5, max_edits = 1))
+    )
+    r2 <- gextract(c("ed_bidi_fwdonly", "ed_bidi_fwdonly_cap1"), iv, iterator = iv)
+    expect_equal(r2$ed_bidi_fwdonly, 2)
+    expect_true(is.na(r2$ed_bidi_fwdonly_cap1))
 })
 
 # ============================================================================

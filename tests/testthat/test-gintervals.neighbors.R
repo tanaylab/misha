@@ -19,8 +19,8 @@ test_that("gintervals.neighbors works in 2D", {
     # COMMENTED OUT: ordering changed after dist2segment fix (see issue about mindist=0,maxdist=0 bug)
     # expect_regression(gintervals.neighbors("test.bigintervs_1d_1", "test.bigintervs_1d_2"), "gintervals.neighbors.2d.2")
     # expect_regression(gintervals.neighbors("test.generated_1d_1", "test.generated_1d_2"), "gintervals.neighbors.2d.3")
-    expect_regression(gintervals.neighbors("test.bigintervs_2d_5", "test.bigintervs_2d_6"), "gintervals.neighbors.2d.4")
-    expect_regression(gintervals.neighbors("test.generated_2d_5", "test.generated_2d_6"), "gintervals.neighbors.2d.5")
+    expect_regression(gintervals.neighbors("test.bigintervs_2d_5", "test.bigintervs_2d_6"), "gintervals.neighbors.2d.4_v2")
+    expect_regression(gintervals.neighbors("test.generated_2d_5", "test.generated_2d_6"), "gintervals.neighbors.2d.5_v2")
 })
 
 test_that("gintervals.neighbors works with intervals.set.out", {
@@ -77,7 +77,7 @@ test_that("columns are maintained (2d)", {
         "dist1", "dist2"
     )))
     expect_true("blabla" %in% colnames(res))
-    expect_regression(res, "gintervals.neighbors.9")
+    expect_regression(res, "gintervals.neighbors.9_v2")
 })
 
 test_that("gintervals.neighbors works with intervals.set.out without min and max dist", {
@@ -585,5 +585,90 @@ test_that("gintervals.neighbors handles identical intervals correctly", {
         qres <- res %>% dplyr::filter(qid == i)
         expect_equal(nrow(qres), 3)
         expect_setequal(qres$tid, c(1, 2, 3))
+    }
+})
+
+test_that("gintervals.neighbors breaks distance ties by the neighbor's coordinates, not the input order", {
+    i1 <- data.frame(chrom = "chr1", start = 1000, end = 1100)
+    # all four at distance 100; a and b are the same interval
+    i2 <- data.frame(chrom = "chr1", start = c(1200, 1200, 800, 1200), end = c(1300, 1300, 900, 1250), id = c("a", "b", "c", "d"))
+    for (ord in list(1:4, 4:1, c(2, 4, 1, 3))) {
+        x <- i2[ord, ]
+        expect_equal(gintervals.neighbors(i1, x)$id, "c")
+        expect_equal(gintervals.neighbors(i1, x, maxneighbors = 2)$id, c("c", "d"))
+        expect_equal(gintervals.neighbors(i1, x, maxneighbors = 4)$id[1:2], c("c", "d"))
+    }
+    # only the same intervals keep their input order
+    expect_equal(gintervals.neighbors(i1, i2, maxneighbors = 4)$id, c("c", "d", "a", "b"))
+    expect_equal(gintervals.neighbors(i1, i2[4:1, ], maxneighbors = 4)$id, c("c", "d", "b", "a"))
+})
+
+test_that("2D gintervals.neighbors picks the nearest by dist1 + dist2 whatever the input order", {
+    q <- gintervals.2d("chr1", 1000, 1100, "chr1", 1000, 1100)
+    # D: dist1 2, dist2 1 (3); E: dist1 4, dist2 0 (4); F: dist1 3, dist2 0 (3). The neighbor search
+    # meets F before D, and D and E at the same step.
+    n <- gintervals.2d("chr1", c(1102, 1104, 1103), c(1200, 1200, 1150), "chr1", c(1101, 1050, 1070), c(1200, 1060, 1080))
+    n$id <- c("D", "E", "F")
+    for (ord in list(1:2, 2:1)) {
+        expect_equal(gintervals.neighbors(q, n[ord, ])$id, "D")
+    }
+    for (ord in list(1:3, 3:1, c(2, 3, 1))) {
+        res <- gintervals.neighbors(q, n[ord, ], maxneighbors = 2)
+        expect_equal(res$id, c("D", "F"))
+        expect_equal(res$dist1 + res$dist2, c(3, 3))
+    }
+})
+
+test_that("candidates tied with the kept neighbors do not count against gmax.data.size", {
+    # 1000 intervals overlap the query; one is kept
+    withr::local_options(gmax.data.size = 100)
+    starts <- seq(0, by = 10, length.out = 1000)
+    t <- data.frame(chrom = "chr1", start = starts, end = starts + 5)
+    r <- gintervals.neighbors(gintervals(1, 0, 20000), t)
+    expect_equal(nrow(r), 1)
+    expect_equal(r$start1, 0)
+    q2 <- gintervals.2d("chr1", 0, 20000, "chr1", 0, 20000)
+    t2 <- gintervals.2d("chr1", starts, starts + 5, "chr1", 0, 5)
+    r2 <- gintervals.neighbors(q2, t2)
+    expect_equal(nrow(r2), 1)
+    expect_equal(r2$start11, 0)
+})
+
+test_that("neighbors at distance 0 are chosen by coordinates when a query overlaps many", {
+    # the ties at distance 0 are found through an index, not by walking all of them
+    set.seed(11)
+    s <- sample(0:20000, 3000, replace = TRUE)
+    t <- data.frame(chrom = "chr1", start = s, end = s + sample(c(1, 10, 100, 1000), 3000, replace = TRUE))
+    t <- rbind(t, t[1:50, ]) # the same intervals twice
+    t$id <- seq_len(nrow(t))
+    qs <- sample(0:20000, 40)
+    q <- data.frame(chrom = "chr1", start = qs, end = qs + sample(c(5, 500, 5000), 40, replace = TRUE))
+    q$qid <- seq_len(nrow(q))
+    gap <- function(s1, e1, s2, e2) ifelse(s2 <= e1 & e2 >= s1, 0, pmax(s2 - e1, s1 - e2))
+    for (k in c(1, 3)) {
+        res <- gintervals.neighbors(q, t, maxneighbors = k)
+        for (i in seq_len(nrow(q))) {
+            d <- gap(q$start[i], q$end[i], t$start, t$end)
+            expect_equal(res$id[res$qid == i], t$id[order(d, t$start, t$end, t$id)][1:k], info = paste(k, i))
+        }
+    }
+
+    g <- expand.grid(i = 0:59, j = 0:59)
+    t2 <- data.frame(
+        chrom1 = "chr1", start1 = g$i * 100, end1 = g$i * 100 + sample(c(50, 100), nrow(g), replace = TRUE),
+        chrom2 = "chr1", start2 = g$j * 100, end2 = g$j * 100 + 50
+    )
+    t2$id <- seq_len(nrow(t2))
+    s1 <- sample(0:5000, 40)
+    s2 <- sample(0:5000, 40)
+    q2 <- data.frame(chrom1 = "chr1", start1 = s1, end1 = s1 + sample(c(10, 300, 2000), 40, replace = TRUE), chrom2 = "chr1", start2 = s2, end2 = s2 + 700)
+    q2$qid <- seq_len(nrow(q2))
+    for (k in c(1, 3)) {
+        res <- gintervals.neighbors(q2, t2, maxneighbors = k)
+        for (i in seq_len(nrow(q2))) {
+            d <- gap(q2$start1[i], q2$end1[i], t2$start1, t2$end1) + gap(q2$start2[i], q2$end2[i], t2$start2, t2$end2)
+            want <- t2$id[order(d, t2$start1, t2$end1, t2$start2, t2$end2, t2$id)][1:k]
+            expect_equal(res$id[res$qid == i], want, info = paste("2D", k, i))
+        }
     }
 })

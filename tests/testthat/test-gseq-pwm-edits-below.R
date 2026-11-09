@@ -281,33 +281,65 @@ test_that("gseq.pwm_edits direction=below with bidirectional scanning", {
 
     # "GT" forward strand scores ~-9.21 (already below -1.0 -> 0 edits)
     # "GT" revcomp "AC" scores ~-0.06 (above -1.0 -> needs edits)
-    # With bidirect=TRUE, the code picks the strand needing fewest edits,
-    # which is the forward strand with 0 edits.
+    # A genomic substitution changes both readings and both must end up below,
+    # so, as in the pwm.edit_distance vtrack, the harder strand decides: the
+    # reverse strand with 1 edit, and the edit is on its reading. (This used to
+    # pick the strand needing the fewest edits, the forward one with 0.)
     result <- gseq.pwm_edits("GT", pssm,
         score.thresh = -1.0,
         score.min = -Inf,
         prior = 0, bidirect = TRUE, direction = "below"
     )
 
-    expect_true(nrow(result) > 0)
-    # Forward strand is already below threshold, so 0 edits on forward strand
-    expect_equal(result$n_edits[1], 0L)
-    expect_equal(result$strand[1], 1L)
+    expect_equal(nrow(result), 1L)
+    expect_equal(result$n_edits[1], 1L)
+    expect_equal(result$strand[1], -1L)
+    expect_equal(result$window_seq[1], "AC")
+    expect_lte(result$score_after[1], -1.0)
 
-    # Use a sequence where BOTH strands score above threshold
-    # "AC" forward is ~-0.06 (above threshold), revcomp "GT" is ~-9.21 (below)
-    # So again the best is 0 edits on the reverse strand.
-    # Use a higher threshold to force both strands above it.
+    # "AC": forward scores ~-0.06 and its reverse "GT" ~-9.21, both already at
+    # or below -0.01, so 0 edits (a tie goes to the forward strand)
     result2 <- gseq.pwm_edits("AC", pssm,
         score.thresh = -0.01,
         score.min = -Inf,
         prior = 0, bidirect = TRUE, direction = "below"
     )
-    expect_true(nrow(result2) > 0)
-    # Forward strand "AC" scores ~-0.06, reverse "GT" scores ~-9.21
-    # Forward needs edits, reverse is already below -0.01
-    # Best is reverse strand with 0 edits
+    expect_equal(nrow(result2), 1L)
     expect_equal(result2$n_edits[1], 0L)
+    expect_equal(result2$strand[1], 1L)
+})
+
+test_that("gseq.pwm_edits direction=below with bidirect matches the pwm.edit_distance vtrack", {
+    gdb.init_examples()
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    set.seed(1109)
+    bases <- c("A", "C", "G", "T")
+    starts <- sort(sample(1000:400000, 15))
+    iv <- gintervals(1, starts, starts + sample(1:8, 15, TRUE))
+    for (k in 1:6) {
+        L <- sample(4:6, 1)
+        pssm <- matrix(rgamma(4 * L, 0.4), L)
+        pssm <- pssm / rowSums(pssm)
+        colnames(pssm) <- bases
+        lp <- log((pssm + 0.01) / rowSums(pssm + 0.01))
+        smax <- sum(apply(lp, 1, max))
+        smin <- sum(apply(lp, 1, min))
+        thr <- smin + runif(1, 0.3, 0.7) * (smax - smin)
+        args <- list(pssm = pssm, score.thresh = thr, prior = 0.01, bidirect = TRUE, direction = "below")
+        if (k %% 3 == 1) args$max_edits <- 1L
+        if (k %% 2 == 0) args$max_indels <- 1L
+        if (k == 5) args$score.min <- smin + 0.5 * (smax - smin)
+        gvtrack.create("ed_below_bidi", NULL, "pwm.edit_distance", params = args)
+        v <- gextract("ed_below_bidi", iv, iterator = iv)
+        v <- v[order(v$intervalID), ]
+        g <- do.call(gseq.pwm_edits, c(list(iv), args))
+        n <- rep(NA_real_, nrow(iv))
+        n[g$seq_idx] <- g$n_edits
+        expect_equal(n, v$ed_below_bidi, info = sprintf("case %d", k))
+        gvtrack.rm("ed_below_bidi")
+    }
 })
 
 test_that("gseq.pwm_edits direction=below with max_indels=1", {
