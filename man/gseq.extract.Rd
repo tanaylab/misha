@@ -24,6 +24,10 @@ This function returns an array of sequence strings for each interval from
 'intervals'. If intervals contain an additional 'strand' column and its
 value is '-1', the reverse-complementary sequence is returned.
 
+By default ('pad = FALSE') each interval must lie within its chromosome: an
+interval that starts before 0 or ends past the end of the chromosome is an
+error.
+
 With 'pad = TRUE' an interval may run past either end of its chromosome
 ('start' below 0, 'end' above the chromosome length). The positions outside
 the chromosome come back as "N", so each sequence is 'end - start' long, and
