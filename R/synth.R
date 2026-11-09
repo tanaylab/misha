@@ -1291,7 +1291,7 @@ print.gsynth.model <- function(x, ...) {
 
     if (!is.null(x$prior_mode)) {
         cat(sprintf("Prior: %s", x$prior_mode))
-        if (!is.null(x$prior) && x$prior_mode != "uniform") {
+        if (!is.null(x[["prior"]]) && x$prior_mode != "uniform") {
             avg_pi <- colMeans(x[["prior"]])
             cat(sprintf(
                 "  (mean pi: A=%.3f C=%.3f G=%.3f T=%.3f)",

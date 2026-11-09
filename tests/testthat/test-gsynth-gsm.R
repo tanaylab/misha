@@ -632,3 +632,11 @@ test_that("an RDS model saved before priors existed loads with a uniform prior a
     expect_equal(ncol(loaded[["prior"]]), 4L)
     expect_no_error(gsynth.save(loaded, file.path(withr::local_tempdir(), "resaved")))
 })
+
+test_that("printing a model with a non-uniform prior_mode but no prior does not fail", {
+    gdb.init_examples()
+    m <- gsynth.train(intervals = gintervals(1, 0, 20000), iterator = 200, k = 2)
+    m$prior <- NULL
+    m$prior_mode <- "custom"
+    expect_no_error(capture.output(print(m)))
+})
