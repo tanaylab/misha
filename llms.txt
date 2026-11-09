@@ -307,7 +307,7 @@ Functions to manipulate and create intervals
 - [`gintervals.normalize()`](https://tanaylab.github.io/misha/reference/gintervals.normalize.md)
   : Normalize intervals to fixed or variable sizes
 - [`gintervals.annotate()`](https://tanaylab.github.io/misha/reference/gintervals.annotate.md)
-  : Annotates 1D intervals using nearest neighbors
+  : Annotates intervals using nearest neighbors
 - [`gintervals.import_genes()`](https://tanaylab.github.io/misha/reference/gintervals.import_genes.md)
   : Imports genes and annotations from files
 - [`gintervals.import_bed()`](https://tanaylab.github.io/misha/reference/gintervals.import_bed.md)

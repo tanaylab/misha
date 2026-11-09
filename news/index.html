@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">misha</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.16.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.17.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -36,9 +36,23 @@
   <main id="main" class="col-md-9"><div class="page-header">
 
       <h1>Changelog</h1>
-      <small>Source: <a href="https://github.com/tanaylab/misha/blob/v5.16.1/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
+      <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="5.17.0" id="misha-5170">misha 5.17.0<a class="anchor" aria-label="anchor" href="#misha-5170"></a></h2>
+<p>This release fixes the defects found in the review of 5.16.1, makes common large computations faster, and adds features for work with sequence-to-function models. Fixes that change results are marked <strong>Behavior fix</strong>; recompute anything that depends on them.</p>
+<ul><li><p><strong>Behavior fix:</strong> <code><a href="../reference/gintervals.rbind.html">gintervals.rbind()</a></code> binds columns as <code><a href="https://rdrr.io/r/base/cbind.html" class="external-link">rbind()</a></code> does; data frames whose factor levels differed got rows of another chromosome, or another value in an extra factor column.</p></li>
+<li><p><strong>Behavior fix:</strong> <code><a href="../reference/gintervals.neighbors.html">gintervals.neighbors()</a></code> breaks distance ties by the neighbor’s coordinates, so its results no longer depend on the input order. In 2D it could return a neighbor farther than the nearest by <code>dist1 + dist2</code>.</p></li>
+<li><p><strong>Behavior fix:</strong> a 2D <code><a href="../reference/gintervals.annotate.html">gintervals.annotate()</a></code> returns both distances (<code>dist1</code>, <code>dist2</code>); <code>max_dist</code> limits <code>dist1 + dist2</code>.</p></li>
+<li><p><strong>Behavior fix:</strong> with <code>options(gmulticontig.2d.cache = TRUE)</code>, a later change of <code>gmulticontig.2d.mode</code> is honoured.</p></li>
+<li><p>An error inside a misha call (e.g. <code><a href="../reference/gintervals.rbind.html">gintervals.rbind()</a></code> of mismatched columns) no longer turns multitasking off for the rest of the session or leaves the umask at 007.</p></li>
+<li><p>An <code>NA</code> logical argument (<code>unify_touching_intervals</code>, <code>bidirect</code>, <code>extend</code>, <code>canonic</code>, <code>include_metadata</code>, <code>interval_relative</code>, <code>remove.dups</code>, <code>allow.duplicates</code>) is an error; it was read as <code>TRUE</code> or <code>FALSE</code>. An <code>NA</code>, infinite or integer-<code>NA</code> coordinate is an invalid interval.</p></li>
+<li><p><code>options(gmax.data.size = NULL)</code> means no limit everywhere. <code>gintervals.load(chrom =)</code> and <code><a href="../reference/gintervals.update.html">gintervals.update()</a></code> accept a factor chromosome column with only some of the levels. <code><a href="../reference/gintervals.html">gintervals()</a></code> errors print whole-number coordinates.</p></li>
+<li><p>Intervals passed by value (<code><a href="https://rdrr.io/r/base/do.call.html" class="external-link">do.call()</a></code>, <code><a href="https://rdrr.io/r/base/funprog.html" class="external-link">Map()</a></code>, purrr) are no longer deparsed: <code><a href="../reference/gsummary.html">gsummary()</a></code> over 2M intervals took 39 s instead of 0.5 s.</p></li>
+<li><p>Databases: a stale <code>.db.cache.lock</code> that cannot be read is broken by its age; a refused re-load of a dataset leaves it loaded; <code>gtrack.copy(db =)</code> into a dataset no longer hides the working database’s own track; when a <code>gtrack.copy(overwrite = TRUE)</code> fails because another session wrote the name, the replaced track goes to the trash instead of a hidden directory; a failed conversion to the indexed format no longer leaves buffered bytes to be written into other files at exit.</p></li>
+<li><p><code><a href="../reference/gintervals.normalize.html">gintervals.normalize()</a></code> documents that windows are clipped at chromosome ends.</p></li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="5.16.1" id="misha-5161">misha 5.16.1<a class="anchor" aria-label="anchor" href="#misha-5161"></a></h2>
 <ul><li><p><strong>Behavior fix:</strong> a numeric <code>strand</code> other than -1, 0 or 1 is an error, as in <code><a href="../reference/gintervals.html">gintervals()</a></code>; functions that read intervals took 255 as -1 (e.g. <code><a href="../reference/gseq.extract.html">gseq.extract()</a></code> returned the reverse complement) and 2 as 1.</p></li>

@@ -1,5 +1,69 @@
 # Changelog
 
+## misha 5.17.0
+
+This release fixes the defects found in the review of 5.16.1, makes
+common large computations faster, and adds features for work with
+sequence-to-function models. Fixes that change results are marked
+**Behavior fix**; recompute anything that depends on them.
+
+- **Behavior fix:**
+  [`gintervals.rbind()`](https://tanaylab.github.io/misha/reference/gintervals.rbind.md)
+  binds columns as [`rbind()`](https://rdrr.io/r/base/cbind.html) does;
+  data frames whose factor levels differed got rows of another
+  chromosome, or another value in an extra factor column.
+
+- **Behavior fix:**
+  [`gintervals.neighbors()`](https://tanaylab.github.io/misha/reference/gintervals.neighbors.md)
+  breaks distance ties by the neighbor’s coordinates, so its results no
+  longer depend on the input order. In 2D it could return a neighbor
+  farther than the nearest by `dist1 + dist2`.
+
+- **Behavior fix:** a 2D
+  [`gintervals.annotate()`](https://tanaylab.github.io/misha/reference/gintervals.annotate.md)
+  returns both distances (`dist1`, `dist2`); `max_dist` limits
+  `dist1 + dist2`.
+
+- **Behavior fix:** with `options(gmulticontig.2d.cache = TRUE)`, a
+  later change of `gmulticontig.2d.mode` is honoured.
+
+- An error inside a misha call
+  (e.g. [`gintervals.rbind()`](https://tanaylab.github.io/misha/reference/gintervals.rbind.md)
+  of mismatched columns) no longer turns multitasking off for the rest
+  of the session or leaves the umask at 007.
+
+- An `NA` logical argument (`unify_touching_intervals`, `bidirect`,
+  `extend`, `canonic`, `include_metadata`, `interval_relative`,
+  `remove.dups`, `allow.duplicates`) is an error; it was read as `TRUE`
+  or `FALSE`. An `NA`, infinite or integer-`NA` coordinate is an invalid
+  interval.
+
+- `options(gmax.data.size = NULL)` means no limit everywhere.
+  `gintervals.load(chrom =)` and
+  [`gintervals.update()`](https://tanaylab.github.io/misha/reference/gintervals.update.md)
+  accept a factor chromosome column with only some of the levels.
+  [`gintervals()`](https://tanaylab.github.io/misha/reference/gintervals.md)
+  errors print whole-number coordinates.
+
+- Intervals passed by value
+  ([`do.call()`](https://rdrr.io/r/base/do.call.html),
+  [`Map()`](https://rdrr.io/r/base/funprog.html), purrr) are no longer
+  deparsed:
+  [`gsummary()`](https://tanaylab.github.io/misha/reference/gsummary.md)
+  over 2M intervals took 39 s instead of 0.5 s.
+
+- Databases: a stale `.db.cache.lock` that cannot be read is broken by
+  its age; a refused re-load of a dataset leaves it loaded;
+  `gtrack.copy(db =)` into a dataset no longer hides the working
+  database’s own track; when a `gtrack.copy(overwrite = TRUE)` fails
+  because another session wrote the name, the replaced track goes to the
+  trash instead of a hidden directory; a failed conversion to the
+  indexed format no longer leaves buffered bytes to be written into
+  other files at exit.
+
+- [`gintervals.normalize()`](https://tanaylab.github.io/misha/reference/gintervals.normalize.md)
+  documents that windows are clipped at chromosome ends.
+
 ## misha 5.16.1
 
 - **Behavior fix:** a numeric `strand` other than -1, 0 or 1 is an

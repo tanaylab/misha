@@ -9,7 +9,7 @@ them to fixed or variable sizes, while ensuring they don't cross chromosome boun
 
     <a class="navbar-brand me-2" href="../index.html">misha</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.16.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.17.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -38,7 +38,7 @@ them to fixed or variable sizes, while ensuring they don't cross chromosome boun
   <main id="main" class="col-md-9"><div class="page-header">
 
       <h1>Normalize intervals to fixed or variable sizes</h1>
-      <small class="dont-index">Source: <a href="https://github.com/tanaylab/misha/blob/v5.16.1/R/intervals-operations.R" class="external-link"><code>R/intervals-operations.R</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/tanaylab/misha/blob/master/R/intervals-operations.R" class="external-link"><code>R/intervals-operations.R</code></a></small>
       <div class="d-none name"><code>gintervals.normalize.Rd</code></div>
     </div>
 
@@ -61,7 +61,8 @@ them to fixed or variable sizes, while ensuring they don't cross chromosome boun
 
 
 <dt id="arg-size">size<a class="anchor" aria-label="anchor" href="#arg-size"></a></dt>
-<dd><p>target size(s) for normalized intervals. Can be either:</p><ul><li><p>A single positive integer: all intervals normalized to this size</p></li>
+<dd><p>target size(s) for normalized intervals, before the clipping at
+chromosome ends. Can be either:</p><ul><li><p>A single positive integer: all intervals normalized to this size</p></li>
 <li><p>A numeric vector: each interval normalized to its corresponding size.
         Vector length must exactly match the number of intervals, OR
         a single interval can be provided with multiple sizes to create
@@ -77,6 +78,13 @@ If NULL, the result is returned to the user.</p></dd>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>Normalized intervals set with fixed or variable sizes, or NULL if result is saved to intervals.set.out</p>
+    </div>
+    <div class="section level2">
+    <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
+    <p>A window that would cross a chromosome end is clipped at that end, so near
+the start or the end of a chromosome the returned interval is shorter than
+'size' (no warning is given). Filter on <code>end - start</code> if the windows must
+all have the full size.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>

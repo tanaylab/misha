@@ -18,7 +18,8 @@ gintervals.normalize(intervals = NULL, size = NULL, intervals.set.out = NULL)
 
 - size:
 
-  target size(s) for normalized intervals. Can be either:
+  target size(s) for normalized intervals, before the clipping at
+  chromosome ends. Can be either:
 
   - A single positive integer: all intervals normalized to this size
 
@@ -36,6 +37,13 @@ gintervals.normalize(intervals = NULL, size = NULL, intervals.set.out = NULL)
 
 Normalized intervals set with fixed or variable sizes, or NULL if result
 is saved to intervals.set.out
+
+## Details
+
+A window that would cross a chromosome end is clipped at that end, so
+near the start or the end of a chromosome the returned interval is
+shorter than 'size' (no warning is given). Filter on `end - start` if
+the windows must all have the full size.
 
 ## See also
 

@@ -1,8 +1,8 @@
-# Annotates 1D intervals using nearest neighbors
+# Annotates intervals using nearest neighbors
 
-Annotates one-dimensional intervals by finding nearest neighbors in
-another set of intervals and adding selected columns from the neighbors
-to the original intervals.
+Annotates intervals by finding nearest neighbors in another set of
+intervals and adding selected columns from the neighbors to the original
+intervals.
 
 ## Usage
 
@@ -28,11 +28,11 @@ gintervals.annotate(
 
 - intervals:
 
-  Intervals to annotate (1D).
+  Intervals to annotate.
 
 - annotation_intervals:
 
-  Source intervals containing annotation data (1D).
+  Source intervals containing annotation data.
 
 - annotation_columns:
 
@@ -50,13 +50,18 @@ gintervals.annotate(
 - dist_column:
 
   Name of the distance column to include. Use `NULL` to omit the
-  distance column. Defaults to "dist".
+  distance column. Defaults to "dist". For 2D intervals two columns are
+  included, with "1" and "2" added to the name (`dist1` and `dist2` by
+  default, as in `gintervals.neighbors`).
 
 - max_dist:
 
   Maximum absolute distance. When finite, neighbors with
   `|dist| > max_dist` result in annotation columns being set to
-  `na_value` for those rows, while the row itself is retained.
+  `na_value` for those rows, while the row itself is retained. For 2D
+  intervals a neighbor is within `max_dist` when
+  `dist1 + dist2 <= max_dist`, the distance by which
+  `gintervals.neighbors` ranks 2D neighbors.
 
 - na_value:
 
@@ -108,8 +113,9 @@ accommodate multiple neighbors.
 The function wraps and extends `gintervals.neighbors` to provide
 convenient column selection/renaming, optional distance inclusion,
 distance thresholding with custom NA values, multiple neighbors per
-interval, and deterministic tie-breaking. Currently supports 1D
-intervals only.
+interval, and deterministic tie-breaking. For 2D intervals the two
+distances of the neighbor are returned, `max_dist` applies to their sum,
+and a `tie_method` other than "first" is not supported.
 
 \- When `annotation_columns = NULL`, all non-basic columns present in
 `annotation_intervals` are included. - Setting `dist_column = NULL`
