@@ -40,7 +40,9 @@ gseq.pwm(
 - pssm:
 
   numeric matrix or data frame with columns named A, C, G, T (additional
-  columns are allowed and will be ignored)
+  columns are allowed and will be ignored). Each row holds the
+  probabilities or counts of the four bases at one motif position;
+  log-odds matrices, `NA` values and rows summing to 0 are rejected.
 
 - mode:
 

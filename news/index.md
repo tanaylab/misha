@@ -27,6 +27,61 @@ sequence-to-function models. Fixes that change results are marked
 - **Behavior fix:** with `options(gmulticontig.2d.cache = TRUE)`, a
   later change of `gmulticontig.2d.mode` is honoured.
 
+- **Behavior fix:** an indexed track read under two different shifts in
+  one call (e.g. two virtual tracks on it with different
+  `sshift`/`eshift`) gave the first shift the last one’s values on the
+  first chromosome of each process. Present since 5.6.15; recompute such
+  results on indexed databases.
+
+- **Behavior fix:** virtual tracks with a filter: `first`, `last` and
+  their positions skip unmasked parts that hold no value; `sample` draws
+  each unmasked value with the same chance; `nearest` is the average of
+  the unmasked values, else the nearest unmasked value; value-based
+  `size` and `exists` are 0 when nothing unmasked holds a value.
+
+- **Behavior fix:** PWM edit distance with `max_indels > 0` scores the
+  inserted base (it counted as 0) and searches 3 or more indels exactly,
+  so edit counts are no longer too low. `score.min` and `score.max`
+  apply with indels; with `direction = "below"` and `bidirect = TRUE`
+  both strands must go below; `pwm.edit_distance.lse` finds reachable
+  thresholds past a local optimum; positions past 2^24 are exact; with
+  indels, short windows at chromosome ends are scanned.
+
+- **Behavior fix:**
+  [`gseq.pwm_edits()`](https://tanaylab.github.io/misha/reference/gseq.pwm_edits.md)
+  gives the virtual track’s answer: same windows for every `extend`, a
+  strand column ignored, the harder strand reported for
+  `direction = "below"` with `bidirect = TRUE`.
+
+- **Behavior fix:** misha’s random draws
+  ([`gsample()`](https://tanaylab.github.io/misha/reference/gsample.md),
+  sampled
+  [`gquantiles()`](https://tanaylab.github.io/misha/reference/gquantiles.md)
+  and [`gcor()`](https://tanaylab.github.io/misha/reference/gcor.md),
+  `sample` and `quantile` virtual tracks) use and advance
+  `.Random.seed`, and multitask processes no longer draw identical
+  streams.
+
+- **Behavior fix:** gsynth:
+  [`gsynth.save()`](https://tanaylab.github.io/misha/reference/gsynth.save.md)/[`gsynth.load()`](https://tanaylab.github.io/misha/reference/gsynth.load.md)
+  keep the model’s iterator, and a model trained with the implicit
+  iterator stores its bin size, so loaded models sample and score;
+  [`gsynth.random()`](https://tanaylab.github.io/misha/reference/gsynth.random.md)
+  draws every base from `nuc_probs`;
+  [`gsynth.train()`](https://tanaylab.github.io/misha/reference/gsynth.train.md)
+  leaves out k-mers that reach into the mask;
+  [`gsynth.train()`](https://tanaylab.github.io/misha/reference/gsynth.train.md)
+  and
+  [`gseq.kmer.dist()`](https://tanaylab.github.io/misha/reference/gseq.kmer.dist.md)
+  count positions covered by overlapping intervals once;
+  [`gsynth.sample()`](https://tanaylab.github.io/misha/reference/gsynth.sample.md)
+  and
+  [`gsynth.score()`](https://tanaylab.github.io/misha/reference/gsynth.score.md)
+  of several intervals no longer depend on each other.
+
+- **Behavior fix:** `gdb.create(format = "per-chromosome")` makes a
+  chromosome of each record of a multi-FASTA file.
+
 - An error inside a misha call
   (e.g. [`gintervals.rbind()`](https://tanaylab.github.io/misha/reference/gintervals.rbind.md)
   of mismatched columns) no longer turns multitasking off for the rest
@@ -63,6 +118,23 @@ sequence-to-function models. Fixes that change results are marked
 
 - [`gintervals.normalize()`](https://tanaylab.github.io/misha/reference/gintervals.normalize.md)
   documents that windows are clipped at chromosome ends.
+
+- PSSM input is checked: counts are accepted; `NA`, negative values
+  (log-odds) and rows of zeros are an error.
+
+- New virtual track function `weighted.sum`: the sum of value x
+  overlapping bp, for windows that cut bins (e.g. 20 bp tracks summed
+  over shifted 32 bp windows). `sum` is unchanged; its docs say that it
+  counts every bin the window touches in full.
+
+- Motif ID de-duplication no longer leaves duplicate names;
+  [`gsynth.replace_kmer()`](https://tanaylab.github.io/misha/reference/gsynth.replace_kmer.md)
+  with a replacement that differs from the target only by case no longer
+  hangs; large-genome FASTA output of
+  [`gsynth.random()`](https://tanaylab.github.io/misha/reference/gsynth.random.md)
+  and
+  [`gsynth.replace_kmer()`](https://tanaylab.github.io/misha/reference/gsynth.replace_kmer.md)
+  gets a `.fai`.
 
 ## misha 5.16.1
 

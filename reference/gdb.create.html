@@ -105,7 +105,10 @@ or "per-chromosome" (separate .seq file per contig). If NULL, uses the value fro
 'chrom_sizes.txt' file is generated (see "User Manual" for more details).</p>
 <p>Two database formats are supported:</p><ul><li><p><strong>indexed</strong>: Single genome.seq + genome.idx (default). Recommended for
         genomes with many contigs. Provides better performance and scalability.</p></li>
-<li><p><strong>per-chromosome</strong>: Separate .seq file per contig.</p></li>
+<li><p><strong>per-chromosome</strong>: Separate .seq file per contig. A FASTA file
+        holding one record gives one contig, named after the file; a file
+        holding several records gives one contig per record, named after its
+        header as in the indexed format.</p></li>
 </ul><p>If 'genes.file' is not 'NULL' four sets of intervals are created in the
 database: <code>tss</code>, <code>exons</code>, <code>utr3</code> and <code>utr5</code>. See
 <a href="gintervals.import_genes.html">gintervals.import_genes</a> for more details about importing genes

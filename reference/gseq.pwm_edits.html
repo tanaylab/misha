@@ -75,12 +75,17 @@ long-format data frame with one row per edit.</p>
 <dl><dt id="arg-seqs">seqs<a class="anchor" aria-label="anchor" href="#arg-seqs"></a></dt>
 <dd><p>character vector of DNA sequences, OR a data frame of genomic
 intervals (with columns chrom, start, end). When intervals are provided,
-sequences are extracted automatically via <code>gseq.extract</code>.</p></dd>
+sequences are extracted automatically via <code>gseq.extract</code>, and the
+windows scanned are those the <code>pwm.edit_distance</code> virtual track scans
+for the same interval. A <code>strand</code> column is ignored, as by the virtual
+track: the strand scanned is set by <code>bidirect</code> and <code>strand</code>.</p></dd>
 
 
 <dt id="arg-pssm">pssm<a class="anchor" aria-label="anchor" href="#arg-pssm"></a></dt>
 <dd><p>numeric matrix or data frame with columns A, C, G, T. Each row
-is a motif position.</p></dd>
+is a motif position and holds the probabilities or counts of the four
+bases; log-odds matrices, <code>NA</code> values and rows summing to 0 are
+rejected.</p></dd>
 
 
 <dt id="arg-score-thresh">score.thresh<a class="anchor" aria-label="anchor" href="#arg-score-thresh"></a></dt>
@@ -96,7 +101,9 @@ means no cap. Default NULL.</p></dd>
 <dd><p>integer or NULL; maximum number of insertions and deletions
 allowed (default NULL, substitutions only). When &gt; 0, a banded
 Needleman-Wunsch DP is used. Edits are reported with <code>edit_type</code>
-"sub", "ins", or "del".</p></dd>
+"sub", "ins", or "del". An inserted base is the best its motif column
+allows (the column maximum for <code>"above"</code>, the minimum for
+<code>"below"</code>) and is scored as such.</p></dd>
 
 
 <dt id="arg-bidirect">bidirect<a class="anchor" aria-label="anchor" href="#arg-bidirect"></a></dt>
@@ -109,17 +116,24 @@ Needleman-Wunsch DP is used. Edits are reported with <code>edit_type</code>
 
 <dt id="arg-score-min">score.min<a class="anchor" aria-label="anchor" href="#arg-score-min"></a></dt>
 <dd><p>numeric or NULL; skip windows with PWM score below this.
-Default NULL (no filter).</p></dd>
+Default NULL (no filter). The score is the window's ungapped score (the
+PSSM-length window from its start), also with <code>max_indels &gt; 0</code>; a
+window without one (a non-ACGT base among its first PSSM-length bases) is
+skipped when a filter is set.</p></dd>
 
 
 <dt id="arg-score-max">score.max<a class="anchor" aria-label="anchor" href="#arg-score-max"></a></dt>
 <dd><p>numeric or NULL; skip windows with PWM score above this.
-Default NULL (no filter).</p></dd>
+Default NULL (no filter). Same score as <code>score.min</code>.</p></dd>
 
 
 <dt id="arg-extend">extend<a class="anchor" aria-label="anchor" href="#arg-extend"></a></dt>
 <dd><p>logical or integer; extend sequence for boundary motifs.
-Default TRUE.</p></dd>
+Default TRUE. For interval input it means what it means for the
+<code>pwm.edit_distance</code> virtual track: <code>TRUE</code> or a positive integer
+lets a window start at every position of the interval and read bases past
+its end; <code>FALSE</code> or 0 keeps every window (deletions included) inside
+the interval.</p></dd>
 
 
 <dt id="arg-strand">strand<a class="anchor" aria-label="anchor" href="#arg-strand"></a></dt>
@@ -131,7 +145,12 @@ Default TRUE.</p></dd>
 <dd><p>character; direction of the edit distance query.
 <code>"above"</code> (default) finds minimum edits to bring score above
 <code>score.thresh</code>; <code>"below"</code> finds minimum edits to bring score
-below <code>score.thresh</code>.</p></dd>
+below <code>score.thresh</code>. With <code>"below"</code> and <code>bidirect = TRUE</code>,
+as in the <code>pwm.edit_distance</code> virtual track, both strand readings of a
+window must end up below the threshold, so the strand needing more edits
+decides <code>n_edits</code> (a strand that cannot be brought below makes the
+window unreachable); the reported edits and <code>strand</code> are those of that
+strand's reading, and the edits are what disrupts that reading.</p></dd>
 
 </dl></div>
     <div class="section level2">

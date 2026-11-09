@@ -102,11 +102,15 @@ policies, any output bin containing an NA per-bp contribution is NA.</p>
 
 <dt id="arg-intervals">intervals<a class="anchor" aria-label="anchor" href="#arg-intervals"></a></dt>
 <dd><p>Intervals to score. Defaults to
-<code><a href="gintervals.all.html">gintervals.all()</a></code>. Best results when interval
-starts are aligned to multiples of
-<code>model$iterator</code>; otherwise the first stratum
-window is shorter than <code>model$iterator</code> and
-its bin label may differ from training.</p></dd>
+<code><a href="gintervals.all.html">gintervals.all()</a></code>. Overlapping intervals are
+unified first, so each position is scored once. The
+stratum of a position comes from the iterator windows
+of its own interval, extended upstream by one
+<code>model$iterator</code>: a window cut by the interval
+end (or by the start of the extension) is evaluated on
+its part inside, so its bin may differ from the one
+training saw on the whole window. Intervals aligned to
+multiples of <code>model$iterator</code> avoid this.</p></dd>
 
 
 <dt id="arg-mask">mask<a class="anchor" aria-label="anchor" href="#arg-mask"></a></dt>

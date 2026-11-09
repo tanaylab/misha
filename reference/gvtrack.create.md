@@ -101,12 +101,14 @@ in-memory sparse tracks without requiring track creation in the
 database. To create a value-based track, provide a data frame with
 columns `chrom`, `start`, `end`, and one numeric value column (any name
 is acceptable). Value-based tracks support all track-based summarizer
-functions (e.g., `avg`, `min`, `max`, `sum`, `lse`, `stddev`,
-`quantile`, `nearest`, `exists`, `size`, `first`, `last`, `sample`, and
-position functions), but do not support overlapping intervals. They
-behave like sparse tracks in aggregation: values are aggregated using
-count-based averaging (each interval contributes equally regardless of
-length), not coverage-based averaging.
+functions (e.g., `avg`, `min`, `max`, `sum`, `weighted.sum`, `lse`,
+`stddev`, `quantile`, `nearest`, `exists`, `size`, `first`, `last`,
+`sample`, and position functions), but do not support overlapping
+intervals. They behave like sparse tracks in aggregation: values are
+aggregated using count-based averaging (each interval contributes
+equally regardless of length), not coverage-based averaging;
+`weighted.sum` weighs each interval by its overlap with the iterator
+interval.
 
 **Track-based summarizers**
 
@@ -123,7 +125,8 @@ length), not coverage-based averaging.
 | Track (1D) | sample | NULL | Uniformly sampled source value from the iterator interval. |
 | Track (1D) | size | NULL | Number of non-NaN values in the iterator interval. |
 | Dense / Sparse / Array track | stddev | NULL | Unbiased standard deviation of values in the iterator interval. |
-| Dense / Sparse / Array track | sum | NULL | Sum of values in the iterator interval. |
+| Dense / Sparse / Array track | sum | NULL | Sum of the values of the bins (dense) or intervals (sparse, array) that the iterator interval touches. Each counts in full, also when the interval covers only part of it: a 312 bp window (iterator 32, `sshift = -140`, `eshift = 140`) over a 20 bp track touches 16 or 17 bins depending on where it starts, so on a track that is 1 everywhere `sum` alternates between 16 and 17. Use `weighted.sum` to weigh each bin by its overlap. |
+| Dense / Sparse / Array track | weighted.sum | NULL | Sum of value times overlap: each bin or interval adds its value times the number of its bp inside the iterator interval (after `sshift`/`eshift`, clipped to the chromosome), the definition [`gtrack.create_dense`](https://tanaylab.github.io/misha/reference/gtrack.create_dense.md) uses for `func = "weighted.sum"`. The 312 bp window above gives 312 on a track that is 1 everywhere; on an interval aligned with the bins it equals `sum` times the bin size. NaN values are skipped; `NaN` when no value overlaps the interval, as for `sum`. |
 | Dense / Sparse / Array track | lse | NULL | Log-sum-exp of track values in the iterator interval: log(sum(exp(x))). Numerically stable. |
 | Dense / Sparse / Array track | quantile | Percentile in \[0, 1\] | Quantile of values in the iterator interval. |
 | Dense track | global.percentile | NULL | Percentile of the interval average relative to the full-track distribution. |
@@ -206,14 +209,14 @@ the start of the iterator interval after all modifier adjustments.
 |  |  |  |  |
 |----|----|----|----|
 | Source | func | Key params | Description |
-| NULL (sequence) | pwm.n_mutations | pssm, score.thresh, score.min, score.max, direction, bidirect, prior, extend, strand | Number of single-base substitutions that independently cross `score.thresh`. Returns 0 if threshold already satisfied, NA if no single edit suffices. |
+| NULL (sequence) | pwm.n_mutations | pssm, score.thresh, score.min, score.max, direction, bidirect, prior, extend, strand | For each window, the number of single-base substitutions that each on its own bring the window to `score.thresh` (0 when the window already satisfies it, none counted when no single substitution does); the interval value is the largest of these over its windows (and strands), and NA when no window has a value. An interval that already holds a match therefore returns more than 0 when another of its windows is one substitution away. |
 
 **LSE edit distance summarizers**
 
 |  |  |  |  |
 |----|----|----|----|
 | Source | func | Key params | Description |
-| NULL (sequence) | pwm.edit_distance.lse | pssm, score.thresh, max_edits, score.min, score.max, direction, bidirect, prior, extend, strand | Minimum number of substitution edits needed to raise the LSE score (log-sum-exp of per-window PWM scores) above `score.thresh`. Exhaustive for k\<=2, greedy heuristic for k\>=3. |
+| NULL (sequence) | pwm.edit_distance.lse | pssm, score.thresh, max_edits, score.min, score.max, direction, bidirect, prior, extend, strand | Minimum number of substitution edits needed to bring the LSE score (log-sum-exp of per-window PWM scores) to `score.thresh`. Exhaustive for k\<=2; for k\>=3 a heuristic (beam) search, whose count can exceed the true minimum and whose NA can mean that it found no solution rather than that none exists. |
 | NULL (sequence) | pwm.edit_distance.lse.pos | pssm, score.thresh, max_edits, score.min, score.max, direction, bidirect, prior, extend, strand | 1-based position of an edit in the optimal edit set for raising the LSE score. Exactly "the most impactful single edit" only when one edit suffices; when the optimum needs two or more edits this is one member of that set, and which member is reported depends on scan orientation. |
 
 **K-mer summarizers**
@@ -238,7 +241,10 @@ k-mer, and masked sequence functions.
 **Motif (PWM) notes**
 
 - `pssm`: Position-specific scoring matrix (matrix or data frame) with
-  columns `A`, `C`, `G`, `T`; extra columns are ignored.
+  columns `A`, `C`, `G`, `T`; extra columns are ignored. Each row holds
+  the probabilities or counts of the four bases at one motif position
+  (rows are normalized to sum to 1); log-odds or log-probability
+  matrices are rejected, as are `NA` values and rows that sum to 0.
 
 - `bidirect`: When TRUE (default), both strands are scanned and combined
   per genomic start (per-position union). The `strand` argument is
@@ -278,16 +284,22 @@ k-mer, and masked sequence functions.
 - Spatial weighting (`spat_factor`, `spat_bin`, `spat_min`, `spat_max`):
   optional position-dependent weights applied in log-space. Provide a
   positive numeric vector `spat_factor`; `spat_bin` (integer \> 0)
-  defines bin width; `spat_min`/`spat_max` restrict the scanning window.
+  defines bin width; `spat_min`/`spat_max` (1-based positions counted
+  from the iterator interval start) restrict the scan to anchors at or
+  after `spat_min` whose window ends at or before `spat_max`, and the
+  spatial bins are counted from `spat_min`.
 
-- `pwm.max.pos`: Positions are reported 1-based relative to the final
-  scan window (after iterator shifts and spatial trimming). Values are
-  signed when `bidirect = TRUE` (positive for forward, negative for
-  reverse). Ties are broken by scan order, which is strand-dependent:
-  with `strand = 1` (and under `bidirect = TRUE`) the most 5' tied
-  anchor wins and the forward strand wins a tie at the same coordinate,
-  but `bidirect = FALSE, strand = -1` scans the reverse-complemented
-  sequence and so keeps the most 3' tied anchor in forward coordinates.
+- `pwm.max.pos`: Positions are reported 1-based relative to the iterator
+  interval start (after any
+  [`gvtrack.iterator()`](https://tanaylab.github.io/misha/reference/gvtrack.iterator.md)
+  shifts); `spat_min`/`spat_max` restrict which anchors are scanned but
+  do not move this origin. Values are signed when `bidirect = TRUE`
+  (positive for forward, negative for reverse). Ties are broken by scan
+  order, which is strand-dependent: with `strand = 1` (and under
+  `bidirect = TRUE`) the most 5' tied anchor wins and the forward strand
+  wins a tie at the same coordinate, but `bidirect = FALSE, strand = -1`
+  scans the reverse-complemented sequence and so keeps the most 3' tied
+  anchor in forward coordinates.
 
 **Potts (pairwise energy) notes**
 
@@ -401,6 +413,10 @@ distances are combined depends on the direction:
   strand determines the answer. For example, if the forward strand needs
   3 edits to go below the threshold and the reverse needs 1, the result
   is 3 — after just 1 edit the forward strand would still have a match.
+  A strand that cannot be brought below within `max_edits` makes the
+  window NA; only a strand that `score.min` / `score.max` leave out (not
+  a current match) is ignored. `pwm.n_mutations` likewise counts the
+  substitutions that bring both strands below the threshold.
 
 Then, across all windows in the iterator interval, the minimum is
 reported (the position where it is easiest to create or disrupt a
@@ -424,8 +440,12 @@ the reported edit changes more.
 - `score.min`, `score.max`: Optional numeric pre-filters on the
   **current** (unedited) PWM score. Windows scoring outside the
   \[`score.min`, `score.max`\] range are skipped (edit distance returns
-  NA). Default NULL (no filter). These are independent of `score.thresh`
-  — they control *which windows to evaluate*, not the target score.
+  NA). Default NULL (no filter). The score is the window's ungapped
+  score (the PSSM-length window from its start), also with
+  `max_indels > 0`; a window whose first PSSM-length bases are not all
+  A, C, G or T has no such score and is skipped when a filter is set.
+  These are independent of `score.thresh` — they control *which windows
+  to evaluate*, not the target score.
 
   **Typical usage with `direction = "below"`**: use `score.min` to
   restrict to windows that currently have a motif match. For example,
@@ -443,23 +463,32 @@ the reported edit changes more.
 
 - `max_indels`: Optional non-negative integer (default 0). When \> 0,
   allows insertions and deletions in addition to substitutions, using a
-  banded Needleman-Wunsch DP. Typical values are 1-2. Only supported by
-  the non-LSE variants (`pwm.edit_distance`, `pwm.edit_distance.pos`,
+  banded Needleman-Wunsch DP. Each insertion or deletion counts as one
+  edit. An inserted base scores the best its motif column allows (the
+  column maximum for `"above"`, the minimum for `"below"`), and a
+  deleted base scores nothing. A window may then hold fewer bases than
+  the PSSM (down to PSSM length minus `max_indels`, the rest inserted):
+  such windows are scanned where the A, C, G, T run they start in ends,
+  before an `N` or other non-ACGT base, and at a chromosome end (with
+  `extend = TRUE`). Typical values are 1-2. Only supported by the
+  non-LSE variants (`pwm.edit_distance`, `pwm.edit_distance.pos`,
   `pwm.max.edit_distance`).
 
 - `direction`: `"above"` (default) or `"below"`. See Direction above.
 
 **Spatial weighting** enables position-dependent weighting for modeling
-positional biases. Bins are 0-indexed from the scan start. When using
+positional biases. Bins are 0-indexed from the start of the scanned
+range: the iterator interval start, or position `spat_min` of it when
+`spat_min` is set. When using
 [`gvtrack.iterator()`](https://tanaylab.github.io/misha/reference/gvtrack.iterator.md)
-shifts (e.g., `sshift = -50`, `eshift = 50`), bins index from the
-expanded scan window start, not the original interval. Both strands use
-the same bin at each genomic position. Positions beyond the last bin
-reuse the final bin's weight. If the window size is not divisible by
-`spat_bin`, the last bin is shorter (e.g., scanning 500 bp with 40 bp
-bins yields bins 0-11 of 40 bp plus bin 12 of 20 bp). Use `spat_min` and
-`spat_max` to restrict scanning to a range divisible by `spat_bin` if
-needed.
+shifts (e.g., `sshift = -50`, `eshift = 50`), the interval is the
+shifted one, so bins index from the expanded scan window start, not the
+original interval. Both strands use the same bin at each genomic
+position. Positions beyond the last bin reuse the final bin's weight. If
+the window size is not divisible by `spat_bin`, the last bin is shorter
+(e.g., scanning 500 bp with 40 bp bins yields bins 0-11 of 40 bp plus
+bin 12 of 20 bp). Use `spat_min` and `spat_max` to restrict scanning to
+a range divisible by `spat_bin` if needed.
 
 PWM parameters can be supplied either as a single list (`params`) or via
 named arguments (see examples), but not both in the same call.

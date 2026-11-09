@@ -13,7 +13,9 @@ gseq.kmer.dist(intervals, k = 6L, mask = NULL)
 
 - intervals:
 
-  Genomic intervals to analyze
+  Genomic intervals to analyze. Overlapping intervals are unified first,
+  so each position is counted once; a k-mer that crosses from an
+  interval into an adjacent one is not counted.
 
 - k:
 
@@ -21,8 +23,8 @@ gseq.kmer.dist(intervals, k = 6L, mask = NULL)
 
 - mask:
 
-  Optional intervals to exclude from counting. Positions within the mask
-  will not contribute to k-mer counts.
+  Optional intervals to exclude from counting. A k-mer that overlaps the
+  mask is not counted.
 
 ## Value
 

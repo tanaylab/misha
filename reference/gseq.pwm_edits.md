@@ -29,12 +29,18 @@ gseq.pwm_edits(
 
   character vector of DNA sequences, OR a data frame of genomic
   intervals (with columns chrom, start, end). When intervals are
-  provided, sequences are extracted automatically via `gseq.extract`.
+  provided, sequences are extracted automatically via `gseq.extract`,
+  and the windows scanned are those the `pwm.edit_distance` virtual
+  track scans for the same interval. A `strand` column is ignored, as by
+  the virtual track: the strand scanned is set by `bidirect` and
+  `strand`.
 
 - pssm:
 
   numeric matrix or data frame with columns A, C, G, T. Each row is a
-  motif position.
+  motif position and holds the probabilities or counts of the four
+  bases; log-odds matrices, `NA` values and rows summing to 0 are
+  rejected.
 
 - score.thresh:
 
@@ -50,7 +56,9 @@ gseq.pwm_edits(
   integer or NULL; maximum number of insertions and deletions allowed
   (default NULL, substitutions only). When \> 0, a banded
   Needleman-Wunsch DP is used. Edits are reported with `edit_type`
-  "sub", "ins", or "del".
+  "sub", "ins", or "del". An inserted base is the best its motif column
+  allows (the column maximum for `"above"`, the minimum for `"below"`)
+  and is scored as such.
 
 - bidirect:
 
@@ -63,16 +71,23 @@ gseq.pwm_edits(
 - score.min:
 
   numeric or NULL; skip windows with PWM score below this. Default NULL
-  (no filter).
+  (no filter). The score is the window's ungapped score (the PSSM-length
+  window from its start), also with `max_indels > 0`; a window without
+  one (a non-ACGT base among its first PSSM-length bases) is skipped
+  when a filter is set.
 
 - score.max:
 
   numeric or NULL; skip windows with PWM score above this. Default NULL
-  (no filter).
+  (no filter). Same score as `score.min`.
 
 - extend:
 
   logical or integer; extend sequence for boundary motifs. Default TRUE.
+  For interval input it means what it means for the `pwm.edit_distance`
+  virtual track: `TRUE` or a positive integer lets a window start at
+  every position of the interval and read bases past its end; `FALSE` or
+  0 keeps every window (deletions included) inside the interval.
 
 - strand:
 
@@ -83,7 +98,13 @@ gseq.pwm_edits(
 
   character; direction of the edit distance query. `"above"` (default)
   finds minimum edits to bring score above `score.thresh`; `"below"`
-  finds minimum edits to bring score below `score.thresh`.
+  finds minimum edits to bring score below `score.thresh`. With
+  `"below"` and `bidirect = TRUE`, as in the `pwm.edit_distance` virtual
+  track, both strand readings of a window must end up below the
+  threshold, so the strand needing more edits decides `n_edits` (a
+  strand that cannot be brought below makes the window unreachable); the
+  reported edits and `strand` are those of that strand's reading, and
+  the edits are what disrupts that reading.
 
 ## Value
 

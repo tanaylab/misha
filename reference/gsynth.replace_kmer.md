@@ -22,11 +22,12 @@ gsynth.replace_kmer(
 
 - target:
 
-  The k-mer sequence to remove (e.g., "CG").
+  The k-mer sequence to remove (e.g., "CG"). Case is ignored.
 
 - replacement:
 
-  The replacement sequence (e.g., "GC").
+  The replacement sequence (e.g., "GC"), of the same length as `target`
+  and different from it (ignoring case). It is written in upper case.
 
 - output_path:
 

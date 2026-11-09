@@ -57,7 +57,9 @@ genomic intervals, optionally excluding masked regions.</p>
 
 
 <dl><dt id="arg-intervals">intervals<a class="anchor" aria-label="anchor" href="#arg-intervals"></a></dt>
-<dd><p>Genomic intervals to analyze</p></dd>
+<dd><p>Genomic intervals to analyze. Overlapping intervals are
+unified first, so each position is counted once; a k-mer that crosses
+from an interval into an adjacent one is not counted.</p></dd>
 
 
 <dt id="arg-k">k<a class="anchor" aria-label="anchor" href="#arg-k"></a></dt>
@@ -65,8 +67,8 @@ genomic intervals, optionally excluding masked regions.</p>
 
 
 <dt id="arg-mask">mask<a class="anchor" aria-label="anchor" href="#arg-mask"></a></dt>
-<dd><p>Optional intervals to exclude from counting. Positions within
-the mask will not contribute to k-mer counts.</p></dd>
+<dd><p>Optional intervals to exclude from counting. A k-mer that
+overlaps the mask is not counted.</p></dd>
 
 </dl></div>
     <div class="section level2">

@@ -74,6 +74,14 @@ If file is a file, tries ZIP .gsm format first, then
     <p>A gsynth.model object</p>
     </div>
     <div class="section level2">
+    <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
+    <p>A .gsm model saved by a misha version whose <code>gsynth.save</code> did not
+store the iterator has none: before <code><a href="gsynth.sample.html">gsynth.sample</a></code> or
+<code><a href="gsynth.score.html">gsynth.score</a></code> can use a stratified model, set
+<code>model$iterator</code> to the iterator used in <code><a href="gsynth.train.html">gsynth.train</a></code>.
+An unstratified model samples without it.</p>
+    </div>
+    <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
     <div class="dont-index"><p><code><a href="gsynth.save.html">gsynth.save</a></code>, <code><a href="gsynth.train.html">gsynth.train</a></code>,
          <code><a href="gsynth.convert.html">gsynth.convert</a></code></p></div>

@@ -23,6 +23,17 @@ gsynth.load(file)
 
 A gsynth.model object
 
+## Details
+
+A .gsm model saved by a misha version whose `gsynth.save` did not store
+the iterator has none: before
+[`gsynth.sample`](https://tanaylab.github.io/misha/reference/gsynth.sample.md)
+or
+[`gsynth.score`](https://tanaylab.github.io/misha/reference/gsynth.score.md)
+can use a stratified model, set `model$iterator` to the iterator used in
+[`gsynth.train`](https://tanaylab.github.io/misha/reference/gsynth.train.md).
+An unstratified model samples without it.
+
 ## See also
 
 [`gsynth.save`](https://tanaylab.github.io/misha/reference/gsynth.save.md),

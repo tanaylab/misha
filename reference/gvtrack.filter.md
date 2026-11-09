@@ -61,12 +61,27 @@ order is:
   overlaps an unmasked region counts once, even when the mask splits it.
   `avg`, `sum`, `size`, `lse`, `min`, `max`, `quantile` and `stddev`
   (the sample standard deviation) reduce over those values, for a track
-  as for a value-based virtual track.
+  as for a value-based virtual track. `size` and `exists` give 0 when
+  the unmasked regions hold no value.
+
+- **first, last, sample, nearest:** `first` and `last` (and their
+  positions) are the first and last unmasked values; `sample` (and
+  `sample.pos.*`) draws one of the unmasked values, each with the same
+  chance; `nearest` is the average of the unmasked values when there are
+  any; when there are none, it is the value of a sparse, array or
+  value-based source whose unmasked stretch is nearest to the unmasked
+  regions of the interval (of two at the same distance, the one on the
+  left, as without a filter), and `NA` when the chromosome holds no
+  unmasked value. On a dense track `nearest` does not look outside the
+  interval, with or without a filter.
 
 - **coverage:** Returns (covered length in unmasked region) / (total
   unmasked length)
 
 - **distance/distance.center:** Unaffected by mask (pure geometry)
+
+- **weighted.sum:** counts the unmasked bp only: a bin or interval that
+  the mask splits adds its value times its unmasked bp.
 
 - **PWM/kmer/potts:** Masked bases act as hard boundaries; matches
   cannot span masked regions. **Important:** When `extend=TRUE` (the
@@ -127,7 +142,7 @@ gvtrack.info("vtrack1")
 #> [1] "avg"
 #> 
 #> $filter
-#> [1] "filter__tmp_RtmppECAfh_trackdb_test_tracks_2_7d54e8370e6eb979"
+#> [1] "filter__tmp_RtmppfY53S_trackdb_test_tracks_2_7d54e8370e6eb979"
 #> 
 #> $filter_stats
 #> $filter_stats$num_chroms

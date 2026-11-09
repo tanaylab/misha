@@ -3,7 +3,11 @@
 Saves a trained Markov model in the cross-platform .gsm format, which
 consists of a metadata YAML file and raw binary arrays for counts and
 CDFs. The .gsm format can be stored as a directory (default) or a ZIP
-archive.
+archive. The model's iterator (`model$iterator`), which
+[`gsynth.sample`](https://tanaylab.github.io/misha/reference/gsynth.sample.md)
+and
+[`gsynth.score`](https://tanaylab.github.io/misha/reference/gsynth.score.md)
+use, is saved when it is a bin size.
 
 ## Usage
 

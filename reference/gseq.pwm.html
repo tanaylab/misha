@@ -87,7 +87,9 @@ All reported positions are on the full input sequence.</p>
 
 
 <dt id="arg-pssm">pssm<a class="anchor" aria-label="anchor" href="#arg-pssm"></a></dt>
-<dd><p>numeric matrix or data frame with columns named A, C, G, T (additional columns are allowed and will be ignored)</p></dd>
+<dd><p>numeric matrix or data frame with columns named A, C, G, T (additional columns are allowed and will be ignored).
+Each row holds the probabilities or counts of the four bases at one motif position; log-odds matrices, <code>NA</code>
+values and rows summing to 0 are rejected.</p></dd>
 
 
 <dt id="arg-mode">mode<a class="anchor" aria-label="anchor" href="#arg-mode"></a></dt>

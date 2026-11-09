@@ -91,17 +91,25 @@ When called with no dimension specifications, trains a single unstratified model
 
 
 <dt id="arg-mask">mask<a class="anchor" aria-label="anchor" href="#arg-mask"></a></dt>
-<dd><p>Optional intervals to exclude from training. Regions in the mask
-will not contribute to k-mer counts. Can be computed using <code><a href="gscreen.html">gscreen()</a></code>.</p></dd>
+<dd><p>Optional intervals to exclude from training. A (k+1)-mer that
+overlaps the mask does not contribute to k-mer counts, as in
+<code><a href="gseq.kmer.dist.html">gseq.kmer.dist</a></code>. Can be computed using <code><a href="gscreen.html">gscreen()</a></code>.</p></dd>
 
 
 <dt id="arg-intervals">intervals<a class="anchor" aria-label="anchor" href="#arg-intervals"></a></dt>
-<dd><p>Genomic intervals to process. If NULL, uses all chromosomes.</p></dd>
+<dd><p>Genomic intervals to process. If NULL, uses all chromosomes.
+Overlapping intervals are unified first, so each position is counted
+once; a (k+1)-mer that crosses from an interval into an adjacent one
+is not counted.</p></dd>
 
 
 <dt id="arg-iterator">iterator<a class="anchor" aria-label="anchor" href="#arg-iterator"></a></dt>
 <dd><p>Iterator for track evaluation, determines the resolution at which
-track values are computed.</p></dd>
+track values are computed. It is stored in the model
+(<code>model$iterator</code>) and used by <code><a href="gsynth.sample.html">gsynth.sample</a></code> and
+<code><a href="gsynth.score.html">gsynth.score</a></code>. If NULL, the iterator the dimension
+expressions imply is used, and its bin size (that of their dense
+tracks) is stored.</p></dd>
 
 
 <dt id="arg-pseudocount">pseudocount<a class="anchor" aria-label="anchor" href="#arg-pseudocount"></a></dt>
@@ -220,7 +228,7 @@ from valid A/C/G/T sequences.</p>
 <span class="r-in"><span><span class="op">)</span></span></span>
 <span class="r-msg co"><span class="r-pr">#&gt;</span> Setting up iterator positions...</span>
 <span class="r-msg co"><span class="r-pr">#&gt;</span> Training Markov model...</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Trained unstratified Markov-5 model: 835,310 6-mers (no stratification)</span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> Trained unstratified Markov-5 model: 829,850 6-mers (no stratification)</span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Train model with 2D stratification (GC content and CG dinucleotide)</span></span></span>
 <span class="r-in"><span><span class="va">model</span> <span class="op">&lt;-</span> <span class="fu">gsynth.train</span><span class="op">(</span></span></span>
@@ -241,7 +249,7 @@ from valid A/C/G/T sequences.</p>
 <span class="r-msg co"><span class="r-pr">#&gt;</span> Extracting track values...</span>
 <span class="r-msg co"><span class="r-pr">#&gt;</span> Training Markov model...</span>
 <span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>129 bin(s) had zero observations; their prior fell back to uniform 1/4.</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Trained Markov-5 model: 835,310 6-mers across 200 bins (2 dimensions)</span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> Trained Markov-5 model: 829,850 6-mers across 200 bins (2 dimensions)</span>
 <span class="r-in"><span></span></span>
 </code></pre></div>
     </div>

@@ -44,9 +44,13 @@ gsynth.score(
 
   Intervals to score. Defaults to
   [`gintervals.all()`](https://tanaylab.github.io/misha/reference/gintervals.all.md).
-  Best results when interval starts are aligned to multiples of
-  `model$iterator`; otherwise the first stratum window is shorter than
-  `model$iterator` and its bin label may differ from training.
+  Overlapping intervals are unified first, so each position is scored
+  once. The stratum of a position comes from the iterator windows of its
+  own interval, extended upstream by one `model$iterator`: a window cut
+  by the interval end (or by the start of the extension) is evaluated on
+  its part inside, so its bin may differ from the one training saw on
+  the whole window. Intervals aligned to multiples of `model$iterator`
+  avoid this.
 
 - mask:
 

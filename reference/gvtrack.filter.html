@@ -86,9 +86,11 @@ of that virtual track until explicitly cleared with <code>filter = NULL</code>.<
 <p>Filters are applied <em>after</em> iterator modifiers (sshift/eshift/dim). The order is:</p><ol><li><p>Apply iterator modifiers (gvtrack.iterator with sshift/eshift)</p></li>
 <li><p>Subtract mask from the modified intervals</p></li>
 <li><p>Evaluate virtual track function over unmasked regions</p></li>
-</ol><p><strong>Semantics by function type:</strong></p><ul><li><p><strong>Aggregations over values:</strong> a bin or interval of the source that overlaps an unmasked region counts once, even when the mask splits it. <code>avg</code>, <code>sum</code>, <code>size</code>, <code>lse</code>, <code>min</code>, <code>max</code>, <code>quantile</code> and <code>stddev</code> (the sample standard deviation) reduce over those values, for a track as for a value-based virtual track.</p></li>
+</ol><p><strong>Semantics by function type:</strong></p><ul><li><p><strong>Aggregations over values:</strong> a bin or interval of the source that overlaps an unmasked region counts once, even when the mask splits it. <code>avg</code>, <code>sum</code>, <code>size</code>, <code>lse</code>, <code>min</code>, <code>max</code>, <code>quantile</code> and <code>stddev</code> (the sample standard deviation) reduce over those values, for a track as for a value-based virtual track. <code>size</code> and <code>exists</code> give 0 when the unmasked regions hold no value.</p></li>
+<li><p><strong>first, last, sample, nearest:</strong> <code>first</code> and <code>last</code> (and their positions) are the first and last unmasked values; <code>sample</code> (and <code>sample.pos.*</code>) draws one of the unmasked values, each with the same chance; <code>nearest</code> is the average of the unmasked values when there are any; when there are none, it is the value of a sparse, array or value-based source whose unmasked stretch is nearest to the unmasked regions of the interval (of two at the same distance, the one on the left, as without a filter), and <code>NA</code> when the chromosome holds no unmasked value. On a dense track <code>nearest</code> does not look outside the interval, with or without a filter.</p></li>
 <li><p><strong>coverage:</strong> Returns (covered length in unmasked region) / (total unmasked length)</p></li>
 <li><p><strong>distance/distance.center:</strong> Unaffected by mask (pure geometry)</p></li>
+<li><p><strong>weighted.sum:</strong> counts the unmasked bp only: a bin or interval that the mask splits adds its value times its unmasked bp.</p></li>
 <li><p><strong>PWM/kmer/potts:</strong> Masked bases act as hard boundaries; matches cannot span masked regions.
         <strong>Important:</strong> When <code>extend=TRUE</code> (the default), motifs at the boundaries of unmasked
         segments can use bases from the adjacent masked regions to complete the motif scoring.
@@ -141,7 +143,7 @@ would be indistinguishable from a scan that ran and found nothing.</p>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] "avg"</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> $filter</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> [1] "filter__tmp_RtmppECAfh_trackdb_test_tracks_2_7d54e8370e6eb979"</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] "filter__tmp_RtmppfY53S_trackdb_test_tracks_2_7d54e8370e6eb979"</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> $filter_stats</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> $filter_stats$num_chroms</span>

@@ -70,11 +70,13 @@ swapping CG to GC).</p>
 
 
 <dl><dt id="arg-target">target<a class="anchor" aria-label="anchor" href="#arg-target"></a></dt>
-<dd><p>The k-mer sequence to remove (e.g., "CG").</p></dd>
+<dd><p>The k-mer sequence to remove (e.g., "CG"). Case is ignored.</p></dd>
 
 
 <dt id="arg-replacement">replacement<a class="anchor" aria-label="anchor" href="#arg-replacement"></a></dt>
-<dd><p>The replacement sequence (e.g., "GC").</p></dd>
+<dd><p>The replacement sequence (e.g., "GC"), of the same length
+as <code>target</code> and different from it (ignoring case). It is
+written in upper case.</p></dd>
 
 
 <dt id="arg-output-path">output_path<a class="anchor" aria-label="anchor" href="#arg-output-path"></a></dt>

@@ -114,9 +114,8 @@ intervals take precedence.</p></dd>
 
 
 <dt id="arg-iterator">iterator<a class="anchor" aria-label="anchor" href="#arg-iterator"></a></dt>
-<dd><p>Iterator for position resolution. Default is 1 (base-pair resolution).
-Larger values may speed up processing but are typically not needed for
-random sampling.</p></dd>
+<dd><p>Not used: every base is drawn independently of its position.
+Kept for compatibility.</p></dd>
 
 </dl></div>
     <div class="section level2">
@@ -149,7 +148,6 @@ the order is A, C, G, T. Named vectors can be in any order.</p>
 <span class="r-in"><span>    output_format <span class="op">=</span> <span class="st">"vector"</span>,</span></span>
 <span class="r-in"><span>    seed <span class="op">=</span> <span class="fl">42</span></span></span>
 <span class="r-in"><span><span class="op">)</span></span></span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Setting up random sampling positions...</span>
 <span class="r-msg co"><span class="r-pr">#&gt;</span> Generating random sequences (1 samples per interval)...</span>
 <span class="r-msg co"><span class="r-pr">#&gt;</span> Generated 1 random sequence(s)</span>
 <span class="r-in"><span></span></span>
@@ -160,7 +158,6 @@ the order is A, C, G, T. Named vectors can be in any order.</p>
 <span class="r-in"><span>    nuc_probs <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>A <span class="op">=</span> <span class="fl">0.2</span>, C <span class="op">=</span> <span class="fl">0.3</span>, G <span class="op">=</span> <span class="fl">0.3</span>, T <span class="op">=</span> <span class="fl">0.2</span><span class="op">)</span>,</span></span>
 <span class="r-in"><span>    seed <span class="op">=</span> <span class="fl">42</span></span></span>
 <span class="r-in"><span><span class="op">)</span></span></span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Setting up random sampling positions...</span>
 <span class="r-msg co"><span class="r-pr">#&gt;</span> Generating random sequences (1 samples per interval)...</span>
 <span class="r-msg co"><span class="r-pr">#&gt;</span> Generated 1 random sequence(s)</span>
 <span class="r-in"><span></span></span>
@@ -171,7 +168,6 @@ the order is A, C, G, T. Named vectors can be in any order.</p>
 <span class="r-in"><span>    nuc_probs <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>A <span class="op">=</span> <span class="fl">0.35</span>, C <span class="op">=</span> <span class="fl">0.15</span>, G <span class="op">=</span> <span class="fl">0.15</span>, T <span class="op">=</span> <span class="fl">0.35</span><span class="op">)</span>,</span></span>
 <span class="r-in"><span>    seed <span class="op">=</span> <span class="fl">42</span></span></span>
 <span class="r-in"><span><span class="op">)</span></span></span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Setting up random sampling positions...</span>
 <span class="r-msg co"><span class="r-pr">#&gt;</span> Generating random sequences (1 samples per interval)...</span>
 <span class="r-msg co"><span class="r-pr">#&gt;</span> Generated 1 random sequence(s)</span>
 <span class="r-in"><span></span></span>

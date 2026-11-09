@@ -76,9 +76,8 @@ gsynth.random(
 
 - iterator:
 
-  Iterator for position resolution. Default is 1 (base-pair resolution).
-  Larger values may speed up processing but are typically not needed for
-  random sampling.
+  Not used: every base is drawn independently of its position. Kept for
+  compatibility.
 
 ## Value
 
@@ -116,7 +115,6 @@ seqs <- gsynth.random(
     output_format = "vector",
     seed = 42
 )
-#> Setting up random sampling positions...
 #> Generating random sequences (1 samples per interval)...
 #> Generated 1 random sequence(s)
 
@@ -127,7 +125,6 @@ gc_rich <- gsynth.random(
     nuc_probs = c(A = 0.2, C = 0.3, G = 0.3, T = 0.2),
     seed = 42
 )
-#> Setting up random sampling positions...
 #> Generating random sequences (1 samples per interval)...
 #> Generated 1 random sequence(s)
 
@@ -138,7 +135,6 @@ at_rich <- gsynth.random(
     nuc_probs = c(A = 0.35, C = 0.15, G = 0.15, T = 0.35),
     seed = 42
 )
-#> Setting up random sampling positions...
 #> Generating random sequences (1 samples per interval)...
 #> Generated 1 random sequence(s)
 ```

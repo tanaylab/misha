@@ -47,18 +47,29 @@ gsynth.train(
 
 - mask:
 
-  Optional intervals to exclude from training. Regions in the mask will
-  not contribute to k-mer counts. Can be computed using
+  Optional intervals to exclude from training. A (k+1)-mer that overlaps
+  the mask does not contribute to k-mer counts, as in
+  [`gseq.kmer.dist`](https://tanaylab.github.io/misha/reference/gseq.kmer.dist.md).
+  Can be computed using
   [`gscreen()`](https://tanaylab.github.io/misha/reference/gscreen.md).
 
 - intervals:
 
   Genomic intervals to process. If NULL, uses all chromosomes.
+  Overlapping intervals are unified first, so each position is counted
+  once; a (k+1)-mer that crosses from an interval into an adjacent one
+  is not counted.
 
 - iterator:
 
   Iterator for track evaluation, determines the resolution at which
-  track values are computed.
+  track values are computed. It is stored in the model
+  (`model$iterator`) and used by
+  [`gsynth.sample`](https://tanaylab.github.io/misha/reference/gsynth.sample.md)
+  and
+  [`gsynth.score`](https://tanaylab.github.io/misha/reference/gsynth.score.md).
+  If NULL, the iterator the dimension expressions imply is used, and its
+  bin size (that of their dense tracks) is stored.
 
 - pseudocount:
 
@@ -195,7 +206,7 @@ model_0d <- gsynth.train(
 )
 #> Setting up iterator positions...
 #> Training Markov model...
-#> Trained unstratified Markov-5 model: 835,310 6-mers (no stratification)
+#> Trained unstratified Markov-5 model: 829,850 6-mers (no stratification)
 
 # Train model with 2D stratification (GC content and CG dinucleotide)
 model <- gsynth.train(
@@ -216,5 +227,5 @@ model <- gsynth.train(
 #> Extracting track values...
 #> Training Markov model...
 #> Warning: 129 bin(s) had zero observations; their prior fell back to uniform 1/4.
-#> Trained Markov-5 model: 835,310 6-mers across 200 bins (2 dimensions)
+#> Trained Markov-5 model: 829,850 6-mers across 200 bins (2 dimensions)
 ```
