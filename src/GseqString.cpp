@@ -674,9 +674,13 @@ SEXP C_gseq_pwm(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect,
 
         int extend_val;
         if (Rf_isLogical(r_extend)) {
-            extend_val = Rf_asLogical(r_extend) ? (w - 1) : 0;
+            if (!rdb::is_true_or_false(r_extend))
+                rdb::verror("extend must be FALSE, TRUE, or a non-negative integer");
+            extend_val = LOGICAL(r_extend)[0] ? (w - 1) : 0;
         } else {
             extend_val = Rf_asInteger(r_extend);
+            if (extend_val == NA_INTEGER)
+                rdb::verror("extend must be FALSE, TRUE, or a non-negative integer");
             if (extend_val < 0) extend_val = 0;
         }
         core.extend = extend_val;
@@ -905,9 +909,13 @@ SEXP C_gseq_kmer(SEXP r_seqs, SEXP r_kmer, SEXP r_mode, SEXP r_strand_mode,
         // Handle extend parameter
         int extend_val;
         if (Rf_isLogical(r_extend)) {
-            extend_val = Rf_asLogical(r_extend) ? (w - 1) : 0;
+            if (!rdb::is_true_or_false(r_extend))
+                rdb::verror("extend must be FALSE, TRUE, or a non-negative integer");
+            extend_val = LOGICAL(r_extend)[0] ? (w - 1) : 0;
         } else {
             extend_val = Rf_asInteger(r_extend);
+            if (extend_val == NA_INTEGER)
+                rdb::verror("extend must be FALSE, TRUE, or a non-negative integer");
             if (extend_val < 0) extend_val = 0;
         }
 

@@ -49,7 +49,7 @@ gpartition <- function(expr = NULL, breaks = NULL, intervals = NULL, include.low
     }
     .gcheckroot()
 
-    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+    intervals <- rescue_ALLGENOME(intervals, substitute(intervals))
 
     exprstr <- do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame())
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())

@@ -110,7 +110,7 @@ gextract <- function(..., intervals = NULL, colnames = NULL, iterator = NULL, ba
     }
     .gcheckroot()
 
-    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+    intervals <- rescue_ALLGENOME(intervals, substitute(intervals))
 
     if (is.null(intervals)) {
         intervals <- eval.parent(args[[length(args)]])
@@ -264,7 +264,7 @@ gquantiles <- function(expr = NULL, percentiles = 0.5, intervals = get("ALLGENOM
     }
     .gcheckroot()
 
-    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+    intervals <- rescue_ALLGENOME(intervals, substitute(intervals))
 
     exprstr <- do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame())
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
@@ -312,7 +312,7 @@ gsummary <- function(expr = NULL, intervals = NULL, iterator = NULL, band = NULL
     }
     .gcheckroot()
 
-    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+    intervals <- rescue_ALLGENOME(intervals, substitute(intervals))
 
     if (is.null(intervals)) {
         intervals <- get("ALLGENOME", envir = .misha)
@@ -387,7 +387,7 @@ gcor <- function(expr1 = NULL, expr2 = NULL, ..., intervals = NULL, iterator = N
     }
     .gcheckroot()
 
-    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+    intervals <- rescue_ALLGENOME(intervals, substitute(intervals))
 
     eval_env <- parent.frame()
     args <- c(list(substitute(expr1)), list(substitute(expr2)), as.list(substitute(list(...)))[-1L])

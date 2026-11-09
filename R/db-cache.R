@@ -725,10 +725,10 @@ gdb.reload <- function(rescan = TRUE) {
             return(NULL)
         }
         # a stale lock is broken and the lock taken again at once; on every other path (held, or a
-        # break that failed: an unreadable lock, a root that cannot be written) the deadline is
-        # checked and the next attempt waits
+        # break that failed: a root that cannot be written) the deadline is checked and the next
+        # attempt waits
         mtime <- file.info(path)$mtime
-        broken <- !is.na(mtime) && difftime(Sys.time(), mtime, units = "secs") > stale && .gdb.cache_break_lock(path)
+        broken <- !is.na(mtime) && difftime(Sys.time(), mtime, units = "secs") > stale && .gdb.cache_break_lock(path, mtime)
         if (Sys.time() > deadline) {
             return(NULL)
         }
@@ -738,21 +738,23 @@ gdb.reload <- function(rescan = TRUE) {
     }
 }
 
-# Breaks a stale lock: it is renamed to a name of its own (of two breakers, one wins the rename),
-# then removed if it is still the lock that was judged stale. A fresh lock taken in between is put
-# back, or, if the name is taken again, removed: its holder then finds the lock not its own when it
-# unlocks, and marks the cache dirty (.gdb.cache_unlock).
-.gdb.cache_break_lock <- function(path) {
+# Breaks a stale lock, judged stale by its modification time `mtime`: it is renamed to a name of its
+# own (of two breakers, one wins the rename), then removed if it is still the lock that was judged
+# stale: the same modification time (a lock is not touched after it is taken), and the same token
+# unless it cannot be read (another user's, left by a killed session whose umask kept it from the
+# group). A fresh lock taken in between, also before the token was read here, is put back, or, if the
+# name is taken again, removed: its holder then finds the lock not its own when it unlocks, and marks
+# the cache dirty (.gdb.cache_unlock).
+.gdb.cache_break_lock <- function(path, mtime) {
     read_lock <- function(p) tryCatch(suppressWarnings(readLines(p, warn = FALSE)), error = function(e) NULL)
     held <- read_lock(path)
-    if (is.null(held)) {
-        return(invisible(FALSE))
-    }
     moved <- paste0(path, ".stale.", basename(tempfile("")))
     if (!suppressWarnings(file.rename(path, moved))) {
         return(invisible(FALSE))
     }
-    if (!identical(read_lock(moved), held) && !file.exists(path) && suppressWarnings(file.rename(moved, path))) {
+    same <- isTRUE(as.numeric(file.info(moved)$mtime) == as.numeric(mtime)) &&
+        (is.null(held) || identical(read_lock(moved), held))
+    if (!same && !file.exists(path) && suppressWarnings(file.rename(moved, path))) {
         return(invisible(FALSE))
     }
     unlink(moved)

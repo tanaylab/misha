@@ -303,6 +303,17 @@ test_that("gtrack.2d.import_contacts with allow.duplicates = FALSE errors the sa
     })
 })
 
+test_that("gtrack.2d.import_contacts refuses allow.duplicates = NA", {
+    local_db_state()
+    withr::with_tempdir({
+        setup_import_db()
+        files <- write_slices(random_intervals(100, seed = 8, unknown = 0), 1, "na_dup")
+        expect_error(gtrack.2d.import_contacts("na_dup", "test", files, allow.duplicates = NA), "not a boolean")
+        expect_counters_reset()
+        expect_false(gtrack.exists("na_dup"))
+    })
+})
+
 test_that("gtrack.2d.import_contacts with fends is identical in parallel", {
     local_db_state()
     withr::with_tempdir({

@@ -26,8 +26,8 @@ SEXP giterator_intervals(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEX
 		// Parse interval_relative parameter
 		bool interval_relative = false;
 		if (!Rf_isNull(_interval_relative)) {
-			if (!Rf_isLogical(_interval_relative) || Rf_length(_interval_relative) != 1)
-				verror("interval_relative argument must be a logical value");
+			if (!is_true_or_false(_interval_relative))
+				verror("interval_relative argument must be TRUE or FALSE");
 			interval_relative = LOGICAL(_interval_relative)[0];
 		}
 

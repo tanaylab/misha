@@ -297,3 +297,9 @@ test_that("interval_relative handles intervals at chromosome start", {
     expect_equal(result$start[1], 0)
     expect_equal(result$end[4], 100)
 })
+
+test_that("interval_relative = NA is an error", {
+    intervs <- gintervals(1, c(100, 500), c(300, 700))
+    expect_error(giterator.intervals(NULL, intervs, iterator = 50, interval_relative = NA), "interval_relative must be TRUE or FALSE")
+    expect_error(giterator.intervals(NULL, intervs, iterator = 50, interval_relative = c(TRUE, FALSE)), "interval_relative must be TRUE or FALSE")
+})
