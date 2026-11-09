@@ -3,6 +3,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -165,6 +166,75 @@ public:
         return m_use_blocked ? score_codes_blocked(bc) : score_codes_naive(c);
     }
 
+    // score_codes() of the four anchors at c, c + 1, c + 2 and c + 3 (and bc
+    // likewise), every window scorable. Each anchor adds the same terms in the
+    // same order as score_codes(), so out[k] is bit-identical to
+    // score_codes(c + k, bc + k); the four sums only run side by side. One
+    // anchor's sum is a single chain of dependent additions, each waiting for
+    // the one before it; four chains fill those waits.
+    inline void score_codes4(const int8_t *c, const int8_t *bc, double out[4]) const
+    {
+        double s0 = m_intercept, s1 = m_intercept, s2 = m_intercept, s3 = m_intercept;
+        if (m_use_blocked) {
+            for (int b = 0; b < m_nblocks; ++b) {
+                const double *t = &m_block_table[(std::size_t)b * 16];
+                const int8_t *p = bc + 2 * b;
+                s0 += t[p[0]];
+                s1 += t[p[1]];
+                s2 += t[p[2]];
+                s3 += t[p[3]];
+            }
+            if (m_pair_u.size() == (std::size_t)m_nblocks * (std::size_t)(m_nblocks - 1) / 2) {
+                std::size_t k = 0;
+                for (int u = 0; u < m_nblocks; ++u) {
+                    const int8_t *pu = bc + 2 * u;
+                    const std::size_t c0 = (std::size_t)pu[0] * 16, c1 = (std::size_t)pu[1] * 16,
+                                      c2 = (std::size_t)pu[2] * 16, c3 = (std::size_t)pu[3] * 16;
+                    for (int v = u + 1; v < m_nblocks; ++v, ++k) {
+                        const double *t = &m_pair_table[k * 256];
+                        const int8_t *pv = bc + 2 * v;
+                        s0 += t[c0 + pv[0]];
+                        s1 += t[c1 + pv[1]];
+                        s2 += t[c2 + pv[2]];
+                        s3 += t[c3 + pv[3]];
+                    }
+                }
+            } else {
+                for (std::size_t k = 0; k < m_pair_u.size(); ++k) {
+                    const double *t = &m_pair_table[k * 256];
+                    const int8_t *pu = bc + m_pair_u[k];
+                    const int8_t *pv = bc + m_pair_v[k];
+                    s0 += t[(std::size_t)pu[0] * 16 + pv[0]];
+                    s1 += t[(std::size_t)pu[1] * 16 + pv[1]];
+                    s2 += t[(std::size_t)pu[2] * 16 + pv[2]];
+                    s3 += t[(std::size_t)pu[3] * 16 + pv[3]];
+                }
+            }
+        } else {
+            for (int i = 0; i < m_W; ++i) {
+                const double *e = &m_e[(std::size_t)i * 4];
+                s0 += e[c[i]];
+                s1 += e[c[i + 1]];
+                s2 += e[c[i + 2]];
+                s3 += e[c[i + 3]];
+            }
+            const std::size_t np = m_p1.size();
+            for (std::size_t k = 0; k < np; ++k) {
+                const double *J = &m_J[k * 16];
+                const int8_t *a = c + m_p1[k];
+                const int8_t *b = c + m_p2[k];
+                s0 += J[(std::size_t)b[0] * 4 + a[0]];
+                s1 += J[(std::size_t)b[1] * 4 + a[1]];
+                s2 += J[(std::size_t)b[2] * 4 + a[2]];
+                s3 += J[(std::size_t)b[3] * 4 + a[3]];
+            }
+        }
+        out[0] = s0;
+        out[1] = s1;
+        out[2] = s2;
+        out[3] = s3;
+    }
+
     // Change in score_codes(c) when position j is changed from c[j] to base b
     // (0..3), every other position as in c. Touches only the field at j and
     // the pairs that contain j (m_pairs_at), so it costs 1 + deg(j) lookups
@@ -184,6 +254,86 @@ public:
             }
         }
         return d;
+    }
+
+    // The largest delta_codes(c, j, b) over every position j and every base b
+    // other than c[j]; -inf when W == 0. Each (j, b) is computed with the same
+    // terms, in the same order and with the same arithmetic as delta_codes(),
+    // only four bases at a time and without its per-pair branch, so the value
+    // is bit-identical to the largest delta_codes(). Since rounding f + d is
+    // monotone in d, f + best_delta(c) is also the largest f + delta_codes()
+    // exactly - what potts.max with max_edits = 1 needs on one strand.
+    //
+    // Two positions are summed side by side, eight running sums in registers:
+    // one position alone makes every addition wait for the one before it.
+    // Each sum still adds its pairs in m_pairs_at[j]'s order.
+    inline double best_delta(const int8_t *c) const
+    {
+        if (m_field_start.empty())
+            build_delta_tables();
+        double best = -std::numeric_limits<double>::infinity();
+        int j = 0;
+        for (; j + 1 < m_W; j += 2) {
+            const int x = c[j];
+            const int y = c[j + 1];
+            const double *ej = &m_e[(std::size_t)j * 4];
+            const double *ek = &m_e[(std::size_t)(j + 1) * 4];
+            const double ex = ej[x], ey = ek[y];
+            double a0 = ej[0] - ex, a1 = ej[1] - ex, a2 = ej[2] - ex, a3 = ej[3] - ex;
+            double b0 = ek[0] - ey, b1 = ek[1] - ey, b2 = ek[2] - ey, b3 = ek[3] - ey;
+            std::size_t p = m_field_start[j];
+            const std::size_t pe = m_field_start[(std::size_t)j + 1];
+            std::size_t q = pe;
+            const std::size_t qe = m_field_start[(std::size_t)j + 2];
+            for (; p < pe && q < qe; ++p, ++q) {
+                const double *r = &m_field_tab[p * 16 + (std::size_t)c[m_field_other[p]] * 4];
+                const double *s = &m_field_tab[q * 16 + (std::size_t)c[m_field_other[q]] * 4];
+                const double rx = r[x], sy = s[y];
+                a0 += r[0] - rx;
+                a1 += r[1] - rx;
+                a2 += r[2] - rx;
+                a3 += r[3] - rx;
+                b0 += s[0] - sy;
+                b1 += s[1] - sy;
+                b2 += s[2] - sy;
+                b3 += s[3] - sy;
+            }
+            for (; p < pe; ++p) {
+                const double *r = &m_field_tab[p * 16 + (std::size_t)c[m_field_other[p]] * 4];
+                const double rx = r[x];
+                a0 += r[0] - rx;
+                a1 += r[1] - rx;
+                a2 += r[2] - rx;
+                a3 += r[3] - rx;
+            }
+            for (; q < qe; ++q) {
+                const double *s = &m_field_tab[q * 16 + (std::size_t)c[m_field_other[q]] * 4];
+                const double sy = s[y];
+                b0 += s[0] - sy;
+                b1 += s[1] - sy;
+                b2 += s[2] - sy;
+                b3 += s[3] - sy;
+            }
+            best = max_other(best, x, a0, a1, a2, a3);
+            best = max_other(best, y, b0, b1, b2, b3);
+        }
+        if (j < m_W) {
+            const int x = c[j];
+            const double *ej = &m_e[(std::size_t)j * 4];
+            const double ex = ej[x];
+            double a0 = ej[0] - ex, a1 = ej[1] - ex, a2 = ej[2] - ex, a3 = ej[3] - ex;
+            const std::size_t pe = m_field_start[(std::size_t)j + 1];
+            for (std::size_t p = m_field_start[j]; p < pe; ++p) {
+                const double *r = &m_field_tab[p * 16 + (std::size_t)c[m_field_other[p]] * 4];
+                const double rx = r[x];
+                a0 += r[0] - rx;
+                a1 += r[1] - rx;
+                a2 += r[2] - rx;
+                a3 += r[3] - rx;
+            }
+            best = max_other(best, x, a0, a1, a2, a3);
+        }
+        return best;
     }
 
     // The complemented twin: rc().score_codes(w) == score_codes(revcomp(w)).
@@ -223,6 +373,20 @@ public:
     }
 
 private:
+    // The largest of best and the d_b with b != x.
+    static inline double max_other(double best, int x, double d0, double d1, double d2, double d3)
+    {
+        if (x != 0 && d0 > best)
+            best = d0;
+        if (x != 1 && d1 > best)
+            best = d1;
+        if (x != 2 && d2 > best)
+            best = d2;
+        if (x != 3 && d3 > best)
+            best = d3;
+        return best;
+    }
+
     // Supports W up to 256. build_blocked_tables() disables the blocked
     // kernel beyond that rather than build tables that grow as W^2 (jsum
     // below is 8 MB at W = 256) - no PottsModel using it today gets remotely
@@ -238,6 +402,36 @@ private:
             m_pairs_at[m_p1[k]].push_back((int)k);
             m_pairs_at[m_p2[k]].push_back((int)k);
         }
+    }
+
+    // best_delta()'s tables: for position j, one entry per pair of
+    // m_pairs_at[j], in that order, holding the pair's other position and its
+    // 4x4 table turned so that row (other base) * 4 + (base at j) is the
+    // coupling, whichever end of the pair j is. Built on best_delta()'s first
+    // call: only potts.max with max_edits = 1 on one strand reads them, and a
+    // wide, dense model and its twin would otherwise pay for 2 x npair x 16
+    // doubles per scorer.
+    void build_delta_tables() const
+    {
+        m_field_start.assign((std::size_t)m_W + 1, 0);
+        m_field_other.clear();
+        m_field_tab.clear();
+        m_field_other.reserve(2 * m_p1.size());
+        m_field_tab.reserve(2 * m_p1.size() * 16);
+        for (int j = 0; j < m_W; ++j) {
+            m_field_start[j] = m_field_other.size();
+            for (const int k : m_pairs_at[j]) {
+                const double *Jk = &m_J[(std::size_t)k * 16];
+                const bool first = (m_p1[k] == j);
+                m_field_other.push_back(first ? m_p2[k] : m_p1[k]);
+                for (int o = 0; o < 4; ++o)
+                    for (int b = 0; b < 4; ++b)
+                        // delta_codes() reads Jk[o * 4 + b] when j is p1 (o the base at p2)
+                        // and Jk[b * 4 + o] when j is p2 (o the base at p1)
+                        m_field_tab.push_back(first ? Jk[o * 4 + b] : Jk[b * 4 + o]);
+            }
+        }
+        m_field_start[m_W] = m_field_other.size();
     }
 
     void build_blocked_tables()
@@ -378,6 +572,11 @@ private:
     std::vector<double> m_J; // npair*16, [k*16 + b*4 + a]
     std::vector<int> m_p1, m_p2;
     std::vector<std::vector<int>> m_pairs_at;
+    // best_delta()'s tables, built on its first call by build_delta_tables():
+    // position j's entries are [m_field_start[j], m_field_start[j + 1]).
+    mutable std::vector<std::size_t> m_field_start;
+    mutable std::vector<int> m_field_other;
+    mutable std::vector<double> m_field_tab;
 
     // Blocked-kernel tables, built by build_blocked_tables(). m_nblocks == 0
     // means "not built" (W too wide for MAX_BLOCKS) - blocked_available()
@@ -401,11 +600,10 @@ private:
 // (BASE_ENCODE folds case). nbad[p] counts non-ACGT bases in [0, p), so anchor
 // i of width W is scorable iff nbad[i + W] - nbad[i] == 0 - O(1) per anchor
 // instead of re-walking W bases. nbad has size codes.size() + 1.
-inline void potts_encode(const std::string &target,
+inline void potts_encode(const char *target, std::size_t n,
                          std::vector<int8_t> &codes,
                          std::vector<int32_t> &nbad)
 {
-    const std::size_t n = target.size();
     codes.resize(n);
     nbad.resize(n + 1);
     nbad[0] = 0;
@@ -414,6 +612,13 @@ inline void potts_encode(const std::string &target,
         codes[p] = c;
         nbad[p + 1] = nbad[p] + (c < 0 ? 1 : 0);
     }
+}
+
+inline void potts_encode(const std::string &target,
+                         std::vector<int8_t> &codes,
+                         std::vector<int32_t> &nbad)
+{
+    potts_encode(target.data(), target.size(), codes, nbad);
 }
 
 // block_codes[p] = 4 * codes[p] + codes[p + 1], the code of a block that

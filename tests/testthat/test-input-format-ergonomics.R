@@ -18,6 +18,48 @@ test_that(".gchroms still errors on truly unknown chromosomes with helpful messa
     expect_error(misha:::.gchroms("frobnitz"), "Known chromosomes")
 })
 
+test_that(".gnormalize_chrom_names maps a factor column's levels, not its rows", {
+    # a genome-wide gextract returns ~10^8 rows but only as many levels as the genome has contigs
+    lengths_in <- integer(0)
+    gchroms <- misha:::.gchroms
+    local_mocked_bindings(.gchroms = function(chroms) {
+        lengths_in <<- c(lengths_in, length(chroms))
+        gchroms(chroms)
+    }, .package = "misha")
+    f <- factor(rep(c("chr1", "2", "chrX"), each = 1000), levels = c("chr1", "2", "chrX", "chr7"))
+    out <- misha:::.gnormalize_chrom_names(data.frame(chrom = f, start = 0, end = 1))
+    expect_equal(lengths_in, 3L)
+    expect_identical(out$chrom, gchroms(as.character(f)))
+})
+
+test_that(".gnormalize_chrom_names gives a factor column what .gchroms(as.character()) gives it", {
+    ref <- function(x) misha:::.gchroms(as.character(x))
+    norm <- function(x) misha:::.gnormalize_chrom_names(data.frame(chrom = x))$chrom
+    msg <- function(expr) tryCatch(expr, error = conditionMessage)
+    cases <- list(
+        factor(c("chr1", "chr2", "chr1", "chrX")),
+        factor(c("1", "2", "X", "1")),
+        factor(c("chr2", "chr2"), levels = c("chrX", "chr2", "chr1")),
+        # an unused level is not mapped, so an unknown one is no error
+        factor(c("chr1", "2"), levels = c("2", "no_such_chrom", "chr1")),
+        factor(c("chr1", "chr1")[0]),
+        factor(sample(c("chr1", "2", "chr3", "X"), 5000, replace = TRUE)),
+        # errors name the first unknown chromosome in row order, NA included
+        factor(c("chr1", "bad_b", "bad_a"), levels = c("bad_a", "chr1", "bad_b")),
+        factor(c("chr1", NA, "chr2"))
+    )
+    for (f in cases) {
+        expect_identical(msg(norm(f)), msg(ref(f)))
+    }
+    iv2 <- data.frame(
+        chrom1 = factor(c("1", "chr2")), start1 = 0, end1 = 1,
+        chrom2 = factor(c("chrX", "X")), start2 = 0, end2 = 1
+    )
+    out <- misha:::.gnormalize_chrom_names(iv2)
+    expect_identical(out$chrom1, ref(iv2$chrom1))
+    expect_identical(out$chrom2, ref(iv2$chrom2))
+})
+
 test_that("gintervals accepts both prefix styles", {
     a <- gintervals(1, 0, 100)
     b <- gintervals("chr1", 0, 100)

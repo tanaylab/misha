@@ -310,6 +310,56 @@ test_that("the blocked kernel agrees with the naive one on 1e6 random windows at
     expect_true(max_diff < 1e-9, info = sprintf("max |naive - blocked| = %.3e over %d windows", max_diff, n))
 })
 
+# potts.max with max_edits = 1 on one strand adds PottsModel::best_delta() to
+# the anchor's score. It must be the largest delta_codes() over every position
+# and base bit for bit, not just close: the screens built on it compare the
+# score to a threshold, and so does gextract.variants() on the same anchors.
+for (.W in c(1L, 2L, 7L, 20L, 21L, 45L)) {
+    for (.npair_mode in if (.W == 1L) "none" else c("full", "sparse", "none")) {
+        test_that(sprintf("best_delta is the largest delta_codes, bit for bit: W = %d, %s", .W, .npair_mode), {
+            m <- potts_ref_model(W = .W, npair_mode = .npair_mode, seed = 7L)
+            params <- misha:::.potts_params(m,
+                bidirect = FALSE, extend = FALSE, strand = 1L, score.thresh = 0,
+                what = "best_delta test"
+            )
+            set.seed(8L)
+            n <- 5000
+            codes <- matrix(sample(0:3, .W * n, replace = TRUE), nrow = .W, ncol = n)
+            storage.mode(codes) <- "integer"
+            res <- .Call("C_potts_score_codes_cmp", params, codes)
+            expect_identical(res$best_delta, res$delta_max)
+            expect_true(all(is.finite(res$best_delta)))
+            # and score_codes4(), four consecutive anchors side by side
+            expect_identical(res$score4_mismatch, 0L)
+        })
+    }
+}
+
+test_that("best_delta and score_codes4 agree bit for bit on a model the naive kernel scores", {
+    # 100 couplings at W = 60, each in a block pair of its own: the gate in
+    # build_blocked_tables() runs the naive kernel for it.
+    set.seed(9L)
+    W <- 60L
+    bp <- t(utils::combn(W / 2L, 2L))
+    bp <- bp[sort(sample(nrow(bp), 100L)), ]
+    pairs <- cbind(2L * bp[, 1L] - 1L, 2L * bp[, 2L] - 1L)
+    m <- list(
+        e = matrix(round(rnorm(W * 4), 4), W, 4, dimnames = list(NULL, POTTS_BASES)),
+        J = lapply(seq_len(nrow(pairs)), function(k) matrix(round(rnorm(16), 4), 4L, 4L)),
+        pairs = pairs, intercept = 0.25
+    )
+    params <- misha:::.potts_params(m,
+        bidirect = FALSE, extend = FALSE, strand = 1L, score.thresh = 0,
+        what = "best_delta test"
+    )
+    codes <- matrix(sample(0:3, W * 3000, replace = TRUE), nrow = W)
+    storage.mode(codes) <- "integer"
+    res <- .Call("C_potts_score_codes_cmp", params, codes)
+    expect_false(res$use_blocked[1])
+    expect_identical(res$best_delta, res$delta_max)
+    expect_identical(res$score4_mismatch, 0L)
+})
+
 # The trailing size-1 block build_blocked_tables() uses for an odd W has no
 # coverage in the tests above - every W above (4, 6, 8, 20) is even.
 # Sweep W = 20/21 (even/odd) x every pairing density: score_codes_blocked()

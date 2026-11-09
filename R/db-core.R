@@ -183,6 +183,28 @@
     allchroms[indices]
 }
 
+# .gchroms(as.character(x)) for a factor x, mapping its levels instead of its rows: a genome-wide
+# gextract returns ~10^8 rows but only as many levels as the genome has contigs. Only the levels in
+# use are mapped, as that call maps only the values present, so the result (values, type, levels)
+# is the same. An NA, or a level .gchroms() rejects, goes through that call itself, so the error
+# names the same chromosome.
+.gchroms_factor <- function(x) {
+    codes <- unclass(x)
+    attributes(codes) <- NULL
+    if (anyNA(codes)) {
+        return(.gchroms(as.character(x)))
+    }
+    lv <- levels(x)
+    used <- which(tabulate(codes, length(lv)) > 0L)
+    mapped <- tryCatch(.gchroms(lv[used]), error = function(e) NULL)
+    if (is.null(mapped)) {
+        return(.gchroms(as.character(x)))
+    }
+    pos <- integer(length(lv))
+    pos[used] <- seq_along(used)
+    mapped[pos[codes]]
+}
+
 .gnormalize_chrom_names <- function(intervals) {
     if (!is.data.frame(intervals)) {
         return(intervals)
@@ -190,7 +212,8 @@
 
     normalize_col <- function(df, col) {
         if (col %in% colnames(df)) {
-            df[[col]] <- .gchroms(as.character(df[[col]]))
+            x <- df[[col]]
+            df[[col]] <- if (is.factor(x)) .gchroms_factor(x) else .gchroms(as.character(x))
         }
         df
     }

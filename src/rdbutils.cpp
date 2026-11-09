@@ -592,6 +592,7 @@ void RdbInitializer::wait_for_kids(rdb::IntervUtils &iu)
 
 	struct timespec timeout, last_progress_time, last_delay_change_time;
 	int last_progress = -1;
+	int64_t last_resident_usage = -1;
 
 	clock_gettime(CLOCK_REALTIME, &timeout);
 	last_progress_time = last_delay_change_time = timeout;
@@ -624,16 +625,21 @@ void RdbInitializer::wait_for_kids(rdb::IntervUtils &iu)
         nanosleep(&timeout, NULL);
 
         int64_t total_mem_usage = s_shm->total_mem_usage;
+        bool counted;
 
-        update_kids_mem_usage();
+        int64_t mem_usage = update_kids_mem_usage(counted);
 
         // Check the memory consumption increase from the last measurement. If the memory limit is going to be
-        // breached till the next measurement => increase the monitoring rate.
-        int64_t delta_mem_usage = s_shm->total_mem_usage - total_mem_usage;
+        // breached till the next measurement => increase the monitoring rate. A round that only read the
+        // kids' resident sizes watches those instead, compared with the previous such round.
+        int64_t delta_mem_usage = counted ? s_shm->total_mem_usage - total_mem_usage :
+            (last_resident_usage >= 0 ? mem_usage - last_resident_usage : 0);
         int64_t time2reach_limit = -1;
 
-        if (delta_mem_usage > 0 && (uint64_t)s_shm->total_mem_usage <= (uint64_t)s_max_mem_usage)
-            time2reach_limit = delay_msec * ((s_max_mem_usage - s_shm->total_mem_usage) / delta_mem_usage);
+        last_resident_usage = counted ? -1 : mem_usage;
+
+        if (delta_mem_usage > 0 && (uint64_t)mem_usage <= (uint64_t)s_max_mem_usage)
+            time2reach_limit = delay_msec * ((s_max_mem_usage - mem_usage) / delta_mem_usage);
 
         if (time2reach_limit >= 0 && time2reach_limit < delay_msec) {
             delay_msec = min(MEM_SYNC_DELAY / 2, delay_msec);
@@ -677,8 +683,52 @@ void RdbInitializer::wait_for_kids(rdb::IntervUtils &iu)
 		REprintf("100%%\n");
 }
 
-int64_t RdbInitializer::update_kids_mem_usage()
+// Updates the memory usage of the kids that the limiter compares with gmax.mem.usage and returns
+// the amount this round watched: the counted total ("counted" is true) or the kids' resident sizes.
+//
+// Counting a kid's private memory (get_unique_mem_usage) walks its page tables, at a cost that
+// grows with all the memory it maps, including what it shares with R: on mm10, 16 tracks
+// genome-wide, about 2 ms per kid, 75 ms per round of 32 kids, so that polling took about half
+// a core. A kid's resident size is a cheap upper bound of its count. While the resident sizes of
+// the kids together stay within the limit, so do their counts, and the limiter acts on neither:
+// the walk is skipped. The counts kept from the last walk are then capped by the resident sizes,
+// so the total the kids compare with the limit is within it, as the count would be. Once the
+// resident sizes can exceed the limit, every round counts, as before.
+int64_t RdbInitializer::update_kids_mem_usage(bool &counted)
 {
+	// The kernel updates a process's resident counters in batches, up to 64 page faults per
+	// thread late, so a kid's resident size may trail its count by a few MB; the margin is
+	// generous, as a margin too small would let a count over the limit go unseen.
+	static const uint64_t RESIDENT_SLACK = (uint64_t)256 << 20;
+
+	vector<uint64_t> resident(s_running_pids.size());
+	uint64_t total_resident = 0;
+	bool resident_known = true;
+
+	for (size_t i = 0; i < s_running_pids.size(); ++i) {
+		resident[i] = get_resident_mem_usage(s_running_pids[i].pid);
+		if (!resident[i]) {
+			resident_known = false;
+			break;
+		}
+		resident[i] += RESIDENT_SLACK;
+		total_resident += resident[i];
+	}
+
+	if (resident_known && !s_running_pids.empty() && total_resident <= s_max_mem_usage) {
+		int64_t total_mem_usage = 0;
+
+		for (size_t i = 0; i < s_running_pids.size(); ++i) {
+			int64_t &mem_usage = s_shm->mem_usage[s_running_pids[i].index];
+
+			mem_usage = min(mem_usage, (int64_t)resident[i]);
+			total_mem_usage += mem_usage;
+		}
+		s_shm->total_mem_usage = total_mem_usage;
+		counted = false;
+		return total_resident;
+	}
+
 	// Update the memory usage of the kids with precise number.
 	// Usually the kids maintain their own usage based on their own rough estimation.
 	int64_t total_mem_usage = 0;
@@ -696,7 +746,8 @@ int64_t RdbInitializer::update_kids_mem_usage()
 	if (total_mem_usage) 
 		s_shm->total_mem_usage = total_mem_usage;
 
-	return total_mem_usage;
+	counted = true;
+	return s_shm->total_mem_usage;
 }
 
 void RdbInitializer::report_kid_write_error()
@@ -920,6 +971,90 @@ double rdb::r_unif_rand()
 		s_rng_state_loaded = true;
 	}
 	return unif_rand();
+}
+
+// A fork copies the page tables of the parent's anonymous memory, one entry per page: the
+// cost grows with the memory the R session holds in 4 KB pages, and is paid once per kid.
+// Memory in 2 MB transparent huge pages costs 512 times fewer entries. Measured on CentOS 7
+// (Linux 3.10, whose R heap got no huge pages) with 32 kids, a gsummary over chr1 and chr2 of
+// mm10: 0.67 s, 11.5 s with 10 GB held, 28 s with 20 GB, 22-25 s of it in the forks, about
+// 0.035 s per GB per kid. On AlmaLinux 8, the same 20 GB in huge pages: 0.68 s.
+//
+// The warning comes when the forks of this call would take about 4.5 s or more: GB in 4 KB
+// pages times kids of 128 or more (4 GB with 32 kids, 8 GB with 16, 32 GB with 4).
+//
+// The check is cheap on every call: the anonymous resident size comes from /proc/self/statm.
+// Only when that alone is large enough does it read how much of it is in huge pages
+// (/proc/self/smaps_rollup, or /proc/self/smaps before Linux 4.14, which walk the page tables
+// of the session). That is read again only when the anonymous memory has grown or shrunk by a
+// quarter since; in between the bytes in 4 KB pages found then (capped by the anonymous size)
+// are multiplied by each call's number of kids.
+//
+// The warning counts as shown once R has raised it: .graise_diagnostics() sets
+// .misha$.GFORK_COST_WARNED when it raises a "fork_cost" diagnostic. A call that fails after
+// queuing it, in a kid or by an interrupt, has its diagnostics dropped, and the next call that
+// forks as many kids warns instead.
+//
+// MISHA_TEST_FORK_4K_BYTES, an environment variable for the tests, stands in for the memory:
+// "A" for A bytes of anonymous memory in 4 KB pages, "A,H" for A bytes of which H are in huge
+// pages.
+static const double FORK_COST_GB_KIDS = 128;
+static bool s_fork_cost_warned = false;
+static uint64_t s_fork_cost_checked_anon = 0;
+static uint64_t s_fork_cost_small_pages = 0;
+
+void rdb::warn_if_forks_are_slow(SEXP envir, unsigned num_kids)
+{
+	if (s_fork_cost_warned || RdbInitializer::is_kid() || num_kids < 2)
+		return;
+
+	SEXP shown = find_in_misha(envir, ".GFORK_COST_WARNED");
+	if (shown != R_UnboundValue && Rf_isLogical(shown) && Rf_length(shown) == 1 && LOGICAL(shown)[0] == TRUE) {
+		s_fork_cost_warned = true;
+		return;
+	}
+
+	const double GB = 1e9;
+	const char *test_memory = getenv("MISHA_TEST_FORK_4K_BYTES");
+	uint64_t test_anon = 0, test_huge = 0;
+
+	if (test_memory) {
+		char *end = NULL;
+		test_anon = strtoull(test_memory, &end, 10);
+		if (end && *end == ',')
+			test_huge = strtoull(end + 1, NULL, 10);
+	}
+
+	uint64_t anon = test_memory ? test_anon : get_anon_resident_mem_usage(getpid());
+
+	if (anon / GB * num_kids < FORK_COST_GB_KIDS)
+		return;
+
+	if (!s_fork_cost_checked_anon || anon >= s_fork_cost_checked_anon + s_fork_cost_checked_anon / 4 ||
+		anon <= s_fork_cost_checked_anon - s_fork_cost_checked_anon / 4)
+	{
+		uint64_t huge = test_memory ? test_huge : get_anon_huge_pages(getpid());
+
+		s_fork_cost_small_pages = anon > huge ? anon - huge : 0;
+		s_fork_cost_checked_anon = anon;
+	}
+
+	uint64_t small_pages = min(s_fork_cost_small_pages, anon);
+
+	// once per call: some calls fork more than once
+	if (small_pages / GB * num_kids < FORK_COST_GB_KIDS || !once_per_call("fork_cost"))
+		return;
+
+	char msg[1000];
+	snprintf(msg, sizeof(msg),
+			 "This R session holds %.1f GB of memory in 4 KB pages (not in transparent huge pages). "
+			 "Each of the %u processes misha starts for this call is a fork of the session, and every fork "
+			 "copies the page tables of that memory: this can add seconds, up to tens of seconds, to every "
+			 "multitasking call, however small. Lower options(gmax.processes), free large objects (rm(), then "
+			 "gc()), or run on a host whose kernel keeps R's memory in transparent huge pages (such as "
+			 "RHEL 8 and its clones). This warning is shown once per session.",
+			 small_pages / GB, num_kids);
+	add_pending_diagnostic(envir, "fork_cost", msg);
 }
 
 bool rdb::once_per_call(const char *key)

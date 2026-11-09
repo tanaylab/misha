@@ -139,3 +139,26 @@ test_that("multitasking gquantiles is exact whatever gquantile.edge.data.size is
         )
     }
 })
+
+# The multitasking path finds each percentile's ranks in the kids' sorted values by bisection
+# over the bit patterns of doubles (it used to merge them rank by rank up to the largest one).
+test_that("multitasking gquantiles matches the single process with ties, infinities and signed zeros", {
+    withr::local_options(gmax.data.size = 1e9)
+    iv <- gintervals(c(1, 2), 0, -1)
+    pcts <- c(0, 1e-7, 0.001, 0.1, 0.5, 0.75, 0.999, 1 - 1e-9, 1)
+    exprs <- c(
+        "round(test.fixedbin * 4)",
+        "as.numeric(ifelse(test.fixedbin > 0.15, Inf, ifelse(test.fixedbin < 0.02, -Inf, test.fixedbin)))",
+        "as.numeric(ifelse(test.fixedbin > 0.1, -0, test.fixedbin))",
+        "test.fixedbin * 0 + 2",
+        "-test.fixedbin"
+    )
+    for (e in c(exprs, "as.numeric(ifelse(test.fixedbin > 0.1, -0, 0))")) {
+        serial <- withr::with_options(list(gmultitasking = FALSE), gquantiles(e, pcts, iv))
+        parallel <- withr::with_options(list(gmultitasking = TRUE, gmax.processes = 8), gquantiles(e, pcts, iv))
+        # bit for bit: identical() alone takes -0 and 0 as equal
+        expect_true(identical(parallel, serial, num.eq = FALSE), label = e)
+        # a zero quantile is 0, not -0, whichever zeros the values hold
+        expect_true(all(1 / parallel[parallel == 0 & !is.na(parallel)] == Inf), label = e)
+    }
+})

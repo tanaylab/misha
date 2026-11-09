@@ -51,6 +51,8 @@ public:
 
 	void set_seqdir(const std::string &dir);
 	void set_substitution(const SeqSubstitution &sub);
+	// Whether reads currently carry a substituted base (gextract.variants).
+	bool has_substitution() const { return m_sub.chromid >= 0; }
 	void read_interval(const GInterval &interval, const GenomeChromKey &chromkey, std::vector<char> &result);
 
 private:

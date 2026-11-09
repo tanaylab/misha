@@ -200,8 +200,14 @@ SEXP C_potts_score_codes_cmp(SEXP r_params, SEXP r_codes)
 
         SEXP r_naive = rprotect_ptr(RSaneAllocVector(REALSXP, n));
         SEXP r_blocked = rprotect_ptr(RSaneAllocVector(REALSXP, n));
+        // The largest single-substitution change, from delta_codes() one
+        // (position, base) at a time and from best_delta(): must be identical.
+        SEXP r_delta_max = rprotect_ptr(RSaneAllocVector(REALSXP, n));
+        SEXP r_best_delta = rprotect_ptr(RSaneAllocVector(REALSXP, n));
         double *naive = REAL(r_naive);
         double *blocked = REAL(r_blocked);
+        double *delta_max = REAL(r_delta_max);
+        double *best_delta = REAL(r_best_delta);
 
         // One base past the window, for the trailing block's second base.
         vector<int8_t> win((size_t)W + 1), win_block_codes;
@@ -226,6 +232,37 @@ SEXP C_potts_score_codes_cmp(SEXP r_params, SEXP r_codes)
             potts_block_codes(win, win_block_codes, 0, (size_t)W);
             naive[i] = model.score_codes_naive(win.data());
             blocked[i] = model.score_codes_blocked(win_block_codes.data());
+            double dm = -numeric_limits<double>::infinity();
+            for (int j = 0; j < W; ++j)
+                for (int b = 0; b < 4; ++b)
+                    if (b != win[j]) {
+                        const double d = model.delta_codes(win.data(), j, b);
+                        if (d > dm)
+                            dm = d;
+                    }
+            delta_max[i] = dm;
+            best_delta[i] = model.best_delta(win.data());
+        }
+
+        // score_codes4() against score_codes() on four consecutive anchors:
+        // window i followed by the first three codes of window i + 1.
+        int n4_mismatch = 0;
+        {
+            vector<int8_t> seq((size_t)W + 4), seq_bc;
+            for (int i = 0; i + 1 < n; ++i) {
+                const int *col = codes + (size_t)i * W;
+                const int *nxt = codes + (size_t)(i + 1) * W;
+                for (int j = 0; j < W; ++j)
+                    seq[j] = (int8_t)col[j];
+                for (int j = 0; j < 4; ++j)
+                    seq[W + j] = (int8_t)nxt[j % W];
+                potts_block_codes(seq, seq_bc, 0, seq.size());
+                double out[4];
+                model.score_codes4(seq.data(), seq_bc.data(), out);
+                for (int k = 0; k < 4; ++k)
+                    if (out[k] != model.score_codes(seq.data() + k, seq_bc.data() + k))
+                        ++n4_mismatch;
+            }
         }
 
         // Which kernel score_codes() runs, for the model and for its
@@ -234,17 +271,25 @@ SEXP C_potts_score_codes_cmp(SEXP r_params, SEXP r_codes)
         LOGICAL(r_use_blocked)[0] = model.use_blocked();
         LOGICAL(r_use_blocked)[1] = model.rc().use_blocked();
 
-        SEXP res = rprotect_ptr(RSaneAllocVector(VECSXP, 3));
+        SEXP r_n4 = rprotect_ptr(RSaneAllocVector(INTSXP, 1));
+        INTEGER(r_n4)[0] = n4_mismatch;
+        SEXP res = rprotect_ptr(RSaneAllocVector(VECSXP, 6));
         SET_VECTOR_ELT(res, 0, r_naive);
         SET_VECTOR_ELT(res, 1, r_blocked);
         SET_VECTOR_ELT(res, 2, r_use_blocked);
-        SEXP names = rprotect_ptr(RSaneAllocVector(STRSXP, 3));
+        SET_VECTOR_ELT(res, 3, r_delta_max);
+        SET_VECTOR_ELT(res, 4, r_best_delta);
+        SET_VECTOR_ELT(res, 5, r_n4);
+        SEXP names = rprotect_ptr(RSaneAllocVector(STRSXP, 6));
         SET_STRING_ELT(names, 0, RSaneMkChar("naive"));
         SET_STRING_ELT(names, 1, RSaneMkChar("blocked"));
         SET_STRING_ELT(names, 2, RSaneMkChar("use_blocked"));
+        SET_STRING_ELT(names, 3, RSaneMkChar("delta_max"));
+        SET_STRING_ELT(names, 4, RSaneMkChar("best_delta"));
+        SET_STRING_ELT(names, 5, RSaneMkChar("score4_mismatch"));
         Rf_setAttrib(res, R_NamesSymbol, names);
 
-        runprotect(5);
+        runprotect(8);
         return res;
     } catch (TGLException &e) {
         rerror("Error in C_potts_score_codes_cmp: %s", e.msg());

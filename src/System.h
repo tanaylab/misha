@@ -13,4 +13,21 @@
 // !!!! COMPATIBILITY: only Linux, on other platforms returns 0. !!!!
 uint64_t get_unique_mem_usage(pid_t pid = 0);
 
+// Resident size of pid in bytes, from /proc/<pid>/statm: kernel counters, read without walking
+// the page tables. It counts every resident page, shared ones included, so it is an upper
+// bound of get_unique_mem_usage() (up to the few pages the kernel's counters may lag by).
+//
+// !!!! COMPATIBILITY: only Linux, on other platforms returns 0. !!!!
+uint64_t get_resident_mem_usage(pid_t pid);
+
+// Anonymous resident size of pid in bytes: resident minus file-backed and shared memory, from
+// /proc/<pid>/statm. Cheap, like get_resident_mem_usage(). Returns 0 on failure.
+uint64_t get_anon_resident_mem_usage(pid_t pid);
+
+// Bytes of pid's anonymous memory in transparent huge pages: AnonHugePages of
+// /proc/<pid>/smaps_rollup, or, on kernels without it (before 4.14), the sum over
+// /proc/<pid>/smaps. Both walk the page tables of the process, so call it rarely.
+// Returns 0 on failure.
+uint64_t get_anon_huge_pages(pid_t pid);
+
 #endif

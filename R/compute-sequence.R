@@ -175,7 +175,9 @@
 #' made by timing the first few reads and extrapolating over the number of
 #' read-ahead windows the intervals span: cached data, and interval sets dense
 #' enough that many intervals share a read, stay in a single process because
-#' distributing them would only add fork overhead.
+#' distributing them would only add fork overhead. Only the time beyond what
+#' reading the same bases from the page cache costs is counted, so long cached
+#' intervals stay in a single process too.
 #'
 #' Sets of fewer than 500 intervals are never distributed. Named intervals sets
 #' stored in the "big" format are always read sequentially. Distributing roughly
