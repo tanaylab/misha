@@ -1104,7 +1104,8 @@ SEXP C_gseq_pwm_edits(SEXP r_seqs, SEXP r_pssm, SEXP r_score_thresh,
             // shortest window. The DP handles longer windows up to seq_avail
             // via its own bounds check.
             int min_window = std::max(1, w - max_indels);
-            int start_min0 = std::max(0, roi_start_1 - 1 - extend_val);
+            // a window never starts before the ROI (extend reaches past its end only)
+            int start_min0 = std::max(0, roi_start_1 - 1);
             int start_max0 = std::min(seqlen - min_window, roi_end_1 - w + extend_val);
             // For the non-indel path, still need at least L bases
             if (max_indels == 0) {

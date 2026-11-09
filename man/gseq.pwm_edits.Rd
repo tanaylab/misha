@@ -62,7 +62,11 @@ Default TRUE. For interval input it means what it means for the
 \code{pwm.edit_distance} virtual track: \code{TRUE} or a positive integer
 lets a window start at every position of the interval and read bases past
 its end; \code{FALSE} or 0 keeps every window (deletions included) inside
-the interval.}
+the interval. For a sequence, its end acts as a chromosome end: with
+\code{max_indels > 0}, \code{TRUE} lets a window start wherever at least
+\code{max(1, w - max_indels)} bases remain (insertions supply the rest),
+as the virtual track does at a chromosome end, and an integer lets a
+window run at most that many bases past the end.}
 
 \item{strand}{integer; which strand to scan when \code{bidirect=FALSE}.
 1=forward, -1=reverse. Default 1.}

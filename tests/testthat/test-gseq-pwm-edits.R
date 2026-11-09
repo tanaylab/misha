@@ -996,3 +996,18 @@ test_that("gseq.pwm_edits refuses an NA extend on sequences, as gseq.pwm does", 
     expect_error(gseq.pwm_edits("GTGT", pssm, score.thresh = -1, prior = 0, extend = NA), "extend must be")
     expect_error(gseq.pwm_edits("GTGT", pssm, score.thresh = -1, prior = 0, extend = c(TRUE, FALSE)), "extend must be")
 })
+
+test_that("gseq.pwm_edits integer extend on a sequence is how many bases a window may run past its end", {
+    pssm <- matrix(c(.97, .01, .01, .01, .01, .97, .01, .01, .01, .01, .97, .01, .01, .01, .01, .97),
+        ncol = 4, byrow = TRUE, dimnames = list(NULL, c("A", "C", "G", "T"))
+    )
+    thr <- 4 * log(0.97) - 0.01
+    ed <- function(extend) {
+        unique(gseq.pwm_edits("TTTTTTAC", pssm, score.thresh = thr, max_indels = 2, extend = extend, prior = 0, bidirect = FALSE)[, c("window_start", "n_edits")])
+    }
+    # the AC at 7-8 needs G and T inserted past the end: 2 bases
+    expect_equal(ed(TRUE), data.frame(window_start = 7L, n_edits = 2L))
+    expect_equal(ed(2L), ed(TRUE))
+    expect_false(7L %in% ed(1L)$window_start)
+    expect_false(7L %in% ed(FALSE)$window_start)
+})
