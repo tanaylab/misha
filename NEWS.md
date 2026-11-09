@@ -1,10 +1,10 @@
 # misha 5.18.0
 
-* **Behavior fix:** `src_overlap_policy = "discard"` and `tgt_overlap_policy = "discard"` (`gintervals.load_chain()`, `gintervals.liftover()`, `gtrack.liftover()`) drop only the bases that more than one chain interval covers and keep the rest of each interval, as target overlaps were handled before 5.2.0. They used to drop whole intervals, and the source side missed overlaps between intervals that are not adjacent in source order, so some bases aligned twice were lifted to one place. Present since 5.2.0.
+* **Behavior fix:** the `"discard"` overlap policies of `gintervals.load_chain()`, `gintervals.liftover()` and `gtrack.liftover()` drop only the bases covered by more than one chain interval, not whole intervals.
 
-* New overlap policy `"discard_intervals"`, on both sides, drops every chain interval involved in an overlap.
+* New overlap policy `"discard_intervals"`: drops every chain interval involved in an overlap.
 
-* `tgt_overlap_policy` `"auto*"`: a minus-strand chain interval that wins an overlap comes back as one interval instead of several.
+* `tgt_overlap_policy = "auto*"` returns a winning minus-strand chain interval as one interval.
 
 * **Behavior fix:** `gtrack.liftover()` on a sparse track: where lifted intervals overlap in the target, each overlapping stretch gets the aggregate of the intervals that cover it, as `gintervals.liftover(value_col =)` does. Before, the whole run of overlapping intervals became one interval with one aggregate.
 
@@ -18,61 +18,59 @@
 
 # misha 5.17.0
 
-This release fixes defects found in a review of 5.16.1, speeds up large computations, and adds features for sequence-to-function models. Fixes marked **Behavior fix** change results; recompute anything that depends on them.
+Fixes marked **Behavior fix** change results; recompute anything that depends on them.
 
-* **Behavior fix:** an indexed track read with two different shifts in one call (e.g. two virtual tracks on it with different `sshift`/`eshift`) gave the first shift the other's values on the first chromosome of each process. Present since 5.6.15.
+* **Behavior fix:** an indexed track read with two different shifts in one call (e.g. two virtual tracks with different `sshift`/`eshift`) gave wrong values for one of them.
 
 * **Behavior fix:** `gintervals.rbind()` no longer mixes up rows when the inputs' factor levels differ.
 
-* **Behavior fix:** `gintervals.neighbors()` breaks ties by coordinates, so results no longer depend on input order, and no longer returns a farther 2D neighbor.
+* **Behavior fix:** `gintervals.neighbors()` breaks ties by coordinates and no longer returns a farther 2D neighbor.
 
-* **Behavior fix:** a 2D `gintervals.annotate()` returns `dist1` and `dist2`; `max_dist` limits their sum.
+* **Behavior fix:** 2D `gintervals.annotate()` returns `dist1` and `dist2`; `max_dist` limits their sum.
 
-* **Behavior fix:** virtual tracks with a filter: `first`, `last`, `sample` and `nearest` use all unmasked values; value-based `size` and `exists` are 0 when nothing unmasked has a value.
+* **Behavior fix:** filtered virtual tracks: `first`, `last`, `sample` and `nearest` use all unmasked values; `size` and `exists` are 0 when no unmasked value exists.
 
-* **Behavior fix:** PWM edit distance with `max_indels > 0` no longer underestimates the edits needed; `score.min` and `score.max` apply with indels; `gseq.pwm_edits()` agrees with the virtual track.
+* **Behavior fix:** PWM edit distance with `max_indels > 0` no longer underestimates the edits; `score.min` and `score.max` apply with indels.
 
-* **Behavior fix:** random draws (`gsample()`, sampled quantiles, `sample` virtual tracks) follow `set.seed()` and differ between parallel processes.
+* **Behavior fix:** random draws (`gsample()`, sampled quantiles, `sample` virtual tracks) follow `set.seed()`.
 
-* **Behavior fix:** gsynth: saved models keep their iterator, `gsynth.random()` follows `nuc_probs` everywhere, overlapping or masked regions are counted correctly, and `gsynth.load()` reads a model file without a `prior` entry.
+* **Behavior fix:** gsynth: saved models keep their iterator, `gsynth.random()` follows `nuc_probs`, and overlapping or masked regions are counted correctly.
 
 * **Behavior fix:** `gdb.create(format = "per-chromosome")` makes one chromosome per FASTA record.
 
-* **Behavior fix:** `gextract(file = "*.parquet")` writes values as double; float32 rounded large positions.
+* **Behavior fix:** `gextract(file = "*.parquet")` writes values as double.
 
 * **Behavior fix:** a parallel `gextract()` stops with an error when a worker dies, instead of dropping its columns.
 
-* **Behavior fix:** imports clip a record that runs past a chromosome end, with a warning, in every format.
+* **Behavior fix:** all imports clip records that run past a chromosome end, with a warning.
 
-* **Behavior fix:** with `gmulticontig.2d.cache = TRUE`, a change of `gmulticontig.2d.mode` takes effect.
+* **Behavior fix:** changing `gmulticontig.2d.mode` takes effect when `gmulticontig.2d.cache = TRUE`.
 
-* `gseq.extract(pad = TRUE)` returns fixed-width windows past chromosome ends, padded with "N".
+* New `gseq.extract(pad = TRUE)`: fixed-width sequences past chromosome ends, padded with "N".
 
-* New virtual track function `weighted.sum`: value times overlapping bp, for windows that cut bins (`sum` counts every touched bin in full).
+* New virtual track function `weighted.sum`: values weighted by the overlapping bases.
 
-* Track attributes travel through Parquet export and import. Suggested attribute names for model predictions: `value.scale`, `model`, `checkpoint`, `heldout.chroms`.
+* Track attributes are kept through Parquet export and import.
 
 * PSSM input is checked: counts are accepted; log-odds, `NA` and all-zero rows are errors.
 
-* An error inside a misha call no longer leaves the rest of the session running in one process.
-
 * `NA` logical arguments and `NA` or infinite coordinates are errors.
 
-* Intervals passed by value (e.g. through `do.call()`) are no longer slow (about 80x faster for 2M intervals).
+* An error inside a misha call no longer leaves the session running in one process.
 
-* Database fixes: stale `.db.cache` locks, refused dataset re-loads, copies into datasets and failed overwrites no longer leave the database in a bad state.
+* Database fixes: stale `.db.cache` locks, dataset re-loads, copies into datasets and failed overwrites.
 
-* `gtrack.export_bigwig()` works on databases whose chromosome order is not alphabetical. bedGraph export is about 10x faster and bedGraph/WIG import about 6x.
+* `gtrack.export_bigwig()` works on databases whose chromosome order is not alphabetical.
 
-* `gtrack.2d.import_contacts(fends =)` needs memory for the fends only, not up to the largest id. `gmax.data.size` is documented as a number of records, and the `gtrack.smooth()` window rule is documented.
+* `gtrack.2d.import_contacts(fends =)` uses less memory.
 
-* Faster, with the same results: genome-wide `gextract()` of many virtual tracks (about 2x, with about half the memory), dense tracks read at their own bin size (about 4x), `gquantiles()`, `gtrack.create_dense()`, `gextract.variants()`, small calls on databases with many tracks, and Potts scans.
+* Faster: `gextract()` of many virtual tracks, dense tracks, `gquantiles()`, `gtrack.create_dense()`, `gextract.variants()`, Potts scans, bedGraph/WIG import and export, and intervals passed by value.
 
-* Parallel computations over many intervals, such as genomes of many contigs, split the work evenly; the last process did twice the others' work. Sums combined across processes can differ in the last digits.
+* Parallel runs over many contigs split the work evenly; sums can differ in the last digits.
 
-* A warning, once per session, when starting parallel processes from a large R session will take seconds (seen on RHEL 7 hosts).
+* A warning when starting parallel processes from a large R session will be slow.
 
-* Zero quantiles are returned as 0, not -0. `gseq.extract()` checks `gmax.data.size` before reading. A worker thread that cannot start no longer aborts R.
+* Zero quantiles are 0, not -0. `gseq.extract()` checks `gmax.data.size`. A worker thread that fails to start no longer aborts R.
 
 # misha 5.16.1
 
@@ -88,7 +86,7 @@ This release fixes defects found in a review of 5.16.1, speeds up large computat
 
 # misha 5.16.0
 
-This release fixes the remaining defects found in the review of 5.14.4. Several change results, marked **Behavior fix**; recompute anything that depends on them.
+Fixes marked **Behavior fix** change results; recompute anything that depends on them.
 
 * **Behavior fix:** `gcor()` computes standard deviations, covariance and correlation without cancellation; values far from zero relative to their spread gave NaN or wrong correlations, also in multitask runs.
 
@@ -190,7 +188,7 @@ This release fixes the remaining defects found in the review of 5.14.4. Several 
 
 # misha 5.15.0
 
-This release fixes defects found in a review of 5.14.4. Several change results, marked **Behavior fix**; recompute anything that depends on them.
+Fixes marked **Behavior fix** change results; recompute anything that depends on them.
 
 * **Behavior fix:** PWM scoring never uses a window that holds N or another non-ACGT base, in every function: the PWM virtual tracks (`pwm.max.pos` and spatially weighted `pwm`/`pwm.max` used to charge N the column mean and score IUPAC codes as perfect matches), `gseq.pwm()`, the edit distance functions (`pwm.edit_distance*`, `pwm.max.edit_distance`, `pwm.n_mutations`, `gseq.pwm_edits()`) and `gtrack.create_pwm_energy()`. `gseq.pwm()` now defaults to `neutral_chars = character(0)`; pass `neutral_chars = c("N", "n", "*")` for the old scores. An interval with no scorable window gives NA (`gseq.pwm(mode = "pos")` used to return 1), and a `gtrack.create_pwm_energy()` bin with none is NaN.
 
