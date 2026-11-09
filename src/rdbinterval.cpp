@@ -29,6 +29,7 @@
 #include "GIntervalsBigSet2D.h"
 #include "GTrackIntervalsFetcher1D.h"
 #include "GTrackIntervalsFetcher2D.h"
+#include "TrackNameIndex.h"
 
 using namespace std;
 
@@ -194,17 +195,7 @@ const GenomeTrack::ChromFiles &IntervUtils::get_chrom_files(const string &dir) c
 
 bool IntervUtils::track_exists(const char *track_name)
 {
-	SEXP all_track_names = R_NilValue;
-	SEXPCleaner all_track_names_cleaner(all_track_names);
-
-	rprotect(all_track_names = find_in_misha(get_env(), "GTRACKS"));
-	if (Rf_isString(all_track_names)) {
-		for (int i = 0; i < Rf_length(all_track_names); ++i) {
-			if (!strcmp(track_name, CHAR(STRING_ELT(all_track_names, i))))
-				return true;
-		}
-	}
-	return false;
+	return TrackNameIndex::gtracks(find_in_misha(get_env(), "GTRACKS"))->find(track_name) != NULL;
 }
 
 // Process-wide cache for the genome interval lists. Keyed on the SEXP
@@ -412,7 +403,12 @@ static void split_intervals_1d_by_range(const GIntervals &intervals, int desired
 				continue;
 			}
 
-			int64_t target_kid_range = (range_left + kids_left - 1) / kids_left;
+			// The kid's share of what was left when it started: range_left has
+			// already lost the kid's own segments, so dividing it alone made each
+			// kid stop at 1/(kids_left + 1) of the rest and left the last kid
+			// about twice the share of the others whenever the scope has many
+			// intervals (a genome of many contigs).
+			int64_t target_kid_range = (range_left + kid_range + kids_left - 1) / kids_left;
 			int64_t need = target_kid_range - kid_range;
 
 			if (need <= 0 && !kid_intervals->empty()) {
@@ -460,6 +456,41 @@ static void split_intervals_1d_by_range(const GIntervals &intervals, int desired
 		delete out_kids.back();
 		out_kids.pop_back();
 	}
+}
+
+// Test-only entry point: the bp each kid gets from split_intervals_1d_by_range()
+// for consecutive intervals of the given lengths on one chromosome.
+extern "C" SEXP C_split_by_range_shares(SEXP _lengths, SEXP _kids, SEXP _align)
+{
+	try {
+		if (!Rf_isReal(_lengths) || !Rf_isInteger(_kids) || Rf_length(_kids) != 1 || !Rf_isInteger(_align) || Rf_length(_align) != 1)
+			verror("lengths must be numeric, kids and align single integers");
+		GIntervals intervals;
+		int64_t pos = 0;
+		for (R_xlen_t i = 0; i < Rf_xlength(_lengths); ++i) {
+			const int64_t len = (int64_t)REAL(_lengths)[i];
+			if (len <= 0)
+				verror("lengths must be positive");
+			intervals.push_back(GInterval(0, pos, pos + len, 0));
+			pos += len;
+		}
+		vector<GIntervalsFetcher1D *> kids;
+		split_intervals_1d_by_range(intervals, INTEGER(_kids)[0], INTEGER(_align)[0], kids);
+		SEXP res = rprotect_ptr(RSaneAllocVector(REALSXP, kids.size()));
+		for (size_t k = 0; k < kids.size(); ++k) {
+			const GIntervals *kid = (GIntervals *)kids[k];
+			double r = 0;
+			for (const GInterval &iv : *kid)
+				r += (double)iv.range();
+			REAL(res)[k] = r;
+			delete kids[k];
+		}
+		runprotect(1);
+		return res;
+	} catch (TGLException &e) {
+		rerror("%s", e.msg());
+	}
+	return R_NilValue;
 }
 
 int IntervUtils::prepare4multitasking(SEXP track_exprs, GIntervalsFetcher1D *scope1d, GIntervalsFetcher2D *scope2d, SEXP iterator_policy, SEXP band,
@@ -932,6 +963,8 @@ bool IntervUtils::distribute_task(uint64_t res_const_size,    // data size in by
 			throw;
 		rdb::prepare4multitasking(res_const_size, res_record_size, ram_shm_size, get_max_mem_usage(), m_num_planned_kids, true);
 	}
+
+	rdb::warn_if_forks_are_slow(m_envir, m_kids_intervals1d.size() + m_kids_intervals2d.size());
 
 	for (vector<GIntervalsFetcher1D *>::const_iterator ikid_intervs = m_kids_intervals1d.begin(); ikid_intervs != m_kids_intervals1d.end(); ++ikid_intervs) {
 		if (!launch_process())

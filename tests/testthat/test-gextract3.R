@@ -66,3 +66,40 @@ test_that("gextract iterators", {
     expect_regression(gextract("test.rects", gintervals.2d(chroms1 = c(6, 5), chroms2 = c(8, 9)), iterator = "test.computed2d"), "gextract.2")
     expect_regression(gextract("test.computed2d", gintervals.2d(chroms1 = c(6, 5), chroms2 = c(8, 9)), iterator = "test.computed2d"), "gextract.1")
 })
+
+test_that("an expression uses the tracks it names as whole identifiers, wherever they stand", {
+    iv <- gintervals(1, 0, 200)
+    # test.fixedbin is a prefix of test.fixedbin_1bp: only the named track sets the iterator
+    expect_equal(nrow(gextract("test.fixedbin_1bp", iv)), 200L)
+    expect_equal(nrow(gextract("test.fixedbin", iv)), 4L)
+    expect_equal(nrow(gextract("test.fixedbin_1bp*2", iv)), 200L)
+    base <- gextract("test.fixedbin", iv, colnames = "v")$v
+    # in backticks, in a string, after $, as an argument name: still the track
+    expect_equal(gextract("`test.fixedbin` + 1", iv, colnames = "v")$v, base + 1)
+    expect_equal(gextract("test.fixedbin + nchar('test.fixedbin')", iv, colnames = "v")$v, base + 13)
+    expect_equal(gextract("ifelse(is.na(test.fixedbin), -1, test.fixedbin)", iv, colnames = "v")$v, ifelse(is.na(base), -1, base))
+    # a name that runs on into more identifier characters is another name
+    expect_error(gextract("test.fixedbinx", iv))
+    expect_error(gextract("xtest.fixedbin", iv))
+
+    withr::defer({
+        for (vt in gvtrack.ls()) {
+            gvtrack.rm(vt)
+        }
+    })
+    gvtrack.create("vt_avg", "test.fixedbin", "avg")
+    gvtrack.create("vt_avg2", "test.fixedbin", "avg")
+    gvtrack.iterator("vt_avg2", sshift = -100, eshift = 100)
+    v1 <- gextract("vt_avg", iv, iterator = 50, colnames = "v")$v
+    expect_equal(v1, base)
+    both <- gextract(c("vt_avg2 - vt_avg", "vt_avg"), iv, iterator = 50, colnames = c("d", "a"))
+    expect_equal(both$a, base)
+    expect_equal(both$d, gextract("vt_avg2", iv, iterator = 50, colnames = "v")$v - base)
+    # a virtual track whose source names no track
+    expect_error({
+        gvtrack.create("vt_bad", "no.such.track", "avg")
+        gextract("vt_bad", iv, iterator = 50)
+    })
+    # an iterator naming no track or interval set
+    expect_error(gextract("test.fixedbin", iv, iterator = "no.such.track"), "neither a name of a track")
+})

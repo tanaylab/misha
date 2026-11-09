@@ -28,7 +28,9 @@
 #' limit, it also bounds the shared memory for the results of \cr \tab \tab
 #' child processes (half the RAM at most) and gquantiles' samples. \cr
 #' gmax.processes \tab AUTO \tab Auto-configured to min(32, 70\% of CPU cores). \cr \tab
-#' \tab Maximal number of processes for multitasking. \cr gmax.processes2core
+#' \tab Maximal number of processes for multitasking. Each is a fork of \cr
+#' \tab \tab the R session; from a session holding 20 GB in 4 KB pages \cr
+#' \tab \tab a fork took 0.7 s (see the user manual). \cr gmax.processes2core
 #' \tab 2 \tab Maximal number of processes per CPU core for multitasking \cr
 #' gseq.extract.probe.usec \tab 100 \tab gseq.extract times its first reads \cr
 #' \tab \tab and distributes across processes when the measured cost per \cr

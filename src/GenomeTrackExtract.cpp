@@ -16,9 +16,12 @@
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <mutex>
 #include <strings.h>
+#include <sys/mman.h>
 #include <sys/stat.h>
 #include <thread>
+#include <unistd.h>
 #include <vector>
 
 #include "rdbinterval.h"
@@ -32,6 +35,7 @@
 #include "TrackExpressionFixedRectIterator.h"
 #include "TrackExpressionIntervals1DIterator.h"
 #include "TrackExpressionSparseIterator.h"
+#include "WorkerThreads.h"
 #include "TGLException.h"
 
 // Optional profiling for gextract_multitask hot path.
@@ -194,40 +198,6 @@ static SEXP build_rintervals_extract(GIntervalsFetcher1D *out_intervals1d, GInte
 	return answer;
 }
 
-static void unpack_kid_extract_result(
-	void *ptr,
-	uint64_t num_intervals,
-	bool is_1d_iterator,
-	unsigned num_exprs,
-	GIntervals &out_intervals1d,
-	GIntervals2D &out_intervals2d,
-	SEXP ids,
-	const vector<SEXP> &r_expr_vals,
-	uint64_t values_offset)
-{
-	if (!num_intervals)
-		return;
-
-	if (is_1d_iterator) {
-		out_intervals1d.insert(out_intervals1d.end(), (GInterval *)ptr, (GInterval *)ptr + num_intervals);
-		ptr = (GInterval *)ptr + num_intervals;
-	} else {
-		out_intervals2d.insert(out_intervals2d.end(), (GInterval2D *)ptr, (GInterval2D *)ptr + num_intervals);
-		ptr = (GInterval2D *)ptr + num_intervals;
-	}
-
-	unsigned *kid_ids = (unsigned *)ptr;
-	for (uint64_t iid = 0; iid < num_intervals; ++iid)
-		INTEGER(ids)[values_offset + iid] = kid_ids[iid];
-	ptr = kid_ids + num_intervals;
-
-	for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr) {
-		double *kid_vals = (double *)ptr;
-		memcpy(REAL(r_expr_vals[iexpr]) + values_offset, kid_vals, sizeof(double) * num_intervals);
-		ptr = kid_vals + num_intervals;
-	}
-}
-
 static void set_extract_value_column_names(SEXP answer, unsigned num_interv_cols, unsigned num_exprs, SEXP _exprs, SEXP _colnames)
 {
 	SEXP col_names = rprotect_ptr(Rf_getAttrib(answer, R_NamesSymbol));
@@ -286,9 +256,19 @@ static unsigned pick_gather_threads(IntervUtils &iu, R_xlen_t nrows, int n_in)
 	return n == 0 ? 1 : n;
 }
 
-// Gather a single column from `_intervals` (`in_col`) into `dst_col`, using
-// 1-based indices in `id_p`. Pure C++ data movement - safe to run from a
-// non-main thread. Callers must validate id_p range upfront.
+// One column of the intervals_join gather: its type and the data of the source column of
+// `_intervals` and of the destination column, fetched on the calling thread - the worker
+// threads must not call the R API (INTEGER() and the like may allocate, for one on an ALTREP
+// column).
+struct GatherColumn {
+	int         type;
+	const void *src;
+	void       *dst;
+};
+
+// Gather a single column into its destination, using 1-based indices in `id_p`. Pure C++
+// data movement - safe to run from a non-main thread. Callers must validate id_p range
+// upfront.
 //
 // For STRSXP we bypass SET_STRING_ELT and write the SEXP* slots directly.
 // This is safe because:
@@ -299,35 +279,28 @@ static unsigned pick_gather_threads(IntervUtils &iu, R_xlen_t nrows, int n_in)
 //     argument stack throughout the call, so they cannot be reclaimed.
 //   - We do not touch any R API from worker threads, so no GC can fire mid
 //     loop.
-static void gather_one_column(SEXP in_col, SEXP dst_col,
-                              const int *id_p, R_xlen_t nrows)
+static void gather_one_column(const GatherColumn &col, const int *id_p, R_xlen_t nrows)
 {
-	switch (TYPEOF(in_col)) {
-		case INTSXP: {
-			const int *src = INTEGER(in_col);
-			int *dst = INTEGER(dst_col);
+	switch (col.type) {
+		case INTSXP:
+		case LGLSXP: {
+			const int *src = (const int *)col.src;
+			int *dst = (int *)col.dst;
 			for (R_xlen_t i = 0; i < nrows; ++i)
 				dst[i] = src[id_p[i] - 1];
 			break;
 		}
 		case REALSXP: {
-			const double *src = REAL(in_col);
-			double *dst = REAL(dst_col);
-			for (R_xlen_t i = 0; i < nrows; ++i)
-				dst[i] = src[id_p[i] - 1];
-			break;
-		}
-		case LGLSXP: {
-			const int *src = LOGICAL(in_col);
-			int *dst = LOGICAL(dst_col);
+			const double *src = (const double *)col.src;
+			double *dst = (double *)col.dst;
 			for (R_xlen_t i = 0; i < nrows; ++i)
 				dst[i] = src[id_p[i] - 1];
 			break;
 		}
 		case STRSXP: {
 			// Direct pointer writes; see contract above.
-			const SEXP *src = STRING_PTR_RO(in_col);
-			SEXP *dst = (SEXP *)STRING_PTR_RO(dst_col);
+			const SEXP *src = (const SEXP *)col.src;
+			SEXP *dst = (SEXP *)col.dst;
 			for (R_xlen_t i = 0; i < nrows; ++i)
 				dst[i] = src[id_p[i] - 1];
 			break;
@@ -494,37 +467,235 @@ static SEXP transform_intervals_join(SEXP answer, SEXP _intervals,
 	}
 
 	// Parallel column gather. Workers steal columns via an atomic counter.
-	unsigned nworkers = pick_gather_threads(iu, nrows, n_in);
-	if (nworkers <= 1) {
-		for (int j = 0; j < n_in; ++j)
-			gather_one_column(VECTOR_ELT(_intervals, j),
-			                  VECTOR_ELT(out, n_keep + j),
-			                  id_p, nrows);
-	} else {
-		std::atomic<int> next{0};
-		auto worker = [&]() {
-			for (;;) {
-				int j = next.fetch_add(1, std::memory_order_relaxed);
-				if (j >= n_in)
-					return;
-				gather_one_column(VECTOR_ELT(_intervals, j),
-				                  VECTOR_ELT(out, n_keep + j),
-				                  id_p, nrows);
-			}
-		};
-		std::vector<std::thread> threads;
-		threads.reserve(nworkers - 1);
-		for (unsigned t = 0; t < nworkers - 1; ++t)
-			threads.emplace_back(worker);
-		worker();
-		for (auto &th : threads)
-			th.join();
+	vector<GatherColumn> cols(n_in);
+	for (int j = 0; j < n_in; ++j) {
+		SEXP in_col = VECTOR_ELT(_intervals, j);
+		SEXP dst_col = VECTOR_ELT(out, n_keep + j);
+
+		cols[j].type = TYPEOF(in_col);
+		switch (cols[j].type) {
+			case INTSXP:
+				cols[j].src = INTEGER(in_col);
+				cols[j].dst = INTEGER(dst_col);
+				break;
+			case LGLSXP:
+				cols[j].src = LOGICAL(in_col);
+				cols[j].dst = LOGICAL(dst_col);
+				break;
+			case REALSXP:
+				cols[j].src = REAL(in_col);
+				cols[j].dst = REAL(dst_col);
+				break;
+			case STRSXP:
+				cols[j].src = STRING_PTR_RO(in_col);
+				cols[j].dst = (void *)STRING_PTR_RO(dst_col);
+				break;
+			default:
+				cols[j].src = cols[j].dst = NULL;
+				break;
+		}
 	}
+
+	std::atomic<int> next{0};
+	run_in_threads(pick_gather_threads(iu, nrows, n_in), [&]() {
+		for (int j; (j = next.fetch_add(1, std::memory_order_relaxed)) < n_in; )
+			gather_one_column(cols[j], id_p, nrows);
+	});
 
 	Rf_setAttrib(out, R_NamesSymbol, out_names);
 	Rf_setAttrib(out, R_RowNamesSymbol, Rf_getAttrib(answer, R_RowNamesSymbol));
 	Rf_setAttrib(out, R_ClassSymbol, Rf_getAttrib(answer, R_ClassSymbol));
 	return out;
+}
+
+// Builds the gextract_multitask answer straight from the kids' result blocks in shared
+// memory: the interval columns, one column per expression and intervalID, rows in kid
+// order. A kid's block holds its intervals (GInterval or GInterval2D records), then their
+// intervalIDs, then one run of doubles per expression (see the kid's pack_data() calls).
+//
+// This is the data frame convert_intervs() builds from the concatenated intervals, down
+// to the attributes: factor levels from the chrom key (a separate levels vector per chrom
+// column in 2D), names, class, and row names 1..N, which R stores compacted as
+// c(NA, N) for N > 2. It skips the intermediate vector of every interval and the
+// single-threaded walk over the rows.
+//
+// All R objects are allocated here, on the calling thread. The worker threads only copy
+// into their memory, each taking whole kids, so the rows they write never overlap; they
+// make no R API calls. As each part of a kid's block is copied its pages are handed back
+// to the system, so at the peak the result is not held twice (the blocks are not read
+// again; the shared memory is unmapped when the call ends). Freeing the pages takes about
+// as long as the copy and the kernel does it one call at a time, so threads beyond a few
+// gain little (genome-wide 16 tracks: 5.3 s on 1 thread, 2.3 s on 4 or 8 or 16).
+static SEXP build_answer_from_kids(IntervUtils &iu, bool is_1d, unsigned num_exprs, uint64_t total_intervals,
+								   SEXP _exprs, SEXP _colnames)
+{
+	const unsigned num_interv_cols = is_1d ? (unsigned)GInterval::NUM_COLS : (unsigned)GInterval2D::NUM_COLS;
+	const unsigned num_cols = num_interv_cols + num_exprs + 1;
+	const unsigned num_chroms = iu.get_chromkey().get_num_chroms();
+	const int nkids = get_num_kids();
+	const size_t interv_size = is_1d ? sizeof(GInterval) : sizeof(GInterval2D);
+	unsigned protect_mark = protect_depth();
+
+	SEXP answer = rprotect_ptr(RSaneAllocVector(VECSXP, num_cols));
+
+	// interval columns: 1D chrom, start, end; 2D chrom1, start1, end1, chrom2, start2, end2
+	vector<unsigned> chrom_col_idx;
+	vector<int *> chrom_cols;
+	vector<double *> coord_cols;
+	for (unsigned icol = 0; icol < num_interv_cols; ++icol) {
+		bool is_chrom = is_1d ? icol == GInterval::CHROM : (icol == GInterval2D::CHROM1 || icol == GInterval2D::CHROM2);
+		SEXP col = RSaneAllocVector(is_chrom ? INTSXP : REALSXP, total_intervals);
+		SET_VECTOR_ELT(answer, icol, col);
+		if (is_chrom) {
+			chrom_col_idx.push_back(icol);
+			chrom_cols.push_back(INTEGER(col));
+		} else
+			coord_cols.push_back(REAL(col));
+	}
+
+	vector<double *> value_cols(num_exprs);
+	for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr) {
+		SEXP col = RSaneAllocVector(REALSXP, total_intervals);
+		SET_VECTOR_ELT(answer, num_interv_cols + iexpr, col);
+		value_cols[iexpr] = REAL(col);
+	}
+
+	SEXP ids = RSaneAllocVector(INTSXP, total_intervals);
+	SET_VECTOR_ELT(answer, num_interv_cols + num_exprs, ids);
+	int *ids_col = INTEGER(ids);
+
+	vector<const char *> kid_res(nkids);
+	vector<uint64_t> kid_size(nkids), kid_offset(nkids);
+	uint64_t offset = 0;
+	for (int i = 0; i < nkids; ++i) {
+		kid_res[i] = (const char *)get_kid_res(i);
+		kid_size[i] = get_kid_res_size(i);
+		kid_offset[i] = offset;
+		offset += kid_size[i];
+	}
+
+#ifdef MADV_REMOVE
+	const uintptr_t page_size = (uintptr_t)sysconf(_SC_PAGESIZE);
+	std::mutex remove_mutex;
+#endif
+
+	auto copy_kid = [&](int i) {
+		const uint64_t n = kid_size[i];
+		const uint64_t o = kid_offset[i];
+		const char *ptr = kid_res[i];
+
+		if (!n)
+			return;
+
+		// Hands back the pages of this kid's block up to "to" once they are copied. The
+		// first page of the block may hold the end of the block before it and the last
+		// page the start of the block after it, which other threads may still read: the
+		// start is rounded up and "to" down, so those two stay. MADV_DONTNEED unmaps the
+		// pages from this process, which threads do in parallel; MADV_REMOVE then frees
+		// them, which the kernel does one call at a time per mapping. The threads take
+		// turns on a mutex for it: waiting in the kernel, they spin. A failure only keeps
+		// the pages until the shared memory is unmapped at the end of the call.
+#ifdef MADV_REMOVE
+		uintptr_t released = ((uintptr_t)ptr + page_size - 1) & ~(page_size - 1);
+#endif
+		auto release = [&](const char *to) {
+#ifdef MADV_REMOVE
+			uintptr_t e = (uintptr_t)to & ~(page_size - 1);
+			if (e > released) {
+				madvise((void *)released, e - released, MADV_DONTNEED);
+				{
+					std::lock_guard<std::mutex> lock(remove_mutex);
+					madvise((void *)released, e - released, MADV_REMOVE);
+				}
+				released = e;
+			}
+#endif
+		};
+
+		if (is_1d) {
+			int *chroms = chrom_cols[0];
+			double *starts = coord_cols[0], *ends = coord_cols[1];
+			for (uint64_t j = 0; j < n; ++j) {
+				// memcpy: a kid's block starts wherever the previous one ended, so the
+				// records need not be aligned
+				GInterval interv;
+				memcpy((void *)&interv, ptr + j * interv_size, sizeof(GInterval));
+				chroms[o + j] = interv.chromid + 1;
+				starts[o + j] = interv.start;
+				ends[o + j] = interv.end;
+			}
+		} else {
+			int *chroms1 = chrom_cols[0], *chroms2 = chrom_cols[1];
+			double *starts1 = coord_cols[0], *ends1 = coord_cols[1], *starts2 = coord_cols[2], *ends2 = coord_cols[3];
+			for (uint64_t j = 0; j < n; ++j) {
+				GInterval2D interv;
+				memcpy((void *)&interv, ptr + j * interv_size, sizeof(GInterval2D));
+				chroms1[o + j] = interv.chromid1() + 1;
+				starts1[o + j] = interv.start1();
+				ends1[o + j] = interv.end1();
+				chroms2[o + j] = interv.chromid2() + 1;
+				starts2[o + j] = interv.start2();
+				ends2[o + j] = interv.end2();
+			}
+		}
+		ptr += n * interv_size;
+		release(ptr);
+
+		static_assert(sizeof(unsigned) == sizeof(int), "intervalID is packed as unsigned");
+		memcpy(ids_col + o, ptr, n * sizeof(unsigned));
+		ptr += n * sizeof(unsigned);
+
+		// column by column, so that a thread holds at most about one column of shared
+		// memory that is copied but not yet released
+		for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr) {
+			memcpy(value_cols[iexpr] + o, ptr, n * sizeof(double));
+			ptr += n * sizeof(double);
+			release(ptr);
+		}
+	};
+
+	std::atomic<int> next_kid{0};
+	run_in_threads(pick_gather_threads(iu, (R_xlen_t)total_intervals, nkids), [&]() {
+		for (int i; (i = next_kid.fetch_add(1)) < nkids; )
+			copy_kid(i);
+	});
+
+	// factor levels: as convert_intervs() sets them
+	for (unsigned icol : chrom_col_idx) {
+		SEXP chroms = rprotect_ptr(RSaneAllocVector(STRSXP, num_chroms));
+		for (unsigned id = 0; id < num_chroms; ++id)
+			SET_STRING_ELT(chroms, id, Rf_mkChar(iu.get_chromkey().id2chrom(id).c_str()));
+		SEXP col = VECTOR_ELT(answer, icol);
+		Rf_setAttrib(col, R_LevelsSymbol, chroms);
+		Rf_setAttrib(col, R_ClassSymbol, Rf_mkString("factor"));
+	}
+
+	SEXP col_names = rprotect_ptr(RSaneAllocVector(STRSXP, num_cols));
+	for (unsigned icol = 0; icol < num_interv_cols; ++icol)
+		SET_STRING_ELT(col_names, icol, Rf_mkChar(is_1d ? GInterval::COL_NAMES[icol] : GInterval2D::COL_NAMES[icol]));
+
+	// convert_intervs() fills 1..N, which R compacts to c(NA, N) when N > 2; give the
+	// compact form directly and spare the N-long vector
+	SEXP row_names;
+	if (total_intervals > 2) {
+		row_names = rprotect_ptr(RSaneAllocVector(INTSXP, 2));
+		INTEGER(row_names)[0] = NA_INTEGER;
+		INTEGER(row_names)[1] = (int)total_intervals;
+	} else {
+		row_names = rprotect_ptr(RSaneAllocVector(INTSXP, total_intervals));
+		for (uint64_t i = 0; i < total_intervals; ++i)
+			INTEGER(row_names)[i] = (int)(i + 1);
+	}
+
+	Rf_setAttrib(answer, R_NamesSymbol, col_names);
+	Rf_setAttrib(answer, R_ClassSymbol, Rf_mkString("data.frame"));
+	Rf_setAttrib(answer, R_RowNamesSymbol, row_names);
+
+	set_extract_value_column_names(answer, num_interv_cols, num_exprs, _exprs, _colnames);
+
+	// everything allocated here is reachable from answer: keep only answer protected
+	runprotect_to(protect_mark + 1);
+	return answer;
 }
 
 static bool is_parquet_file(const char *filename)
@@ -1758,67 +1929,20 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 			} else {  // parent process
 				auto t_gather_start = std::chrono::steady_clock::now();
 
-				// collect results from kids
-				// First pass: compute total sizes to pre-reserve and avoid repeated reallocations.
 				uint64_t total_intervals = 0;
-				for (int i = 0; i < get_num_kids(); ++i) {
+				for (int i = 0; i < get_num_kids(); ++i)
 					total_intervals += get_kid_res_size(i);
-				}
-				if (is_1d_iterator)
-					out_intervals1d.reserve(total_intervals);
-				else
-					out_intervals2d.reserve(total_intervals);
 
-				vector<SEXP> r_expr_vals(num_exprs, R_NilValue);
-				for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr)
-					r_expr_vals[iexpr] = rprotect_ptr(RSaneAllocVector(REALSXP, total_intervals));
-				SEXP ids = rprotect_ptr(RSaneAllocVector(INTSXP, total_intervals));
-				uint64_t values_offset = 0;
-
-				for (int i = 0; i < get_num_kids(); ++i) {
-					void *ptr = get_kid_res(i);
-					num_intervals = get_kid_res_size(i);
-
-					unpack_kid_extract_result(ptr, num_intervals, is_1d_iterator, num_exprs,
-						out_intervals1d, out_intervals2d, ids, r_expr_vals, values_offset);
-					values_offset += num_intervals;
-				}
-
-				if (out_intervals1d.empty() && out_intervals2d.empty()) 
+				if (!total_intervals)
 					rreturn(R_NilValue);
 
-			auto t_assemble_start = std::chrono::steady_clock::now();
+				SEXP answer = build_answer_from_kids(iu, is_1d_iterator, num_exprs, total_intervals, _exprs, _colnames);
 
-			// assemble the answer
-			SEXP answer;
-			unsigned num_interv_cols;
-
-			if (!out_intervals1d.empty()) {
-				answer = iu.convert_intervs(&out_intervals1d, GInterval::NUM_COLS + num_exprs + 1);
-				num_interv_cols = GInterval::NUM_COLS;
-			} else {
-				answer = iu.convert_intervs(&out_intervals2d, GInterval2D::NUM_COLS + num_exprs + 1);
-				num_interv_cols = GInterval2D::NUM_COLS;
-			}
-
-			for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr)
-				SET_VECTOR_ELT(answer, num_interv_cols + iexpr, r_expr_vals[iexpr]);
-			SET_VECTOR_ELT(answer, num_interv_cols + num_exprs, ids);
-
-			set_extract_value_column_names(answer, num_interv_cols, num_exprs, _exprs, _colnames);
-			// r_expr_vals and ids were protected *before* convert_intervs, so they are
-			// not on top of the stack: runprotect(1) here would pop whatever
-			// convert_intervs left instead. Name the object.
-			runprotect(ids);
-
-			if (profile) {
-				auto t_end = std::chrono::steady_clock::now();
-				double gather_ms = std::chrono::duration<double, std::milli>(t_assemble_start - t_gather_start).count();
-				double assemble_ms = std::chrono::duration<double, std::milli>(t_end - t_assemble_start).count();
-				log_gextract_timing("parent_gather_ms", gather_ms);
-				log_gextract_timing("parent_assemble_ms", assemble_ms);
-			}
-            rreturn(transform_intervals_join(answer, _intervals, join_mode, iu));
+				if (profile) {
+					auto t_end = std::chrono::steady_clock::now();
+					log_gextract_timing("parent_gather_ms", std::chrono::duration<double, std::milli>(t_end - t_gather_start).count());
+				}
+				rreturn(transform_intervals_join(answer, _intervals, join_mode, iu));
 		}
 	} catch (rdb::SingleShard &) {
 		// the serial entry point below re-queues whatever it warrants

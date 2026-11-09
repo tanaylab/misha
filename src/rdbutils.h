@@ -164,6 +164,11 @@ bool is_kid();
 // its kid index; otherwise every kid would draw the same numbers.
 double r_unif_rand();
 
+// Called by the parent before it forks num_kids processes. Once per R session, queues a
+// warning (see add_pending_diagnostic) when the session holds so much memory in 4 KB pages
+// that the forks alone will take seconds; see the definition.
+void warn_if_forks_are_slow(SEXP envir, unsigned num_kids);
+
 // Use rprotect instead of PROTECT!
 SEXP rprotect(SEXP &expr);
 
@@ -433,8 +438,9 @@ static inline void define_in_misha(SEXP envir, const char *name, SEXP value) {
 // inflated for the rest of the session.
 //
 // The queue is .misha$.GPENDING.DIAGNOSTICS: a list of length-2 character vectors,
-// c(severity, text), in the order they were produced. `severity` is "message" or
-// "warning". Appending rather than assigning one slot per severity means a second
+// c(severity, text), in the order they were produced. `severity` is "message",
+// "warning", or "fork_cost": a warning that also records that it was shown (see
+// warn_if_forks_are_slow). Appending rather than assigning one slot per severity means a second
 // diagnostic within one call cannot silently overwrite the first, and a new severity
 // costs nothing on either side of the boundary.
 //
@@ -745,7 +751,7 @@ private:
     static void    check_kids_state(bool ignore_errors);
 	static void    forget_reaped_kids();
 	static void    wait_for_kids(rdb::IntervUtils &iu);
-	static int64_t update_kids_mem_usage();
+	static int64_t update_kids_mem_usage(bool &counted);
 	static int     get_num_kids() { return s_kid_index; }
 	[[noreturn]] static void handle_error(const char *msg);
 	static void    update_progress(unsigned char progress);

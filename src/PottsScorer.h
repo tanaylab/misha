@@ -46,6 +46,10 @@ public:
 
     void invalidate_cache();
 
+    // Frees the encoded stretch of the chromosome (target_from_chunk()); for a
+    // scan that moves to another chromosome.
+    void release_chunk();
+
     // The best per-anchor score from the last score_interval() call, or -inf if
     // it scored nothing. SequenceVarProcessor::score_potts_var() (in
     // SequenceVarProcessor.cpp) calls this to aggregate MAX_LIKELIHOOD_POS
@@ -78,6 +82,10 @@ private:
     // float this returns through and -inf out of the aggregators below can
     // only mean "no scorable anchor".
     double anchor_value(size_t i, bool union_max, int &dir) const;
+    // anchor_value() of the anchors i .. i + 3, all four windows scorable,
+    // through PottsModel::score_codes4(): the same four values, computed side
+    // by side.
+    void anchor_values4(size_t i, bool union_max, double u[4], int dir[4]) const;
 
     // max_edits = 1: the best anchor score reachable with at most one
     // substitution. Max over substitutions and max over anchors commute, and a
@@ -200,9 +208,62 @@ private:
     double m_last_max_score = -std::numeric_limits<double>::infinity();
 
     // Scratch, reused across calls so a per-bp iterator does not reallocate.
+    std::vector<char> m_seq; // the fetched target, kept up to SEQ_BUFFER_KEEP bytes
+    static constexpr size_t SEQ_BUFFER_KEEP = 1 << 16;
     std::vector<int8_t> m_codes;
     std::vector<int32_t> m_nbad;
     std::vector<int8_t> m_block_codes;
+
+    // What the anchor loops read: the current target's codes, prefix counts of
+    // non-ACGT bases and block codes, index 0 at the target's first base. They
+    // point either into m_codes / m_nbad / m_block_codes (a target fetched and
+    // encoded for this call) or into m_chunk below. m_bc_ready says m_bc already
+    // holds every block code; otherwise block_codes_for() computes the ones a
+    // loop is about to read, as potts_block_codes() always did.
+    const int8_t *m_c = nullptr;
+    const int32_t *m_nb = nullptr;
+    const int8_t *m_bc = nullptr;
+    bool m_bc_ready = false;
+    void block_codes_for(size_t lo, size_t hi);
+
+    // An encoded stretch of the current chromosome, in this scorer's
+    // orientation (reverse-complemented for strand -1), so that a scan whose
+    // targets are short and overlap - iterator = 1 with a 1 bp vtrack, the
+    // usual shape of a per-bp screen - reads and encodes each base once instead
+    // of fetching, copying and encoding a W bp target per call. The codes are
+    // the ones the fetched target would give (a complemented code is 3 - code,
+    // as basepair2complementary() maps only ACGTacgt), so every score is
+    // bit-identical. Built only after CHUNK_MIN_RUN calls in a row whose target
+    // overlapped the one before, further along the same chromosome: a few bins of
+    // a short interval, or targets with gaps between them, fetch as before
+    // rather than encode bases no call reads. Never built while a substitution
+    // is set on the shared GenomeSeqFetch (gextract.variants), whose reads it
+    // would not see. It starts at CHUNK_MIN_LEN bases and doubles per refill up
+    // to CHUNK_MAX_LEN (6 bytes a base: 192 KB), and release_chunk() frees it
+    // when the scan moves to another chromosome.
+    struct SeqChunk {
+        int chromid = -1;
+        int64_t start = 0; // genomic [start, end), forward coordinates
+        int64_t end = 0;
+        std::vector<int8_t> codes;
+        std::vector<int32_t> nbad;
+        std::vector<int8_t> block_codes;
+        int last_chromid = -1;  // the previous call's target, for the overlap test
+        int64_t last_start = -1;
+        int64_t last_end = -1;
+        int run = 0;            // calls in a row whose target overlapped the one before
+        size_t next_len = 0;    // length of the next chunk, doubled per refill
+    };
+    static constexpr int64_t CHUNK_MAX_TARGET = 4096;   // longer targets take the fetch path
+    static constexpr int CHUNK_MIN_RUN = 16;
+    static constexpr size_t CHUNK_MIN_LEN = 256;
+    static constexpr size_t CHUNK_MAX_LEN = 1 << 15;
+    SeqChunk m_chunk;
+    // Points m_c / m_nb / m_bc at the chunk's copy of `expanded`, building or
+    // refilling the chunk as needed; false when the call should fetch instead
+    // (the pointers are left as they were; the overlap record is updated
+    // either way).
+    bool target_from_chunk(const GInterval &expanded, const GenomeChromKey &chromkey);
 
     SlideCache m_slide;
     // Seed scratch in window-slot order: the value for every mode but

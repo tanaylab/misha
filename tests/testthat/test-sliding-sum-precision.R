@@ -60,3 +60,40 @@ test_that("sliding window sum has no precision drift", {
         merged$fresh_sum[both_valid]
     )
 })
+
+test_that("windows of two sizes slide and give what each window read afresh gives", {
+    # A 60 bp iterator over test.fixedbin's 50 bp bins gives windows of two sizes, which slide
+    # from one to the next (dropping and adding different numbers of bins) for sum, exists and
+    # size, and for sum with avg, while the sum stays exact; lse slides between windows of one
+    # size. Rows 600 bp apart are each read afresh. (lse with avg is left out: there a window read
+    # afresh sums the LSE in float, a slid one in double.)
+    withr::defer({
+        for (vt in gvtrack.ls()) {
+            gvtrack.rm(vt)
+        }
+    })
+    sets <- list("sum", "lse", "exists", "size", c("sum", "lse", "exists", "size"), c("sum", "avg"), c("exists", "size"))
+    end1 <- gintervals.all()$end[1]
+    query <- rbind(gintervals(1, 0, 300000), gintervals(1, end1 - 30000, end1))
+    for (shifts in list(c(-140, 173), c(-1000, 1000), c(7, 290))) {
+        for (funcs in sets) {
+            for (vt in gvtrack.ls()) {
+                gvtrack.rm(vt)
+            }
+            vts <- paste0("vt_", funcs)
+            for (i in seq_along(funcs)) {
+                gvtrack.create(vts[i], "test.fixedbin", func = funcs[i])
+                gvtrack.iterator(vts[i], sshift = shifts[1], eshift = shifts[2])
+            }
+            slid <- gextract(vts, query, iterator = 60)
+            rows <- seq(1, nrow(slid), by = 10)
+            far <- slid[rows, c("chrom", "start", "end")]
+            fresh <- gextract(vts, far, iterator = far)
+            label <- paste(paste(funcs, collapse = "+"), paste(shifts, collapse = ","))
+            expect_gt(sum(!is.na(fresh[[vts[1]]])), 100)
+            for (vt in vts) {
+                expect_identical(slid[[vt]][rows], fresh[[vt]], label = paste(label, vt))
+            }
+        }
+    }
+})

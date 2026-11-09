@@ -138,13 +138,16 @@ gextract.variants <- function(expr = NULL, intervals = NULL, variants = NULL, it
             r <- .gvariants_saturate(p)
             r$ok <- rep(TRUE, nrow(r))
         } else {
-            p$chrom <- as.character(b$chrom[p$bin])
             if (!nrow(p)) {
                 next
             }
             # Only the variants this chunk can reach go into the join.
-            v <- variants[variants$chrom %in% unique(p$chrom) &
+            v <- variants[variants$chrom %in% as.character(b$chrom[unique(p$bin)]) &
                 variants$pos >= min(p$pos) & variants$pos <= max(p$pos), , drop = FALSE]
+            # and only the positions that hold one of them: p has a row for every base each bin
+            # reads. Matching the position alone keeps every row the join keeps.
+            p <- p[p$pos %in% v$pos, , drop = FALSE]
+            p$chrom <- as.character(b$chrom[p$bin])
             r <- merge(p, v, by = c("chrom", "pos"))
             r <- r[order(r$bin, r$pos, r$alt), c("bin", "pos", "ref", "alt", "ok"), drop = FALSE]
         }

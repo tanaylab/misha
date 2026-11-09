@@ -293,6 +293,17 @@ public:
 	void set_vars(const GInterval &interval, unsigned idx);
 	void set_vars(const GInterval2D &interval, const DiagonalBand &band, unsigned idx);
 
+	// Whether every variable is a track named as is - a dense track that is not a virtual track,
+	// so no function, shift, filter or percentile - and there are no sequence, interval or value
+	// variables. The value of an interval of a fixed-bin iterator is then that of the bin it lies
+	// in, as long as the iterator's bin size is the tracks' (see TrackExprScanner::fill_bins_bulk).
+	bool dense_tracks_only() const;
+
+	// For dense_tracks_only() variables: sets slots idx, idx + 1, ... of every variable to the values
+	// of bins first_bin, first_bin + 1, ... (num_bins of them), as set_vars() sets them for the
+	// iterator intervals of these bins. interval is the last of these intervals.
+	void set_vars_bins(const GInterval &interval, int64_t first_bin, unsigned num_bins, unsigned idx);
+
 private:
     rdb::IntervUtils &m_iu;
     string                  m_groot;
@@ -361,6 +372,14 @@ private:
 	std::unique_ptr<IntervVarProcessor>      m_interv_processor;
 	std::unique_ptr<ValueVarProcessor>       m_value_processor;
 	std::unique_ptr<SequenceVarProcessor>    m_sequence_processor;
+
+	// Set by init(): whether any track variable is sequence based (PWM, k-mer, ...) and
+	// whether any is not. set_vars() runs for every iterator interval, so it skips the
+	// processors that have nothing to do.
+	bool                                     m_has_sequence_vars{true};
+	bool                                     m_has_track_vars{true};
+
+	std::vector<float>                       m_bin_vals;  // set_vars_bins
 
 	void                 parse_imdf(SEXP rvtrack, const string &vtrack, Iterator_modifier1D *imdf1d, Iterator_modifier2D *imdf2d);
 	Iterator_modifier1D *add_imdf(const Iterator_modifier1D &imdf1d);

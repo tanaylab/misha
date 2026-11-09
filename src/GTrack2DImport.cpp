@@ -263,6 +263,7 @@ vector<char> run_kids(IntervUtils &iu, int num_kids, const function<char(int)> &
 	}
 
 	prepare4multitasking(sizeof(char), 0, num_kids * sizeof(char), throttle ? iu.get_max_mem_usage() : misha::config::UNLIMITED, num_kids);
+	warn_if_forks_are_slow(iu.get_env(), num_kids);
 
 	for (int kid = 0; kid < num_kids; ++kid) {
 		if (!launch_process()) {

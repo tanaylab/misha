@@ -1024,6 +1024,21 @@ One should not expect the internal limiting mechanism to be the panacea for memo
 
 It is worth to say a word about memory consumption. Deducting real memory usage of the process based on "top", "ps" or other utilities of similar kind might be highly misleading. Since all the processes are spawned from R, their memory usage as reported by these utilities will be at least as high as that of their parent process. If, for example, R process uses 5 Gb of memory and 10 processes are spawned from it, the virtual memory of all these 11 processes will top 55 Gb. Yet the majority of the consumed memory will be shared and unless the child processes start modifying this memory or allocating new one, the physical free memory of the machine will remain almost unaltered. The internal memory consumption limiting mechanism tries to estimate the drop of system free memory and hence deducts its data from counting "Private Dirty" bytes (on Linux) or from internal estimation (on other platforms) - a very different datum from what "top" is reporting.
 
+### Multitasking from a Large R Session
+
+Each child process is a fork of the R session. A fork copies the page tables of the session, once per child, so its cost grows with the memory the session holds. When the memory of the session is in 2 MB transparent huge pages the copy is small; when it is in 4 KB pages (the `AnonHugePages` lines of `/proc/<pid>/smaps` of the R process are 0), it can take longer than the call itself. Measured with `gmax.processes = 32`, a `gsummary` of a `sum` virtual track at iterator 32 over chr1 and chr2 of mm10, median of 3 runs:
+
+| Host | Memory pages of the session | Session holds | Elapsed |
+|------|-----------------------------|---------------|---------|
+| Linux 3.10 (CentOS 7) | 4 KB | 0.1 GB | 0.67 s |
+| | | 10 GB | 11.5 s |
+| | | 20 GB | 28.0 s |
+| Linux 4.18 (AlmaLinux 8) | 2 MB | 0.1 GB | 0.32 s |
+| | | 10 GB | 0.49 s |
+| | | 20 GB | 0.68 s |
+
+On the first host nearly all of the time was the forks: 22-25 s of runs of 24-27 s, timed separately. From a session that holds tens of GB in 4 KB pages, a call that is quick on one process is better run with fewer processes (`options(gmax.processes = 4)`) or with `gmultitasking = FALSE`; freeing large objects (`rm()`, then `gc()`) before such calls also helps.
+
 ### Other Considerations
 
 In multitasking mode the return value of `gquantiles` may vary depending on the number of CPU cores. For more details please refer the documentation of this function.

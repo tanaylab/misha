@@ -56,3 +56,11 @@ bool TrackExpressionFixedBinIterator::next()
 
 	return true;
 }
+
+bool TrackExpressionFixedBinIterator::advance(int64_t k)
+{
+	// the k - 1 skipped calls of next() would only set m_last_interval, which the last one sets
+	if (k > 1 && !isend())
+		m_cur_bin += k - 1;
+	return next();
+}

@@ -98,7 +98,8 @@
   },
   "GenomeSeqFetch.h": {
     "identical": false,
-    "misha": "99e6965b8ecbc9f6",
+    "misha": "89aa47a6591c1164",
+    "needs_port": true,
     "pymisha": "3f45023c6b7515c7"
   },
   "GenomeSeqScorer.cpp": {
@@ -113,7 +114,8 @@
   },
   "GenomeTrack.cpp": {
     "identical": false,
-    "misha": "cfecc116d98319dc",
+    "misha": "bb685109ab59c76d",
+    "needs_port": true,
     "pymisha": "a40ff95461b79f69"
   },
   "GenomeTrack.h": {
@@ -129,13 +131,13 @@
   },
   "GenomeTrackFixedBin.cpp": {
     "identical": false,
-    "misha": "2722305844b3035d",
+    "misha": "350a7c29a3e017ef",
     "needs_port": true,
     "pymisha": "c5164c12a264980a"
   },
   "GenomeTrackFixedBin.h": {
     "identical": false,
-    "misha": "bb39c5581432d614",
+    "misha": "4d386debbfe8daab",
     "needs_port": true,
     "pymisha": "b0ceac1f79e683a9"
   },
@@ -157,8 +159,9 @@
     "pymisha": "c8b0d1113e0f6a55"
   },
   "GenomeUtils.h": {
-    "identical": true,
-    "misha": "b1957fb22332ea2d",
+    "identical": false,
+    "misha": "bce36799a176afb2",
+    "needs_port": true,
     "pymisha": "b1957fb22332ea2d"
   },
   "HashFunc.h": {
@@ -258,18 +261,21 @@
     "pymisha": "b4239ec87717f34e"
   },
   "PottsModel.h": {
-    "identical": true,
-    "misha": "dcc91c2a6c24bcbd",
+    "identical": false,
+    "misha": "c23e16a6dee213e4",
+    "needs_port": true,
     "pymisha": "dcc91c2a6c24bcbd"
   },
   "PottsScorer.cpp": {
-    "identical": true,
-    "misha": "9cb6313e3889861e",
+    "identical": false,
+    "misha": "7a917db6f636d877",
+    "needs_port": true,
     "pymisha": "9cb6313e3889861e"
   },
   "PottsScorer.h": {
-    "identical": true,
-    "misha": "c71a91c0cc5e30ef",
+    "identical": false,
+    "misha": "2a345eb7e7f478c2",
+    "needs_port": true,
     "pymisha": "c71a91c0cc5e30ef"
   },
   "RaList.h": {

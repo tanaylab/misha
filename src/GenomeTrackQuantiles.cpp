@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <algorithm>
 #include <cmath>
 #include <functional>
@@ -75,8 +76,11 @@ static SEXP build_rintervals_quantiles(GIntervalsFetcher1D *out_intervals1d, GIn
     for (unsigned ipercentile = 0; ipercentile < percentiles.size(); ++ipercentile) {
         SEXP percentile_vals;
         percentile_vals = rprotect_ptr(RSaneAllocVector(REALSXP, num_intervs));
-		for (uint64_t iinterv = 0; iinterv < num_intervs; ++iinterv)
-			REAL(percentile_vals)[iinterv] = quantiles[iinterv * percentiles.size() + ipercentile];
+		// 0.0 for a zero of either sign, as gquantiles gives it
+		for (uint64_t iinterv = 0; iinterv < num_intervs; ++iinterv) {
+			double v = quantiles[iinterv * percentiles.size() + ipercentile];
+			REAL(percentile_vals)[iinterv] = v == 0 ? 0. : v;
+		}
 		SET_VECTOR_ELT(answer, num_interv_cols + ipercentile, percentile_vals);
 	}
 
@@ -261,7 +265,9 @@ SEXP C_gquantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _iterator
 		for (vector<Percentile>::const_iterator ip = percentiles.begin(); ip != percentiles.end(); ++ip) {
 			char buf[100];
 
-			REAL(answer)[ip->index] = medians[ip->index];
+			// 0.0 for a zero of either sign: which zero a rank holds is arbitrary when the values
+			// hold both, and differs between the single-process and the multitask paths
+			REAL(answer)[ip->index] = medians[ip->index] == 0 ? 0. : medians[ip->index];
 
 			format_percentile(buf, sizeof(buf), ip->percentile);
 			SET_STRING_ELT(colnames, ip->index, Rf_mkChar(buf));
@@ -399,8 +405,8 @@ SEXP gquantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 				// Fast path: if no kid sub-sampled (min_sampling_rate == 1), every
 				// non-NaN value in the stream is present in some kid's samples
 				// buffer, and each kid has already sorted its buffer in-place
-				// inside shared memory. We can compute exact percentiles via a
-				// k-way merge over the per-kid sorted runs without ever
+				// inside shared memory. We can compute exact percentiles from
+				// the per-kid sorted runs without ever
 				// materialising a single concatenated samples vector. This
 				// avoids both the giant std::vector::insert reallocations
 				// (~21 GB on dense binsize=1 mm10) and the single-threaded
@@ -418,8 +424,7 @@ SEXP gquantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 
 					// Targets are the (index1, index2) pairs needed by linear
 					// interpolation in StreamPercentiler::get_percentile, in
-					// strictly ascending unique order so a single linear walk
-					// over the merged stream is enough.
+					// strictly ascending unique order.
 					vector<uint64_t> targets;
 					targets.reserve(percentiles.size() * 2);
 					if (stream_size > 0) {
@@ -433,42 +438,51 @@ SEXP gquantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 						targets.erase(unique(targets.begin(), targets.end()), targets.end());
 					}
 
-					// Min-heap of (value, run_idx). For dense full-genome scans
-					// the heap size is ~num_kids (≤ chromosomes for the typical
-					// per-chrom split), so log K is small (~6 for K=89), and
-					// the merge cost is O(N log K) which is meaningfully less
-					// than the previous O(N log N) sort for N = 2.65e9.
-					struct HeapEntry {
-						double val; int run_idx;
-						bool operator>(const HeapEntry &o) const { return val > o.val; }
+					// The value of rank t (0-based) in the merged order is the smallest value v with at
+					// least t + 1 values <= v. It is found by bisection over the doubles in their bit
+					// order (key_of maps a double to an unsigned integer in the same order as the values),
+					// counting the values <= a candidate with one binary search per run: about
+					// 64 * K * log(N / K) comparisons per target for K runs of N values in all, where a
+					// k-way merge pops every rank up to the largest target (~2.6e9 for a 1 bp genome).
+					auto key_of = [](double d) {
+						uint64_t u;
+						memcpy(&u, &d, sizeof(u));
+						return (u >> 63) ? ~u : (u | (1ULL << 63));
 					};
-					priority_queue<HeapEntry, vector<HeapEntry>, greater<HeapEntry>> heap;
-					for (int r = 0; r < (int)runs.size(); ++r) {
-						if (runs[r].cur != runs[r].end)
-							heap.push({*runs[r].cur, r});
-					}
+					auto val_of = [](uint64_t k) {
+						uint64_t u = (k >> 63) ? (k & ~(1ULL << 63)) : ~k;
+						double d;
+						memcpy(&d, &u, sizeof(d));
+						return d;
+					};
+					auto count_le = [&runs](double v) {
+						uint64_t c = 0;
+						for (const Run &rn : runs)
+							c += upper_bound(rn.cur, rn.end, v) - rn.cur;
+						return c;
+					};
 
 					vector<double> values_at_targets;
 					values_at_targets.reserve(targets.size());
-					uint64_t cur_rank = 0;
-					size_t target_i = 0;
-					while (!heap.empty() && target_i < targets.size()) {
-						HeapEntry e = heap.top();
-						heap.pop();
-
-						// e.val is the value at rank cur_rank. Capture it for
-						// every target index that equals cur_rank (target_i is
-						// monotone non-decreasing because targets is sorted).
-						while (target_i < targets.size() && targets[target_i] == cur_rank) {
-							values_at_targets.push_back(e.val);
-							++target_i;
+					if (!runs.empty()) {
+						double vmin = *runs[0].cur, vmax = runs[0].end[-1];
+						for (const Run &rn : runs) {
+							vmin = min(vmin, *rn.cur);
+							vmax = max(vmax, rn.end[-1]);
 						}
-
-						Run &rn = runs[e.run_idx];
-						++rn.cur;
-						if (rn.cur != rn.end)
-							heap.push({*rn.cur, e.run_idx});
-						++cur_rank;
+						for (uint64_t t : targets) {
+							uint64_t lo = key_of(vmin), hi = key_of(vmax);
+							while (lo < hi) {
+								uint64_t mid = lo + (hi - lo) / 2;
+								if (count_le(val_of(mid)) >= t + 1)
+									hi = mid;
+								else
+									lo = mid + 1;
+							}
+							// (a zero rank comes out as -0.0, which precedes 0.0 in the bit order; the
+							// answer gives every zero as 0.0)
+							values_at_targets.push_back(val_of(lo));
+						}
 					}
 
 					// Linear interpolation between (index1, index2) per percentile,
@@ -603,7 +617,9 @@ SEXP gquantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 		for (vector<Percentile>::const_iterator ip = percentiles.begin(); ip != percentiles.end(); ++ip) {
 			char buf[100];
 
-			REAL(answer)[ip->index] = medians[ip->index];
+			// 0.0 for a zero of either sign: which zero a rank holds is arbitrary when the values
+			// hold both, and differs between the single-process and the multitask paths
+			REAL(answer)[ip->index] = medians[ip->index] == 0 ? 0. : medians[ip->index];
 
 			format_percentile(buf, sizeof(buf), ip->percentile);
 			SET_STRING_ELT(colnames, ip->index, Rf_mkChar(buf));
@@ -1361,8 +1377,9 @@ SEXP gbins_quantiles(SEXP _track_exprs, SEXP _breaks, SEXP _include_lowest, SEXP
 		for (unsigned i = 0; i < totalbins; i++) {
 			unsigned offset = i * percentiles.size();
 
+			// 0.0 for a zero of either sign, as gquantiles gives it
 			for (vector<Percentile>::const_iterator ip = percentiles.begin(); ip != percentiles.end(); ++ip)
-				REAL(answer)[totalbins * ip->index + i] = medians[offset + ip->index];
+				REAL(answer)[totalbins * ip->index + i] = medians[offset + ip->index] == 0 ? 0. : medians[offset + ip->index];
 		}
 
 		dim = rprotect_ptr(RSaneAllocVector(INTSXP, bins_manager.get_num_bin_finders() + 1));

@@ -288,10 +288,10 @@
 
     if (file.exists(trackdir)) {
         # (the name may be listed already: a track of a dataset that this one now shadows)
-        tracks <- sort(unique(c(get("GTRACKS", envir = .misha), track)))
-        intervals <- sort(get("GINTERVS", envir = .misha))
+        tracks <- get("GTRACKS", envir = .misha)
+        tracks <- .gdb.sorted_insert(tracks, track) %||% sort(unique(c(tracks, track)))
 
-        res <- intersect(tracks, intervals)
+        res <- intersect(tracks, get("GINTERVS", envir = .misha))
         if (length(res) > 0) {
             stop("The following tracks exist also as intervals: ", paste(res, collapse = " "))
         }

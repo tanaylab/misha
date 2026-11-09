@@ -48,6 +48,14 @@ This release fixes defects found in a review of 5.16.1, speeds up large computat
 
 * `gtrack.2d.import_contacts(fends =)` needs memory for the fends only, not up to the largest id. `gmax.data.size` is documented as a number of records, and the `gtrack.smooth()` window rule is documented.
 
+* Faster, with the same results: genome-wide `gextract()` of many virtual tracks (about 2x, with about half the memory), dense tracks read at their own bin size (about 4x), `gquantiles()`, `gtrack.create_dense()`, `gextract.variants()`, small calls on databases with many tracks, and Potts scans.
+
+* Parallel computations over many intervals, such as genomes of many contigs, split the work evenly; the last process did twice the others' work. Sums combined across processes can differ in the last digits.
+
+* A warning, once per session, when starting parallel processes from a large R session will take seconds (seen on RHEL 7 hosts).
+
+* Zero quantiles are returned as 0, not -0. `gseq.extract()` checks `gmax.data.size` before reading. A worker thread that cannot start no longer aborts R.
+
 # misha 5.16.1
 
 * **Behavior fix:** a numeric `strand` other than -1, 0 or 1 is an error, as in `gintervals()`; functions that read intervals took 255 as -1 (e.g. `gseq.extract()` returned the reverse complement) and 2 as 1.
