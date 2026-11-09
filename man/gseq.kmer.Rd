@@ -41,7 +41,7 @@ scanning. Windows are k consecutive non-gap bases (default: TRUE)}
 }
 \value{
 Numeric vector with counts (for "count" mode) or fractions (for "frac" mode).
-  Returns 0 when sequence is too short or ROI is invalid.
+  Returns 0 when sequence is too short or ROI is invalid, and NA for an \code{NA} sequence.
 }
 \description{
 Counts exact matches of a k-mer in DNA sequences over a specified region of interest

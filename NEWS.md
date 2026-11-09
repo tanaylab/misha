@@ -14,6 +14,10 @@
 
 * **Behavior fix:** `gseq.kmer()` and `gseq.pwm()` match the kmer and pwm virtual tracks: `gseq.kmer(strand = 0)` sums both strands, and `extend` lets a match run past `end_pos` only.
 
+* **Behavior fix:** `pwm.count` and `gseq.pwm(mode = "count")` give `NA` where there is no window to count (a sequence or chromosome end shorter than the motif), as the other pwm functions do.
+
+* `gseq.pwm()` and `gseq.kmer()` give `NA` for an `NA` sequence.
+
 # misha 5.17.0
 
 Fixes marked **Behavior fix** change results; recompute anything that depends on them.

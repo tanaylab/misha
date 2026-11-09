@@ -178,7 +178,11 @@ gseq.comp <- function(seq) {
 #'
 #' @return Numeric vector (for "lse"/"max"/"count" modes), integer vector (for "pos" mode),
 #'   or data.frame with \code{pos} and \code{strand} columns (for "pos" mode with
-#'   \code{return_strand=TRUE}). Returns NA when no valid windows exist.
+#'   \code{return_strand=TRUE}). A sequence whose windows are all unscorable (for example
+#'   all \code{N}) gives \code{0} for \code{"count"}, as \code{pwm.count} does. A sequence
+#'   or ROI with no window at all (shorter than the motif), or an \code{NA} sequence, gives
+#'   \code{NA} in every mode, \code{"count"} included, as the PWM virtual tracks give for an
+#'   interval without an anchor.
 #'
 #' @details
 #' This function scores DNA sequences directly without requiring a genomics database.
@@ -857,7 +861,7 @@ gseq.pwm_edits <- function(seqs,
 #' @param gap_chars character vector; which characters count as gaps (default: c("-", "."))
 #'
 #' @return Numeric vector with counts (for "count" mode) or fractions (for "frac" mode).
-#'   Returns 0 when sequence is too short or ROI is invalid.
+#'   Returns 0 when sequence is too short or ROI is invalid, and NA for an \code{NA} sequence.
 #'
 #' @details
 #' This function counts k-mer occurrences in DNA sequences directly without requiring

@@ -91,7 +91,11 @@ scanning window). Has no effect when \code{neutral_chars} is empty.}
 \value{
 Numeric vector (for "lse"/"max"/"count" modes), integer vector (for "pos" mode),
   or data.frame with \code{pos} and \code{strand} columns (for "pos" mode with
-  \code{return_strand=TRUE}). Returns NA when no valid windows exist.
+  \code{return_strand=TRUE}). A sequence whose windows are all unscorable (for example
+  all \code{N}) gives \code{0} for \code{"count"}, as \code{pwm.count} does. A sequence
+  or ROI with no window at all (shorter than the motif), or an \code{NA} sequence, gives
+  \code{NA} in every mode, \code{"count"} included, as the PWM virtual tracks give for an
+  interval without an anchor.
 }
 \description{
 Scores full DNA sequences using a Position Weight Matrix (PWM) over a specified

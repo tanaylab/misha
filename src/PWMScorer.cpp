@@ -1029,9 +1029,9 @@ double PWMScorer::score_interval(const GInterval& interval, const GenomeChromKey
         const size_t motif_len = m_pssm.size();
 
         // Shorter than the motif only at a chromosome end, where the END padding is clipped: no
-        // anchor, so NaN as for any interval without one. pwm.count reports 0 here (documented).
+        // anchor, so NaN as for any interval without one, pwm.count included (nothing to count)
         if (tlen < motif_len)
-            return m_mode == MOTIF_COUNT ? 0 : std::numeric_limits<float>::quiet_NaN();
+            return std::numeric_limits<float>::quiet_NaN();
 
         if (tlen >= motif_len) {
             // On the minus strand the target is reverse-complemented: put the spat_min/spat_max range, which

@@ -607,14 +607,15 @@ test_that("gseq.pwm extend parameter works correctly", {
 
     count <- function(...) gseq.pwm(seq, pssm, mode = "count", score.thresh = 0, prior = 0, ...)
 
-    # ROI at 5-5 (just "A"): the AC at 5-6 starts in the ROI and ends past it
-    expect_equal(count(start_pos = 5, end_pos = 5, extend = FALSE), 0)
+    # ROI at 5-5 (just "A"): the AC at 5-6 starts in the ROI and ends past it. Without
+    # extend the ROI holds no window at all: NA, nothing to count, as the pwm vtracks
+    expect_equal(count(start_pos = 5, end_pos = 5, extend = FALSE), NA_real_)
     expect_equal(count(start_pos = 5, end_pos = 5, extend = TRUE), 1)
     expect_equal(count(start_pos = 5, end_pos = 5, extend = 1), 1)
 
     # ROI at 6-6 (just "C"): the AC starts before the ROI, so no extend scores it,
     # as the pwm vtracks never score an anchor before the interval
-    expect_equal(count(start_pos = 6, end_pos = 6, extend = FALSE), 0)
+    expect_equal(count(start_pos = 6, end_pos = 6, extend = FALSE), NA_real_)
     expect_equal(count(start_pos = 6, end_pos = 6, extend = TRUE), 0)
     expect_equal(count(start_pos = 6, end_pos = 6, extend = 5), 0)
     expect_lt(gseq.pwm(seq, pssm, mode = "max", prior = 0, start_pos = 6, end_pos = 6, extend = TRUE), -1)
@@ -708,8 +709,9 @@ test_that("gseq.pwm handles edge case: sequence too short", {
     result_max <- gseq.pwm(seq, pssm, mode = "max", prior = 0)
     expect_true(is.na(result_max))
 
+    # no window, so nothing to count: NA, as the pwm vtracks give
     result_count <- gseq.pwm(seq, pssm, mode = "count", score.thresh = 0, prior = 0)
-    expect_equal(result_count, 0)
+    expect_equal(result_count, NA_real_)
 
     result_pos <- gseq.pwm(seq, pssm, mode = "pos", prior = 0)
     expect_true(is.na(result_pos))
@@ -727,7 +729,7 @@ test_that("gseq.pwm handles edge case: empty ROI", {
 
     # start_pos > end_pos: invalid ROI
     result_count <- gseq.pwm(seq, pssm, mode = "count", score.thresh = 0, prior = 0, start_pos = 5, end_pos = 3)
-    expect_equal(result_count, 0)
+    expect_equal(result_count, NA_real_)
 
     result_total <- gseq.pwm(seq, pssm, mode = "lse", prior = 0, start_pos = 5, end_pos = 3)
     expect_true(is.na(result_total))
@@ -1467,7 +1469,7 @@ test_that("gseq.pwm with gaps: ROI and extend", {
 
     # ROI at 11-11 (the A) with extend=TRUE finds the AC at 11-12, which runs past it
     expect_equal(count(start_pos = 11, end_pos = 11, extend = TRUE), 1)
-    expect_equal(count(start_pos = 11, end_pos = 11, extend = FALSE), 0)
+    expect_equal(count(start_pos = 11, end_pos = 11, extend = FALSE), NA_real_)
     # ROI at 12-12 (the C): the AC starts before the ROI
     expect_equal(count(start_pos = 12, end_pos = 12, extend = TRUE), 0)
 
@@ -1513,7 +1515,7 @@ test_that("gseq.pwm with gaps: all gaps / too few non-gaps", {
     expect_true(is.na(result_lse))
 
     result_count <- gseq.pwm(seq_all_gaps, pssm, mode = "count", score.thresh = 0, prior = 0, skip_gaps = TRUE)
-    expect_equal(result_count, 0)
+    expect_equal(result_count, NA_real_)
 
     # Only one non-gap base (need 2 for motif width)
     seq_one_base <- "---A---"
@@ -2451,4 +2453,15 @@ test_that("a reverse-strand read leaves a byte above 127 as it is", {
     comp <- c(A = "T", C = "G", G = "C", T = "A")
     expected[acgt] <- charToRaw(paste(comp[rawToChar(expected[acgt], multiple = TRUE)], collapse = ""))
     expect_identical(got, expected)
+})
+
+test_that("gseq.pwm count separates 'counted nothing' from 'nothing to count', and an NA sequence is NA", {
+    pssm <- matrix(c(0.97, 0.01, 0.01, 0.01), 1, dimnames = list(NULL, c("A", "C", "G", "T")))
+    # windows, none scorable: counted, found none
+    expect_equal(gseq.pwm("NNNN", pssm, mode = "count", score.thresh = -1, prior = 0), 0)
+    # an NA sequence: its "A" used to be scored, as CHAR() of NA is "NA"
+    for (m in c("lse", "max", "count", "pos")) {
+        expect_true(is.na(gseq.pwm(NA_character_, pssm, mode = m, score.thresh = -1, prior = 0)), info = m)
+    }
+    expect_equal(gseq.kmer(c(NA, "AA"), "A", strand = 1), c(NA, 2))
 })

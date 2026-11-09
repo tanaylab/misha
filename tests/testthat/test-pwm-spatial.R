@@ -443,7 +443,8 @@ test_that("gseq.pwm spat.min/spat.max match the pwm virtual tracks", {
         for (m in c("lse", "max", "pos")) {
             expect_true(is.na(gseq.pwm("ACGTACGTACGTACGTACGT", pssm, mode = m, spat.min = 25, skip_gaps = g)), info = paste(m, g))
         }
-        expect_equal(gseq.pwm("ACGTACGTACGTACGTACGT", pssm, mode = "count", score.thresh = -1, spat.min = 25, skip_gaps = g), 0)
+        # count too, as pwm.count: nothing to count
+        expect_equal(gseq.pwm("ACGTACGTACGTACGTACGT", pssm, mode = "count", score.thresh = -1, spat.min = 25, skip_gaps = g), NA_real_)
         expect_true(is.na(gseq.pwm("ACGTACGTACGTACGTACGT", pssm, start_pos = 5, spat.min = 18, skip_gaps = g)))
     }
     # The window [spat.min, spat.max] counts from start_pos

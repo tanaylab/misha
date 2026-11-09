@@ -250,14 +250,12 @@ static ScoreResult score_pwm_over_range(
     };
 
     // No window start allowed (an ROI shorter than the motif, or spat.min past
-    // the last start). Checked before the gap path too, whose projector over
+    // the last start): NA in every mode, count included, as the pwm virtual
+    // tracks give for an interval without an anchor - there is nothing to count.
+    // Checked before the gap path too, whose projector over
     // [start_min0, start_max0 + w - 1] would get a negative size.
     if (start_max0 < start_min0) {
-        if (pwm_mode == PWM_COUNT) {
-            result.value = 0.0;
-        } else {
-            result.value = R_NaReal;
-        }
+        result.value = R_NaReal;
         return result;
     }
 
@@ -392,12 +390,9 @@ static ScoreResult score_pwm_over_range(
         int j_min = gp.first_log_ge_phys(start_min0);
         int j_max = gp.last_log_window_end_le_phys(end_lim_phys0, w);
 
+        // fewer than w non-gap bases: no window, so NA, count included
         if (j_min < 0 || j_max < j_min || static_cast<int>(gp.comp.size()) < w) {
-            if (pwm_mode == PWM_COUNT) {
-                result.value = 0.0;
-            } else {
-                result.value = R_NaReal;
-            }
+            result.value = R_NaReal;
             return result;
         }
 
@@ -796,7 +791,10 @@ SEXP C_gseq_pwm(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect,
             // at which a scan of millions of sequences can be interrupted at all.
             rdb::check_interrupt();
 
-            std::string seq = r_string_to_upper(CHAR(STRING_ELT(r_seqs, i)));
+            // An NA sequence, or an ROI with no base in the sequence, has no window: NA in every
+            // mode, count included (CHAR() of an NA is the string "NA", which would be scanned)
+            const SEXP r_seq = STRING_ELT(r_seqs, i);
+            std::string seq = r_seq == NA_STRING ? std::string() : r_string_to_upper(CHAR(r_seq));
             int L = seq.length();
             
             // Get ROI bounds
@@ -806,13 +804,10 @@ SEXP C_gseq_pwm(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect,
             // Validate bounds
             if (roi_start < 1) roi_start = 1;
             if (roi_end > L) roi_end = L;
-            if (roi_start > roi_end) {
-                // Invalid ROI
+            if (r_seq == NA_STRING || roi_start > roi_end) {
                 if (mode == "pos") {
                     INTEGER(r_pos)[i] = NA_INTEGER;
                     if (return_strand) INTEGER(r_strand_out)[i] = NA_INTEGER;
-                } else if (mode == "count") {
-                    REAL(r_result)[i] = 0.0;
                 } else {
                     REAL(r_result)[i] = R_NaReal;
                 }
@@ -953,6 +948,11 @@ SEXP C_gseq_kmer(SEXP r_seqs, SEXP r_kmer, SEXP r_mode, SEXP r_strand_mode,
         for (int i = 0; i < n_seqs; ++i) {
             rdb::check_interrupt();
 
+            // an NA sequence is NA (CHAR() of it is the string "NA", which would be counted)
+            if (STRING_ELT(r_seqs, i) == NA_STRING) {
+                REAL(r_result)[i] = R_NaReal;
+                continue;
+            }
             std::string seq = r_string_to_upper(CHAR(STRING_ELT(r_seqs, i)));
             int L = seq.length();
             

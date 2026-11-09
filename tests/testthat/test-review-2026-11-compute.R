@@ -158,19 +158,16 @@ test_that("gseq.kmer.dist(mask =) leaves out k-mers that reach into the mask", {
     expect_equal(r$count[match(names(expected), r$kmer)], as.numeric(expected))
 })
 
-test_that("pwm and pwm.max are NA at a chromosome end that holds no anchor", {
+test_that("the pwm vtracks are NA at a chromosome end that holds no anchor, pwm.count included", {
     withr::defer(remove_all_vtracks())
     pssm <- matrix(c(0.7, 0.1, 0.1, 0.1), 6, 4, byrow = TRUE, dimnames = list(NULL, c("A", "C", "G", "T")))
     sz <- gintervals.all()
     sz <- sz$end[sz$chrom == "chr1"]
     iv <- gintervals("chr1", sz - 4, sz)
-    for (fn in c("pwm", "pwm.max", "pwm.max.pos")) {
-        gvtrack.create("pwm_end", NULL, fn, pssm = pssm)
+    for (fn in c("pwm", "pwm.max", "pwm.max.pos", "pwm.count")) {
+        gvtrack.create("pwm_end", NULL, fn, pssm = pssm, score.thresh = -100)
         expect_true(is.na(gextract("pwm_end", iv, iterator = iv)$pwm_end), info = fn)
     }
-    # documented: pwm.count reports 0 there
-    gvtrack.create("pwm_end", NULL, "pwm.count", pssm = pssm, score.thresh = -100)
-    expect_equal(gextract("pwm_end", iv, iterator = iv)$pwm_end, 0)
 })
 
 test_that("pwm.edit_distance handles motifs whose prefilter block would be too large", {
