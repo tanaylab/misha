@@ -15,7 +15,7 @@ gintervals.load_chain(
 \arguments{
 \item{file}{name of chain file}
 
-\item{src_overlap_policy}{policy for handling source overlaps: "error" (default), "keep", or "discard". "keep" allows one source interval to map to multiple target intervals, "discard" discards all source intervals that have overlaps and "error" throws an error if source overlaps are detected.}
+\item{src_overlap_policy}{policy for handling source overlaps: "error" (default), "keep", "discard" or "discard_intervals". "keep" allows one source interval to map to multiple target intervals, "discard" removes the source bases covered by more than one chain interval and keeps the rest of each chain interval, "discard_intervals" discards every chain interval that has a source overlap, and "error" throws an error if source overlaps are detected.}
 
 \item{tgt_overlap_policy}{policy for handling target overlaps. One of:
 \tabular{ll}{
@@ -26,7 +26,8 @@ gintervals.load_chain(
   auto_longer \tab Resolves overlaps by segmenting and selecting the chain with the longest span for each segment. Tie-breakers: highest score, then lowest chain_id. \cr
   auto_first \tab Resolves overlaps by segmenting and selecting the chain with the lowest chain_id for each segment. \cr
   keep \tab Preserves all overlapping intervals. \cr
-  discard \tab Discards any chain interval that has a target overlap with another chain interval. \cr
+  discard \tab Removes the target bases covered by more than one chain interval and keeps the rest of each chain interval. \cr
+  discard_intervals \tab Discards any chain interval that has a target overlap with another chain interval. \cr
   agg \tab Segments overlaps into smaller disjoint regions where each region contains all contributing chains, allowing downstream aggregation to process multiple values per region. \cr
   best_source_cluster \tab Best source cluster strategy based on source overlap. When multiple chains map a source interval, clusters them by source overlap: if chain source intervals overlap (indicating true duplications), all mappings are retained; if chain source intervals are disjoint (indicating conflicting/alternative mappings), only the cluster with the largest total target length is kept. \cr
 }}
@@ -56,7 +57,8 @@ The 'src_overlap_policy' controls how source overlaps are handled:
 \itemize{
   \item "error" (default): Throw an error if source overlaps are detected
   \item "keep": Keep all mappings, allowing one source to map to multiple targets
-  \item "discard": Remove all chain intervals involved in source overlaps
+  \item "discard": Remove the source bases covered by more than one chain interval, keeping the rest of each chain interval
+  \item "discard_intervals": Remove all chain intervals involved in source overlaps
 }
 
 The 'tgt_overlap_policy' controls how target overlaps are handled:
@@ -64,7 +66,8 @@ The 'tgt_overlap_policy' controls how target overlaps are handled:
   \item "error": Throw an error if target overlaps are detected
   \item "auto" (default) / "auto_first": Keep the first overlapping chain (original file order) by trimming or discarding later overlaps while keeping source/target lengths consistent
   \item "auto_longer": Keep the longer overlapping chain and trim/drop the shorter ones
-  \item "discard": Remove all chain intervals involved in target overlaps
+  \item "discard": Remove the target bases covered by more than one chain interval, keeping the rest of each chain interval
+  \item "discard_intervals": Remove all chain intervals involved in target overlaps
   \item "keep": Allow target overlaps to remain untouched (liftover must be able to handle them)
 }
 }

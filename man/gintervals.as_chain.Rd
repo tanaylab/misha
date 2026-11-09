@@ -18,10 +18,10 @@ forward strand of each genome. Strands are 1 (forward) or -1 (reverse); a strand
 of 0 is treated as forward. Liftover uses only the relative orientation: a block
 is reversed when exactly one of 'strand' and 'strandsrc' is -1.}
 
-\item{src_overlap_policy}{source overlap policy: "error", "keep", or "discard"}
+\item{src_overlap_policy}{source overlap policy: "error", "keep", "discard", or "discard_intervals"}
 
 \item{tgt_overlap_policy}{target overlap policy: "error", "auto", "auto_first",
-"auto_longer", "auto_score", "discard", "keep", or "agg"}
+"auto_longer", "auto_score", "discard", "discard_intervals", "keep", or "agg"}
 
 \item{min_score}{optional minimum alignment score threshold}
 }

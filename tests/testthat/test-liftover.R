@@ -82,7 +82,7 @@ test_that("gintervals.load_chain handles source overlaps with 'discard' policy",
     write_chain_entry(chain_file, "source2", 50, "+", 0, 12, "chr3", 12, "+", 0, 12, 3)
 
     # Discard policy should remove overlapping intervals but keep clean ones
-    chain <- gintervals.load_chain(chain_file, src_overlap_policy = "discard")
+    chain <- gintervals.load_chain(chain_file, src_overlap_policy = "discard_intervals")
     expect_equal(nrow(chain), 1)
     expect_equal(as.character(chain$chrom), "chr3")
     expect_equal(as.character(chain$chromsrc), "source2")
@@ -185,7 +185,7 @@ test_that("gintervals.load_chain handles target overlaps with 'discard' policy",
     write_chain_entry(chain_file, "source3", 100, "+", 0, 10, "chr2", 16, "+", 0, 10, 3)
 
     # Discard policy should remove overlapping chr1 intervals but keep chr2
-    chain <- gintervals.load_chain(chain_file, tgt_overlap_policy = "discard")
+    chain <- gintervals.load_chain(chain_file, tgt_overlap_policy = "discard_intervals")
     expect_equal(nrow(chain), 1)
     expect_equal(as.character(chain$chrom), "chr2")
 })
@@ -522,10 +522,75 @@ test_that("gintervals.liftover returns empty result when all intervals discarded
     write_chain_entry(chain_file, "source1", 100, "+", 10, 27, "chr1", 32, "+", 15, 32, 2)
 
     # Load chain and discard all overlaps
-    chain <- gintervals.load_chain(chain_file, src_overlap_policy = "discard")
+    chain <- gintervals.load_chain(chain_file, src_overlap_policy = "discard_intervals")
 
     # Chain should be empty or NULL
     expect_true(is.null(chain) || nrow(chain) == 0)
+})
+
+test_that("src_overlap_policy 'discard' keeps the source bases a single interval covers", {
+    local_db_state()
+    setup_db(list(paste0(">chr1\n", paste(rep("ACGT", 100), collapse = ""), "\n")))
+
+    # A [0,100) overlaps B [10,20) and C [50,150); B and C do not overlap.
+    # D [200,210) overlaps nothing.
+    chain_file <- new_chain_file()
+    write_chain_entry(chain_file, "srcA", 1000, "+", 0, 100, "chr1", 400, "+", 0, 100, 1)
+    write_chain_entry(chain_file, "srcA", 1000, "+", 10, 20, "chr1", 400, "+", 100, 110, 2)
+    write_chain_entry(chain_file, "srcA", 1000, "+", 50, 150, "chr1", 400, "+", 200, 300, 3)
+    write_chain_entry(chain_file, "srcA", 1000, "+", 200, 210, "chr1", 400, "+", 300, 310, 4)
+
+    chain <- gintervals.load_chain(chain_file, src_overlap_policy = "discard")
+    chain <- chain[order(chain$startsrc), ]
+    expect_equal(chain$chain_id, c(1, 1, 3, 4))
+    expect_equal(chain$startsrc, c(0, 20, 100, 200))
+    expect_equal(chain$endsrc, c(10, 50, 150, 210))
+    expect_equal(chain$start, c(0, 20, 250, 300))
+    expect_equal(chain$end, c(10, 50, 300, 310))
+
+    # "discard_intervals" drops every interval with an overlap. In source order
+    # C is next to B only, so a neighbour-only check used to keep C.
+    chain <- gintervals.load_chain(chain_file, src_overlap_policy = "discard_intervals")
+    expect_equal(chain$chain_id, 4)
+})
+
+test_that("src_overlap_policy 'discard' maps the kept part of a minus-strand interval", {
+    # A: chr2 [1000,1100) -> chr1 [5000,5100) reversed; B [1010,1020) lies inside A.
+    # A keeps source [1000,1010) and [1020,1100), i.e. target [5090,5100) and [5000,5080).
+    ch <- gintervals.as_chain(data.frame(
+        chrom = "chr1", start = c(5000, 8000), end = c(5100, 8010), strand = c(-1, 1),
+        chromsrc = "chr2", startsrc = c(1000, 1010), endsrc = c(1100, 1020), strandsrc = 1,
+        chain_id = 1:2, score = 1000
+    ), src_overlap_policy = "discard")
+    res <- gintervals.liftover(gintervals("chr2", 1000, 1100), ch)
+    res <- res[order(res$start), ]
+    expect_equal(res$start, c(5000, 5090))
+    expect_equal(res$end, c(5080, 5100))
+    res <- gintervals.liftover(gintervals("chr2", 1005, 1006), ch)
+    expect_equal(c(res$start, res$end), c(5094, 5095))
+})
+
+test_that("tgt_overlap_policy 'discard' keeps the target bases a single interval covers", {
+    local_db_state()
+    setup_db(list(paste0(">chr1\n", paste(rep("ACGT", 250), collapse = ""), "\n")))
+
+    # X -> [0,100), Y -> [50,150), Z -> [20,40) inside X, W -> [500,510) alone.
+    # This is what gintervals.load_chain did with target overlaps before 5.1.2.
+    chain_file <- new_chain_file()
+    write_chain_entry(chain_file, "srcX", 1000, "+", 0, 100, "chr1", 1000, "+", 0, 100, 1)
+    write_chain_entry(chain_file, "srcY", 1000, "+", 0, 100, "chr1", 1000, "+", 50, 150, 2)
+    write_chain_entry(chain_file, "srcZ", 1000, "+", 0, 20, "chr1", 1000, "+", 20, 40, 3)
+    write_chain_entry(chain_file, "srcW", 1000, "+", 0, 10, "chr1", 1000, "+", 500, 510, 4)
+
+    chain <- gintervals.load_chain(chain_file, tgt_overlap_policy = "discard")
+    chain <- chain[order(chain$start), ]
+    expect_equal(chain$chain_id, c(1, 1, 2, 4))
+    expect_equal(chain$start, c(0, 40, 100, 500))
+    expect_equal(chain$end, c(20, 50, 150, 510))
+    expect_equal(chain$startsrc, c(0, 40, 50, 0))
+
+    chain <- gintervals.load_chain(chain_file, tgt_overlap_policy = "discard_intervals")
+    expect_equal(chain$chain_id, 4)
 })
 
 test_that("complex chain with both source and target overlaps", {
@@ -561,8 +626,8 @@ test_that("complex chain with both source and target overlaps", {
     # Test discard + discard: should only keep the clean mapping
     chain_discard_discard <- gintervals.load_chain(
         chain_file,
-        src_overlap_policy = "discard",
-        tgt_overlap_policy = "discard"
+        src_overlap_policy = "discard_intervals",
+        tgt_overlap_policy = "discard_intervals"
     )
     expect_true(nrow(chain_discard_discard) <= 1)
     if (nrow(chain_discard_discard) > 0) {

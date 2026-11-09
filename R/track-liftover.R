@@ -137,12 +137,12 @@ gtrack.liftover <- function(track = NULL,
 
     if (is.character(chain)) {
         # Chain file path provided - validate and use the policies
-        if (!src_overlap_policy %in% c("error", "keep", "discard")) {
-            stop("src_overlap_policy must be 'error', 'keep', or 'discard'", call. = FALSE)
+        if (!src_overlap_policy %in% c("error", "keep", "discard", "discard_intervals")) {
+            stop("src_overlap_policy must be 'error', 'keep', 'discard', or 'discard_intervals'", call. = FALSE)
         }
 
-        if (!tgt_overlap_policy %in% c("error", "auto", "auto_first", "auto_longer", "auto_score", "discard", "keep", "agg", "best_source_cluster", "best_cluster_union", "best_cluster_sum", "best_cluster_max")) {
-            stop("tgt_overlap_policy must be 'error', 'auto', 'auto_first', 'auto_longer', 'auto_score', 'keep', 'discard', 'agg', 'best_source_cluster', 'best_cluster_union', 'best_cluster_sum', or 'best_cluster_max'", call. = FALSE)
+        if (!tgt_overlap_policy %in% c("error", "auto", "auto_first", "auto_longer", "auto_score", "discard", "discard_intervals", "keep", "agg", "best_source_cluster", "best_cluster_union", "best_cluster_sum", "best_cluster_max")) {
+            stop("tgt_overlap_policy must be 'error', 'auto', 'auto_first', 'auto_longer', 'auto_score', 'keep', 'discard', 'discard_intervals', 'agg', 'best_source_cluster', 'best_cluster_union', 'best_cluster_sum', or 'best_cluster_max'", call. = FALSE)
         }
 
         if (!is.null(min_score) && (!is.numeric(min_score) || length(min_score) != 1)) {
@@ -174,12 +174,12 @@ gtrack.liftover <- function(track = NULL,
             min_score <- attr(chain.intervs, "min_score")
         } else {
             # Chain doesn't have attributes (e.g., manually created) - validate and use user-specified policies
-            if (!src_overlap_policy %in% c("error", "keep", "discard")) {
-                stop("src_overlap_policy must be 'error', 'keep', or 'discard'", call. = FALSE)
+            if (!src_overlap_policy %in% c("error", "keep", "discard", "discard_intervals")) {
+                stop("src_overlap_policy must be 'error', 'keep', 'discard', or 'discard_intervals'", call. = FALSE)
             }
 
-            if (!tgt_overlap_policy %in% c("error", "auto", "auto_first", "auto_longer", "auto_score", "discard", "keep", "agg", "best_source_cluster", "best_cluster_union", "best_cluster_sum", "best_cluster_max")) {
-                stop("tgt_overlap_policy must be 'error', 'auto', 'auto_first', 'auto_longer', 'auto_score', 'keep', 'discard', 'agg', 'best_source_cluster', 'best_cluster_union', 'best_cluster_sum', or 'best_cluster_max'", call. = FALSE)
+            if (!tgt_overlap_policy %in% c("error", "auto", "auto_first", "auto_longer", "auto_score", "discard", "discard_intervals", "keep", "agg", "best_source_cluster", "best_cluster_union", "best_cluster_sum", "best_cluster_max")) {
+                stop("tgt_overlap_policy must be 'error', 'auto', 'auto_first', 'auto_longer', 'auto_score', 'keep', 'discard', 'discard_intervals', 'agg', 'best_source_cluster', 'best_cluster_union', 'best_cluster_sum', or 'best_cluster_max'", call. = FALSE)
             }
 
             # Convert "auto" to "auto_score" alias
@@ -200,7 +200,7 @@ gtrack.liftover <- function(track = NULL,
     # otherwise fail deep in C++ with a confusing "Invalid target overlap policy"
     # message, so reject them here with an actionable error.
     if (tgt_overlap_policy %in% c("best_source_cluster", "best_cluster_union", "best_cluster_sum", "best_cluster_max")) {
-        stop(sprintf("tgt_overlap_policy = '%s' is only supported by gintervals.liftover(), not gtrack.liftover(). Use 'auto', 'agg', 'keep', or 'discard'.", tgt_overlap_policy), call. = FALSE)
+        stop(sprintf("tgt_overlap_policy = '%s' is only supported by gintervals.liftover(), not gtrack.liftover(). Use 'auto', 'agg', 'keep', 'discard', or 'discard_intervals'.", tgt_overlap_policy), call. = FALSE)
     }
 
     .gconfirmtrackcreate(trackstr)

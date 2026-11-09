@@ -470,7 +470,7 @@ test_that("gtrack.liftover with discard policies removes overlapping intervals",
     })
 
     gtrack.liftover(lifted_track, "Lifted track", src_track_dir, chain_file,
-        src_overlap_policy = "discard", tgt_overlap_policy = "discard"
+        src_overlap_policy = "discard_intervals", tgt_overlap_policy = "discard_intervals"
     )
 
     # Extract and validate

@@ -1011,15 +1011,41 @@ void ChainIntervals::handle_src_overlaps(const string &policy, const GenomeChrom
 	} else if (policy == "keep") {
 		// Do nothing - allow overlapping source intervals
 	} else if (policy == "discard") {
-		// Mark all intervals that have overlapping sources
+		// Keep only the source bases that a single chain interval covers. A chain
+		// interval maps the same way read from either side (minus strand too), so
+		// run the target-side trim on intervals with the two sides swapped.
+		auto swap_sides = [this]() {
+			for (ChainInterval &ci : *this) {
+				std::swap(ci.chromid, ci.chromid_src);
+				std::swap(ci.start, ci.start_src);
+				std::swap(ci.end, ci.end_src);
+			}
+		};
+		swap_sides();
+		sort_by_tgt();
+		handle_tgt_overlaps("discard", chromkey, src_id2chrom);
+		swap_sides();
+		sort_by_src();
+	} else if (policy == "discard_intervals") {
+		// Mark all intervals that have overlapping sources. Sorted by source
+		// start, interval i overlaps an earlier one iff the largest end_src
+		// before it on its chrom exceeds its start; comparing only with i-1
+		// missed A [0,100) vs C [50,150) with B [10,20) between them.
 		vector<bool> to_discard(size(), false);
+		int64_t max_end_src = 0;
 
 		for (size_t i = 1; i < size(); ++i) {
-			if ((*this)[i-1].chromid_src == (*this)[i].chromid_src &&
-			    (*this)[i-1].end_src > (*this)[i].start_src) {
-				to_discard[i-1] = true;
-				to_discard[i] = true;
+			if ((*this)[i-1].chromid_src != (*this)[i].chromid_src) {
+				max_end_src = 0;
+				continue;
 			}
+			max_end_src = max(max_end_src, (*this)[i-1].end_src);
+			if (max_end_src > (*this)[i].start_src)
+				to_discard[i] = true;
+			// i-1 overlaps a later interval iff it overlaps i, the later one
+			// with the smallest start
+			if ((*this)[i-1].end_src > (*this)[i].start_src)
+				to_discard[i-1] = true;
 		}
 
 		// Remove marked intervals
@@ -1033,7 +1059,7 @@ void ChainIntervals::handle_src_overlaps(const string &policy, const GenomeChrom
 		}
 		erase(new_end, end());
 	} else {
-		TGLError("Invalid source overlap policy: %s. Must be 'error', 'keep', or 'discard'", policy.c_str());
+		TGLError("Invalid source overlap policy: %s. Must be 'error', 'keep', 'discard', or 'discard_intervals'", policy.c_str());
 	}
 }
 
@@ -1108,7 +1134,7 @@ void ChainIntervals::handle_tgt_overlaps(const string &policy, const GenomeChrom
 		out.push_back(slice);
 	};
 
-	if (effective_policy == "discard") {
+	if (effective_policy == "discard_intervals") {
 		vector<char> to_discard(size(), 0);
 
 		size_t idx = 0;
@@ -1215,8 +1241,8 @@ void ChainIntervals::handle_tgt_overlaps(const string &policy, const GenomeChrom
 	                            effective_policy == "auto_longer" ||
 	                            effective_policy == "auto_score";
 
-	if (!is_auto_policy && effective_policy != "agg")
-		TGLError("Invalid target overlap policy: %s. Must be 'error', 'keep', 'auto_first', 'auto_longer', 'auto_score', 'agg', or 'discard'", effective_policy.c_str());
+	if (!is_auto_policy && effective_policy != "agg" && effective_policy != "discard")
+		TGLError("Invalid target overlap policy: %s. Must be 'error', 'keep', 'auto_first', 'auto_longer', 'auto_score', 'agg', 'discard', or 'discard_intervals'", effective_policy.c_str());
 
 	vector<ChainInterval> resolved;
 	resolved.reserve(size() * 2);
@@ -1260,6 +1286,10 @@ void ChainIntervals::handle_tgt_overlaps(const string &policy, const GenomeChrom
 				append_slice(resolved, (*this)[*active.begin()], pos, next_pos, allow_merge);
 				continue;
 			}
+
+			// "discard": a segment covered by several intervals maps nowhere
+			if (effective_policy == "discard")
+				continue;
 
 			if (effective_policy == "agg") {
 				for (size_t active_idx : active)

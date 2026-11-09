@@ -1,3 +1,9 @@
+# misha 5.18.0
+
+* **Behavior fix:** `src_overlap_policy = "discard"` and `tgt_overlap_policy = "discard"` (`gintervals.load_chain()`, `gintervals.liftover()`, `gtrack.liftover()`) drop only the bases that more than one chain interval covers and keep the rest of each interval, as target overlaps were handled before 5.2.0. They used to drop whole intervals, and the source side missed overlaps between intervals that are not adjacent in source order, so some bases aligned twice were lifted to one place. Present since 5.2.0.
+
+* New overlap policy `"discard_intervals"`, on both sides, drops every chain interval involved in an overlap.
+
 # misha 5.17.0
 
 This release fixes defects found in a review of 5.16.1, speeds up large computations, and adds features for sequence-to-function models. Fixes marked **Behavior fix** change results; recompute anything that depends on them.
