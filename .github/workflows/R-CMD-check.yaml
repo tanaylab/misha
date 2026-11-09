@@ -33,9 +33,31 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: r-lib/actions/setup-pandoc@v2
+      # The pandoc and R downloads time out now and then (HTTP 504, mostly on macOS): each is tried once more
+      # after a pause before the job fails.
+      - id: pandoc
+        uses: r-lib/actions/setup-pandoc@v2
+        continue-on-error: true
 
-      - uses: r-lib/actions/setup-r@v2
+      - if: steps.pandoc.outcome == 'failure'
+        run: sleep 60
+
+      - if: steps.pandoc.outcome == 'failure'
+        uses: r-lib/actions/setup-pandoc@v2
+
+      - id: setup-r
+        uses: r-lib/actions/setup-r@v2
+        continue-on-error: true
+        with:
+          r-version: ${{ matrix.config.r }}
+          http-user-agent: ${{ matrix.config.http-user-agent }}
+          use-public-rspm: true
+
+      - if: steps.setup-r.outcome == 'failure'
+        run: sleep 60
+
+      - if: steps.setup-r.outcome == 'failure'
+        uses: r-lib/actions/setup-r@v2
         with:
           r-version: ${{ matrix.config.r }}
           http-user-agent: ${{ matrix.config.http-user-agent }}

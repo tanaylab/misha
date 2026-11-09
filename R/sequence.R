@@ -782,6 +782,10 @@ gseq.pwm_edits <- function(seqs,
     if (!is.logical(bidirect) || length(bidirect) != 1L || is.na(bidirect)) {
         stop("bidirect must be TRUE or FALSE", call. = FALSE)
     }
+    # an NA extend acted as TRUE on sequences, as it did in gseq.pwm and gseq.kmer
+    if (length(extend) != 1 || is.na(extend)) {
+        stop("extend must be FALSE, TRUE, or a non-negative integer", call. = FALSE)
+    }
     if (!is.numeric(prior) || prior < 0 || prior > 1) stop("prior must be between 0 and 1")
     if (strand != 1 && strand != -1) stop("strand must be 1 or -1")
     if (!direction %in% c("above", "below")) stop("direction must be 'above' or 'below'")

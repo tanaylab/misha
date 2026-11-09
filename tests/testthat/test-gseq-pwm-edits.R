@@ -990,3 +990,9 @@ test_that("gseq.pwm_edits on intervals scans the vtrack's windows for every exte
         }
     }
 })
+
+test_that("gseq.pwm_edits refuses an NA extend on sequences, as gseq.pwm does", {
+    pssm <- matrix(c(0.7, 0.1, 0.1, 0.1, 0.1, 0.1, 0.7, 0.1), ncol = 4, byrow = TRUE, dimnames = list(NULL, c("A", "C", "G", "T")))
+    expect_error(gseq.pwm_edits("GTGT", pssm, score.thresh = -1, prior = 0, extend = NA), "extend must be")
+    expect_error(gseq.pwm_edits("GTGT", pssm, score.thresh = -1, prior = 0, extend = c(TRUE, FALSE)), "extend must be")
+})
