@@ -6,6 +6,16 @@
 
 * `tgt_overlap_policy` `"auto*"`: a minus-strand chain interval that wins an overlap comes back as one interval instead of several.
 
+* **Behavior fix:** `gtrack.liftover()` on a sparse track: where lifted intervals overlap in the target, each overlapping stretch gets the aggregate of the intervals that cover it, as `gintervals.liftover(value_col =)` does. Before, the whole run of overlapping intervals became one interval with one aggregate.
+
+* **Behavior fix:** `gtrack.liftover(multi_target_agg = "count")` on a dense track gives 0 in every bin nothing maps to; it was `NaN` on chromosomes nothing maps to (still `NaN` when `min_n` is above 0).
+
+* **Behavior fix:** 2D virtual tracks `avg`, `min`, `max` and `weighted.sum`, and 2D track expressions, skip NaN values, as 1D ones do. `min`/`max` depended on where a NaN cell sat and could be wrong numbers, and `avg`/`weighted.sum` were NaN. `area` still counts NaN cells. Recompute results from 2D tracks that contain NaN.
+
+* **Behavior fix:** `gseq.kmer()` counts as `kmer.count` and `kmer.frac` do: `strand = 0` sums the two strands (a palindromic k-mer counts twice and warns, and `frac` divides by both strands' starts), and `extend` lets a match run past `end_pos` only, never start before `start_pos`.
+
+* **Behavior fix:** `gseq.pwm()`'s `extend` lets a window run past `end_pos` only, never start before `start_pos`, as the pwm virtual tracks do. For both functions an integer `extend` is the number of bases a match may run past `end_pos`.
+
 # misha 5.17.0
 
 This release fixes defects found in a review of 5.16.1, speeds up large computations, and adds features for sequence-to-function models. Fixes marked **Behavior fix** change results; recompute anything that depends on them.
