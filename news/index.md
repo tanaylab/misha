@@ -99,6 +99,27 @@ on them.
   [`gtrack.smooth()`](https://tanaylab.github.io/misha/reference/gtrack.smooth.md)
   window rule is documented.
 
+- Faster, with the same results: genome-wide
+  [`gextract()`](https://tanaylab.github.io/misha/reference/gextract.md)
+  of many virtual tracks (about 2x, with about half the memory), dense
+  tracks read at their own bin size (about 4x),
+  [`gquantiles()`](https://tanaylab.github.io/misha/reference/gquantiles.md),
+  [`gtrack.create_dense()`](https://tanaylab.github.io/misha/reference/gtrack.create_dense.md),
+  [`gextract.variants()`](https://tanaylab.github.io/misha/reference/gextract.variants.md),
+  small calls on databases with many tracks, and Potts scans.
+
+- Parallel computations over many intervals, such as genomes of many
+  contigs, split the work evenly; the last process did twice the others’
+  work. Sums combined across processes can differ in the last digits.
+
+- A warning, once per session, when starting parallel processes from a
+  large R session will take seconds (seen on RHEL 7 hosts).
+
+- Zero quantiles are returned as 0, not -0.
+  [`gseq.extract()`](https://tanaylab.github.io/misha/reference/gseq.extract.md)
+  checks `gmax.data.size` before reading. A worker thread that cannot
+  start no longer aborts R.
+
 ## misha 5.16.1
 
 - **Behavior fix:** a numeric `strand` other than -1, 0 or 1 is an

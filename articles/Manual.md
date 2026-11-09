@@ -87,13 +87,13 @@ gdataset.load(shared_annotations)
 
 # List all sources (working db + loaded datasets)
 gdataset.ls()
-#> [1] "/tmp/RtmpLCfJTQ/trackdb/test"       "/tmp/RtmpLCfJTQ/shared_annotations"
+#> [1] "/tmp/RtmpsFw0Ne/trackdb/test"       "/tmp/RtmpsFw0Ne/shared_annotations"
 
 # Get detailed information
 gdataset.ls(dataframe = TRUE)
 #>                                 path tracks_total tracks_visible
-#> 1       /tmp/RtmpLCfJTQ/trackdb/test            5              5
-#> 2 /tmp/RtmpLCfJTQ/shared_annotations            1              1
+#> 1       /tmp/RtmpsFw0Ne/trackdb/test            5              5
+#> 2 /tmp/RtmpsFw0Ne/shared_annotations            1              1
 #>   intervals_total intervals_visible has_metadata writable
 #> 1               1                 1        FALSE     TRUE
 #> 2               0                 0        FALSE    FALSE
@@ -119,8 +119,8 @@ gtrack.copy("dense_track", db = other_dataset)
 
 gdataset.load(other_dataset)
 #> Error:
-#> ! Cannot load dataset '/tmp/RtmpLCfJTQ/other_dataset':
-#>   - tracks 'dense_track' already exist in working database '/tmp/RtmpLCfJTQ/trackdb/test'
+#> ! Cannot load dataset '/tmp/RtmpsFw0Ne/other_dataset':
+#>   - tracks 'dense_track' already exist in working database '/tmp/RtmpsFw0Ne/trackdb/test'
 #> Use force=TRUE to override.
 ```
 
@@ -134,12 +134,12 @@ gdataset.load(other_dataset, force = TRUE)
 
 # Check which source provides a track
 gtrack.dataset("dense_track")
-#> [1] "/tmp/RtmpLCfJTQ/trackdb/test"
+#> [1] "/tmp/RtmpsFw0Ne/trackdb/test"
 
 # See all sources where a track exists (for debugging)
 gtrack.dbs("dense_track")
 #>                     dense_track                     dense_track 
-#>  "/tmp/RtmpLCfJTQ/trackdb/test" "/tmp/RtmpLCfJTQ/other_dataset"
+#>  "/tmp/RtmpsFw0Ne/trackdb/test" "/tmp/RtmpsFw0Ne/other_dataset"
 
 gdataset.unload(other_dataset)
 ```
@@ -214,24 +214,24 @@ to find which source contains a track or interval set:
 
 # Single track - returns source path
 gtrack.dataset("annotation_track")
-#> [1] "/tmp/RtmpLCfJTQ/shared_annotations"
+#> [1] "/tmp/RtmpsFw0Ne/shared_annotations"
 
 # All sources containing a track (useful for debugging shadowed tracks)
 gtrack.dbs("dense_track")
 #>                    dense_track 
-#> "/tmp/RtmpLCfJTQ/trackdb/test"
+#> "/tmp/RtmpsFw0Ne/trackdb/test"
 
 # Multiple tracks (vectorized)
 gtrack.dataset(c("dense_track", "sparse_track", "annotation_track"))
-#> [1] "/tmp/RtmpLCfJTQ/trackdb/test"       "/tmp/RtmpLCfJTQ/trackdb/test"      
-#> [3] "/tmp/RtmpLCfJTQ/shared_annotations"
+#> [1] "/tmp/RtmpsFw0Ne/trackdb/test"       "/tmp/RtmpsFw0Ne/trackdb/test"      
+#> [3] "/tmp/RtmpsFw0Ne/shared_annotations"
 
 # Intervals
 gintervals.dataset("annotations")
-#> [1] "/tmp/RtmpLCfJTQ/trackdb/test"
+#> [1] "/tmp/RtmpsFw0Ne/trackdb/test"
 gintervals.dbs("annotations")
 #>                    annotations 
-#> "/tmp/RtmpLCfJTQ/trackdb/test"
+#> "/tmp/RtmpsFw0Ne/trackdb/test"
 ```
 
 Filter track and interval listings by source:
@@ -284,10 +284,10 @@ gdataset.info(chipseq_dataset)
 #> [1] "runner"
 #> 
 #> $created
-#> [1] "2026-11-09T08:42:42Z"
+#> [1] "2026-11-09T09:08:06Z"
 #> 
 #> $original_db
-#> [1] "/tmp/RtmpLCfJTQ/trackdb/test"
+#> [1] "/tmp/RtmpsFw0Ne/trackdb/test"
 #> 
 #> $misha_version
 #> [1] "5.17.0"
@@ -319,7 +319,7 @@ to create a lightweight database that links to a parent database’s
 my_db <- file.path(tempdir(), "my_db")
 unlink(my_db, recursive = TRUE)
 gdb.create_linked(my_db, parent = my_project)
-#> Created linked database at /tmp/RtmpLCfJTQ/my_db (linked to /tmp/RtmpLCfJTQ/trackdb/test)
+#> Created linked database at /tmp/RtmpsFw0Ne/my_db (linked to /tmp/RtmpsFw0Ne/trackdb/test)
 
 # Use as your working database
 gsetroot(my_db)
@@ -404,7 +404,7 @@ gsetroot(my_project)
 gdataset.load(shared_annotations)
 gtrack.copy("annotation_track", "my_local_copy") # Copy to working db
 gtrack.dataset("my_local_copy")
-#> [1] "/tmp/RtmpLCfJTQ/trackdb/test"
+#> [1] "/tmp/RtmpsFw0Ne/trackdb/test"
 gtrack.rm("my_local_copy", force = TRUE)
 ```
 
@@ -452,7 +452,7 @@ Single-database usage works exactly as before:
 gsetroot(my_project) # Works unchanged
 gdb.init(my_project) # Equivalent, also works
 gdataset.ls()
-#> [1] "/tmp/RtmpLCfJTQ/trackdb/test"
+#> [1] "/tmp/RtmpsFw0Ne/trackdb/test"
 ```
 
 An example of a Genomic Database file structure:
@@ -1630,6 +1630,34 @@ internal memory consumption limiting mechanism tries to estimate the
 drop of system free memory and hence deducts its data from counting
 “Private Dirty” bytes (on Linux) or from internal estimation (on other
 platforms) - a very different datum from what “top” is reporting.
+
+#### Multitasking from a Large R Session
+
+Each child process is a fork of the R session. A fork copies the page
+tables of the session, once per child, so its cost grows with the memory
+the session holds. When the memory of the session is in 2 MB transparent
+huge pages the copy is small; when it is in 4 KB pages (the
+`AnonHugePages` lines of `/proc/<pid>/smaps` of the R process are 0), it
+can take longer than the call itself. Measured with
+`gmax.processes = 32`, a `gsummary` of a `sum` virtual track at iterator
+32 over chr1 and chr2 of mm10, median of 3 runs:
+
+| Host                     | Memory pages of the session | Session holds | Elapsed |
+|--------------------------|-----------------------------|---------------|---------|
+| Linux 3.10 (CentOS 7)    | 4 KB                        | 0.1 GB        | 0.67 s  |
+|                          |                             | 10 GB         | 11.5 s  |
+|                          |                             | 20 GB         | 28.0 s  |
+| Linux 4.18 (AlmaLinux 8) | 2 MB                        | 0.1 GB        | 0.32 s  |
+|                          |                             | 10 GB         | 0.49 s  |
+|                          |                             | 20 GB         | 0.68 s  |
+
+On the first host nearly all of the time was the forks: 22-25 s of runs
+of 24-27 s, timed separately. From a session that holds tens of GB in 4
+KB pages, a call that is quick on one process is better run with fewer
+processes (`options(gmax.processes = 4)`) or with
+`gmultitasking = FALSE`; freeing large objects
+([`rm()`](https://rdrr.io/r/base/rm.html), then
+[`gc()`](https://rdrr.io/r/base/gc.html)) before such calls also helps.
 
 #### Other Considerations
 

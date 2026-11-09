@@ -65,6 +65,10 @@
 <li><p>Database fixes: stale <code>.db.cache</code> locks, refused dataset re-loads, copies into datasets and failed overwrites no longer leave the database in a bad state.</p></li>
 <li><p><code><a href="../reference/gtrack.export_bigwig.html">gtrack.export_bigwig()</a></code> works on databases whose chromosome order is not alphabetical. bedGraph export is about 10x faster and bedGraph/WIG import about 6x.</p></li>
 <li><p><code>gtrack.2d.import_contacts(fends =)</code> needs memory for the fends only, not up to the largest id. <code>gmax.data.size</code> is documented as a number of records, and the <code><a href="../reference/gtrack.smooth.html">gtrack.smooth()</a></code> window rule is documented.</p></li>
+<li><p>Faster, with the same results: genome-wide <code><a href="../reference/gextract.html">gextract()</a></code> of many virtual tracks (about 2x, with about half the memory), dense tracks read at their own bin size (about 4x), <code><a href="../reference/gquantiles.html">gquantiles()</a></code>, <code><a href="../reference/gtrack.create_dense.html">gtrack.create_dense()</a></code>, <code><a href="../reference/gextract.variants.html">gextract.variants()</a></code>, small calls on databases with many tracks, and Potts scans.</p></li>
+<li><p>Parallel computations over many intervals, such as genomes of many contigs, split the work evenly; the last process did twice the others’ work. Sums combined across processes can differ in the last digits.</p></li>
+<li><p>A warning, once per session, when starting parallel processes from a large R session will take seconds (seen on RHEL 7 hosts).</p></li>
+<li><p>Zero quantiles are returned as 0, not -0. <code><a href="../reference/gseq.extract.html">gseq.extract()</a></code> checks <code>gmax.data.size</code> before reading. A worker thread that cannot start no longer aborts R.</p></li>
 </ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="5.16.1" id="misha-5161">misha 5.16.1<a class="anchor" aria-label="anchor" href="#misha-5161"></a></h2>

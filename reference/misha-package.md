@@ -33,7 +33,9 @@ function to alter the value of the options.
 |  |  | limit, it also bounds the shared memory for the results of |
 |  |  | child processes (half the RAM at most) and gquantiles' samples. |
 | gmax.processes | AUTO | Auto-configured to min(32, 70% of CPU cores). |
-|  |  | Maximal number of processes for multitasking. |
+|  |  | Maximal number of processes for multitasking. Each is a fork of |
+|  |  | the R session; from a session holding 20 GB in 4 KB pages |
+|  |  | a fork took 0.7 s (see the user manual). |
 | gmax.processes2core | 2 | Maximal number of processes per CPU core for multitasking |
 | gseq.extract.probe.usec | 100 | gseq.extract times its first reads |
 |  |  | and distributes across processes when the measured cost per |
