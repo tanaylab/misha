@@ -845,16 +845,17 @@ test_that("gseq.kmer validates inputs correctly", {
 test_that("gseq.kmer mode='count' counts exact matches", {
     seq <- "CGCGCGCG"
 
+    # CG and GC are palindromes, so strand = 1 counts each site once
     # Count CG (4 occurrences)
-    result <- gseq.kmer(seq, "CG", mode = "count", start_pos = 1, end_pos = 8, extend = FALSE)
+    result <- gseq.kmer(seq, "CG", mode = "count", strand = 1, start_pos = 1, end_pos = 8, extend = FALSE)
     expect_equal(result, 4)
 
     # Count GC (3 occurrences)
-    result <- gseq.kmer(seq, "GC", mode = "count", start_pos = 1, end_pos = 8, extend = FALSE)
+    result <- gseq.kmer(seq, "GC", mode = "count", strand = 1, start_pos = 1, end_pos = 8, extend = FALSE)
     expect_equal(result, 3)
 
     # Count AA (0 occurrences)
-    result <- gseq.kmer(seq, "AA", mode = "count", start_pos = 1, end_pos = 8, extend = FALSE)
+    result <- gseq.kmer(seq, "AA", mode = "count", strand = 1, start_pos = 1, end_pos = 8, extend = FALSE)
     expect_equal(result, 0)
 })
 
@@ -1270,6 +1271,32 @@ test_that("gseq.kmer matches gextract kmer vtrack: both strands", {
     expect_equal(gseq_both, vtrack_result$count_both)
     expect_equal(gseq_fwd, vtrack_result$count_fwd)
     expect_equal(gseq_rev, vtrack_result$count_rev)
+})
+
+test_that("gseq.kmer strand = 0 matches the kmer vtracks for palindromic and other k-mers", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    test_interval <- gintervals(1, 10000, 10200)
+    seq <- toupper(gseq.extract(test_interval))
+
+    # CG is its own reverse complement, AC is not
+    for (kmer in c("CG", "AC")) {
+        suppressWarnings(gvtrack.create("kc", NULL, "kmer.count", kmer = kmer, strand = 0, extend = FALSE))
+        suppressWarnings(gvtrack.create("kf", NULL, "kmer.frac", kmer = kmer, strand = 0, extend = FALSE))
+        vt <- gextract(c("kc", "kf"), test_interval, iterator = test_interval)
+        expect_gt(vt$kc, 0)
+
+        # skip_gaps = TRUE and FALSE take different scanning paths
+        for (skip in c(TRUE, FALSE)) {
+            args <- list(seq, kmer, strand = 0, extend = FALSE, skip_gaps = skip)
+            expect_equal(do.call(gseq.kmer, c(args, mode = "count")), vt$kc, info = kmer)
+            expect_equal(do.call(gseq.kmer, c(args, mode = "frac")), vt$kf, tolerance = 1e-6, info = kmer)
+        }
+    }
+
+    # Both strands are summed: a palindrome counts twice per site
+    expect_equal(gseq.kmer("CGCGCGCGCG", "CG", strand = 0, extend = FALSE), 10)
 })
 
 # ============================================================================

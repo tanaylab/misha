@@ -535,6 +535,11 @@ static ScoreResult score_kmer_over_range(
         kmer_rc = seq2reverse_complementary(kmer_upper);
     }
 
+    // As in the kmer.count / kmer.frac virtual tracks (KmerCounter), strand 0
+    // sums the matches of the two strands, so a palindromic k-mer counts twice
+    // per site, and frac divides by the starts of both strands.
+    const int nstrands = strand_mode == 0 ? 2 : 1;
+
     // Branch on gap-skipping mode
     if (!skip_gaps || gaps == nullptr) {
         // ========== Original contiguous path ==========
@@ -544,8 +549,8 @@ static ScoreResult score_kmer_over_range(
             return result;
         }
 
-        int count = 0;
-        int nstarts = start_max0 - start_min0 + 1;
+        int64_t count = 0;
+        int64_t nstarts = (int64_t)(start_max0 - start_min0 + 1) * nstrands;
 
         // Scan all allowed starts
         for (int s0 = start_min0; s0 <= start_max0; ++s0) {
@@ -562,9 +567,7 @@ static ScoreResult score_kmer_over_range(
                 match_rev = (seq.compare(s0, w, kmer_rc) == 0);
             }
 
-            if (match_fwd || match_rev) {
-                count++;
-            }
+            count += match_fwd + match_rev;
         }
 
         if (return_frac && nstarts > 0) {
@@ -592,8 +595,8 @@ static ScoreResult score_kmer_over_range(
             return result;
         }
 
-        int count = 0;
-        int nstarts = j_max - j_min + 1;
+        int64_t count = 0;
+        int64_t nstarts = (int64_t)(j_max - j_min + 1) * nstrands;
 
         // Scan logical starts
         for (int j = j_min; j <= j_max; ++j) {
@@ -610,9 +613,7 @@ static ScoreResult score_kmer_over_range(
                 match_rev = (gp.comp.compare(j, w, kmer_rc) == 0);
             }
 
-            if (match_fwd || match_rev) {
-                count++;
-            }
+            count += match_fwd + match_rev;
         }
 
         if (return_frac && nstarts > 0) {

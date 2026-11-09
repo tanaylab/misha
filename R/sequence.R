@@ -843,7 +843,7 @@ gseq.pwm_edits <- function(seqs,
 #' @param seqs character vector of DNA sequences (A/C/G/T/N; case-insensitive)
 #' @param kmer single character string containing the k-mer to search for (A/C/G/T only)
 #' @param mode character; one of "count" or "frac"
-#' @param strand integer; 1=forward, -1=reverse, 0=both strands (default: 0)
+#' @param strand integer; 1=forward, -1=reverse, 0=both strands, summed (default: 0)
 #' @param start_pos integer or NULL; 1-based inclusive start of ROI (default: 1)
 #' @param end_pos integer or NULL; 1-based inclusive end of ROI (default: sequence length)
 #' @param extend logical or integer; extension of allowed window starts (default: FALSE)
@@ -861,12 +861,16 @@ gseq.pwm_edits <- function(seqs,
 #'
 #' The ROI (region of interest) is defined by \code{start_pos} and \code{end_pos}.
 #' The \code{extend} parameter controls whether k-mer matches can extend beyond the ROI boundaries.
-#' For palindromic k-mers, use \code{strand=1} or \code{-1} to avoid double counting.
+#' With \code{strand=0} the matches on the two strands are summed, as in the k-mer virtual
+#' tracks, so a palindromic k-mer (its own reverse complement) counts twice per site; use
+#' \code{strand=1} or \code{-1} to count it once. The \code{frac} denominator is the number
+#' of allowed starts, doubled with \code{strand=0}, so the fraction stays in [0, 1].
 #'
 #' When \code{skip_gaps=TRUE}, characters specified in \code{gap_chars} are treated as gaps.
 #' Windows are defined as k consecutive non-gap bases. The \code{frac} denominator counts the
-#' number of possible logical starts (non-gap windows) in the region. \code{start_pos} and
-#' \code{end_pos} are interpreted as physical coordinates on the full sequence.
+#' number of possible logical starts (non-gap windows) in the region, doubled with
+#' \code{strand=0}. \code{start_pos} and \code{end_pos} are interpreted as physical
+#' coordinates on the full sequence.
 #'
 #' @seealso \code{\link{gvtrack.create}} for detailed k-mer parameter documentation
 #'
