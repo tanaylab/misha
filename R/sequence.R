@@ -122,18 +122,8 @@ gseq.comp <- function(seq) {
         stop("extend must be FALSE, TRUE, or a non-negative integer")
     }
 
-    # Compute start_min and start_max (1-based, inclusive)
-    start_min <- pmax.int(1L, roi_start - E)
-    start_max <- pmin.int(pmax.int(0L, L - w + 1L), roi_end - w + 1L + E)
-
-    list(
-        L = L,
-        roi_start = roi_start,
-        roi_end = roi_end,
-        E = E,
-        start_min = start_min,
-        start_max = start_max
-    )
+    # The allowed window starts are computed in C++ (compute_bounds)
+    list(roi_start = roi_start, roi_end = roi_end)
 }
 
 #' Score DNA sequences with a PWM over a region of interest
@@ -160,7 +150,11 @@ gseq.comp <- function(seq) {
 #'   spatial weights - calibrate with \code{mode="max"} before choosing one.
 #' @param start_pos integer or NULL; 1-based inclusive start of ROI (default: 1)
 #' @param end_pos integer or NULL; 1-based inclusive end of ROI (default: sequence length)
-#' @param extend logical or integer; extension of allowed window starts (default: FALSE)
+#' @param extend logical or integer; if TRUE, a motif anchored in the ROI may run up to
+#'   w - 1 bases past its end (w being the motif length), so boundary-anchored motifs keep
+#'   their full context; anchors must still start inside the ROI. If FALSE (default), only
+#'   windows fully contained in the ROI are scored. An integer is the number of bases a
+#'   window may run past \code{end_pos}: TRUE is w - 1 and FALSE is 0.
 #' @param spat.factor numeric vector; spatial weighting factors (optional)
 #' @param spat.bin integer; bin size for spatial weighting
 #' @param spat.min numeric; 1-based position, counted from \code{start_pos}, where the
@@ -191,11 +185,15 @@ gseq.comp <- function(seq) {
 #' For detailed documentation on PWM scoring modes, parameters, and spatial weighting,
 #' see \code{\link{gvtrack.create}} (functions "pwm", "pwm.max", "pwm.max.pos", "pwm.count").
 #'
-#' The ROI (region of interest) is defined by \code{start_pos} and \code{end_pos}.
-#' The \code{extend} parameter controls whether motif matches can extend beyond the ROI boundaries.
+#' The ROI (region of interest) is defined by \code{start_pos} and \code{end_pos}. As in the
+#' PWM virtual tracks, a window on either strand is anchored at its first (leftmost) base,
+#' which must not lie before \code{start_pos}. \code{extend} sets how many bases past
+#' \code{end_pos} a window may run (w - 1 with TRUE, so every anchor in the ROI is scored),
+#' never past the end of the sequence.
 #'
 #' When \code{skip_gaps=TRUE}, characters specified in \code{gap_chars} are treated as gaps.
-#' Windows are defined as w consecutive non-gap bases. All positions (\code{pos}) are reported
+#' Windows are defined as w consecutive non-gap bases, and \code{extend} counts non-gap
+#' bases. All positions (\code{pos}) are reported
 #' as 1-based indices on the original full sequence (including gaps). \code{start_pos} and
 #' \code{end_pos} are interpreted as physical coordinates on the full sequence.
 #'
@@ -268,7 +266,7 @@ gseq.comp <- function(seq) {
 #' # Score only a region of interest
 #' gseq.pwm(seqs, pssm, mode = "max", start_pos = 3, end_pos = 10)
 #'
-#' # Allow matches to extend beyond ROI boundaries
+#' # Also score motifs that start in the region and end past it
 #' gseq.pwm(seqs, pssm, mode = "count", score.thresh = -3, start_pos = 5, end_pos = 8, extend = TRUE)
 #'
 #' # Spatial weighting example: higher weight in the center

@@ -148,16 +148,27 @@ static int get_int_elem(SEXP r_vec, int idx, int default_val) {
     return (val == NA_INTEGER) ? default_val : val;
 }
 
-// Compute ROI bounds and allowed window starts
-static void compute_bounds(int L, int w, int roi_start, int roi_end, int extend_val,
-                          int& start_min0, int& start_max0) {
-    // Convert 1-based ROI to 0-based for internal use
-    int roi_start0 = roi_start - 1;
-    int roi_end0 = roi_end - 1;
-    
-    // Compute allowed window starts (0-based)
-    start_min0 = std::max(0, roi_start0 - extend_val);
-    start_max0 = std::min(L - w, roi_end0 - w + 1 + extend_val);
+// Allowed window starts (0-based) for a 1-based ROI, by the rule of the
+// sequence virtual tracks (KmerCounter, PWMScorer): a window is anchored at its
+// first base, which must not lie before the ROI, and it may run at most
+// extend_val bases past the ROI end, never past the end of the sequence.
+// extend = TRUE is w - 1, so every anchor in the ROI is allowed. With gaps,
+// only non-gap bases count toward extend_val. start_max0 is returned as if the
+// sequence held no gaps: the gap paths read start_max0 + w - 1 as the last
+// base a window may cover.
+static void compute_bounds(const std::string& seq, int w, int roi_start, int roi_end, int extend_val,
+                           const GapCharset* gaps, int& start_min0, int& start_max0) {
+    const int last0 = static_cast<int>(seq.length()) - 1;
+    int end_lim0 = roi_end - 1;
+    if (gaps == nullptr) {
+        end_lim0 = static_cast<int>(std::min<int64_t>(last0, static_cast<int64_t>(end_lim0) + extend_val));
+    } else {
+        for (int left = extend_val; left > 0 && end_lim0 < last0;) {
+            if (!gaps->is_gap[static_cast<unsigned char>(seq[++end_lim0])]) --left;
+        }
+    }
+    start_min0 = roi_start - 1;
+    start_max0 = end_lim0 - w + 1;
 }
 
 // Score PWM over a range (with optional gap support)
@@ -514,14 +525,9 @@ static ScoreResult score_pwm_over_range(
 
 // Score k-mer over a range (with optional gap support)
 // Returns count or fraction depending on return_frac
-// Allowed starts follow the kmer.count / kmer.frac virtual tracks (KmerCounter):
-// a match on either strand is anchored at its first base, and the anchor must lie
-// in the ROI. extend_val is how many bases past roi_end0 a match may run (k - 1
-// for extend = TRUE, so every anchor in the ROI counts, 0 for FALSE), clipped to
-// the sequence end. With skip_gaps these are non-gap bases.
 static ScoreResult score_kmer_over_range(
     const std::string& seq,
-    int roi_start0, int roi_end0, int extend_val,
+    int start_min0, int start_max0,
     const std::string& kmer,
     int strand_mode,
     bool return_frac,
@@ -548,9 +554,6 @@ static ScoreResult score_kmer_over_range(
     // Branch on gap-skipping mode
     if (!skip_gaps || gaps == nullptr) {
         // ========== Original contiguous path ==========
-        const int start_min0 = roi_start0;
-        const int start_max0 = static_cast<int>(std::min<int64_t>(
-            static_cast<int64_t>(seq.length()) - w, static_cast<int64_t>(roi_end0) - w + 1 + extend_val));
         // Handle empty range
         if (start_max0 < start_min0) {
             result.value = 0.0;
@@ -587,21 +590,18 @@ static ScoreResult score_kmer_over_range(
 
     } else {
         // ========== Gap-skipping path ==========
-        // Non-gap bases from the ROI start to the sequence end; a window may
-        // run past the ROI end by up to extend_val of them.
-        GapProjector gp = GapProjector::build(seq, *gaps, roi_start0, static_cast<int>(seq.length()) - 1);
-        const int n_log = static_cast<int>(gp.comp.size());
+        // Compute the full physical range that windows can span
+        int end_lim_phys0 = start_max0 + w - 1;
 
-        // The last non-gap base in the ROI (-1 if none)
-        const int roi_last = static_cast<int>(
-            std::upper_bound(gp.log_to_phys.begin(), gp.log_to_phys.end(), roi_end0) - gp.log_to_phys.begin()) - 1;
+        // Build gap projector over the full physical range
+        GapProjector gp = GapProjector::build(seq, *gaps, start_min0, end_lim_phys0);
 
-        const int j_min = 0;
-        const int j_max = static_cast<int>(std::min<int64_t>(
-            n_log - w, static_cast<int64_t>(roi_last) - w + 1 + extend_val));
+        // Compute logical bounds
+        int j_min = gp.first_log_ge_phys(start_min0);
+        int j_max = gp.last_log_window_end_le_phys(end_lim_phys0, w);
 
         // Check if we have enough non-gap bases
-        if (j_max < j_min || n_log < w) {
+        if (j_min < 0 || j_max < j_min || static_cast<int>(gp.comp.size()) < w) {
             result.value = 0.0;
             return result;
         }
@@ -821,7 +821,8 @@ SEXP C_gseq_pwm(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect,
             
             // Compute allowed window starts
             int start_min0, start_max0;
-            compute_bounds(L, w, roi_start, roi_end, extend_val, start_min0, start_max0);
+            compute_bounds(seq, w, roi_start, roi_end, extend_val, skip_gaps ? &gap_charset : nullptr,
+                           start_min0, start_max0);
             int bin_origin = roi_start;
             if (spat_min != NA_INTEGER) {
                 start_min0 = std::max(start_min0, roi_start + spat_min - 2);
@@ -967,10 +968,15 @@ SEXP C_gseq_kmer(SEXP r_seqs, SEXP r_kmer, SEXP r_mode, SEXP r_strand_mode,
                 continue;
             }
             
+            // Compute allowed window starts
+            int start_min0, start_max0;
+            compute_bounds(seq, w, roi_start, roi_end, extend_val, skip_gaps ? &gap_charset : nullptr,
+                           start_min0, start_max0);
+            
             // Score the sequence
             bool return_frac = (mode == "frac");
             ScoreResult result = score_kmer_over_range(
-                seq, roi_start - 1, roi_end - 1, extend_val, kmer, strand_mode, return_frac,
+                seq, start_min0, start_max0, kmer, strand_mode, return_frac,
                 skip_gaps, skip_gaps ? &gap_charset : nullptr
             );
             
