@@ -14,10 +14,11 @@ function to alter the value of the options.
 |  |  |  |
 |----|----|----|
 | NAME | DEFAULT | DESCRIPTION |
-| gmax.data.size | AUTO | Auto-configured based on system RAM and processes. |
-|  |  | Formula: min((RAM \* 0.7) / gmax.processes, 10GB). |
-|  |  | Controls max in-memory result buffer size for streaming/sampling. |
-|  |  | Operations like gextract, gscreen use this as upper bound. |
+| gmax.data.size | AUTO | Maximal number of records (rows of a result, values, bases) |
+|  |  | a call holds in memory: gextract, gscreen and the like fail above it, |
+|  |  | and gquantiles samples. A count, not a size in bytes. |
+|  |  | Auto-configured from system RAM and cores to the number |
+|  |  | min(RAM in bytes \* 0.7 / (70% of the cores), 1e10). |
 |  |  | Inf or unset means no limit; NA or a negative value is an error; |
 |  |  | a value below 1 counts as 1. |
 | gbig.intervals.size | 1000000 | Threshold for converting interval sets to disk-based |

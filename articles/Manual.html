@@ -158,13 +158,13 @@ provide additional tracks and intervals.</li>
 <span></span>
 <span><span class="co"># List all sources (working db + loaded datasets)</span></span>
 <span><span class="fu"><a href="../reference/gdataset.ls.html">gdataset.ls</a></span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "/tmp/RtmpG2Imqp/trackdb/test"       "/tmp/RtmpG2Imqp/shared_annotations"</span></span>
+<span><span class="co">#&gt; [1] "/tmp/RtmpLCfJTQ/trackdb/test"       "/tmp/RtmpLCfJTQ/shared_annotations"</span></span>
 <span></span>
 <span><span class="co"># Get detailed information</span></span>
 <span><span class="fu"><a href="../reference/gdataset.ls.html">gdataset.ls</a></span><span class="op">(</span>dataframe <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
 <span><span class="co">#&gt;                                 path tracks_total tracks_visible</span></span>
-<span><span class="co">#&gt; 1       /tmp/RtmpG2Imqp/trackdb/test            5              5</span></span>
-<span><span class="co">#&gt; 2 /tmp/RtmpG2Imqp/shared_annotations            1              1</span></span>
+<span><span class="co">#&gt; 1       /tmp/RtmpLCfJTQ/trackdb/test            5              5</span></span>
+<span><span class="co">#&gt; 2 /tmp/RtmpLCfJTQ/shared_annotations            1              1</span></span>
 <span><span class="co">#&gt;   intervals_total intervals_visible has_metadata writable</span></span>
 <span><span class="co">#&gt; 1               1                 1        FALSE     TRUE</span></span>
 <span><span class="co">#&gt; 2               0                 0        FALSE    FALSE</span></span></code></pre></div>
@@ -189,8 +189,8 @@ error:</p>
 <span></span>
 <span><span class="fu"><a href="../reference/gdataset.load.html">gdataset.load</a></span><span class="op">(</span><span class="va">other_dataset</span><span class="op">)</span></span>
 <span><span class="co">#&gt; <span style="color: #BBBB00; font-weight: bold;">Error</span><span style="font-weight: bold;">:</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BBBB00;">!</span> Cannot load dataset '/tmp/RtmpG2Imqp/other_dataset':</span></span>
-<span><span class="co">#&gt;   - tracks 'dense_track' already exist in working database '/tmp/RtmpG2Imqp/trackdb/test'</span></span>
+<span><span class="co">#&gt; <span style="color: #BBBB00;">!</span> Cannot load dataset '/tmp/RtmpLCfJTQ/other_dataset':</span></span>
+<span><span class="co">#&gt;   - tracks 'dense_track' already exist in working database '/tmp/RtmpLCfJTQ/trackdb/test'</span></span>
 <span><span class="co">#&gt; Use force=TRUE to override.</span></span></code></pre></div>
 <p>Use <code>force=TRUE</code> to allow collisions, with clear
 precedence rules:</p>
@@ -201,12 +201,12 @@ precedence rules:</p>
 <span></span>
 <span><span class="co"># Check which source provides a track</span></span>
 <span><span class="fu"><a href="../reference/gtrack.dataset.html">gtrack.dataset</a></span><span class="op">(</span><span class="st">"dense_track"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "/tmp/RtmpG2Imqp/trackdb/test"</span></span>
+<span><span class="co">#&gt; [1] "/tmp/RtmpLCfJTQ/trackdb/test"</span></span>
 <span></span>
 <span><span class="co"># See all sources where a track exists (for debugging)</span></span>
 <span><span class="fu"><a href="../reference/gtrack.dbs.html">gtrack.dbs</a></span><span class="op">(</span><span class="st">"dense_track"</span><span class="op">)</span></span>
 <span><span class="co">#&gt;                     dense_track                     dense_track </span></span>
-<span><span class="co">#&gt;  "/tmp/RtmpG2Imqp/trackdb/test" "/tmp/RtmpG2Imqp/other_dataset"</span></span>
+<span><span class="co">#&gt;  "/tmp/RtmpLCfJTQ/trackdb/test" "/tmp/RtmpLCfJTQ/other_dataset"</span></span>
 <span></span>
 <span><span class="fu"><a href="../reference/gdataset.unload.html">gdataset.unload</a></span><span class="op">(</span><span class="va">other_dataset</span><span class="op">)</span></span></code></pre></div>
 </div>
@@ -272,24 +272,24 @@ or interval set:</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Single track - returns source path</span></span>
 <span><span class="fu"><a href="../reference/gtrack.dataset.html">gtrack.dataset</a></span><span class="op">(</span><span class="st">"annotation_track"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "/tmp/RtmpG2Imqp/shared_annotations"</span></span>
+<span><span class="co">#&gt; [1] "/tmp/RtmpLCfJTQ/shared_annotations"</span></span>
 <span></span>
 <span><span class="co"># All sources containing a track (useful for debugging shadowed tracks)</span></span>
 <span><span class="fu"><a href="../reference/gtrack.dbs.html">gtrack.dbs</a></span><span class="op">(</span><span class="st">"dense_track"</span><span class="op">)</span></span>
 <span><span class="co">#&gt;                    dense_track </span></span>
-<span><span class="co">#&gt; "/tmp/RtmpG2Imqp/trackdb/test"</span></span>
+<span><span class="co">#&gt; "/tmp/RtmpLCfJTQ/trackdb/test"</span></span>
 <span></span>
 <span><span class="co"># Multiple tracks (vectorized)</span></span>
 <span><span class="fu"><a href="../reference/gtrack.dataset.html">gtrack.dataset</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"dense_track"</span>, <span class="st">"sparse_track"</span>, <span class="st">"annotation_track"</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "/tmp/RtmpG2Imqp/trackdb/test"       "/tmp/RtmpG2Imqp/trackdb/test"      </span></span>
-<span><span class="co">#&gt; [3] "/tmp/RtmpG2Imqp/shared_annotations"</span></span>
+<span><span class="co">#&gt; [1] "/tmp/RtmpLCfJTQ/trackdb/test"       "/tmp/RtmpLCfJTQ/trackdb/test"      </span></span>
+<span><span class="co">#&gt; [3] "/tmp/RtmpLCfJTQ/shared_annotations"</span></span>
 <span></span>
 <span><span class="co"># Intervals</span></span>
 <span><span class="fu"><a href="../reference/gintervals.dataset.html">gintervals.dataset</a></span><span class="op">(</span><span class="st">"annotations"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "/tmp/RtmpG2Imqp/trackdb/test"</span></span>
+<span><span class="co">#&gt; [1] "/tmp/RtmpLCfJTQ/trackdb/test"</span></span>
 <span><span class="fu"><a href="../reference/gintervals.dbs.html">gintervals.dbs</a></span><span class="op">(</span><span class="st">"annotations"</span><span class="op">)</span></span>
 <span><span class="co">#&gt;                    annotations </span></span>
-<span><span class="co">#&gt; "/tmp/RtmpG2Imqp/trackdb/test"</span></span></code></pre></div>
+<span><span class="co">#&gt; "/tmp/RtmpLCfJTQ/trackdb/test"</span></span></code></pre></div>
 <p>Filter track and interval listings by source:</p>
 <div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># List tracks from a specific source only</span></span>
@@ -331,10 +331,10 @@ tracks and intervals:</p>
 <span><span class="co">#&gt; [1] "runner"</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; $created</span></span>
-<span><span class="co">#&gt; [1] "2026-11-09T07:02:47Z"</span></span>
+<span><span class="co">#&gt; [1] "2026-11-09T08:42:42Z"</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; $original_db</span></span>
-<span><span class="co">#&gt; [1] "/tmp/RtmpG2Imqp/trackdb/test"</span></span>
+<span><span class="co">#&gt; [1] "/tmp/RtmpLCfJTQ/trackdb/test"</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; $misha_version</span></span>
 <span><span class="co">#&gt; [1] "5.17.0"</span></span>
@@ -363,7 +363,7 @@ that links to a parent database’s <code>seq/</code> directory and
 <span><span class="va">my_db</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir</a></span><span class="op">(</span><span class="op">)</span>, <span class="st">"my_db"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/unlink.html" class="external-link">unlink</a></span><span class="op">(</span><span class="va">my_db</span>, recursive <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/gdb.create_linked.html">gdb.create_linked</a></span><span class="op">(</span><span class="va">my_db</span>, parent <span class="op">=</span> <span class="va">my_project</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Created linked database at /tmp/RtmpG2Imqp/my_db (linked to /tmp/RtmpG2Imqp/trackdb/test)</span></span>
+<span><span class="co">#&gt; Created linked database at /tmp/RtmpLCfJTQ/my_db (linked to /tmp/RtmpLCfJTQ/trackdb/test)</span></span>
 <span></span>
 <span><span class="co"># Use as your working database</span></span>
 <span><span class="fu"><a href="../reference/gdb.init.html">gsetroot</a></span><span class="op">(</span><span class="va">my_db</span><span class="op">)</span></span>
@@ -435,7 +435,7 @@ different database when multiple databases are connected:</p>
 <span><span class="fu"><a href="../reference/gdataset.load.html">gdataset.load</a></span><span class="op">(</span><span class="va">shared_annotations</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/gtrack.copy.html">gtrack.copy</a></span><span class="op">(</span><span class="st">"annotation_track"</span>, <span class="st">"my_local_copy"</span><span class="op">)</span> <span class="co"># Copy to working db</span></span>
 <span><span class="fu"><a href="../reference/gtrack.dataset.html">gtrack.dataset</a></span><span class="op">(</span><span class="st">"my_local_copy"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "/tmp/RtmpG2Imqp/trackdb/test"</span></span>
+<span><span class="co">#&gt; [1] "/tmp/RtmpLCfJTQ/trackdb/test"</span></span>
 <span><span class="fu"><a href="../reference/gtrack.rm.html">gtrack.rm</a></span><span class="op">(</span><span class="st">"my_local_copy"</span>, force <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
 <p>Note: <code><a href="../reference/gtrack.mv.html">gtrack.mv()</a></code> only works within the same database.
 To move a track between databases, use <code><a href="../reference/gtrack.copy.html">gtrack.copy()</a></code>
@@ -474,7 +474,7 @@ They can reference tracks from any loaded source:</p>
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/gdb.init.html">gsetroot</a></span><span class="op">(</span><span class="va">my_project</span><span class="op">)</span> <span class="co"># Works unchanged</span></span>
 <span><span class="fu"><a href="../reference/gdb.init.html">gdb.init</a></span><span class="op">(</span><span class="va">my_project</span><span class="op">)</span> <span class="co"># Equivalent, also works</span></span>
 <span><span class="fu"><a href="../reference/gdataset.ls.html">gdataset.ls</a></span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "/tmp/RtmpG2Imqp/trackdb/test"</span></span></code></pre></div>
+<span><span class="co">#&gt; [1] "/tmp/RtmpLCfJTQ/trackdb/test"</span></span></code></pre></div>
 <p>An example of a Genomic Database file structure:</p>
 <pre><code>hg38/              &lt;- Genomic Database root directory
    chrom_sizes.txt
@@ -864,10 +864,10 @@ the stored interval set.</p>
 <blockquote>
 <p><strong>Note:</strong> <code>gbig.intervals.size</code> controls
 <em>storage format</em> for interval sets (disk-based vs. in-memory),
-while <code>gmax.data.size</code> controls <em>buffer sizes</em> for
-streaming operations like <code>gextract</code> and
-<code>gquantiles</code>. These are independent thresholds serving
-different purposes.</p>
+while <code>gmax.data.size</code> limits the <em>number of records</em>
+(rows of a result, values) that operations like <code>gextract</code>
+and <code>gquantiles</code> hold in memory. These are independent
+thresholds serving different purposes.</p>
 </blockquote>
 <p>Saved interval sets in the small format can be seamlessly used in all
 functions and track expressions without the need to explicitly load
@@ -1891,23 +1891,22 @@ For example: - On a 4-core laptop: <code>gmax.processes = 2</code> (70%
 of 4) - On a 16-core workstation: <code>gmax.processes = 11</code> (70%
 of 16) - On a 128-core server: <code>gmax.processes = 89</code> (70% of
 128)</p>
-<p><strong>Automatic Buffer Size:</strong> The package coordinates
-buffer size with process limits to ensure
-<code>gmax.processes * gmax.data.size &lt;= 70% of RAM</code>.
-Specifically, it sets
-<code>gmax.data.size = min((RAM * 0.7) / gmax.processes, 10GB)</code>.
-This ensures that when all processes are running at full capacity, total
-memory usage stays within safe limits. For example: - On a 4-core, 8GB
-laptop: <code>gmax.processes = 2</code>,
-<code>gmax.data.size = 2.8GB</code> (total: 5.6GB = 70% of 8GB) - On a
-16-core, 32GB workstation: <code>gmax.processes = 11</code>,
-<code>gmax.data.size = 2.0GB</code> (total: 22.4GB = 70% of 32GB) - On a
-128-core, 256GB server: <code>gmax.processes = 89</code>,
-<code>gmax.data.size = 2.0GB</code> (total: 179.2GB = 70% of 256GB)</p>
-<p>The 10GB cap is empirically determined - larger shared memory
-allocations can fail even when system limits appear to allow them. This
-cap is rarely hit on multi-core systems due to the per-process
-division.</p>
+<p><strong>Automatic Limit on Records:</strong>
+<code>gmax.data.size</code> is a maximal number of records (rows of a
+result, values, bases) that a call holds in memory:
+<code>gextract</code>, <code>gscreen</code> and the like fail above it,
+and <code>gquantiles</code> samples. It is a count, not a size in bytes.
+The package sets it from RAM and cores to the number
+<code>min(RAM in bytes * 0.7 / (70% of the cores), 1e10)</code>. For
+example: - On a 4-core, 8GB laptop: <code>gmax.data.size = 2.8e9</code>
+records - On a 16-core, 32GB workstation:
+<code>gmax.data.size = 2.0e9</code> records - On a 128-core, 256GB
+server: <code>gmax.data.size = 2.0e9</code> records</p>
+<p>A record takes more than one byte (a row of <code>gextract</code>
+holds its coordinates and one double per expression), so this bounds
+memory only loosely. A result too big for memory can be written to a
+file instead (<code>gextract(..., file = "x.tsv")</code> or
+<code>file = "x.parquet"</code>), which the limit does not bound.</p>
 <p><strong>Small Workloads:</strong> Some functions may choose to run
 single-threaded for very small workloads to avoid fork overhead. This
 behavior can be function-specific. To disable multitasking entirely, set
@@ -1916,12 +1915,12 @@ behavior can be function-specific. To disable multitasking entirely, set
 options if needed:</p>
 <div class="sourceCode" id="cb36"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">options</a></span><span class="op">(</span>gmax.processes <span class="op">=</span> <span class="fl">32</span><span class="op">)</span>        <span class="co"># Override process limit</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">options</a></span><span class="op">(</span>gmax.data.size <span class="op">=</span> <span class="fl">5e9</span><span class="op">)</span>       <span class="co"># Override buffer size (5GB)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">options</a></span><span class="op">(</span>gmax.data.size <span class="op">=</span> <span class="fl">5e9</span><span class="op">)</span>       <span class="co"># Override the limit (5e9 records)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">options</a></span><span class="op">(</span>gmultitasking <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span>      <span class="co"># Disable multitasking entirely</span></span></code></pre></div>
 <p>To check current auto-configured values:</p>
 <div class="sourceCode" id="cb37"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">getOption</a></span><span class="op">(</span><span class="st">"gmax.processes"</span><span class="op">)</span>         <span class="co"># Current process limit</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">getOption</a></span><span class="op">(</span><span class="st">"gmax.data.size"</span><span class="op">)</span> <span class="op">/</span> <span class="fl">1e9</span>   <span class="co"># Current buffer size in GB</span></span></code></pre></div>
+<span><span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">getOption</a></span><span class="op">(</span><span class="st">"gmax.data.size"</span><span class="op">)</span>         <span class="co"># Current limit, in records</span></span></code></pre></div>
 </div>
 <div class="section level4">
 <h4 id="limiting-the-memory-consumption">Limiting the Memory Consumption<a class="anchor" aria-label="anchor" href="#limiting-the-memory-consumption"></a>

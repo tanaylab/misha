@@ -46,7 +46,7 @@
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">gseq.extract</span><span class="op">(</span>intervals <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">gseq.extract</span><span class="op">(</span>intervals <span class="op">=</span> <span class="cn">NULL</span>, pad <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -55,6 +55,12 @@
 
 <dl><dt id="arg-intervals">intervals<a class="anchor" aria-label="anchor" href="#arg-intervals"></a></dt>
 <dd><p>intervals for which DNA sequence is returned</p></dd>
+
+
+<dt id="arg-pad">pad<a class="anchor" aria-label="anchor" href="#arg-pad"></a></dt>
+<dd><p>if TRUE, the part of an interval outside its chromosome is
+returned as "N" (see Details). If FALSE (the default), an interval that runs
+past a chromosome end is an error.</p></dd>
 
 </dl></div>
     <div class="section level2">
@@ -66,9 +72,18 @@
     <p>This function returns an array of sequence strings for each interval from
 'intervals'. If intervals contain an additional 'strand' column and its
 value is '-1', the reverse-complementary sequence is returned.</p>
-<p>Each interval must lie within its chromosome: an interval that starts
-before 0 or ends past the end of the chromosome is an error, and no
-sequence is padded.</p>
+<p>By default ('pad = FALSE') each interval must lie within its chromosome: an
+interval that starts before 0 or ends past the end of the chromosome is an
+error.</p>
+<p>With 'pad = TRUE' an interval may run past either end of its chromosome
+('start' below 0, 'end' above the chromosome length). The positions outside
+the chromosome come back as "N", so each sequence is 'end - start' long, and
+an interval wholly outside its chromosome comes back as all "N". 'start' must
+still be below 'end', and the chromosome must exist. For a row with strand -1
+the padded sequence is reverse complemented as a whole, so the "N" run of the
+chromosome start comes last. The bases inside the chromosome are returned as
+stored, lowercase included. This gives fixed-width windows near chromosome
+ends, e.g. for sequence models (see the examples).</p>
 <p>Each interval costs one disk read, so large interval sets are dominated by
 I/O latency rather than by the sequence data itself. When the sequence files
 are not in the page cache, the work is split across several processes (capped
@@ -101,6 +116,17 @@ requests the maximum number of processes, a large value never distributes.
 <span class="r-in"><span><span class="va">intervs</span> <span class="op">&lt;-</span> <span class="fu"><a href="gintervals.html">gintervals</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">2</span><span class="op">)</span>, <span class="fl">10000</span>, <span class="fl">10020</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="fu">gseq.extract</span><span class="op">(</span><span class="va">intervs</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] "ccaggggccagcactgctcg" "GGGGCTCCCACCCGCCGTCC"</span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co"># Fixed-width windows centred on positions. The second window starts 30 bp</span></span></span>
+<span class="r-in"><span><span class="co"># before the start of chr1, so its first 30 bases are N.</span></span></span>
+<span class="r-in"><span><span class="va">w</span> <span class="op">&lt;-</span> <span class="fl">100</span></span></span>
+<span class="r-in"><span><span class="va">centers</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">250000</span>, <span class="fl">20</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">windows</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>chrom <span class="op">=</span> <span class="st">"chr1"</span>, start <span class="op">=</span> <span class="va">centers</span> <span class="op">-</span> <span class="va">w</span> <span class="op">/</span> <span class="fl">2</span>, end <span class="op">=</span> <span class="va">centers</span> <span class="op">+</span> <span class="va">w</span> <span class="op">/</span> <span class="fl">2</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">seqs</span> <span class="op">&lt;-</span> <span class="fu">gseq.extract</span><span class="op">(</span><span class="va">windows</span>, pad <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/nchar.html" class="external-link">nchar</a></span><span class="op">(</span><span class="va">seqs</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 100 100</span>
+<span class="r-in"><span><span class="va">seqs</span><span class="op">[</span><span class="fl">2</span><span class="op">]</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] "NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNtaaccctaaccctaaccctaaccctaaccctaaccctaaccctaaccctaaccctaaccctaaccctaac"</span>
 <span class="r-in"><span></span></span>
 </code></pre></div>
     </div>

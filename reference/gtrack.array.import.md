@@ -49,6 +49,12 @@ through the chromosome alias chain, with the lines of other chromosomes
 skipped and their names reported. A file that names chromosomes and
 matches none of them is an error.
 
+As in
+[`gtrack.import`](https://tanaylab.github.io/misha/reference/gtrack.import.md),
+records of a file that run past the end of their chromosome are clipped
+to it, and records that start at or past the end are dropped, with one
+warning giving the counts.
+
 'description' is added as a track attribute.
 
 ## See also

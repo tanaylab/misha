@@ -87,6 +87,9 @@ two intervals from different sources are forbidden.</p>
 through the chromosome alias chain, with the lines of other chromosomes
 skipped and their names reported. A file that names chromosomes and matches
 none of them is an error.</p>
+<p>As in <code><a href="gtrack.import.html">gtrack.import</a></code>, records of a file that run past the end
+of their chromosome are clipped to it, and records that start at or past
+the end are dropped, with one warning giving the counts.</p>
 <p>'description' is added as a track attribute.</p>
     </div>
     <div class="section level2">

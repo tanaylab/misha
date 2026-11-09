@@ -65,8 +65,18 @@ Each track value at coordinate 'C' is determined by smoothing non 'NaN'
 values of 'expr' over the window around 'C'. The window size is
 controlled by 'winsize' and is given in coordinate units (not in number
 of bins), defining the total regions to be considered when smoothing (on
-both sides of the central point). Two different algorithms can be used
-for smoothing:
+both sides of the central point).
+
+The window is a whole number of iterator bins: the central bin and 'k'
+bins on each side, 2 \* k + 1 bins in all, where k = winsize / (2 \*
+binsize) rounded to the nearest integer, a half rounded up ('binsize'
+being the bin size of the iterator). The window can therefore be wider
+than 'winsize': 'winsize = 100' with a 20 bp iterator gives k = 3 (2.5
+rounded up), 7 bins or 140 bp; 'winsize = 288' with a 32 bp iterator
+gives k = 5 (4.5 rounded up), 11 bins or 352 bp, and 'winsize = 256'
+gives 9 bins. A 'winsize' below the bin size (k = 0) is an error.
+
+Two different algorithms can be used for smoothing:
 
 "MEAN" - an arithmetic average.
 

@@ -46,7 +46,7 @@ gextract(
 
   file name where the function result is optionally outputted:
   GZIP-compressed Parquet if the name ends in '.parquet' (chrom, start,
-  end and one float32 column per expression, all nullable as in
+  end and one double column per expression, all nullable as in
   arrow-written files), tab-delimited otherwise
 
 - intervals.set.out:
@@ -92,7 +92,7 @@ too big to fit into the physical memory. The resulted file can be used
 as an input for 'gtrack.import' or 'gtrack.array.import' functions.
 
 A 'file' name ending in '.parquet' (in any case) writes a Parquet file
-instead: columns 'chrom', 'start' and 'end', then one float32 column per
+instead: columns 'chrom', 'start' and 'end', then one double column per
 track expression, named as in the text file. 'start' and 'end' are
 32-bit integers unless a chromosome of the scope is 2^31 bp or longer.
 NaN values are written as NaN, not as missing values. Only 1D iterators
@@ -101,7 +101,12 @@ are supported, and the column names must be unique and other than
 in its directory (a symbolic link is followed, and the file it points to
 is replaced) and renamed when complete, so an error or an interrupt
 leaves an existing file as it was. With a numeric 'iterator' the file is
-a table of dense bins that pyarrow reads directly.
+a table of dense bins that pyarrow reads directly. A column whose track
+expression is exactly the name of a track carries the track's attributes
+as its field metadata (Arrow field metadata: in pyarrow,
+`pq.read_schema(file).field(name).metadata`);
+[`gtrack.import_parquet`](https://tanaylab.github.io/misha/reference/gtrack.import_parquet.md)
+restores them.
 
 If 'intervals.set.out' is not 'NULL' the result is saved as an intervals
 set. Similarly to 'file' parameter 'intervals.set.out' can be useful to

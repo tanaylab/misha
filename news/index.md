@@ -2,139 +2,102 @@
 
 ## misha 5.17.0
 
-This release fixes the defects found in the review of 5.16.1, makes
-common large computations faster, and adds features for work with
-sequence-to-function models. Fixes that change results are marked
-**Behavior fix**; recompute anything that depends on them.
+This release fixes defects found in a review of 5.16.1, speeds up large
+computations, and adds features for sequence-to-function models. Fixes
+marked **Behavior fix** change results; recompute anything that depends
+on them.
+
+- **Behavior fix:** an indexed track read with two different shifts in
+  one call (e.g. two virtual tracks on it with different
+  `sshift`/`eshift`) gave the first shift the other’s values on the
+  first chromosome of each process. Present since 5.6.15.
 
 - **Behavior fix:**
   [`gintervals.rbind()`](https://tanaylab.github.io/misha/reference/gintervals.rbind.md)
-  binds columns as [`rbind()`](https://rdrr.io/r/base/cbind.html) does;
-  data frames whose factor levels differed got rows of another
-  chromosome, or another value in an extra factor column.
+  no longer mixes up rows when the inputs’ factor levels differ.
 
 - **Behavior fix:**
   [`gintervals.neighbors()`](https://tanaylab.github.io/misha/reference/gintervals.neighbors.md)
-  breaks distance ties by the neighbor’s coordinates, so its results no
-  longer depend on the input order. In 2D it could return a neighbor
-  farther than the nearest by `dist1 + dist2`.
+  breaks ties by coordinates, so results no longer depend on input
+  order, and no longer returns a farther 2D neighbor.
 
 - **Behavior fix:** a 2D
   [`gintervals.annotate()`](https://tanaylab.github.io/misha/reference/gintervals.annotate.md)
-  returns both distances (`dist1`, `dist2`); `max_dist` limits
-  `dist1 + dist2`.
+  returns `dist1` and `dist2`; `max_dist` limits their sum.
 
-- **Behavior fix:** with `options(gmulticontig.2d.cache = TRUE)`, a
-  later change of `gmulticontig.2d.mode` is honoured.
+- **Behavior fix:** virtual tracks with a filter: `first`, `last`,
+  `sample` and `nearest` use all unmasked values; value-based `size` and
+  `exists` are 0 when nothing unmasked has a value.
 
-- **Behavior fix:** an indexed track read under two different shifts in
-  one call (e.g. two virtual tracks on it with different
-  `sshift`/`eshift`) gave the first shift the last one’s values on the
-  first chromosome of each process. Present since 5.6.15; recompute such
-  results on indexed databases.
-
-- **Behavior fix:** virtual tracks with a filter: `first`, `last` and
-  their positions skip unmasked parts that hold no value; `sample` draws
-  each unmasked value with the same chance; `nearest` is the average of
-  the unmasked values, else the nearest unmasked value; value-based
-  `size` and `exists` are 0 when nothing unmasked holds a value.
-
-- **Behavior fix:** PWM edit distance with `max_indels > 0` scores the
-  inserted base (it counted as 0) and searches 3 or more indels exactly,
-  so edit counts are no longer too low. `score.min` and `score.max`
-  apply with indels; with `direction = "below"` and `bidirect = TRUE`
-  both strands must go below; `pwm.edit_distance.lse` finds reachable
-  thresholds past a local optimum; positions past 2^24 are exact; with
-  indels, short windows at chromosome ends are scanned.
-
-- **Behavior fix:**
+- **Behavior fix:** PWM edit distance with `max_indels > 0` no longer
+  underestimates the edits needed; `score.min` and `score.max` apply
+  with indels;
   [`gseq.pwm_edits()`](https://tanaylab.github.io/misha/reference/gseq.pwm_edits.md)
-  gives the virtual track’s answer: same windows for every `extend`, a
-  strand column ignored, the harder strand reported for
-  `direction = "below"` with `bidirect = TRUE`.
+  agrees with the virtual track.
 
-- **Behavior fix:** misha’s random draws
+- **Behavior fix:** random draws
   ([`gsample()`](https://tanaylab.github.io/misha/reference/gsample.md),
-  sampled
-  [`gquantiles()`](https://tanaylab.github.io/misha/reference/gquantiles.md)
-  and [`gcor()`](https://tanaylab.github.io/misha/reference/gcor.md),
-  `sample` and `quantile` virtual tracks) use and advance
-  `.Random.seed`, and multitask processes no longer draw identical
-  streams.
+  sampled quantiles, `sample` virtual tracks) follow
+  [`set.seed()`](https://rdrr.io/r/base/Random.html) and differ between
+  parallel processes.
 
-- **Behavior fix:** gsynth:
-  [`gsynth.save()`](https://tanaylab.github.io/misha/reference/gsynth.save.md)/[`gsynth.load()`](https://tanaylab.github.io/misha/reference/gsynth.load.md)
-  keep the model’s iterator, and a model trained with the implicit
-  iterator stores its bin size, so loaded models sample and score;
+- **Behavior fix:** gsynth: saved models keep their iterator,
   [`gsynth.random()`](https://tanaylab.github.io/misha/reference/gsynth.random.md)
-  draws every base from `nuc_probs`;
-  [`gsynth.train()`](https://tanaylab.github.io/misha/reference/gsynth.train.md)
-  leaves out k-mers that reach into the mask;
-  [`gsynth.train()`](https://tanaylab.github.io/misha/reference/gsynth.train.md)
-  and
-  [`gseq.kmer.dist()`](https://tanaylab.github.io/misha/reference/gseq.kmer.dist.md)
-  count positions covered by overlapping intervals once;
-  [`gsynth.sample()`](https://tanaylab.github.io/misha/reference/gsynth.sample.md)
-  and
-  [`gsynth.score()`](https://tanaylab.github.io/misha/reference/gsynth.score.md)
-  of several intervals no longer depend on each other.
+  follows `nuc_probs` everywhere, and overlapping or masked regions are
+  counted correctly.
 
-- **Behavior fix:** `gdb.create(format = "per-chromosome")` makes a
-  chromosome of each record of a multi-FASTA file.
+- **Behavior fix:** `gdb.create(format = "per-chromosome")` makes one
+  chromosome per FASTA record.
 
-- An error inside a misha call
-  (e.g. [`gintervals.rbind()`](https://tanaylab.github.io/misha/reference/gintervals.rbind.md)
-  of mismatched columns) no longer turns multitasking off for the rest
-  of the session or leaves the umask at 007.
+- **Behavior fix:** `gextract(file = "*.parquet")` writes values as
+  double; float32 rounded large positions.
 
-- An `NA` logical argument (`unify_touching_intervals`, `bidirect`,
-  `extend`, `canonic`, `include_metadata`, `interval_relative`,
-  `remove.dups`, `allow.duplicates`) is an error; it was read as `TRUE`
-  or `FALSE`. An `NA`, infinite or integer-`NA` coordinate is an invalid
-  interval.
+- **Behavior fix:** a parallel
+  [`gextract()`](https://tanaylab.github.io/misha/reference/gextract.md)
+  stops with an error when a worker dies, instead of dropping its
+  columns.
 
-- `options(gmax.data.size = NULL)` means no limit everywhere.
-  `gintervals.load(chrom =)` and
-  [`gintervals.update()`](https://tanaylab.github.io/misha/reference/gintervals.update.md)
-  accept a factor chromosome column with only some of the levels.
-  [`gintervals()`](https://tanaylab.github.io/misha/reference/gintervals.md)
-  errors print whole-number coordinates.
+- **Behavior fix:** imports clip a record that runs past a chromosome
+  end, with a warning, in every format.
 
-- Intervals passed by value
-  ([`do.call()`](https://rdrr.io/r/base/do.call.html),
-  [`Map()`](https://rdrr.io/r/base/funprog.html), purrr) are no longer
-  deparsed:
-  [`gsummary()`](https://tanaylab.github.io/misha/reference/gsummary.md)
-  over 2M intervals took 39 s instead of 0.5 s.
+- **Behavior fix:** with `gmulticontig.2d.cache = TRUE`, a change of
+  `gmulticontig.2d.mode` takes effect.
 
-- Databases: a stale `.db.cache.lock` that cannot be read is broken by
-  its age; a refused re-load of a dataset leaves it loaded;
-  `gtrack.copy(db =)` into a dataset no longer hides the working
-  database’s own track; when a `gtrack.copy(overwrite = TRUE)` fails
-  because another session wrote the name, the replaced track goes to the
-  trash instead of a hidden directory; a failed conversion to the
-  indexed format no longer leaves buffered bytes to be written into
-  other files at exit.
+- `gseq.extract(pad = TRUE)` returns fixed-width windows past chromosome
+  ends, padded with “N”.
 
-- [`gintervals.normalize()`](https://tanaylab.github.io/misha/reference/gintervals.normalize.md)
-  documents that windows are clipped at chromosome ends.
+- New virtual track function `weighted.sum`: value times overlapping bp,
+  for windows that cut bins (`sum` counts every touched bin in full).
 
-- PSSM input is checked: counts are accepted; `NA`, negative values
-  (log-odds) and rows of zeros are an error.
+- Track attributes travel through Parquet export and import. Suggested
+  attribute names for model predictions: `value.scale`, `model`,
+  `checkpoint`, `heldout.chroms`.
 
-- New virtual track function `weighted.sum`: the sum of value x
-  overlapping bp, for windows that cut bins (e.g. 20 bp tracks summed
-  over shifted 32 bp windows). `sum` is unchanged; its docs say that it
-  counts every bin the window touches in full.
+- PSSM input is checked: counts are accepted; log-odds, `NA` and
+  all-zero rows are errors.
 
-- Motif ID de-duplication no longer leaves duplicate names;
-  [`gsynth.replace_kmer()`](https://tanaylab.github.io/misha/reference/gsynth.replace_kmer.md)
-  with a replacement that differs from the target only by case no longer
-  hangs; large-genome FASTA output of
-  [`gsynth.random()`](https://tanaylab.github.io/misha/reference/gsynth.random.md)
-  and
-  [`gsynth.replace_kmer()`](https://tanaylab.github.io/misha/reference/gsynth.replace_kmer.md)
-  gets a `.fai`.
+- An error inside a misha call no longer leaves the rest of the session
+  running in one process.
+
+- `NA` logical arguments and `NA` or infinite coordinates are errors.
+
+- Intervals passed by value (e.g. through
+  [`do.call()`](https://rdrr.io/r/base/do.call.html)) are no longer slow
+  (about 80x faster for 2M intervals).
+
+- Database fixes: stale `.db.cache` locks, refused dataset re-loads,
+  copies into datasets and failed overwrites no longer leave the
+  database in a bad state.
+
+- [`gtrack.export_bigwig()`](https://tanaylab.github.io/misha/reference/gtrack.export_bigwig.md)
+  works on databases whose chromosome order is not alphabetical.
+  bedGraph export is about 10x faster and bedGraph/WIG import about 6x.
+
+- `gtrack.2d.import_contacts(fends =)` needs memory for the fends only,
+  not up to the largest id. `gmax.data.size` is documented as a number
+  of records, and the
+  [`gtrack.smooth()`](https://tanaylab.github.io/misha/reference/gtrack.smooth.md)
+  window rule is documented.
 
 ## misha 5.16.1
 

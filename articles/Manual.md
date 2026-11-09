@@ -87,13 +87,13 @@ gdataset.load(shared_annotations)
 
 # List all sources (working db + loaded datasets)
 gdataset.ls()
-#> [1] "/tmp/RtmpG2Imqp/trackdb/test"       "/tmp/RtmpG2Imqp/shared_annotations"
+#> [1] "/tmp/RtmpLCfJTQ/trackdb/test"       "/tmp/RtmpLCfJTQ/shared_annotations"
 
 # Get detailed information
 gdataset.ls(dataframe = TRUE)
 #>                                 path tracks_total tracks_visible
-#> 1       /tmp/RtmpG2Imqp/trackdb/test            5              5
-#> 2 /tmp/RtmpG2Imqp/shared_annotations            1              1
+#> 1       /tmp/RtmpLCfJTQ/trackdb/test            5              5
+#> 2 /tmp/RtmpLCfJTQ/shared_annotations            1              1
 #>   intervals_total intervals_visible has_metadata writable
 #> 1               1                 1        FALSE     TRUE
 #> 2               0                 0        FALSE    FALSE
@@ -119,8 +119,8 @@ gtrack.copy("dense_track", db = other_dataset)
 
 gdataset.load(other_dataset)
 #> Error:
-#> ! Cannot load dataset '/tmp/RtmpG2Imqp/other_dataset':
-#>   - tracks 'dense_track' already exist in working database '/tmp/RtmpG2Imqp/trackdb/test'
+#> ! Cannot load dataset '/tmp/RtmpLCfJTQ/other_dataset':
+#>   - tracks 'dense_track' already exist in working database '/tmp/RtmpLCfJTQ/trackdb/test'
 #> Use force=TRUE to override.
 ```
 
@@ -134,12 +134,12 @@ gdataset.load(other_dataset, force = TRUE)
 
 # Check which source provides a track
 gtrack.dataset("dense_track")
-#> [1] "/tmp/RtmpG2Imqp/trackdb/test"
+#> [1] "/tmp/RtmpLCfJTQ/trackdb/test"
 
 # See all sources where a track exists (for debugging)
 gtrack.dbs("dense_track")
 #>                     dense_track                     dense_track 
-#>  "/tmp/RtmpG2Imqp/trackdb/test" "/tmp/RtmpG2Imqp/other_dataset"
+#>  "/tmp/RtmpLCfJTQ/trackdb/test" "/tmp/RtmpLCfJTQ/other_dataset"
 
 gdataset.unload(other_dataset)
 ```
@@ -214,24 +214,24 @@ to find which source contains a track or interval set:
 
 # Single track - returns source path
 gtrack.dataset("annotation_track")
-#> [1] "/tmp/RtmpG2Imqp/shared_annotations"
+#> [1] "/tmp/RtmpLCfJTQ/shared_annotations"
 
 # All sources containing a track (useful for debugging shadowed tracks)
 gtrack.dbs("dense_track")
 #>                    dense_track 
-#> "/tmp/RtmpG2Imqp/trackdb/test"
+#> "/tmp/RtmpLCfJTQ/trackdb/test"
 
 # Multiple tracks (vectorized)
 gtrack.dataset(c("dense_track", "sparse_track", "annotation_track"))
-#> [1] "/tmp/RtmpG2Imqp/trackdb/test"       "/tmp/RtmpG2Imqp/trackdb/test"      
-#> [3] "/tmp/RtmpG2Imqp/shared_annotations"
+#> [1] "/tmp/RtmpLCfJTQ/trackdb/test"       "/tmp/RtmpLCfJTQ/trackdb/test"      
+#> [3] "/tmp/RtmpLCfJTQ/shared_annotations"
 
 # Intervals
 gintervals.dataset("annotations")
-#> [1] "/tmp/RtmpG2Imqp/trackdb/test"
+#> [1] "/tmp/RtmpLCfJTQ/trackdb/test"
 gintervals.dbs("annotations")
 #>                    annotations 
-#> "/tmp/RtmpG2Imqp/trackdb/test"
+#> "/tmp/RtmpLCfJTQ/trackdb/test"
 ```
 
 Filter track and interval listings by source:
@@ -284,10 +284,10 @@ gdataset.info(chipseq_dataset)
 #> [1] "runner"
 #> 
 #> $created
-#> [1] "2026-11-09T07:02:47Z"
+#> [1] "2026-11-09T08:42:42Z"
 #> 
 #> $original_db
-#> [1] "/tmp/RtmpG2Imqp/trackdb/test"
+#> [1] "/tmp/RtmpLCfJTQ/trackdb/test"
 #> 
 #> $misha_version
 #> [1] "5.17.0"
@@ -319,7 +319,7 @@ to create a lightweight database that links to a parent database’s
 my_db <- file.path(tempdir(), "my_db")
 unlink(my_db, recursive = TRUE)
 gdb.create_linked(my_db, parent = my_project)
-#> Created linked database at /tmp/RtmpG2Imqp/my_db (linked to /tmp/RtmpG2Imqp/trackdb/test)
+#> Created linked database at /tmp/RtmpLCfJTQ/my_db (linked to /tmp/RtmpLCfJTQ/trackdb/test)
 
 # Use as your working database
 gsetroot(my_db)
@@ -404,7 +404,7 @@ gsetroot(my_project)
 gdataset.load(shared_annotations)
 gtrack.copy("annotation_track", "my_local_copy") # Copy to working db
 gtrack.dataset("my_local_copy")
-#> [1] "/tmp/RtmpG2Imqp/trackdb/test"
+#> [1] "/tmp/RtmpLCfJTQ/trackdb/test"
 gtrack.rm("my_local_copy", force = TRUE)
 ```
 
@@ -452,7 +452,7 @@ Single-database usage works exactly as before:
 gsetroot(my_project) # Works unchanged
 gdb.init(my_project) # Equivalent, also works
 gdataset.ls()
-#> [1] "/tmp/RtmpG2Imqp/trackdb/test"
+#> [1] "/tmp/RtmpLCfJTQ/trackdb/test"
 ```
 
 An example of a Genomic Database file structure:
@@ -762,10 +762,10 @@ in the small format. Use `gintervals.is.bigset` to determine the format
 of the stored interval set.
 
 > **Note:** `gbig.intervals.size` controls *storage format* for interval
-> sets (disk-based vs. in-memory), while `gmax.data.size` controls
-> *buffer sizes* for streaming operations like `gextract` and
-> `gquantiles`. These are independent thresholds serving different
-> purposes.
+> sets (disk-based vs. in-memory), while `gmax.data.size` limits the
+> *number of records* (rows of a result, values) that operations like
+> `gextract` and `gquantiles` hold in memory. These are independent
+> thresholds serving different purposes.
 
 Saved interval sets in the small format can be seamlessly used in all
 functions and track expressions without the need to explicitly load
@@ -1545,21 +1545,21 @@ parallelism while leaving headroom for the system. For example: - On a
 workstation: `gmax.processes = 11` (70% of 16) - On a 128-core server:
 `gmax.processes = 89` (70% of 128)
 
-**Automatic Buffer Size:** The package coordinates buffer size with
-process limits to ensure
-`gmax.processes * gmax.data.size <= 70% of RAM`. Specifically, it sets
-`gmax.data.size = min((RAM * 0.7) / gmax.processes, 10GB)`. This ensures
-that when all processes are running at full capacity, total memory usage
-stays within safe limits. For example: - On a 4-core, 8GB laptop:
-`gmax.processes = 2`, `gmax.data.size = 2.8GB` (total: 5.6GB = 70% of
-8GB) - On a 16-core, 32GB workstation: `gmax.processes = 11`,
-`gmax.data.size = 2.0GB` (total: 22.4GB = 70% of 32GB) - On a 128-core,
-256GB server: `gmax.processes = 89`, `gmax.data.size = 2.0GB` (total:
-179.2GB = 70% of 256GB)
+**Automatic Limit on Records:** `gmax.data.size` is a maximal number of
+records (rows of a result, values, bases) that a call holds in memory:
+`gextract`, `gscreen` and the like fail above it, and `gquantiles`
+samples. It is a count, not a size in bytes. The package sets it from
+RAM and cores to the number
+`min(RAM in bytes * 0.7 / (70% of the cores), 1e10)`. For example: - On
+a 4-core, 8GB laptop: `gmax.data.size = 2.8e9` records - On a 16-core,
+32GB workstation: `gmax.data.size = 2.0e9` records - On a 128-core,
+256GB server: `gmax.data.size = 2.0e9` records
 
-The 10GB cap is empirically determined - larger shared memory
-allocations can fail even when system limits appear to allow them. This
-cap is rarely hit on multi-core systems due to the per-process division.
+A record takes more than one byte (a row of `gextract` holds its
+coordinates and one double per expression), so this bounds memory only
+loosely. A result too big for memory can be written to a file instead
+(`gextract(..., file = "x.tsv")` or `file = "x.parquet"`), which the
+limit does not bound.
 
 **Small Workloads:** Some functions may choose to run single-threaded
 for very small workloads to avoid fork overhead. This behavior can be
@@ -1571,7 +1571,7 @@ function-specific. To disable multitasking entirely, set
 ``` r
 
 options(gmax.processes = 32)        # Override process limit
-options(gmax.data.size = 5e9)       # Override buffer size (5GB)
+options(gmax.data.size = 5e9)       # Override the limit (5e9 records)
 options(gmultitasking = FALSE)      # Disable multitasking entirely
 ```
 
@@ -1580,7 +1580,7 @@ To check current auto-configured values:
 ``` r
 
 getOption("gmax.processes")         # Current process limit
-getOption("gmax.data.size") / 1e9   # Current buffer size in GB
+getOption("gmax.data.size")         # Current limit, in records
 ```
 
 #### Limiting the Memory Consumption
