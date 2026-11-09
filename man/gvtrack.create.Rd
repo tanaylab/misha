@@ -139,9 +139,11 @@ interval after all modifier adjustments.
 \strong{2D track summarizers}
 \tabular{llll}{
   Source \tab func \tab params \tab Description \cr
-  2D track \tab area \tab NULL \tab Area covered by intersections of track rectangles with the iterator interval. \cr
-  2D track \tab weighted.sum \tab NULL \tab Weighted sum of values where each weight equals the intersection area. \cr
+  2D track \tab area \tab NULL \tab Area covered by intersections of track rectangles with the iterator interval, rectangles whose value is NaN included. \cr
+  2D track \tab weighted.sum \tab NULL \tab Weighted sum of values where each weight equals the intersection area. NaN values are skipped; \code{NaN} when no value overlaps the interval. \cr
 }
+
+On a 2D track \code{avg}, \code{min}, \code{max} and \code{weighted.sum} skip NaN values, as the 1D summarizers do, and give \code{NaN} when no value overlaps the interval; \code{avg} is the mean over the area that has a value. \code{area} counts every rectangle, so where a rectangle is NaN, \code{avg} differs from \code{weighted.sum} / \code{area}.
 
 \strong{Motif (PWM) summarizers}
 \tabular{llll}{

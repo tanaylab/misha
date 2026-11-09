@@ -48,7 +48,7 @@ public:
 
 	float last_weighted_sum() const { return m_last_weighted_sum; }
 	float last_occupied_area() const { return m_last_occupied_area; }
-	float last_avg() const { return m_last_weighted_sum / m_last_occupied_area; }
+	float last_avg() const { return m_last_avg; }
 	float last_min() const { return m_last_min; }
 	float last_max() const { return m_last_max; }
 
@@ -69,6 +69,7 @@ protected:
 
 	int64_t      m_last_occupied_area;
 	double       m_last_weighted_sum;
+	float        m_last_avg;   // over the area that has a value: unlike m_last_occupied_area, without NaN-valued objects
 	float        m_last_min;
 	float        m_last_max;
 
