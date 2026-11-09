@@ -108,9 +108,9 @@ private:
 	// Arrays of MIN_DENSE_IDS ids are kept whatever the number of fends. Past that, an id of
 	// MAX_IDS_PER_FEND ids a fend or more moves the fends to the hash table, and they move back once the
 	// largest id is below DENSE_IDS_PER_FEND ids a fend.
-	static const uint64_t MIN_DENSE_IDS = 1 << 24;
-	static const uint64_t MAX_IDS_PER_FEND = 8;
-	static const uint64_t DENSE_IDS_PER_FEND = 4;
+	static constexpr uint64_t MIN_DENSE_IDS = 1 << 24;
+	static constexpr uint64_t MAX_IDS_PER_FEND = 8;
+	static constexpr uint64_t DENSE_IDS_PER_FEND = 4;
 
 	bool                              m_sparse{false};
 	uint64_t                          m_num_fends{0};

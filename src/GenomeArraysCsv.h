@@ -37,6 +37,7 @@ public:
 	// (chrom, start, end), chromosome size N" ("" if none)
 	uint64_t get_num_clipped() const { return m_num_clipped; }
 	uint64_t get_num_dropped() const { return m_num_dropped; }
+	uint64_t get_num_kept() const { return m_num_kept; }
 	const string &get_first_clipped() const { return m_first_clipped; }
 
 protected:
@@ -61,6 +62,7 @@ protected:
 	bool                  m_clip_to_chroms{false};
 	uint64_t              m_num_clipped{0};
 	uint64_t              m_num_dropped{0};
+	uint64_t              m_num_kept{0};
 	string                m_first_clipped;
 	long                  m_first_clipped_line{-1};
 
