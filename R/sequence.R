@@ -106,7 +106,10 @@ gseq.comp <- function(seq) {
     roi_start <- if (is.null(start_pos)) rep.int(1L, n) else rep_len(as.integer(start_pos), n)
     roi_end <- if (is.null(end_pos)) L else rep_len(as.integer(end_pos), n)
 
-    # Handle extend parameter
+    # Handle extend parameter; an NA would act as TRUE in C_gseq_pwm/C_gseq_kmer
+    if (length(extend) != 1 || is.na(extend)) {
+        stop("extend must be FALSE, TRUE, or a non-negative integer")
+    }
     E <- if (isFALSE(extend)) {
         0L
     } else if (isTRUE(extend)) {

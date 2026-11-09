@@ -34,7 +34,7 @@ gintervals.2d.band_intersect <- function(intervals = NULL, band = NULL, interval
         stop("Usage: gintervals.2d.band_intersect(intervals, band = NULL, intervals.set.out = NULL)", call. = FALSE)
     }
 
-    intervals <- .gscope_expand_2d(rescue_ALLGENOME(intervals, as.character(substitute(intervals))))
+    intervals <- .gscope_expand_2d(rescue_ALLGENOME(intervals, substitute(intervals)))
 
     intervals.set.out <- do.call(.gexpr2str, list(substitute(intervals.set.out)), envir = parent.frame())
 
@@ -325,7 +325,7 @@ gintervals.canonic <- function(intervals = NULL, unify_touching_intervals = TRUE
         stop("Usage: gintervals.canonic(intervals, unify_touching_intervals = TRUE)", call. = FALSE)
     }
 
-    intervals <- .gscope_expand_2d(rescue_ALLGENOME(intervals, as.character(substitute(intervals))))
+    intervals <- .gscope_expand_2d(rescue_ALLGENOME(intervals, substitute(intervals)))
 
     res <- .gcall("gintervcanonic", intervals, unify_touching_intervals, .misha_env())
     res
@@ -568,7 +568,7 @@ gintervals.force_range <- function(intervals = NULL, intervals.set.out = NULL) {
     }
     .gcheckroot()
 
-    intervals <- .gscope_expand_2d(rescue_ALLGENOME(intervals, as.character(substitute(intervals))))
+    intervals <- .gscope_expand_2d(rescue_ALLGENOME(intervals, substitute(intervals)))
 
     intervals.set.out <- do.call(.gexpr2str, list(substitute(intervals.set.out)), envir = parent.frame())
 
@@ -662,8 +662,14 @@ gintervals.force_range <- function(intervals = NULL, intervals.set.out = NULL) {
 #' This function normalizes intervals by computing their centers and then expanding
 #' them to fixed or variable sizes, while ensuring they don't cross chromosome boundaries.
 #'
+#' A window that would cross a chromosome end is clipped at that end, so near
+#' the start or the end of a chromosome the returned interval is shorter than
+#' 'size' (no warning is given). Filter on \code{end - start} if the windows must
+#' all have the full size.
+#'
 #' @param intervals intervals set
-#' @param size target size(s) for normalized intervals. Can be either:
+#' @param size target size(s) for normalized intervals, before the clipping at
+#'   chromosome ends. Can be either:
 #'   \itemize{
 #'     \item A single positive integer: all intervals normalized to this size
 #'     \item A numeric vector: each interval normalized to its corresponding size.
@@ -709,7 +715,7 @@ gintervals.normalize <- function(intervals = NULL, size = NULL, intervals.set.ou
     # Check vector length matches intervals or is one-to-many case
     is_size_vector <- length(size) > 1
     if (is_size_vector) {
-        intervals_temp <- .gscope_expand_2d(rescue_ALLGENOME(intervals, as.character(substitute(intervals))))
+        intervals_temp <- .gscope_expand_2d(rescue_ALLGENOME(intervals, substitute(intervals)))
         n_intervals <- nrow(intervals_temp)
         n_sizes <- length(size)
 
@@ -722,7 +728,7 @@ gintervals.normalize <- function(intervals = NULL, size = NULL, intervals.set.ou
         }
     }
 
-    intervals <- .gscope_expand_2d(rescue_ALLGENOME(intervals, as.character(substitute(intervals))))
+    intervals <- .gscope_expand_2d(rescue_ALLGENOME(intervals, substitute(intervals)))
     intervals.set.out <- do.call(.gexpr2str, list(substitute(intervals.set.out)), envir = parent.frame())
 
     # Handle one-to-many case: single interval with multiple sizes
@@ -1070,7 +1076,7 @@ gintervals.chrom_sizes <- function(intervals = NULL) {
     }
     .gcheckroot()
 
-    intervals <- .gscope_expand_2d(rescue_ALLGENOME(intervals, as.character(substitute(intervals))))
+    intervals <- .gscope_expand_2d(rescue_ALLGENOME(intervals, substitute(intervals)))
 
     if (.gintervals.is_bigset(intervals)) {
         if (.gintervals.big.is1d(intervals)) {

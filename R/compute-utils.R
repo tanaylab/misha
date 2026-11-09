@@ -86,7 +86,7 @@ glookup <- function(lookup_table = NULL, ..., intervals = NULL, include.lowest =
         intervals <- eval.parent(args[[length(args)]])
     }
 
-    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+    intervals <- rescue_ALLGENOME(intervals, substitute(intervals))
 
     exprs <- c()
     breaks <- list()
@@ -170,7 +170,7 @@ gsample <- function(expr = NULL, n = NULL, intervals = NULL, iterator = NULL, ba
     }
     .gcheckroot()
 
-    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+    intervals <- rescue_ALLGENOME(intervals, substitute(intervals))
 
     if (is.null(intervals)) {
         intervals <- get("ALLGENOME", envir = .misha)
@@ -224,7 +224,7 @@ gscreen <- function(expr = NULL, intervals = NULL, iterator = NULL, band = NULL,
     }
     .gcheckroot()
 
-    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+    intervals <- rescue_ALLGENOME(intervals, substitute(intervals))
 
     if (is.null(intervals)) {
         intervals <- get("ALLGENOME", envir = .misha)

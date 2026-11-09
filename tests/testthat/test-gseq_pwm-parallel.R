@@ -389,6 +389,9 @@ test_that("gseq.pwm multitask single-shard fallback does not leak its RdbInitial
         ),
         "Unknown neutral_chars_policy"
     )
+    # Read before any other misha call: the next one would repair a leaked scope
+    # (.gcall), and the warning count below would not show it.
+    expect_identical(.glifetime_counters(), c(ref_count = 0L, protect_count = 0L))
 
     # Before the fix this returned 0: the destructor was skipped and every later
     # misha call in the session lost its once-per-call diagnostics.

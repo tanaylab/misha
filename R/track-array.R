@@ -201,7 +201,7 @@ gtrack.array.extract <- function(track = NULL, slice = NULL, intervals = NULL, f
     }
     .gcheckroot()
 
-    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+    intervals <- rescue_ALLGENOME(intervals, substitute(intervals))
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
     slice <- .gslice(trackstr, slice)

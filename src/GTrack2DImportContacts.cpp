@@ -632,7 +632,7 @@ SEXP gtrack_import_contacts(SEXP _track, SEXP _contacts, SEXP _fends, SEXP _allo
 			if (!Rf_isString(_contacts) || Rf_length(_contacts) < 1)
 				verror("Contacts argument is not a string");
 
-			if (!Rf_isLogical(_allow_duplicates) || Rf_length(_allow_duplicates) != 1)
+			if (!is_true_or_false(_allow_duplicates))
 				verror("Allow duplicates argument is not a boolean");
 
 			IntervUtils iu(_envir);

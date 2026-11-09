@@ -66,12 +66,28 @@ void DataFrameUtils::define_data_frame_cols(SEXP src, vector<SEXP> &src_cols, SE
     }
 }
 
+// A source column must have the type of the target column it is copied into: the copy goes through
+// the target's accessor (INTEGER(), REAL(), SET_STRING_ELT()), which raises an R error - a longjmp
+// past ~RdbInitializer - when the types differ, and a factor's codes mean something only with the
+// target's levels.
+static void verify_same_col_type(SEXP src_col, SEXP tgt_col)
+{
+	if (TYPEOF(src_col) != TYPEOF(tgt_col) || Rf_isFactor(src_col) != Rf_isFactor(tgt_col))
+		verror("Cannot copy a data frame column of type %s into a column of type %s",
+			   Rf_isFactor(src_col) ? "factor" : Rf_type2char(TYPEOF(src_col)),
+			   Rf_isFactor(tgt_col) ? "factor" : Rf_type2char(TYPEOF(tgt_col)));
+}
+
 void DataFrameUtils::copy_data_frame_row(const vector<SEXP> &src_cols, int src_row, const vector<SEXP> &tgt_cols, int tgt_row, int tgt_col_offset)
 {
 	for (uint64_t col = 0; col < src_cols.size(); ++col) {
 		SEXP src_col = src_cols[col];
 		SEXP tgt_col = tgt_cols[col + tgt_col_offset];
 
+		// Per row: the type only, which is what an R error would come from. The callers copy rows
+		// of the data frame that defined the target columns.
+		if (TYPEOF(src_col) != TYPEOF(tgt_col))
+			verify_same_col_type(src_col, tgt_col);
 		if (Rf_isInteger(src_col) || Rf_isFactor(src_col))
 			INTEGER(tgt_col)[tgt_row] = INTEGER(src_col)[src_row];
 		else if (Rf_isReal(src_col))
@@ -94,6 +110,7 @@ void DataFrameUtils::copy_data_frame_rows(const vector<SEXP> &src_cols, int src_
 		SEXP src_col = src_cols[col];
 		SEXP tgt_col = tgt_cols[col + tgt_col_offset];
 
+		verify_same_col_type(src_col, tgt_col);
 		if (Rf_isInteger(src_col) || Rf_isFactor(src_col)) {
 			int *src_vals = INTEGER(src_col);
 			int *tgt_vals = INTEGER(tgt_col);

@@ -150,6 +150,8 @@ static void load_rng_state_callback(void *_data)
 RdbInitializer::Shm *RdbInitializer::s_shm = (RdbInitializer::Shm *)MAP_FAILED;
 struct sigaction     RdbInitializer::s_old_sigint_act;
 struct sigaction     RdbInitializer::s_old_sigchld_act;
+mode_t               RdbInitializer::s_old_umask = 0;
+TGLException::Error_handler RdbInitializer::s_old_error_handler = NULL;
 int                  RdbInitializer::s_ref_count = 0;
 int                  RdbInitializer::s_sigint_fired = 0;
 unsigned             RdbInitializer::s_protect_counter = 0;
@@ -171,7 +173,7 @@ RdbInitializer::RdbInitializer()
 			s_rng_state_loaded = false;
 		}
 
-		m_old_umask = umask(07);
+		s_old_umask = umask(07);
 
 		s_shm_size = 0;
 		s_is_kid = false;
@@ -184,7 +186,7 @@ RdbInitializer::RdbInitializer()
 		s_running_pids.clear();
 		s_once_per_call_keys.clear();
 
-		m_old_error_handler = TGLException::set_error_handler(TGLException::throw_error_handler);
+		s_old_error_handler = TGLException::set_error_handler(TGLException::throw_error_handler);
 
 		struct sigaction new_act;
 
@@ -225,44 +227,7 @@ RdbInitializer::~RdbInitializer()
 	s_ref_count--;
 
 	if (!s_ref_count) {
-		// if this is a child, do not detach from shared memory and do not deallocate the semaphore:
-		// if exception is thrown ~RdbInitializer is called first and then the child might need
-		// to write the error into the shared memory
-		if (!s_is_kid) {
-			if (s_shm_sem != SEM_FAILED) {
-				SemLocker sl(s_shm_sem);
-				SigBlocker sb;
-
-				// kill all the remaining child processes
-				for (vector<LiveStat>::const_iterator ipid = s_running_pids.begin(); ipid != s_running_pids.end(); ++ipid)
-					kill(ipid->pid, SIGTERM);
-			}
-
-			// after SIGTERM is sent to all the kids let's wait till sigchld_hander() burries them all
-            while (1) {
-                SigBlocker sb;
-                check_kids_state(true);
-                if (s_running_pids.empty())
-                    break;
-
-                sigsuspend(&sb.oldsigset);
-            }
-
-			if (s_shm_sem != SEM_FAILED)
-				sem_close(s_shm_sem); // semaphore should be already unlinked, only need to close it
-
-			if (s_alloc_suspend_sem != SEM_FAILED) 
-				sem_close(s_alloc_suspend_sem);
-
-			if (s_shm != (Shm *)MAP_FAILED)
-				munmap(s_shm, s_shm_size);
-		}
-
-		TGLException::set_error_handler(m_old_error_handler);
-
-		// Rf_install old signal handlers
-		sigaction(SIGINT, &s_old_sigint_act, NULL);
-		sigaction(SIGCHLD, &s_old_sigchld_act, NULL);
+		release_process_state();
 
         // close all file descriptors opened during the session
         set<int> open_fds;
@@ -272,14 +237,111 @@ RdbInitializer::~RdbInitializer()
                 close(*ifd);
         }
 
-		umask(m_old_umask);
-
 		// do not revert to R's default error report
 	}
 
 	// deal with PROTECT / UNPROTECT
 	runprotect(s_protect_counter - m_old_protect_count);
 	s_protect_counter = m_old_protect_count;
+}
+
+// Puts back what the outermost RdbInitializer changed in the process, except the files the call
+// opened, which only that object knows of: kills the kids that still run, releases the shared
+// memory and the semaphores, and restores the error handler, the SIGINT and SIGCHLD handlers and
+// the umask.
+void RdbInitializer::release_process_state()
+{
+	// if this is a child, do not detach from shared memory and do not deallocate the semaphore:
+	// if exception is thrown ~RdbInitializer is called first and then the child might need
+	// to write the error into the shared memory
+	if (!s_is_kid) {
+		forget_reaped_kids();
+
+		if (s_shm_sem != SEM_FAILED) {
+			SemLocker sl(s_shm_sem);
+			SigBlocker sb;
+
+			// kill all the remaining child processes
+			for (vector<LiveStat>::const_iterator ipid = s_running_pids.begin(); ipid != s_running_pids.end(); ++ipid)
+				kill(ipid->pid, SIGTERM);
+		}
+
+		// After SIGTERM is sent to all the kids, wait till they are reaped. The wait is a poll, not
+		// sigsuspend(): a kid that another waitpid() reaps sends no SIGCHLD this loop would see.
+		// A kid still alive after 10 s gets SIGKILL; after 30 s the rest are given up on.
+		for (int waited_ms = 0;; waited_ms += 10) {
+			{
+				SigBlocker sb;
+				check_kids_state(true);
+				forget_reaped_kids();
+				if (s_running_pids.empty())
+					break;
+			}
+			if (waited_ms == 10000) {
+				for (vector<LiveStat>::const_iterator ipid = s_running_pids.begin(); ipid != s_running_pids.end(); ++ipid)
+					kill(ipid->pid, SIGKILL);
+			}
+			if (waited_ms >= 30000) {
+				s_running_pids.clear();
+				break;
+			}
+			struct timespec ts = {0, 10 * 1000 * 1000};
+			nanosleep(&ts, NULL);  // a SIGCHLD ends it early
+		}
+
+		if (s_shm_sem != SEM_FAILED)
+			sem_close(s_shm_sem); // semaphore should be already unlinked, only need to close it
+
+		if (s_alloc_suspend_sem != SEM_FAILED) 
+			sem_close(s_alloc_suspend_sem);
+
+		if (s_shm != (Shm *)MAP_FAILED)
+			munmap(s_shm, s_shm_size);
+	}
+
+	TGLException::set_error_handler(s_old_error_handler);
+
+	// Rf_install old signal handlers
+	sigaction(SIGINT, &s_old_sigint_act, NULL);
+	sigaction(SIGCHLD, &s_old_sigchld_act, NULL);
+
+	umask(s_old_umask);
+}
+
+// Drops from s_running_pids the kids that are already gone: one that ended is reaped here, and one
+// that someone else reaped (waitpid gives ECHILD) is no longer ours - its pid may even belong to
+// another process by now, which must not be signaled.
+void RdbInitializer::forget_reaped_kids()
+{
+	for (size_t i = 0; i < s_running_pids.size();) {
+		int status;
+		pid_t res = waitpid(s_running_pids[i].pid, &status, WNOHANG);
+		if (res == s_running_pids[i].pid || (res < 0 && errno == ECHILD)) {
+			s_running_pids[i] = s_running_pids.back();
+			s_running_pids.pop_back();
+		} else
+			++i;
+	}
+}
+
+bool RdbInitializer::repair_leaked_scope()
+{
+	if (s_is_kid || (s_ref_count <= 0 && !s_protect_counter))
+		return false;
+
+	if (s_ref_count > 0) {
+		release_process_state();
+		// The next outermost RdbInitializer resets the rest (shared memory pointers, kid
+		// bookkeeping) before it uses them.
+		s_shm_sem = SEM_FAILED;
+		s_alloc_suspend_sem = SEM_FAILED;
+		s_shm = (Shm *)MAP_FAILED;
+	}
+	s_ref_count = 0;
+	// Not unprotected here: R reset its protection stack when it longjmp-ed past the scope, so
+	// the objects misha counted are no longer on it.
+	s_protect_counter = 0;
+	return true;
 }
 
 string RdbInitializer::get_shm_sem_name()
@@ -1354,6 +1416,14 @@ SEXP C_lifetime_counters()
 	return counters;
 }
 
+// The safety net behind C6, called by .gcall() before a misha call made when no other misha call is
+// running: TRUE if a scope that ended through a longjmp had left the counters above zero, and its
+// state was put back. No RdbInitializer, like C_lifetime_counters.
+SEXP C_lifetime_repair()
+{
+	return Rf_ScalarLogical(RdbInitializer::repair_leaked_scope());
+}
+
 // Saves R's generator state to .Random.seed (PutRNGstate()) if a draw of r_unif_rand() loaded it
 // and it has not been saved since. Called by .gcall() when a call returns, so that R's next draw
 // continues after the numbers the call drew. No RdbInitializer, like C_lifetime_counters: it only
@@ -1383,6 +1453,17 @@ SEXP C_take_write_error(SEXP restore)
 	if (msg != R_NilValue)
 		UNPROTECT(1);
 	return msg;
+}
+
+// Test support: breaks C3 on purpose. An R error raised inside an RdbInitializer scope longjmps
+// past ~RdbInitializer and leaves both counters above zero, which is what a test of
+// repair_leaked_scope() needs to start from.
+SEXP C_test_leak_scope()
+{
+	RdbInitializer rdb_init;
+	rprotect_ptr(RSaneAllocVector(INTSXP, 1));
+	Rf_error("misha test: an R error inside an RdbInitializer scope");
+	return R_NilValue;
 }
 
 // Test support: caps the size of the files this process (and the children it forks) may write,

@@ -47,9 +47,14 @@ gdataset.load <- function(path, force = FALSE, verbose = FALSE) {
         return(invisible(list(tracks = 0, intervals = 0, shadowed_tracks = 0, shadowed_intervals = 0)))
     }
 
-    # If already loaded, unload first to support reload
+    # If already loaded, unload first to support reload: the checks below then see the session
+    # without it. A re-load that stops (a check, or anything after) puts the session back as it was,
+    # with the dataset loaded.
     gdatasets <- get("GDATASETS", envir = .misha)
     if (path_norm %in% gdatasets) {
+        restore <- .gdb.session_restorer()
+        reloaded <- FALSE
+        on.exit(if (!reloaded) restore(), add = TRUE)
         gdataset.unload(path_norm)
         gdatasets <- get("GDATASETS", envir = .misha)
     }
@@ -245,6 +250,7 @@ gdataset.load <- function(path, force = FALSE, verbose = FALSE) {
     # for large databases). New datasets without a cache will be C++ scanned
     # and cached automatically by gdb.reload.
     gdb.reload(rescan = FALSE)
+    reloaded <- TRUE
 
     if (verbose) {
         message(sprintf("Loaded dataset '%s':", path))

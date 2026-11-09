@@ -41,3 +41,11 @@ test_that("gintervals.mark_overlaps works", {
         overlap_group = c(2, 1, 2, 2)
     ))
 })
+
+test_that("gintervals.canonic refuses unify_touching_intervals = NA", {
+    iv <- gintervals(1, c(0, 100, 300), c(100, 200, 400))
+    expect_equal(nrow(gintervals.canonic(iv, unify_touching_intervals = TRUE)), 2)
+    expect_equal(nrow(gintervals.canonic(iv, unify_touching_intervals = FALSE)), 3)
+    expect_error(gintervals.canonic(iv, unify_touching_intervals = NA), "TRUE or FALSE")
+    expect_error(gintervals.canonic(iv, unify_touching_intervals = c(TRUE, FALSE)), "TRUE or FALSE")
+})

@@ -22,8 +22,12 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 		if (!Rf_isString(_tgt_overlap_policy) || Rf_length(_tgt_overlap_policy) != 1)
 			verror("Target overlap policy argument is not a string");
 
-		bool canonic = Rf_asLogical(_canonic);
-		bool include_metadata = Rf_asLogical(_include_metadata);
+		if (!is_true_or_false(_canonic))
+			verror("canonic must be TRUE or FALSE");
+		if (!is_true_or_false(_include_metadata))
+			verror("include_metadata must be TRUE or FALSE");
+		bool canonic = LOGICAL(_canonic)[0];
+		bool include_metadata = LOGICAL(_include_metadata)[0];
 
 		// Parse aggregation parameters
 		bool use_aggregation = false;
@@ -49,9 +53,9 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 			agg_cfg.type = parse_aggregation_type(agg_type_str);
 
 			// Parse na.rm
-			if (!Rf_isLogical(_na_rm) || Rf_length(_na_rm) != 1)
-				verror("na.rm must be a single logical value");
-			agg_cfg.na_rm = Rf_asLogical(_na_rm);
+			if (!is_true_or_false(_na_rm))
+				verror("na.rm must be TRUE or FALSE");
+			agg_cfg.na_rm = LOGICAL(_na_rm)[0];
 
 			// Parse min_n
 			if (!Rf_isInteger(_min_n) || Rf_length(_min_n) != 1)
