@@ -1292,7 +1292,7 @@ print.gsynth.model <- function(x, ...) {
     if (!is.null(x$prior_mode)) {
         cat(sprintf("Prior: %s", x$prior_mode))
         if (!is.null(x$prior) && x$prior_mode != "uniform") {
-            avg_pi <- colMeans(x$prior)
+            avg_pi <- colMeans(x[["prior"]])
             cat(sprintf(
                 "  (mean pi: A=%.3f C=%.3f G=%.3f T=%.3f)",
                 avg_pi[1], avg_pi[2], avg_pi[3], avg_pi[4]
@@ -1395,9 +1395,9 @@ gsynth.save <- function(model, file, compress = FALSE) {
         dim_sizes = if (n_dims > 0) as.integer(model$dim_sizes) else list(),
         total_bins = as.integer(total_bins),
         pseudocount = if (!is.null(model$pseudocount)) as.numeric(model$pseudocount) else 1.0,
-        prior_mode = if (!is.null(model$prior_mode)) as.character(model$prior_mode) else "uniform",
-        prior = if (!is.null(model$prior)) {
-            apply(model$prior, 1, function(row) as.numeric(row), simplify = FALSE)
+        prior_mode = if (!is.null(model[["prior_mode"]])) as.character(model[["prior_mode"]]) else "uniform",
+        prior = if (!is.null(model[["prior"]])) {
+            apply(model[["prior"]], 1, function(row) as.numeric(row), simplify = FALSE)
         } else {
             NULL
         },
@@ -1525,8 +1525,8 @@ gsynth.load <- function(file) {
         stop("File does not contain a valid gsynth.model", call. = FALSE)
     }
     # Backfill prior fields for old RDS models trained before 5.6.21
-    if (is.null(model$prior_mode)) model$prior_mode <- "uniform"
-    if (is.null(model$prior)) {
+    if (is.null(model[["prior_mode"]])) model$prior_mode <- "uniform"
+    if (is.null(model[["prior"]])) {
         tb <- if (!is.null(model$total_bins)) model$total_bins else model$num_bins
         model$prior <- matrix(0.25, nrow = tb, ncol = 4L)
     }

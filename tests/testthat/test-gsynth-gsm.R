@@ -618,3 +618,17 @@ test_that("a .gsm without a prior key loads (metadata$prior partially matched pr
     expect_s3_class(loaded, class(m)[1])
     expect_equal(loaded$k, m$k)
 })
+
+test_that("an RDS model saved before priors existed loads with a uniform prior and saves again", {
+    gdb.init_examples()
+    m <- gsynth.train(intervals = gintervals(1, 0, 20000), iterator = 200, k = 2)
+    m$prior <- NULL
+    m$prior_mode <- NULL
+    old <- file.path(withr::local_tempdir(), "old_model.rds")
+    saveRDS(m, old)
+    loaded <- gsynth.load(old)
+    expect_identical(loaded$prior_mode, "uniform")
+    expect_true(is.matrix(loaded[["prior"]]))
+    expect_equal(ncol(loaded[["prior"]]), 4L)
+    expect_no_error(gsynth.save(loaded, file.path(withr::local_tempdir(), "resaved")))
+})
