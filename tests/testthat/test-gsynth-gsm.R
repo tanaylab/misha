@@ -605,3 +605,16 @@ test_that("a model trained with the implicit iterator of a dense track samples, 
     expect_true(any(is.finite(a)))
     expect_identical(gextract("zz_impl_b", intervals = iv, iterator = binsize)$zz_impl_b, a)
 })
+
+test_that("a .gsm without a prior key loads (metadata$prior partially matched prior_mode)", {
+    gdb.init_examples()
+    m <- gsynth.train(intervals = gintervals(1, 0, 20000), iterator = 200, k = 2)
+    f <- file.path(withr::local_tempdir(), "m_noprior")
+    gsynth.save(m, f)
+    meta <- yaml::read_yaml(file.path(f, "metadata.yaml"))
+    meta$prior <- NULL
+    yaml::write_yaml(meta, file.path(f, "metadata.yaml"))
+    loaded <- gsynth.load(f)
+    expect_s3_class(loaded, class(m)[1])
+    expect_equal(loaded$k, m$k)
+})

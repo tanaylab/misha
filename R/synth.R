@@ -1589,15 +1589,15 @@ gsynth.convert <- function(input_file, output_file, compress = FALSE) {
 
 # Internal: reconstruct gsynth.model from metadata + binary files
 .build_model_from_gsm <- function(metadata, dir_path) {
-    if (is.null(metadata$format) || metadata$format != "gsynth_model") {
+    if (is.null(metadata[["format"]]) || metadata[["format"]] != "gsynth_model") {
         stop("Invalid .gsm metadata: missing or wrong format field", call. = FALSE)
     }
 
-    total_bins <- as.integer(metadata$total_bins)
-    n_dims <- as.integer(metadata$n_dims)
+    total_bins <- as.integer(metadata[["total_bins"]])
+    n_dims <- as.integer(metadata[["n_dims"]])
 
     # Read Markov order (default to 5 for backward compatibility)
-    k <- as.integer(if (is.null(metadata$markov_order)) 5L else metadata$markov_order)
+    k <- as.integer(if (is.null(metadata[["markov_order"]])) 5L else metadata[["markov_order"]])
     num_kmers <- as.integer(4L^k)
 
     # Read binary data
@@ -1641,9 +1641,9 @@ gsynth.convert <- function(input_file, output_file, compress = FALSE) {
 
     # Reconstruct dim_specs
     dim_specs <- list()
-    if (n_dims > 0 && length(metadata$dim_specs) > 0) {
+    if (n_dims > 0 && length(metadata[["dim_specs"]]) > 0) {
         for (d in seq_len(n_dims)) {
-            raw_spec <- metadata$dim_specs[[d]]
+            raw_spec <- metadata[["dim_specs"]][[d]]
             bm <- raw_spec$bin_map
             if (is.null(bm)) {
                 bm <- seq_len(as.integer(raw_spec$num_bins))
@@ -1659,20 +1659,20 @@ gsynth.convert <- function(input_file, output_file, compress = FALSE) {
         }
     }
 
-    dim_sizes <- if (n_dims > 0) as.integer(unlist(metadata$dim_sizes)) else integer(0)
+    dim_sizes <- if (n_dims > 0) as.integer(unlist(metadata[["dim_sizes"]])) else integer(0)
 
     # Reconstruct sparse_bins from CDF data
-    min_obs <- as.integer(if (!is.null(metadata$min_obs)) metadata$min_obs else 0L)
-    per_bin_kmers <- as.numeric(unlist(metadata$per_bin_kmers))
+    min_obs <- as.integer(if (!is.null(metadata[["min_obs"]])) metadata[["min_obs"]] else 0L)
+    per_bin_kmers <- as.numeric(unlist(metadata[["per_bin_kmers"]]))
     sparse_bins <- which(per_bin_kmers < min_obs)
 
     # Build the model object
-    pseudocount <- if (!is.null(metadata$pseudocount)) as.numeric(metadata$pseudocount) else 1.0
+    pseudocount <- if (!is.null(metadata[["pseudocount"]])) as.numeric(metadata[["pseudocount"]]) else 1.0
 
     # Reconstruct prior; defaults to uniform 1/4 for old .gsm files without it.
-    prior_mode <- if (!is.null(metadata$prior_mode)) as.character(metadata$prior_mode) else "uniform"
-    if (!is.null(metadata$prior)) {
-        prior_rows <- lapply(metadata$prior, function(row) as.numeric(unlist(row)))
+    prior_mode <- if (!is.null(metadata[["prior_mode"]])) as.character(metadata[["prior_mode"]]) else "uniform"
+    if (!is.null(metadata[["prior"]])) {
+        prior_rows <- lapply(metadata[["prior"]], function(row) as.numeric(unlist(row)))
         prior_mat <- do.call(rbind, prior_rows)
         if (nrow(prior_mat) != total_bins || ncol(prior_mat) != 4L) {
             stop(sprintf(
@@ -1689,10 +1689,10 @@ gsynth.convert <- function(input_file, output_file, compress = FALSE) {
         num_kmers = num_kmers,
         num_bins = total_bins,
         breaks = NULL,
-        total_kmers = as.numeric(metadata$total_kmers),
+        total_kmers = as.numeric(metadata[["total_kmers"]]),
         per_bin_kmers = per_bin_kmers,
-        total_masked = as.numeric(metadata$total_masked),
-        total_n = as.numeric(metadata$total_n),
+        total_masked = as.numeric(metadata[["total_masked"]]),
+        total_n = as.numeric(metadata[["total_n"]]),
         model_data = model_data,
         n_dims = n_dims,
         dim_specs = dim_specs,
@@ -1702,7 +1702,7 @@ gsynth.convert <- function(input_file, output_file, compress = FALSE) {
         prior_mode = prior_mode,
         prior = prior_mat,
         # NULL in a model saved before gsynth.save stored the iterator
-        iterator = if (!is.null(metadata$iterator)) as.numeric(metadata$iterator) else NULL,
+        iterator = if (!is.null(metadata[["iterator"]])) as.numeric(metadata[["iterator"]]) else NULL,
         min_obs = min_obs,
         sparse_bins = sparse_bins
     )

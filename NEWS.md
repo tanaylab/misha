@@ -16,7 +16,7 @@ This release fixes defects found in a review of 5.16.1, speeds up large computat
 
 * **Behavior fix:** random draws (`gsample()`, sampled quantiles, `sample` virtual tracks) follow `set.seed()` and differ between parallel processes.
 
-* **Behavior fix:** gsynth: saved models keep their iterator, `gsynth.random()` follows `nuc_probs` everywhere, and overlapping or masked regions are counted correctly.
+* **Behavior fix:** gsynth: saved models keep their iterator, `gsynth.random()` follows `nuc_probs` everywhere, overlapping or masked regions are counted correctly, and `gsynth.load()` reads a model file without a `prior` entry.
 
 * **Behavior fix:** `gdb.create(format = "per-chromosome")` makes one chromosome per FASTA record.
 
