@@ -43,8 +43,10 @@ on them.
 
 - **Behavior fix:** gsynth: saved models keep their iterator,
   [`gsynth.random()`](https://tanaylab.github.io/misha/reference/gsynth.random.md)
-  follows `nuc_probs` everywhere, and overlapping or masked regions are
-  counted correctly.
+  follows `nuc_probs` everywhere, overlapping or masked regions are
+  counted correctly, and
+  [`gsynth.load()`](https://tanaylab.github.io/misha/reference/gsynth.load.md)
+  reads a model file without a `prior` entry.
 
 - **Behavior fix:** `gdb.create(format = "per-chromosome")` makes one
   chromosome per FASTA record.
