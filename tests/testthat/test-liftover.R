@@ -629,6 +629,29 @@ test_that("src_overlap_policy 'discard' leaves the 'agg' pieces of a chain witho
     expect_equal(lift("discard")$start, c(10, 50, 70, 100))
 })
 
+test_that("a pre-loaded chain resolves source overlaps first, as gintervals.load_chain", {
+    local_db_state()
+    setup_db(list(paste0(">chr1\n", paste(rep("ACGT", 100), collapse = ""), "\n")))
+
+    # A src [0,100) -> [0,100) and B src [50,150) -> [50,150) overlap on both sides. Source
+    # first, "discard" drops src [50,100) from both, so nothing is left for "auto" to resolve.
+    chain_file <- new_chain_file()
+    write_chain_entry(chain_file, "srcA", 1000, "+", 0, 100, "chr1", 400, "+", 0, 100, 1)
+    write_chain_entry(chain_file, "srcA", 1000, "+", 50, 150, "chr1", 400, "+", 50, 150, 2)
+    from_file <- gintervals.load_chain(chain_file, src_overlap_policy = "discard", tgt_overlap_policy = "auto")
+    raw <- gintervals.load_chain(chain_file, src_overlap_policy = "keep", tgt_overlap_policy = "keep")
+    pre <- gintervals.as_chain(as.data.frame(raw), src_overlap_policy = "discard", tgt_overlap_policy = "auto")
+
+    intervs <- data.frame(chrom = "srcA", start = 0, end = 150)
+    lift <- function(chain) {
+        res <- gintervals.liftover(intervs, chain)
+        res[order(res$start), c("start", "end")]
+    }
+    expect_equal(lift(pre), lift(from_file))
+    expect_equal(lift(pre)$start, c(0, 100))
+    expect_equal(lift(pre)$end, c(50, 150))
+})
+
 test_that("complex chain with both source and target overlaps", {
     local_db_state()
 

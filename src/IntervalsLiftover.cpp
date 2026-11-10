@@ -104,16 +104,15 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 
 		iu.convert_rchain_intervs(_chain, chain_intervs, src_id2chrom);
 
-		// Handle target overlaps first
+		// Source overlaps first, then target overlaps, as gintervals.load_chain resolves them
+		chain_intervs.sort_by_src();
+		chain_intervs.handle_src_overlaps(src_overlap_policy, iu.get_chromkey(), src_id2chrom);
 		chain_intervs.sort_by_tgt();
 		chain_intervs.handle_tgt_overlaps(effective_tgt_policy, iu.get_chromkey(), src_id2chrom);
 		chain_intervs.set_tgt_overlap_policy(effective_tgt_policy);
 
-		// Handle source overlaps
-		chain_intervs.sort_by_src();
-		chain_intervs.handle_src_overlaps(src_overlap_policy, iu.get_chromkey(), src_id2chrom);
-
 		// Build auxiliary structures for efficient source interval mapping
+		chain_intervs.sort_by_src();
 		chain_intervs.buildSrcAux();
 
 		GenomeChromKey src_chromkey;

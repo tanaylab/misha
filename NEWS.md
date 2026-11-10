@@ -6,6 +6,8 @@
 
 * `tgt_overlap_policy = "auto*"` returns a winning minus-strand chain interval as one interval.
 
+* **Behavior fix:** `gintervals.liftover()` and `gtrack.liftover()` resolve the source overlaps of a chain before its target overlaps, as `gintervals.load_chain()` does.
+
 # misha 5.17.0
 
 Fixes marked **Behavior fix** change results; recompute anything that depends on them.
