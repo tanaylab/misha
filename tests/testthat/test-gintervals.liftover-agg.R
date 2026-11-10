@@ -647,3 +647,61 @@ test_that("gintervals.liftover: narrow interval starting at its leftmost chain i
     expect_equal(r2$start, 1000)
     expect_equal(r2$end, 1100)
 })
+
+test_that("first, last and nth order the lifted pieces by position, then by chain, not by value", {
+    local_db_state()
+
+    source_db <- setup_source_db(list(
+        paste0(">source1\n", paste(rep("A", 100), collapse = ""), "\n"),
+        paste0(">source2\n", paste(rep("C", 100), collapse = ""), "\n")
+    ))
+    src <- data.frame(chrom = c("chrsource1", "chrsource2"), start = 0, end = 100)
+    gtrack.create_sparse("sp12", "", src, c(1, 2))
+    gtrack.create_sparse("sp21", "", src, c(2, 1))
+    gtrack.create_dense("de12", "", src, c(1, 2), binsize = 10)
+    setup_db(list(paste0(">chrA\n", paste(rep("T", 200), collapse = ""), "\n")))
+
+    mid <- function(res, col) res[res$start >= 50 & res$end <= 100, col]
+    for (policy in c("keep", "agg")) {
+        for (ids in list(c(1, 2), c(2, 1))) {
+            # chrsource1 -> chrA [0,100) and chrsource2 -> chrA [50,150). With "keep" the
+            # piece from chrsource1 starts first; "agg" cuts both chains at 50 and 100, so on
+            # [50,100) the two pieces coincide and the lower chain id comes first. Dense
+            # liftover lands one 10 bp source bin of each on every target bin there, so it
+            # goes by chain with either policy.
+            chain_file <- new_chain_file()
+            write_chain_entry(chain_file, "chrsource1", 100, "+", 0, 100, "chrA", 200, "+", 0, 100, ids[1])
+            write_chain_entry(chain_file, "chrsource2", 100, "+", 0, 100, "chrA", 200, "+", 50, 150, ids[2])
+            chain <- gintervals.load_chain(chain_file, tgt_overlap_policy = policy)
+            by_chain <- if (ids[1] < ids[2]) 1 else 2
+            first_src <- if (policy == "keep") 1 else by_chain
+            info <- paste(policy, ids[1])
+
+            for (vals in list(c(1, 2), c(2, 1))) {
+                lift <- function(agg, params = NULL) {
+                    gintervals.liftover(cbind(src, val = vals), chain,
+                        value_col = "val", multi_target_agg = agg, params = params
+                    )
+                }
+                expect_equal(mid(lift("first"), "val"), vals[first_src], info = info)
+                expect_equal(mid(lift("last"), "val"), vals[3 - first_src], info = info)
+                expect_equal(mid(lift("nth", 1), "val"), vals[first_src], info = info)
+                expect_equal(mid(lift("nth", 2), "val"), vals[3 - first_src], info = info)
+            }
+
+            for (tr in c("sp12", "sp21", "de12")) {
+                vals <- if (tr == "sp21") c(2, 1) else c(1, 2)
+                first_tr <- if (tr == "de12") by_chain else first_src
+                for (agg in c("first", "last")) {
+                    out <- paste("lifted", tr, agg, policy, ids[1], sep = "_")
+                    gtrack.liftover(out, "", file.path(source_db, "tracks", paste0(tr, ".track")), chain,
+                        multi_target_agg = agg
+                    )
+                    want <- vals[if (agg == "first") first_tr else 3 - first_tr]
+                    res <- gextract(out, gintervals("chrA", 50, 100), iterator = if (tr == "de12") 10 else NULL)
+                    expect_true(all(res[[out]] == want), info = paste(info, tr, agg))
+                }
+            }
+        }
+    }
+})

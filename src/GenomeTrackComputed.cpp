@@ -27,19 +27,21 @@ void GenomeTrackComputed::read_interval(const Rectangle &interval, const Diagona
 {
 	if (m_bfile.opened()) {
 		ComputedQuadTree::Stat result;
+		int64_t nan_area;
 
 		load();
 		if (band.is_non_empty_area())
-			m_qtree.get_stat(interval, band, result);
+			m_qtree.get_stat(interval, band, result, nan_area);
 		else
-			m_qtree.get_stat(interval, result);
+			m_qtree.get_stat(interval, result, nan_area);
 		m_last_occupied_area = result.occupied_area;
 		m_last_weighted_sum = result.weighted_sum;
+		m_last_avg = result.weighted_sum / (result.occupied_area - nan_area);
 		m_last_min = result.min_val;
 		m_last_max = result.max_val;
 	} else {
 		m_last_occupied_area = 0;
-		m_last_weighted_sum = m_last_min = m_last_max = numeric_limits<double>::quiet_NaN();
+		m_last_weighted_sum = m_last_avg = m_last_min = m_last_max = numeric_limits<double>::quiet_NaN();
 	}
 }
 

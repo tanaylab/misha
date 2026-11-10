@@ -728,6 +728,8 @@ void StatQuadTree<T, Size>::update_stat(const T &obj, Stat &stat, const Rectangl
 {
 	int64_t occupied_area = intersection.area();
 	double val = obj.val(intersection, m_uptr);
+	// A NaN value is added too, and makes the weighted sum NaN. Track files are written with these node
+	// statistics, and StatQuadTreeCached::get_stat() relies on that NaN to read such a node object by object.
 	stat.weighted_sum += val * occupied_area;
 	stat.min_val = min(val, stat.min_val);
 	stat.max_val = max(val, stat.max_val);

@@ -1,9 +1,11 @@
 create_isolated_test_db()
 
-# Tests for sparse track liftover overlapping interval merging
-# These tests verify the fix for the bug where sparse track liftover
-# would create overlapping intervals in the output track when different
-# source intervals mapped to overlapping (but not identical) target regions.
+# Tests for sparse track liftover where lifted pieces overlap in the target.
+# A sparse track cannot hold overlapping intervals, so the pieces are cut at their
+# boundaries and each segment gets the aggregate of the pieces that cover it
+# (as gintervals.liftover(value_col =) does). Before that, the output held
+# overlapping intervals ("Invalid format of a sparse track file"), and later the
+# whole chain of overlapping pieces was merged into one interval with one aggregate.
 
 test_that("gtrack.liftover merges overlapping target intervals in sparse tracks", {
     local_db_state()
@@ -49,8 +51,11 @@ test_that("gtrack.liftover merges overlapping target intervals in sparse tracks"
     # Extract and validate - the key test is that gextract works (no overlapping interval error)
     result <- gextract(lifted_track, gintervals.all())
 
-    # Should have merged the overlapping intervals
     expect_true(nrow(result) >= 1)
+
+    # Both pieces have value 10: every covered position is 10, nothing outside [10,27)
+    per_bp <- gextract(lifted_track, gintervals("chr1", 0, 40), iterator = 1)[[lifted_track]]
+    expect_equal(per_bp, c(rep(NaN, 10), rep(10, 17), rep(NaN, 13)))
 
     # Verify no overlapping intervals in the output
     if (nrow(result) > 1) {
@@ -344,5 +349,60 @@ test_that("gtrack.liftover with sum aggregation correctly sums overlapping value
         for (i in 1:(nrow(result) - 1)) {
             expect_true(result$end[i] <= result$start[i + 1])
         }
+    }
+
+    # Summed per segment: only [13,20) is covered by both pieces
+    expect_equal(result$start, c(10, 13, 20))
+    expect_equal(result$end, c(13, 20, 23))
+    expect_equal(result[[lifted_track]], c(100, 200, 100))
+})
+
+test_that("gtrack.liftover aggregates overlapping sparse pieces per segment, as gintervals.liftover does", {
+    local_db_state()
+
+    source_db <- setup_source_db(list(paste0(">source1\n", paste(rep("A", 300), collapse = ""), "\n")))
+    src_intervals <- data.frame(chrom = "chrsource1", start = c(0, 100, 200), end = c(10, 111, 211))
+    gtrack.create_sparse("src_track", "Source track", src_intervals, c(1, 100, 1))
+    src_track_dir <- file.path(source_db, "tracks", "src_track.track")
+
+    setup_db(list(paste0(">chr1\n", paste(rep("T", 300), collapse = ""), "\n")))
+
+    # The three pieces land on chr1 [0,10), [9,20), [19,30): neighbours overlap by 1bp
+    chain_file <- new_chain_file()
+    write_chain_entry(chain_file, "chrsource1", 300, "+", 0, 10, "chr1", 300, "+", 0, 10, 1)
+    write_chain_entry(chain_file, "chrsource1", 300, "+", 100, 111, "chr1", 300, "+", 9, 20, 2)
+    write_chain_entry(chain_file, "chrsource1", 300, "+", 200, 211, "chr1", 300, "+", 19, 30, 3)
+
+    lifted_track <- "lifted_seg"
+    withr::defer({
+        if (gtrack.exists(lifted_track)) gtrack.rm(lifted_track, force = TRUE)
+    })
+    lift <- function(agg) {
+        if (gtrack.exists(lifted_track)) gtrack.rm(lifted_track, force = TRUE)
+        gtrack.liftover(lifted_track, "Lifted", src_track_dir, chain_file,
+            tgt_overlap_policy = "keep", multi_target_agg = agg
+        )
+    }
+
+    lift("mean")
+    result <- gextract(lifted_track, gintervals.all())
+    expect_equal(result$start, c(0, 9, 10, 19, 20))
+    expect_equal(result$end, c(9, 10, 19, 20, 30))
+    expect_equal(result[[lifted_track]], c(1, 50.5, 100, 50.5, 1))
+
+    # Per position, the lifted track equals gintervals.liftover(value_col =) on the same input
+    src_iv <- data.frame(chrom = "chrsource1", start = c(0, 100, 200), end = c(10, 111, 211), v = c(1, 100, 1))
+    per_bp <- function(segs, col) {
+        v <- rep(NaN, 40)
+        for (i in seq_len(nrow(segs))) v[(segs$start[i] + 1):segs$end[i]] <- segs[[col]][i]
+        v
+    }
+    for (agg in c("mean", "sum", "count", "max", "first", "last", "max.coverage_len", "min.coverage_frac")) {
+        lift(agg)
+        got <- gextract(lifted_track, gintervals("chr1", 0, 40), iterator = 1)[[lifted_track]]
+        ref <- gintervals.liftover(src_iv, chain_file,
+            tgt_overlap_policy = "keep", value_col = "v", multi_target_agg = agg
+        )
+        expect_equal(got, per_bp(ref, "v"), info = agg)
     }
 })

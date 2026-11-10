@@ -169,7 +169,7 @@ test_that("gtrack.liftover aggregation edge cases: ties and sorting with dense t
         if (gtrack.exists(lifted_track)) gtrack.rm(lifted_track, force = TRUE)
     })
 
-    # first: all start at 50, end at 60, sorted by value descending: 5,5,3,2 -> pick first (5)
+    # first: all lie at [50,60), so they go by chain id: chains 1-4 hold 5,3,5,2 -> first (5)
     gtrack.liftover(
         lifted_track, "first", src_track_dir, chain_file,
         tgt_overlap_policy = "agg",
@@ -179,7 +179,7 @@ test_that("gtrack.liftover aggregation edge cases: ties and sorting with dense t
     expect_equal(unique(res[[lifted_track]]), 5)
     gtrack.rm(lifted_track, force = TRUE)
 
-    # last: pick last in sorted order (2)
+    # last: chain 4 (2)
     gtrack.liftover(
         lifted_track, "last", src_track_dir, chain_file,
         tgt_overlap_policy = "agg",
@@ -189,7 +189,7 @@ test_that("gtrack.liftover aggregation edge cases: ties and sorting with dense t
     expect_equal(unique(res[[lifted_track]]), 2)
     gtrack.rm(lifted_track, force = TRUE)
 
-    # nth with n=2: sorted by value desc is 5,5,3,2, second is 5
+    # nth with n=2: chain 2 (3)
     gtrack.liftover(
         lifted_track, "nth", src_track_dir, chain_file,
         tgt_overlap_policy = "agg",
@@ -197,7 +197,7 @@ test_that("gtrack.liftover aggregation edge cases: ties and sorting with dense t
         params = 2
     )
     res <- gextract(lifted_track, gintervals("chrB", 50, 60))
-    expect_equal(unique(res[[lifted_track]]), 5)
+    expect_equal(unique(res[[lifted_track]]), 3)
     gtrack.rm(lifted_track, force = TRUE)
 
     # min: should be 2
@@ -343,8 +343,9 @@ test_that("gtrack.liftover aggregation for sparse tracks", {
         tgt_overlap_policy = "agg",
         multi_target_agg = "first"
     )
+    # the three pieces lie at [100,110), so they go by chain id: chain 1 holds 5
     vals <- gextract(lifted_track, gintervals("chrB", 100, 110))[[lifted_track]]
-    expect_true(all(vals == 11))
+    expect_true(all(vals == 5))
 
     gtrack.rm(lifted_track, force = TRUE)
     gtrack.liftover(
@@ -1019,4 +1020,38 @@ test_that("gtrack.liftover rejects cluster target-overlap policies with a clear 
             "only supported by gintervals.liftover"
         )
     }
+})
+
+# A dense target bin that nothing lands in counts 0 under "count" (as in gtrack.create_dense), on a
+# chromosome that something lands on and on one that nothing lands on (which was NaN). Below min_n
+# the count is NaN; the other aggregators give NaN.
+test_that("gtrack.liftover count: a dense bin nothing lands in is 0 on every chromosome", {
+    local_db_state()
+
+    source_db <- setup_source_db(list(paste0(">source1\n", paste(rep("A", 100), collapse = ""), "\n")))
+    gtrack.create_dense(
+        "cnt_src", "x",
+        data.frame(chrom = "chrsource1", start = 0L, end = 10L, stringsAsFactors = FALSE),
+        5, 10, NaN
+    )
+    src_dir <- file.path(source_db, "tracks", "cnt_src.track")
+    setup_db(list(
+        ">chrA\n", paste(rep("T", 200), collapse = ""), "\n",
+        ">chrB\n", paste(rep("C", 200), collapse = ""), "\n"
+    ))
+    chain <- new_chain_file()
+    write_chain_entry(chain, "chrsource1", 100, "+", 0, 10, "chrA", 200, "+", 0, 10, 1)
+
+    lifted <- "cnt_lifted"
+    withr::defer(if (gtrack.exists(lifted)) gtrack.rm(lifted, force = TRUE))
+    iv <- gintervals(c("chrA", "chrA", "chrB"), c(0, 100, 100), c(10, 110, 110))
+    lift <- function(agg, min_n = NULL) {
+        if (gtrack.exists(lifted)) gtrack.rm(lifted, force = TRUE)
+        gtrack.liftover(lifted, "x", src_dir, chain, multi_target_agg = agg, min_n = min_n)
+        gextract(lifted, iv, iterator = iv)[[lifted]]
+    }
+    expect_equal(lift("count"), c(1, 0, 0))
+    expect_equal(lift("count", min_n = 0), c(1, 0, 0))
+    expect_equal(lift("count", min_n = 1), c(1, NaN, NaN))
+    expect_equal(lift("sum"), c(5, NaN, NaN))
 })

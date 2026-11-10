@@ -8,6 +8,7 @@
 #ifndef STATQUADTREECACHED_H_
 #define STATQUADTREECACHED_H_
 
+#include <cmath>
 #include <cstdint>
 #include <inttypes.h>
 
@@ -83,11 +84,12 @@ public:
 	bool do_intersect(const Rectangle &rect);
 
 	// returns statitstics for the given rectangle: weighted sum, occupied area, minimal and maximal value of the object that intersect with rect.
-	// Note: the average value can be achieved by dividing weighted sum by occupied.area
-	void get_stat(const Rectangle &rect, Stat &stat);
+	// An object whose value is NaN adds its area to occupied area and to nan_area, and nothing else: weighted sum, minimum
+	// and maximum skip it, as they skip a NaN bin in 1D tracks. The average value is weighted sum / (occupied area - nan_area).
+	void get_stat(const Rectangle &rect, Stat &stat, int64_t &nan_area);
 
 	// Works in a similar way as a bandless get_stat. The band further restricts the query area.
-	void get_stat(const Rectangle &rect, const DiagonalBand &band, Stat &stat);
+	void get_stat(const Rectangle &rect, const DiagonalBand &band, Stat &stat, int64_t &nan_area);
 
 	uint64_t get_num_objs() const { return m_num_objs; }
 
@@ -219,10 +221,10 @@ private:
 	Chunk &cache_chunk(const Chunk &chunk);
 
 	bool do_intersect(const Chunk &chunk, const NodeBase *node_base, const Rectangle &rect);
-	void get_stat(const Chunk &chunk, const NodeBase *node_base, const Rectangle &rect, Stat &stat);
-	void get_stat(const Chunk &chunk, const NodeBase *node_base, const Rectangle &rect, const DiagonalBand &band, Stat &stat);
-	void update_stat(const T &obj, Stat &stat, const Rectangle &intersection) const;
-	void update_stat(const T &obj, Stat &stat, const Rectangle &intersection, const DiagonalBand &band) const;
+	void get_stat(const Chunk &chunk, const NodeBase *node_base, const Rectangle &rect, Stat &stat, int64_t &nan_area);
+	void get_stat(const Chunk &chunk, const NodeBase *node_base, const Rectangle &rect, const DiagonalBand &band, Stat &stat, int64_t &nan_area);
+	void update_stat(const T &obj, Stat &stat, const Rectangle &intersection, int64_t &nan_area) const;
+	void update_stat(const T &obj, Stat &stat, const Rectangle &intersection, const DiagonalBand &band, int64_t &nan_area) const;
 	void update_stat(const NodeBase *node_base, Stat &stat) const;
 
 	void debug_print_tree(const Chunk &chunk, NodeBase *node_base, unsigned depth);
@@ -786,31 +788,33 @@ bool StatQuadTreeCached<T, Size>::do_intersect(const Chunk &chunk, const NodeBas
 }
 
 template <class T, class Size>
-void StatQuadTreeCached<T, Size>::get_stat(const Rectangle &rect, Stat &stat)
+void StatQuadTreeCached<T, Size>::get_stat(const Rectangle &rect, Stat &stat, int64_t &nan_area)
 {
 	stat.reset();
+	nan_area = 0;
 
 	if (!empty())
-		get_stat(m_root_chunk, m_root_chunk.top_node, rect, stat);
+		get_stat(m_root_chunk, m_root_chunk.top_node, rect, stat, nan_area);
 
-	if (!stat.occupied_area)
+	if (stat.occupied_area == nan_area)
 		stat.weighted_sum = stat.min_val = stat.max_val = numeric_limits<double>::quiet_NaN();
 }
 
 template <class T, class Size>
-void StatQuadTreeCached<T, Size>::get_stat(const Rectangle &rect, const DiagonalBand &band, Stat &stat)
+void StatQuadTreeCached<T, Size>::get_stat(const Rectangle &rect, const DiagonalBand &band, Stat &stat, int64_t &nan_area)
 {
 	stat.reset();
+	nan_area = 0;
 
 	if (!empty())
-		get_stat(m_root_chunk, m_root_chunk.top_node, rect, band, stat);
+		get_stat(m_root_chunk, m_root_chunk.top_node, rect, band, stat, nan_area);
 
-	if (!stat.occupied_area)
+	if (stat.occupied_area == nan_area)
 		stat.weighted_sum = stat.min_val = stat.max_val = numeric_limits<double>::quiet_NaN();
 }
 
 template <class T, class Size>
-void StatQuadTreeCached<T, Size>::get_stat(const Chunk &chunk, const NodeBase *node_base, const Rectangle &rect, Stat &stat)
+void StatQuadTreeCached<T, Size>::get_stat(const Chunk &chunk, const NodeBase *node_base, const Rectangle &rect, Stat &stat, int64_t &nan_area)
 {
 	if (node_base->is_leaf) {
 		Leaf *leaf = (Leaf *)node_base;
@@ -821,25 +825,27 @@ void StatQuadTreeCached<T, Size>::get_stat(const Chunk &chunk, const NodeBase *n
 			const T &obj = objs[i].obj;
 			Rectangle intersection = obj.intersect(rect, leaf->arena);
 			if (intersection.is_non_empty_area())
-				update_stat(obj, stat, intersection);
+				update_stat(obj, stat, intersection, nan_area);
 		}
 	} else {
 		Node *node = (Node *)node_base;
 		for (int iquad = 0; iquad < NUM_QUADS; ++iquad) {
 			QuadRetriever qr(this, chunk, node->kid_ptr[iquad]);
 			if (qr.quad()->arena.do_intersect(rect)) {
-				if (qr.quad()->arena.is_inside(rect)) {
+				// A node's stored statistics count all its objects. One NaN value makes the weighted sum NaN and
+				// min / max whatever the objects added after it gave, so such a node is read object by object.
+				if (qr.quad()->arena.is_inside(rect) && !std::isnan(qr.quad()->stat.weighted_sum)) {
 					if (qr.quad()->stat.occupied_area)
 						update_stat(qr.quad(), stat);
 				} else
-					get_stat(qr.chunk(), qr.quad(), rect, stat);
+					get_stat(qr.chunk(), qr.quad(), rect, stat, nan_area);
 			}
 		}
 	}
 }
 
 template <class T, class Size>
-void StatQuadTreeCached<T, Size>::get_stat(const Chunk &chunk, const NodeBase *node_base, const Rectangle &rect, const DiagonalBand &band, Stat &stat)
+void StatQuadTreeCached<T, Size>::get_stat(const Chunk &chunk, const NodeBase *node_base, const Rectangle &rect, const DiagonalBand &band, Stat &stat, int64_t &nan_area)
 {
 	if (node_base->is_leaf) {
 		Leaf *leaf = (Leaf *)node_base;
@@ -851,10 +857,10 @@ void StatQuadTreeCached<T, Size>::get_stat(const Chunk &chunk, const NodeBase *n
 			Rectangle intersection = obj.intersect(rect, leaf->arena);
 			if (intersection.is_non_empty_area()) {
 				if (band.do_contain(intersection))
-					update_stat(obj, stat, intersection);
+					update_stat(obj, stat, intersection, nan_area);
 				else if (band.do_intersect(intersection)) {
 					band.shrink2intersected(intersection);
-					update_stat(obj, stat, intersection, band);
+					update_stat(obj, stat, intersection, band, nan_area);
 				}
 			}
 		}
@@ -864,21 +870,24 @@ void StatQuadTreeCached<T, Size>::get_stat(const Chunk &chunk, const NodeBase *n
 			QuadRetriever qr(this, chunk, node->kid_ptr[iquad]);
 			if (qr.quad()->arena.do_intersect(rect)) {
 				if (qr.quad()->arena.is_inside(rect)) {
-					if (band.do_contain(qr.quad()->arena))
-						update_stat(qr.quad(), stat);
-					else if (band.do_intersect(qr.quad()->arena)) {
+					if (band.do_contain(qr.quad()->arena)) {
+						if (std::isnan(qr.quad()->stat.weighted_sum))  // see the bandless get_stat()
+							get_stat(qr.chunk(), qr.quad(), rect, stat, nan_area);
+						else
+							update_stat(qr.quad(), stat);
+					} else if (band.do_intersect(qr.quad()->arena)) {
 						Rectangle r(qr.quad()->arena);
 						band.shrink2intersected(r);
-						get_stat(qr.chunk(), qr.quad(), r, band, stat);
+						get_stat(qr.chunk(), qr.quad(), r, band, stat, nan_area);
 					}
 				} else {
 					Rectangle intersection = qr.quad()->arena.intersect(rect);
 					if (band.do_contain(intersection))
-						get_stat(qr.chunk(), qr.quad(), rect, stat);
+						get_stat(qr.chunk(), qr.quad(), rect, stat, nan_area);
 					else if (band.do_intersect(intersection)) {
 						Rectangle r(qr.quad()->arena);
 						band.shrink2intersected(r);
-						get_stat(qr.chunk(), qr.quad(), intersection, band, stat);
+						get_stat(qr.chunk(), qr.quad(), intersection, band, stat, nan_area);
 					}
 				}
 			}
@@ -887,26 +896,34 @@ void StatQuadTreeCached<T, Size>::get_stat(const Chunk &chunk, const NodeBase *n
 }
 
 template <class T, class Size>
-void StatQuadTreeCached<T, Size>::update_stat(const T &obj, Stat &stat, const Rectangle &intersection) const
+void StatQuadTreeCached<T, Size>::update_stat(const T &obj, Stat &stat, const Rectangle &intersection, int64_t &nan_area) const
 {
 	int64_t occupied_area = intersection.area();
 	double val = obj.val(intersection, m_uptr);
+	stat.occupied_area += occupied_area;
+	if (std::isnan(val)) {
+		nan_area += occupied_area;
+		return;
+	}
 	stat.weighted_sum += val * occupied_area;
 	stat.min_val = min(val, stat.min_val);
 	stat.max_val = max(val, stat.max_val);
-	stat.occupied_area += occupied_area;
 }
 
 
 template <class T, class Size>
-void StatQuadTreeCached<T, Size>::update_stat(const T &obj, Stat &stat, const Rectangle &intersection, const DiagonalBand &band) const
+void StatQuadTreeCached<T, Size>::update_stat(const T &obj, Stat &stat, const Rectangle &intersection, const DiagonalBand &band, int64_t &nan_area) const
 {
 	int64_t occupied_area = band.intersected_area(intersection);
 	double val = obj.val(intersection, band, m_uptr);
+	stat.occupied_area += occupied_area;
+	if (std::isnan(val)) {
+		nan_area += occupied_area;
+		return;
+	}
 	stat.weighted_sum += val * occupied_area;
 	stat.min_val = min(val, stat.min_val);
 	stat.max_val = max(val, stat.max_val);
-	stat.occupied_area += occupied_area;
 }
 
 template <class T, class Size>

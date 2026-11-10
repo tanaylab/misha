@@ -605,21 +605,38 @@ test_that("gseq.pwm extend parameter works correctly", {
     seq <- "GGGGACGGGG"
     #      123456789..
 
-    # ROI at 6-6 (just "C"), no extend: should not find AC
-    result <- gseq.pwm(seq, pssm, mode = "count", score.thresh = 0, prior = 0, start_pos = 6, end_pos = 6, extend = FALSE)
-    expect_equal(result, 0)
+    count <- function(...) gseq.pwm(seq, pssm, mode = "count", score.thresh = 0, prior = 0, ...)
 
-    # ROI at 6-6, extend=TRUE (w-1=1): should find AC starting at position 5
-    result <- gseq.pwm(seq, pssm, mode = "count", score.thresh = 0, prior = 0, start_pos = 6, end_pos = 6, extend = TRUE)
-    expect_equal(result, 1)
+    # ROI at 5-5 (just "A"): the AC at 5-6 starts in the ROI and ends past it. Without
+    # extend the ROI holds no window at all: NA, nothing to count, as the pwm vtracks
+    expect_equal(count(start_pos = 5, end_pos = 5, extend = FALSE), NA_real_)
+    expect_equal(count(start_pos = 5, end_pos = 5, extend = TRUE), 1)
+    expect_equal(count(start_pos = 5, end_pos = 5, extend = 1), 1)
 
-    # ROI at 6-6, extend=1 (explicit): same as extend=TRUE
-    result <- gseq.pwm(seq, pssm, mode = "count", score.thresh = 0, prior = 0, start_pos = 6, end_pos = 6, extend = 1)
-    expect_equal(result, 1)
+    # ROI at 6-6 (just "C"): the AC starts before the ROI, so no extend scores it,
+    # as the pwm vtracks never score an anchor before the interval
+    expect_equal(count(start_pos = 6, end_pos = 6, extend = FALSE), NA_real_)
+    expect_equal(count(start_pos = 6, end_pos = 6, extend = TRUE), 0)
+    expect_equal(count(start_pos = 6, end_pos = 6, extend = 5), 0)
+    expect_lt(gseq.pwm(seq, pssm, mode = "max", prior = 0, start_pos = 6, end_pos = 6, extend = TRUE), -1)
 
-    # ROI at 7-7, extend=2: should find AC (start_min = 7-2 = 5)
-    result <- gseq.pwm(seq, pssm, mode = "count", score.thresh = 0, prior = 0, start_pos = 7, end_pos = 7, extend = 2)
-    expect_equal(result, 1)
+    # An integer extend is how many bases a match may run past end_pos
+    expect_equal(count(start_pos = 1, end_pos = 4, extend = 1), 0)
+    expect_equal(count(start_pos = 1, end_pos = 4, extend = 2), 1)
+
+    # A minus-strand match is anchored at its first base too: GT at 5-6 is AC's reverse complement
+    rc <- function(...) {
+        gseq.pwm("GGGGGTGGGG", pssm, mode = "count", score.thresh = 0, prior = 0, bidirect = FALSE, strand = -1, ...)
+    }
+    expect_equal(rc(start_pos = 6, end_pos = 6, extend = TRUE), 0)
+    expect_equal(rc(start_pos = 5, end_pos = 5, extend = TRUE), 1)
+
+    # The motif at 1-2 lies before the ROI and the one at 9-10 ends 2 bases past it
+    ac <- data.frame(A = c(1, 0), C = c(0, 1), G = 0, T = 0)
+    expect_equal(gseq.pwm("ACGGGGGGAC", ac,
+        mode = "count", bidirect = FALSE, strand = 1, start_pos = 2, end_pos = 8,
+        extend = TRUE, score.thresh = -0.01, prior = 0
+    ), 0)
 })
 
 test_that("gseq.pwm mode='pos' reports correct 1-based positions", {
@@ -692,8 +709,9 @@ test_that("gseq.pwm handles edge case: sequence too short", {
     result_max <- gseq.pwm(seq, pssm, mode = "max", prior = 0)
     expect_true(is.na(result_max))
 
+    # no window, so nothing to count: NA, as the pwm vtracks give
     result_count <- gseq.pwm(seq, pssm, mode = "count", score.thresh = 0, prior = 0)
-    expect_equal(result_count, 0)
+    expect_equal(result_count, NA_real_)
 
     result_pos <- gseq.pwm(seq, pssm, mode = "pos", prior = 0)
     expect_true(is.na(result_pos))
@@ -711,7 +729,7 @@ test_that("gseq.pwm handles edge case: empty ROI", {
 
     # start_pos > end_pos: invalid ROI
     result_count <- gseq.pwm(seq, pssm, mode = "count", score.thresh = 0, prior = 0, start_pos = 5, end_pos = 3)
-    expect_equal(result_count, 0)
+    expect_equal(result_count, NA_real_)
 
     result_total <- gseq.pwm(seq, pssm, mode = "lse", prior = 0, start_pos = 5, end_pos = 3)
     expect_true(is.na(result_total))
@@ -845,16 +863,17 @@ test_that("gseq.kmer validates inputs correctly", {
 test_that("gseq.kmer mode='count' counts exact matches", {
     seq <- "CGCGCGCG"
 
+    # CG and GC are palindromes, so strand = 1 counts each site once
     # Count CG (4 occurrences)
-    result <- gseq.kmer(seq, "CG", mode = "count", start_pos = 1, end_pos = 8, extend = FALSE)
+    result <- gseq.kmer(seq, "CG", mode = "count", strand = 1, start_pos = 1, end_pos = 8, extend = FALSE)
     expect_equal(result, 4)
 
     # Count GC (3 occurrences)
-    result <- gseq.kmer(seq, "GC", mode = "count", start_pos = 1, end_pos = 8, extend = FALSE)
+    result <- gseq.kmer(seq, "GC", mode = "count", strand = 1, start_pos = 1, end_pos = 8, extend = FALSE)
     expect_equal(result, 3)
 
     # Count AA (0 occurrences)
-    result <- gseq.kmer(seq, "AA", mode = "count", start_pos = 1, end_pos = 8, extend = FALSE)
+    result <- gseq.kmer(seq, "AA", mode = "count", strand = 1, start_pos = 1, end_pos = 8, extend = FALSE)
     expect_equal(result, 0)
 })
 
@@ -893,21 +912,34 @@ test_that("gseq.kmer handles ROI bounds correctly", {
     expect_equal(result, 0)
 })
 
-test_that("gseq.kmer extend parameter works correctly", {
+test_that("gseq.kmer extend lets a match run past the ROI end, never before its start", {
     seq <- "GGGGACGGGG"
     #      123456789..
 
-    # ROI at 6-6 (just "C"), no extend: should not find AC
-    result <- gseq.kmer(seq, "AC", mode = "count", start_pos = 6, end_pos = 6, extend = FALSE)
-    expect_equal(result, 0)
+    # ROI at 5-5 (just "A"): the AC at 5-6 starts in the ROI and ends past it
+    expect_equal(gseq.kmer(seq, "AC", strand = 1, start_pos = 5, end_pos = 5, extend = FALSE), 0)
+    expect_equal(gseq.kmer(seq, "AC", strand = 1, start_pos = 5, end_pos = 5, extend = TRUE), 1)
+    expect_equal(gseq.kmer(seq, "AC", strand = 1, start_pos = 5, end_pos = 5, extend = 1), 1)
 
-    # ROI at 6-6, extend=TRUE (k-1=1): should find AC starting at position 5
-    result <- gseq.kmer(seq, "AC", mode = "count", start_pos = 6, end_pos = 6, extend = TRUE)
-    expect_equal(result, 1)
+    # ROI at 6-6 (just "C"): the AC starts before the ROI, so no extend counts it
+    expect_equal(gseq.kmer(seq, "AC", strand = 1, start_pos = 6, end_pos = 6, extend = TRUE), 0)
+    expect_equal(gseq.kmer(seq, "AC", strand = 1, start_pos = 6, end_pos = 6, extend = 5), 0)
+    # a minus-strand match is anchored at its first base too: GT at 5-6 is AC's reverse complement
+    expect_equal(gseq.kmer("GGGGGTGGGG", "AC", strand = -1, start_pos = 6, end_pos = 6, extend = TRUE), 0)
+    expect_equal(gseq.kmer("GGGGGTGGGG", "AC", strand = -1, start_pos = 5, end_pos = 5, extend = TRUE), 1)
 
-    # ROI at 6-6, extend=1 (explicit): same as extend=TRUE
-    result <- gseq.kmer(seq, "AC", mode = "count", start_pos = 6, end_pos = 6, extend = 1)
-    expect_equal(result, 1)
+    # An integer extend is how many bases a match may run past end_pos
+    expect_equal(gseq.kmer(seq, "AC", strand = 1, start_pos = 1, end_pos = 4, extend = 1), 0)
+    expect_equal(gseq.kmer(seq, "AC", strand = 1, start_pos = 1, end_pos = 4, extend = 2), 1)
+
+    # frac with extend = TRUE divides by every start in the ROI whose k-mer fits
+    # in the sequence: 9 when the ROI reaches the sequence end, 10 when a base follows it
+    expect_equal(gseq.kmer(seq, "AC", mode = "frac", strand = 1, start_pos = 1, end_pos = 10, extend = TRUE), 1 / 9)
+    expect_equal(gseq.kmer(paste0(seq, "G"), "AC", mode = "frac", strand = 1, start_pos = 1, end_pos = 10, extend = TRUE), 1 / 10)
+
+    # With skip_gaps the run past the end counts non-gap bases: A at 3 then C at 5
+    expect_equal(gseq.kmer("GGA-CG", "AC", strand = 1, start_pos = 3, end_pos = 3, extend = TRUE), 1)
+    expect_equal(gseq.kmer("GGA-CG", "AC", strand = 1, start_pos = 3, end_pos = 4, extend = FALSE), 0)
 })
 
 test_that("gseq.kmer strand parameter works", {
@@ -1272,6 +1304,118 @@ test_that("gseq.kmer matches gextract kmer vtrack: both strands", {
     expect_equal(gseq_rev, vtrack_result$count_rev)
 })
 
+test_that("gseq.pwm matches the pwm vtracks on random intervals", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+    withr::local_seed(29)
+
+    pssm <- matrix(c(
+        0.7, 0.1, 0.1, 0.1,
+        0.1, 0.1, 0.7, 0.1,
+        0.1, 0.6, 0.2, 0.1
+    ), ncol = 4, byrow = TRUE, dimnames = list(NULL, c("A", "C", "G", "T")))
+    w <- nrow(pssm) - 1
+
+    chrom_sizes <- gintervals.all()
+    chr20_end <- chrom_sizes$end[chrom_sizes$chrom == "chr20"]
+    starts <- sort(sample(0:199, 12)) * 1000 + 10000
+    # short and long intervals on chr1, plus the end of chr20
+    iv <- rbind(
+        data.frame(chrom = "chr1", start = starts, end = starts + c(3:5, sample(20:300, 9))),
+        data.frame(chrom = "chr20", start = chr20_end - 41, end = chr20_end)
+    )
+    iv_size <- chrom_sizes$end[match(iv$chrom, chrom_sizes$chrom)]
+
+    # gseq.pwm gets the interval padded by w - 1 on each side (clipped to the
+    # chromosome), with start_pos / end_pos marking the interval
+    pad <- iv
+    pad$start <- pmax(0, iv$start - w)
+    pad$end <- pmin(iv_size, iv$end + w)
+    seqs <- gseq.extract(pad)
+    roi_start <- iv$start - pad$start + 1
+    roi_end <- iv$end - pad$start
+
+    funcs <- c(lse = "pwm", max = "pwm.max", count = "pwm.count")
+    for (ext in c(FALSE, TRUE)) {
+        # strand 0 stands for bidirect = TRUE
+        for (strand in c(0, 1, -1)) {
+            bidirect <- strand == 0
+            if (bidirect) strand <- 1
+            for (mode in names(funcs)) {
+                thresh <- if (mode == "count") -4.5
+                params <- list(pssm = pssm, bidirect = bidirect, strand = strand, extend = ext, prior = 0.01)
+                params$score.thresh <- thresh
+                do.call(gvtrack.create, c(list("v", NULL, funcs[[mode]]), params))
+                vt <- gextract("v", iv, iterator = iv)
+                vt <- vt$v[order(vt$intervalID)]
+                for (skip in c(TRUE, FALSE)) {
+                    gs <- gseq.pwm(seqs, pssm,
+                        mode = mode, bidirect = bidirect, strand = strand, score.thresh = thresh,
+                        start_pos = roi_start, end_pos = roi_end, extend = ext, prior = 0.01, skip_gaps = skip
+                    )
+                    expect_equal(gs, vt, tolerance = 1e-5, info = paste(mode, ext, bidirect, strand, skip))
+                }
+            }
+        }
+    }
+})
+
+test_that("gseq.kmer matches the kmer vtracks on random intervals", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+    withr::local_seed(17)
+
+    chrom_sizes <- gintervals.all()
+    chr20_end <- chrom_sizes$end[chrom_sizes$chrom == "chr20"]
+    starts <- sort(sample(0:199, 15)) * 1000 + 10000
+    # short and long intervals on chr1, plus both ends of chr20
+    iv <- rbind(
+        data.frame(chrom = "chr1", start = starts, end = starts + c(1:5, sample(20:300, 10))),
+        data.frame(chrom = "chr20", start = c(0, chr20_end - 41), end = c(37, chr20_end))
+    )
+    iv_size <- chrom_sizes$end[match(iv$chrom, chrom_sizes$chrom)]
+
+    # palindromic: CG, GATC; not: A, C, AC, TTA, CAGG
+    for (kmer in c("A", "C", "CG", "AC", "TTA", "GATC", "CAGG")) {
+        # gseq.kmer gets the interval padded by k - 1 on each side (clipped to
+        # the chromosome), with start_pos / end_pos marking the interval
+        w <- nchar(kmer) - 1
+        pad <- iv
+        pad$start <- pmax(0, iv$start - w)
+        pad$end <- pmin(iv_size, iv$end + w)
+        seqs <- gseq.extract(pad)
+        roi_start <- iv$start - pad$start + 1
+        roi_end <- iv$end - pad$start
+
+        for (ext in c(FALSE, TRUE)) {
+            for (strand in c(-1, 0, 1)) {
+                for (mode in c("count", "frac")) {
+                    suppressWarnings(gvtrack.create("v", NULL, paste0("kmer.", mode), kmer = kmer, strand = strand, extend = ext))
+                    vt <- gextract("v", iv, iterator = iv)
+                    vt <- vt$v[order(vt$intervalID)]
+                    for (skip in c(TRUE, FALSE)) {
+                        gs <- suppressWarnings(gseq.kmer(seqs, kmer,
+                            mode = mode, strand = strand, start_pos = roi_start, end_pos = roi_end,
+                            extend = ext, skip_gaps = skip
+                        ))
+                        expect_equal(gs, vt, tolerance = 1e-6, info = paste(kmer, ext, strand, mode, skip))
+                    }
+                }
+            }
+        }
+    }
+
+    # Both strands are summed: a palindrome counts twice per site
+    expect_equal(suppressWarnings(gseq.kmer("CGCGCGCGCG", "CG", strand = 0)), 10)
+})
+
+test_that("gseq.kmer warns for a palindromic k-mer on strand 0, as the vtracks do", {
+    expect_warning(gseq.kmer("ACGT", "CG"), "kmer sequence 'CG' is palindromic, please set strand to 1 or -1 to avoid double counting", fixed = TRUE)
+    expect_warning(gseq.kmer("ACGT", "cg", strand = 0), "palindromic")
+    expect_no_warning(gseq.kmer("ACGT", "CG", strand = 1))
+    expect_no_warning(gseq.kmer("ACGT", "AC", strand = 0))
+})
+
 # ============================================================================
 # Tests for gap support in gseq.pwm() and gseq.kmer()
 # ============================================================================
@@ -1319,14 +1463,21 @@ test_that("gseq.pwm with gaps: ROI and extend", {
     seq <- "GGGG-A--GGAC-GGGG"
     #      12345678901234567
 
-    # ROI at 12-12 (where C is) with extend=TRUE should find AC
-    # With extend=1, scans positions 11-13, which includes the AC window (11-12)
-    result <- gseq.pwm(seq, pssm,
+    count <- function(...) {
+        gseq.pwm(seq, pssm, mode = "count", score.thresh = 0, bidirect = FALSE, strand = 1, skip_gaps = TRUE, prior = 0, ...)
+    }
+
+    # ROI at 11-11 (the A) with extend=TRUE finds the AC at 11-12, which runs past it
+    expect_equal(count(start_pos = 11, end_pos = 11, extend = TRUE), 1)
+    expect_equal(count(start_pos = 11, end_pos = 11, extend = FALSE), NA_real_)
+    # ROI at 12-12 (the C): the AC starts before the ROI
+    expect_equal(count(start_pos = 12, end_pos = 12, extend = TRUE), 0)
+
+    # The run past the end counts non-gap bases: A at 3 and C at 5 across a gap
+    expect_equal(gseq.pwm("GGA-CG", pssm,
         mode = "count", score.thresh = 0, bidirect = FALSE, strand = 1,
-        start_pos = 12, end_pos = 12, extend = TRUE, skip_gaps = TRUE,
-        prior = 0
-    )
-    expect_equal(result, 1)
+        start_pos = 3, end_pos = 3, extend = TRUE, skip_gaps = TRUE, prior = 0
+    ), 1)
 })
 
 test_that("gseq.pwm with gaps: reverse strand", {
@@ -1364,7 +1515,7 @@ test_that("gseq.pwm with gaps: all gaps / too few non-gaps", {
     expect_true(is.na(result_lse))
 
     result_count <- gseq.pwm(seq_all_gaps, pssm, mode = "count", score.thresh = 0, prior = 0, skip_gaps = TRUE)
-    expect_equal(result_count, 0)
+    expect_equal(result_count, NA_real_)
 
     # Only one non-gap base (need 2 for motif width)
     seq_one_base <- "---A---"
@@ -2302,4 +2453,15 @@ test_that("a reverse-strand read leaves a byte above 127 as it is", {
     comp <- c(A = "T", C = "G", G = "C", T = "A")
     expected[acgt] <- charToRaw(paste(comp[rawToChar(expected[acgt], multiple = TRUE)], collapse = ""))
     expect_identical(got, expected)
+})
+
+test_that("gseq.pwm count separates 'counted nothing' from 'nothing to count', and an NA sequence is NA", {
+    pssm <- matrix(c(0.97, 0.01, 0.01, 0.01), 1, dimnames = list(NULL, c("A", "C", "G", "T")))
+    # windows, none scorable: counted, found none
+    expect_equal(gseq.pwm("NNNN", pssm, mode = "count", score.thresh = -1, prior = 0), 0)
+    # an NA sequence: its "A" used to be scored, as CHAR() of NA is "NA"
+    for (m in c("lse", "max", "count", "pos")) {
+        expect_true(is.na(gseq.pwm(NA_character_, pssm, mode = m, score.thresh = -1, prior = 0)), info = m)
+    }
+    expect_equal(gseq.kmer(c(NA, "AA"), "A", strand = 1), c(NA, 2))
 })

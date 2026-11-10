@@ -448,13 +448,15 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 							double locus_len = static_cast<double>(seg_end - seg_start);
 							// Use unique contributor id (chain + interval) to avoid coalescing distinct source intervals
 							int64_t contrib_chain_id = (entries[i].chain_id << 32) ^ static_cast<int64_t>(entries[i].interval_id);
+							// first, last and nth order by where the lifted piece lies: clipped to the
+							// segment, every piece covering it would tie and they would order by value
 							aggregation_state_add(
 								agg_state,
 								entries[i].value,
 								overlap_len,
 								locus_len,
-								overlap_start,
-								overlap_end,
+								entries[i].start,
+								entries[i].end,
 								contrib_chain_id
 							);
 

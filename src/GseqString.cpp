@@ -148,16 +148,27 @@ static int get_int_elem(SEXP r_vec, int idx, int default_val) {
     return (val == NA_INTEGER) ? default_val : val;
 }
 
-// Compute ROI bounds and allowed window starts
-static void compute_bounds(int L, int w, int roi_start, int roi_end, int extend_val,
-                          int& start_min0, int& start_max0) {
-    // Convert 1-based ROI to 0-based for internal use
-    int roi_start0 = roi_start - 1;
-    int roi_end0 = roi_end - 1;
-    
-    // Compute allowed window starts (0-based)
-    start_min0 = std::max(0, roi_start0 - extend_val);
-    start_max0 = std::min(L - w, roi_end0 - w + 1 + extend_val);
+// Allowed window starts (0-based) for a 1-based ROI, by the rule of the
+// sequence virtual tracks (KmerCounter, PWMScorer): a window is anchored at its
+// first base, which must not lie before the ROI, and it may run at most
+// extend_val bases past the ROI end, never past the end of the sequence.
+// extend = TRUE is w - 1, so every anchor in the ROI is allowed. With gaps,
+// only non-gap bases count toward extend_val. start_max0 is returned as if the
+// sequence held no gaps: the gap paths read start_max0 + w - 1 as the last
+// base a window may cover.
+static void compute_bounds(const std::string& seq, int w, int roi_start, int roi_end, int extend_val,
+                           const GapCharset* gaps, int& start_min0, int& start_max0) {
+    const int last0 = static_cast<int>(seq.length()) - 1;
+    int end_lim0 = roi_end - 1;
+    if (gaps == nullptr) {
+        end_lim0 = static_cast<int>(std::min<int64_t>(last0, static_cast<int64_t>(end_lim0) + extend_val));
+    } else {
+        for (int left = extend_val; left > 0 && end_lim0 < last0;) {
+            if (!gaps->is_gap[static_cast<unsigned char>(seq[++end_lim0])]) --left;
+        }
+    }
+    start_min0 = roi_start - 1;
+    start_max0 = end_lim0 - w + 1;
 }
 
 // Score PWM over a range (with optional gap support)
@@ -239,14 +250,12 @@ static ScoreResult score_pwm_over_range(
     };
 
     // No window start allowed (an ROI shorter than the motif, or spat.min past
-    // the last start). Checked before the gap path too, whose projector over
+    // the last start): NA in every mode, count included, as the pwm virtual
+    // tracks give for an interval without an anchor - there is nothing to count.
+    // Checked before the gap path too, whose projector over
     // [start_min0, start_max0 + w - 1] would get a negative size.
     if (start_max0 < start_min0) {
-        if (pwm_mode == PWM_COUNT) {
-            result.value = 0.0;
-        } else {
-            result.value = R_NaReal;
-        }
+        result.value = R_NaReal;
         return result;
     }
 
@@ -381,12 +390,9 @@ static ScoreResult score_pwm_over_range(
         int j_min = gp.first_log_ge_phys(start_min0);
         int j_max = gp.last_log_window_end_le_phys(end_lim_phys0, w);
 
+        // fewer than w non-gap bases: no window, so NA, count included
         if (j_min < 0 || j_max < j_min || static_cast<int>(gp.comp.size()) < w) {
-            if (pwm_mode == PWM_COUNT) {
-                result.value = 0.0;
-            } else {
-                result.value = R_NaReal;
-            }
+            result.value = R_NaReal;
             return result;
         }
 
@@ -535,6 +541,11 @@ static ScoreResult score_kmer_over_range(
         kmer_rc = seq2reverse_complementary(kmer_upper);
     }
 
+    // As in the kmer.count / kmer.frac virtual tracks (KmerCounter), strand 0
+    // sums the matches of the two strands, so a palindromic k-mer counts twice
+    // per site, and frac divides by the starts of both strands.
+    const int nstrands = strand_mode == 0 ? 2 : 1;
+
     // Branch on gap-skipping mode
     if (!skip_gaps || gaps == nullptr) {
         // ========== Original contiguous path ==========
@@ -544,8 +555,8 @@ static ScoreResult score_kmer_over_range(
             return result;
         }
 
-        int count = 0;
-        int nstarts = start_max0 - start_min0 + 1;
+        int64_t count = 0;
+        int64_t nstarts = (int64_t)(start_max0 - start_min0 + 1) * nstrands;
 
         // Scan all allowed starts
         for (int s0 = start_min0; s0 <= start_max0; ++s0) {
@@ -562,9 +573,7 @@ static ScoreResult score_kmer_over_range(
                 match_rev = (seq.compare(s0, w, kmer_rc) == 0);
             }
 
-            if (match_fwd || match_rev) {
-                count++;
-            }
+            count += match_fwd + match_rev;
         }
 
         if (return_frac && nstarts > 0) {
@@ -592,8 +601,8 @@ static ScoreResult score_kmer_over_range(
             return result;
         }
 
-        int count = 0;
-        int nstarts = j_max - j_min + 1;
+        int64_t count = 0;
+        int64_t nstarts = (int64_t)(j_max - j_min + 1) * nstrands;
 
         // Scan logical starts
         for (int j = j_min; j <= j_max; ++j) {
@@ -610,9 +619,7 @@ static ScoreResult score_kmer_over_range(
                 match_rev = (gp.comp.compare(j, w, kmer_rc) == 0);
             }
 
-            if (match_fwd || match_rev) {
-                count++;
-            }
+            count += match_fwd + match_rev;
         }
 
         if (return_frac && nstarts > 0) {
@@ -784,7 +791,10 @@ SEXP C_gseq_pwm(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect,
             // at which a scan of millions of sequences can be interrupted at all.
             rdb::check_interrupt();
 
-            std::string seq = r_string_to_upper(CHAR(STRING_ELT(r_seqs, i)));
+            // An NA sequence, or an ROI with no base in the sequence, has no window: NA in every
+            // mode, count included (CHAR() of an NA is the string "NA", which would be scanned)
+            const SEXP r_seq = STRING_ELT(r_seqs, i);
+            std::string seq = r_seq == NA_STRING ? std::string() : r_string_to_upper(CHAR(r_seq));
             int L = seq.length();
             
             // Get ROI bounds
@@ -794,13 +804,10 @@ SEXP C_gseq_pwm(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect,
             // Validate bounds
             if (roi_start < 1) roi_start = 1;
             if (roi_end > L) roi_end = L;
-            if (roi_start > roi_end) {
-                // Invalid ROI
+            if (r_seq == NA_STRING || roi_start > roi_end) {
                 if (mode == "pos") {
                     INTEGER(r_pos)[i] = NA_INTEGER;
                     if (return_strand) INTEGER(r_strand_out)[i] = NA_INTEGER;
-                } else if (mode == "count") {
-                    REAL(r_result)[i] = 0.0;
                 } else {
                     REAL(r_result)[i] = R_NaReal;
                 }
@@ -809,7 +816,8 @@ SEXP C_gseq_pwm(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect,
             
             // Compute allowed window starts
             int start_min0, start_max0;
-            compute_bounds(L, w, roi_start, roi_end, extend_val, start_min0, start_max0);
+            compute_bounds(seq, w, roi_start, roi_end, extend_val, skip_gaps ? &gap_charset : nullptr,
+                           start_min0, start_max0);
             int bin_origin = roi_start;
             if (spat_min != NA_INTEGER) {
                 start_min0 = std::max(start_min0, roi_start + spat_min - 2);
@@ -940,6 +948,11 @@ SEXP C_gseq_kmer(SEXP r_seqs, SEXP r_kmer, SEXP r_mode, SEXP r_strand_mode,
         for (int i = 0; i < n_seqs; ++i) {
             rdb::check_interrupt();
 
+            // an NA sequence is NA (CHAR() of it is the string "NA", which would be counted)
+            if (STRING_ELT(r_seqs, i) == NA_STRING) {
+                REAL(r_result)[i] = R_NaReal;
+                continue;
+            }
             std::string seq = r_string_to_upper(CHAR(STRING_ELT(r_seqs, i)));
             int L = seq.length();
             
@@ -957,7 +970,8 @@ SEXP C_gseq_kmer(SEXP r_seqs, SEXP r_kmer, SEXP r_mode, SEXP r_strand_mode,
             
             // Compute allowed window starts
             int start_min0, start_max0;
-            compute_bounds(L, w, roi_start, roi_end, extend_val, start_min0, start_max0);
+            compute_bounds(seq, w, roi_start, roi_end, extend_val, skip_gaps ? &gap_charset : nullptr,
+                           start_min0, start_max0);
             
             // Score the sequence
             bool return_frac = (mode == "frac");

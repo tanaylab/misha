@@ -299,6 +299,35 @@ struct GIntervalVal {
 	}
 };
 
+// Finds the lifted pieces (sorted by start) that overlap each target locus, for loci visited left
+// to right. active holds the pieces that overlap the current locus, in the order of pieces, and
+// next the first piece not yet reached, so each piece is looked at only while it overlaps a locus.
+struct LiftedPiecesSweep {
+	const vector<GIntervalVal> &pieces;
+	size_t next;
+	vector<size_t> active;
+
+	LiftedPiecesSweep(const vector<GIntervalVal> &_pieces) : pieces(_pieces), next(0) {}
+
+	// Adds to agg_state each piece that overlaps [start, end), weighed by its overlap, with
+	// coverage_frac = overlap / locus_len and the piece's own start and end, by which first, last
+	// and nth order the pieces. start and end must not decrease from call to call.
+	void add_overlapping(int64_t start, int64_t end, double locus_len, AggregationState &agg_state) {
+		while (next < pieces.size() && pieces[next].interval.start < end)
+			active.push_back(next++);
+		active.erase(remove_if(active.begin(), active.end(), [&](size_t i) { return pieces[i].interval.end <= start; }), active.end());
+
+		for (vector<size_t>::const_iterator i = active.begin(); i != active.end(); ++i) {
+			const GIntervalVal &piece = pieces[*i];
+			int64_t overlap_start = max(start, piece.interval.start);
+			int64_t overlap_end = min(end, piece.interval.end);
+			if (overlap_start < overlap_end)
+				aggregation_state_add(agg_state, (double)piece.val, (double)(overlap_end - overlap_start), locus_len,
+									  piece.interval.start, piece.interval.end, piece.chain_id);
+		}
+	}
+};
+
 // Aggregate possibly-overlapping mapped rectangles into DISJOINT rectangles before
 // inserting them into a StatQuadTree (which requires non-overlapping objects -
 // overlapping inserts corrupt read-back and double-count). Disjoint source rects can
@@ -826,6 +855,11 @@ SEXP gtrack_liftover(SEXP _track,
 					GenomeTrackFixedBin::pack_header(fixedbin_header_bytes, binsize);
 			}
 
+			// A bin that nothing landed in: what aggregate_values gives no contributions, i.e. NaN, or
+			// 0 under "count" (NaN below min_n). The bins of a chromosome that nothing landed on too.
+			double empty_aggregated = aggregate_values(agg_cfg, AggregationState());
+			float empty_bin_val = std::isnan(empty_aggregated) ? numeric_limits<float>::quiet_NaN() : (float)empty_aggregated;
+
 			for (int chromid = 0; chromid < (int)iu.get_chromkey().get_num_chroms(); ++chromid) {
 				// Create empty file if this chromosome has no data
 				if (chrom_intervals.find(chromid) == chrom_intervals.end()) {
@@ -841,11 +875,11 @@ SEXP gtrack_liftover(SEXP _track,
 								iw.write_bytes(fixedbin_header_bytes.data(), fixedbin_header_bytes.size());
 								if (end_bin > 0) {
 									const int64_t chunk_size = 65536;
-									vector<float> na_chunk((size_t)min<int64_t>(end_bin, chunk_size), numeric_limits<float>::quiet_NaN());
+									vector<float> empty_chunk((size_t)min<int64_t>(end_bin, chunk_size), empty_bin_val);
 									int64_t remaining = end_bin;
 									while (remaining > 0) {
-										uint64_t to_write = (uint64_t)min<int64_t>(remaining, (int64_t)na_chunk.size());
-										iw.write_bytes(&na_chunk[0], to_write * sizeof(float));
+										uint64_t to_write = (uint64_t)min<int64_t>(remaining, (int64_t)empty_chunk.size());
+										iw.write_bytes(&empty_chunk[0], to_write * sizeof(float));
 										remaining -= to_write;
 									}
 								}
@@ -854,14 +888,14 @@ SEXP gtrack_liftover(SEXP _track,
 								snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), chromid).c_str());
 								GenomeTrackFixedBin gtrack;
 								gtrack.init_write(filename, binsize, chromid);
-								// Fill the chromosome with NaN values so the bin count matches the chromosome size
+								// Fill the chromosome so the bin count matches the chromosome size
 								if (end_bin > 0) {
 									const int64_t chunk_size = 65536;
-									vector<float> na_chunk((size_t)min<int64_t>(end_bin, chunk_size), numeric_limits<float>::quiet_NaN());
+									vector<float> empty_chunk((size_t)min<int64_t>(end_bin, chunk_size), empty_bin_val);
 									int64_t remaining = end_bin;
 									while (remaining > 0) {
-										uint64_t to_write = (uint64_t)min<int64_t>(remaining, (int64_t)na_chunk.size());
-										gtrack.write_next_bins(&na_chunk[0], to_write);
+										uint64_t to_write = (uint64_t)min<int64_t>(remaining, (int64_t)empty_chunk.size());
+										gtrack.write_next_bins(&empty_chunk[0], to_write);
 										remaining -= to_write;
 									}
 								}
@@ -901,48 +935,18 @@ SEXP gtrack_liftover(SEXP _track,
 					int64_t end_bin = (int64_t)ceil(chrom_size / (double)binsize);
 					int64_t coord1 = 0;
 					int64_t coord2 = coord1 + binsize;
-					vector<GIntervalVal>::const_iterator iinterv_val = interv_vals.begin();
+					LiftedPiecesSweep sweep(interv_vals);
 					AggregationState agg_state;
 					agg_state.contributions.reserve(8);
 
 					for (int64_t bin = 0; bin < end_bin; ++bin) {
 						agg_state.reset();
 
-						// Advance the persistent cursor past contributions that end at or before this
-						// bin's start. interv_vals is sorted by start, so a contribution with end <=
-						// coord1 cannot overlap this bin or any later one (coord1 only increases).
-						// Contributions with end > coord1 may still overlap a later bin, so we must NOT
-						// advance past them here: doing so dropped a contribution that spanned a bin
-						// boundary whenever an overlapping sibling (e.g. a parallel chain kept by the
-						// "agg" target-overlap policy) shared its interval.
-						while (iinterv_val != interv_vals.end() && iinterv_val->interval.end <= coord1)
-							++iinterv_val;
-
-						// Collect every contribution overlapping [coord1, coord2). Sorted by start, so
-						// stop as soon as a contribution starts at or after coord2.
-						for (vector<GIntervalVal>::const_iterator iter = iinterv_val; iter != interv_vals.end(); ++iter) {
-							if (iter->interval.start >= coord2)
-								break;
-							int64_t overlap_start = max(coord1, iter->interval.start);
-							int64_t overlap_end = min(coord2, iter->interval.end);
-							if (overlap_start < overlap_end) {
-								double overlap_len = static_cast<double>(overlap_end - overlap_start);
-								int64_t bin_end_clamped = std::min<int64_t>(coord2, chrom_size);
-								double locus_len = static_cast<double>(std::max<int64_t>(0, bin_end_clamped - coord1));
-								if (locus_len == 0.0)
-									locus_len = static_cast<double>(coord2 - coord1);
-								aggregation_state_add(
-									agg_state,
-									static_cast<double>(iter->val),
-									overlap_len,
-									locus_len,
-									overlap_start,
-									overlap_end,
-									iter->chain_id
-								);
-							}
-							check_interrupt();
-						}
+						int64_t bin_end_clamped = std::min<int64_t>(coord2, chrom_size);
+						double locus_len = static_cast<double>(std::max<int64_t>(0, bin_end_clamped - coord1));
+						if (locus_len == 0.0)
+							locus_len = static_cast<double>(coord2 - coord1);
+						sweep.add_overlapping(coord1, coord2, locus_len, agg_state);
 
 						double aggregated = aggregate_values(agg_cfg, agg_state);
 						float out_val = numeric_limits<float>::quiet_NaN();
@@ -973,53 +977,38 @@ SEXP gtrack_liftover(SEXP _track,
 					agg_state.contributions.reserve(4);
 					vector<char> rec_buf;
 
-					// Merge overlapping intervals before writing
-					// Intervals are sorted by start, then end
-					size_t idx = 0;
-					while (idx < interv_vals.size()) {
-						// Start a new merged interval
-						int64_t merged_start = interv_vals[idx].interval.start;
-						int64_t merged_end = interv_vals[idx].interval.end;
+					// Lifted pieces may overlap (e.g. under tgt_overlap_policy "keep" or "agg"), and a
+					// sparse track cannot hold overlapping intervals. Cut the pieces at their boundaries
+					// and give each segment the aggregate of the pieces that cover it, as
+					// gintervals.liftover(value_col =) does; a piece that overlaps no other is one segment.
+					vector<int64_t> breaks;
+					breaks.reserve(2 * interv_vals.size());
+					for (vector<GIntervalVal>::const_iterator iinterv_val = interv_vals.begin(); iinterv_val != interv_vals.end(); ++iinterv_val) {
+						breaks.push_back(iinterv_val->interval.start);
+						breaks.push_back(iinterv_val->interval.end);
+					}
+					sort(breaks.begin(), breaks.end());
+					breaks.erase(unique(breaks.begin(), breaks.end()), breaks.end());
+
+					LiftedPiecesSweep sweep(interv_vals);
+					for (size_t ibreak = 0; ibreak + 1 < breaks.size(); ++ibreak) {
+						GInterval segment(chromid, breaks[ibreak], breaks[ibreak + 1], 0);
 						agg_state.reset();
-
-						// Collect all intervals that overlap with the current merged region
-						while (idx < interv_vals.size() &&
-								interv_vals[idx].interval.start < merged_end) {
-							// This interval overlaps with merged region
-							// Extend merged_end if needed
-							if (interv_vals[idx].interval.end > merged_end)
-								merged_end = interv_vals[idx].interval.end;
-
-							double contrib_len = static_cast<double>(
-								std::max<int64_t>(0, interv_vals[idx].interval.end - interv_vals[idx].interval.start));
-							if (contrib_len == 0.0)
-								contrib_len = 1.0;
-
-							aggregation_state_add(
-								agg_state,
-								static_cast<double>(interv_vals[idx].val),
-								contrib_len,
-								contrib_len,
-								interv_vals[idx].interval.start,
-								interv_vals[idx].interval.end,
-								interv_vals[idx].chain_id
-							);
-							++idx;
-							check_interrupt();
-						}
+						sweep.add_overlapping(segment.start, segment.end, (double)segment.range(), agg_state);
+						if (agg_state.contributions.empty())  // a gap between pieces
+							continue;
 
 						double aggregated = aggregate_values(agg_cfg, agg_state);
 						float out_val = numeric_limits<float>::quiet_NaN();
 						if (!std::isnan(aggregated))
 							out_val = static_cast<float>(aggregated);
 
-						GInterval merged_interval(chromid, merged_start, merged_end, 0);
 						if (indexed) {
 							rec_buf.clear();
-							GenomeTrackSparse::pack_record(rec_buf, merged_interval.start, merged_interval.end, out_val);
+							GenomeTrackSparse::pack_record(rec_buf, segment.start, segment.end, out_val);
 							iw.write_bytes(rec_buf.data(), rec_buf.size());
 						} else {
-							gtrack.write_next_interval(merged_interval, out_val);
+							gtrack.write_next_interval(segment, out_val);
 						}
 						check_interrupt();
 					}

@@ -8,6 +8,20 @@
 
 * **Behavior fix:** `gintervals.liftover()` and `gtrack.liftover()` resolve the source overlaps of a chain before its target overlaps, as `gintervals.load_chain()` does.
 
+* **Behavior fix:** `gtrack.liftover()` of a sparse track aggregates each overlapping stretch separately, as `gintervals.liftover(value_col =)` does.
+
+* **Behavior fix:** `multi_target_agg = "first"`, `"last"` and `"nth"` in `gintervals.liftover()` and `gtrack.liftover()` order the lifted pieces by position, then by chain id, not by value.
+
+* **Behavior fix:** `gtrack.liftover(multi_target_agg = "count")` of a dense track gives 0, not `NaN`, where nothing maps.
+
+* **Behavior fix:** 2D virtual tracks (`avg`, `min`, `max`, `weighted.sum`) and 2D track expressions skip NaN values.
+
+* **Behavior fix:** `gseq.kmer()` and `gseq.pwm()` match the kmer and pwm virtual tracks: `gseq.kmer(strand = 0)` sums both strands, and `extend` lets a match run past `end_pos` only.
+
+* **Behavior fix:** `pwm.count` and `gseq.pwm(mode = "count")` give `NA` where there is no window to count (a sequence or chromosome end shorter than the motif), as the other pwm functions do.
+
+* **Behavior fix:** `gseq.pwm()` and `gseq.kmer()` give `NA` for an `NA` sequence.
+
 # misha 5.17.0
 
 Fixes marked **Behavior fix** change results; recompute anything that depends on them.

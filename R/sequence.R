@@ -98,7 +98,7 @@ gseq.comp <- function(seq) {
 }
 
 # Helper function to normalize ROI bounds for sequence scoring
-.normalize_bounds <- function(seqs, start_pos, end_pos, w, extend) {
+.normalize_bounds <- function(seqs, start_pos, end_pos, extend) {
     n <- length(seqs)
     L <- nchar(seqs, type = "chars", allowNA = TRUE, keepNA = TRUE)
 
@@ -106,34 +106,14 @@ gseq.comp <- function(seq) {
     roi_start <- if (is.null(start_pos)) rep.int(1L, n) else rep_len(as.integer(start_pos), n)
     roi_end <- if (is.null(end_pos)) L else rep_len(as.integer(end_pos), n)
 
-    # Handle extend parameter; an NA would act as TRUE in C_gseq_pwm/C_gseq_kmer
-    if (length(extend) != 1 || is.na(extend)) {
-        stop("extend must be FALSE, TRUE, or a non-negative integer")
-    }
-    E <- if (isFALSE(extend)) {
-        0L
-    } else if (isTRUE(extend)) {
-        w - 1L
-    } else {
-        as.integer(extend)
-    }
-
-    if (any(E < 0L, na.rm = TRUE)) {
+    # Check extend here; C_gseq_pwm/C_gseq_kmer turn it into a number of bases, and an NA
+    # would act as TRUE there
+    if (length(extend) != 1 || is.na(extend) || (!is.logical(extend) && isTRUE(as.integer(extend) < 0L))) {
         stop("extend must be FALSE, TRUE, or a non-negative integer")
     }
 
-    # Compute start_min and start_max (1-based, inclusive)
-    start_min <- pmax.int(1L, roi_start - E)
-    start_max <- pmin.int(pmax.int(0L, L - w + 1L), roi_end - w + 1L + E)
-
-    list(
-        L = L,
-        roi_start = roi_start,
-        roi_end = roi_end,
-        E = E,
-        start_min = start_min,
-        start_max = start_max
-    )
+    # The allowed window starts are computed in C++ (compute_bounds)
+    list(roi_start = roi_start, roi_end = roi_end)
 }
 
 #' Score DNA sequences with a PWM over a region of interest
@@ -160,7 +140,12 @@ gseq.comp <- function(seq) {
 #'   spatial weights - calibrate with \code{mode="max"} before choosing one.
 #' @param start_pos integer or NULL; 1-based inclusive start of ROI (default: 1)
 #' @param end_pos integer or NULL; 1-based inclusive end of ROI (default: sequence length)
-#' @param extend logical or integer; extension of allowed window starts (default: FALSE)
+#' @param extend logical or integer; if TRUE, a motif anchored in the ROI may run up to
+#'   w - 1 bases past its end (w being the motif length), so boundary-anchored motifs keep
+#'   their full context; anchors must still start inside the ROI. If FALSE (default), only
+#'   windows fully contained in the ROI are scored. An integer is the number of bases a
+#'   window may run past \code{end_pos}: TRUE is w - 1 and FALSE is 0. An integer above
+#'   w - 1 also scores windows that start after \code{end_pos}.
 #' @param spat.factor numeric vector; spatial weighting factors (optional)
 #' @param spat.bin integer; bin size for spatial weighting
 #' @param spat.min numeric; 1-based position, counted from \code{start_pos}, where the
@@ -184,18 +169,26 @@ gseq.comp <- function(seq) {
 #'
 #' @return Numeric vector (for "lse"/"max"/"count" modes), integer vector (for "pos" mode),
 #'   or data.frame with \code{pos} and \code{strand} columns (for "pos" mode with
-#'   \code{return_strand=TRUE}). Returns NA when no valid windows exist.
+#'   \code{return_strand=TRUE}). A sequence whose windows are all unscorable (for example
+#'   all \code{N}) gives \code{0} for \code{"count"}, as \code{pwm.count} does. A sequence
+#'   or ROI with no window at all (shorter than the motif), or an \code{NA} sequence, gives
+#'   \code{NA} in every mode, \code{"count"} included, as the PWM virtual tracks give for an
+#'   interval without an anchor.
 #'
 #' @details
 #' This function scores DNA sequences directly without requiring a genomics database.
 #' For detailed documentation on PWM scoring modes, parameters, and spatial weighting,
 #' see \code{\link{gvtrack.create}} (functions "pwm", "pwm.max", "pwm.max.pos", "pwm.count").
 #'
-#' The ROI (region of interest) is defined by \code{start_pos} and \code{end_pos}.
-#' The \code{extend} parameter controls whether motif matches can extend beyond the ROI boundaries.
+#' The ROI (region of interest) is defined by \code{start_pos} and \code{end_pos}. As in the
+#' PWM virtual tracks, a window on either strand is anchored at its first (leftmost) base,
+#' which must not lie before \code{start_pos}. \code{extend} sets how many bases past
+#' \code{end_pos} a window may run (w - 1 with TRUE, so every anchor in the ROI is scored),
+#' never past the end of the sequence.
 #'
 #' When \code{skip_gaps=TRUE}, characters specified in \code{gap_chars} are treated as gaps.
-#' Windows are defined as w consecutive non-gap bases. All positions (\code{pos}) are reported
+#' Windows are defined as w consecutive non-gap bases, and \code{extend} counts non-gap
+#' bases. All positions (\code{pos}) are reported
 #' as 1-based indices on the original full sequence (including gaps). \code{start_pos} and
 #' \code{end_pos} are interpreted as physical coordinates on the full sequence.
 #'
@@ -268,7 +261,7 @@ gseq.comp <- function(seq) {
 #' # Score only a region of interest
 #' gseq.pwm(seqs, pssm, mode = "max", start_pos = 3, end_pos = 10)
 #'
-#' # Allow matches to extend beyond ROI boundaries
+#' # Also score motifs that start in the region and end past it
 #' gseq.pwm(seqs, pssm, mode = "count", score.thresh = -3, start_pos = 5, end_pos = 8, extend = TRUE)
 #'
 #' # Spatial weighting example: higher weight in the center
@@ -385,7 +378,7 @@ gseq.pwm <- function(seqs,
     }
 
     # Normalize bounds
-    b <- .normalize_bounds(seqs, start_pos, end_pos, w, extend)
+    b <- .normalize_bounds(seqs, start_pos, end_pos, extend)
 
     for (nm in c("spat.min", "spat.max")) {
         v <- get(nm)
@@ -643,7 +636,11 @@ gseq.potts <- function(seqs, model, mode = c("lse", "max", "pos", "count"),
 #'   \code{pwm.edit_distance} virtual track: \code{TRUE} or a positive integer
 #'   lets a window start at every position of the interval and read bases past
 #'   its end; \code{FALSE} or 0 keeps every window (deletions included) inside
-#'   the interval.
+#'   the interval. For a sequence, its end acts as a chromosome end: with
+#'   \code{max_indels > 0}, \code{TRUE} lets a window start wherever at least
+#'   \code{max(1, w - max_indels)} bases remain (insertions supply the rest),
+#'   as the virtual track does at a chromosome end, and an integer lets a
+#'   window run at most that many bases past the end.
 #' @param strand integer; which strand to scan when \code{bidirect=FALSE}.
 #'   1=forward, -1=reverse. Default 1.
 #' @param direction character; direction of the edit distance query.
@@ -843,29 +840,44 @@ gseq.pwm_edits <- function(seqs,
 #' @param seqs character vector of DNA sequences (A/C/G/T/N; case-insensitive)
 #' @param kmer single character string containing the k-mer to search for (A/C/G/T only)
 #' @param mode character; one of "count" or "frac"
-#' @param strand integer; 1=forward, -1=reverse, 0=both strands (default: 0)
+#' @param strand integer; 1=forward, -1=reverse, 0=both strands, summed (default: 0)
 #' @param start_pos integer or NULL; 1-based inclusive start of ROI (default: 1)
 #' @param end_pos integer or NULL; 1-based inclusive end of ROI (default: sequence length)
-#' @param extend logical or integer; extension of allowed window starts (default: FALSE)
+#' @param extend logical or integer; if TRUE, counts k-mers whose anchor lies in the ROI
+#'   even if the k-mer extends beyond its end; if FALSE (default), only k-mers fully
+#'   contained in the ROI are considered. An integer is the number of bases a k-mer may
+#'   run past \code{end_pos}: TRUE is k-1 and FALSE is 0. An integer above k-1 also
+#'   counts k-mers that start after \code{end_pos} (and \code{frac} counts their starts).
 #' @param skip_gaps logical; if TRUE, treat gap characters as holes and skip them while
 #'   scanning. Windows are k consecutive non-gap bases (default: TRUE)
 #' @param gap_chars character vector; which characters count as gaps (default: c("-", "."))
 #'
 #' @return Numeric vector with counts (for "count" mode) or fractions (for "frac" mode).
-#'   Returns 0 when sequence is too short or ROI is invalid.
+#'   Returns 0 when sequence is too short or ROI is invalid, and NA for an \code{NA} sequence.
 #'
 #' @details
 #' This function counts k-mer occurrences in DNA sequences directly without requiring
 #' a genomics database. For detailed documentation on k-mer counting parameters, see
 #' \code{\link{gvtrack.create}} (functions "kmer.count" and "kmer.frac").
 #'
-#' The ROI (region of interest) is defined by \code{start_pos} and \code{end_pos}.
-#' The \code{extend} parameter controls whether k-mer matches can extend beyond the ROI boundaries.
-#' For palindromic k-mers, use \code{strand=1} or \code{-1} to avoid double counting.
+#' The ROI (region of interest) is defined by \code{start_pos} and \code{end_pos}. As in the
+#' k-mer virtual tracks, a match on either strand is anchored at its first (leftmost) base,
+#' which must not lie before \code{start_pos}. \code{extend} sets how many bases past
+#' \code{end_pos} a match may run (k-1 with TRUE, so every anchor in the ROI counts), never
+#' past the end of the sequence.
+#'
+#' With \code{strand=0} the matches on the two strands are summed, as in the k-mer virtual
+#' tracks, so a palindromic k-mer (its own reverse complement) counts twice per site and
+#' \code{strand=0} issues a warning; use \code{strand=1} or \code{-1} to count it once.
+#'
+#' For \code{mode="frac"} the denominator is the number of possible anchors in the ROI:
+#' every anchor with \code{extend=TRUE} (minus the last k-1 at the end of the sequence), the
+#' first n-k+1 of an n-base ROI with \code{extend=FALSE}; with \code{strand=0} anchors on
+#' both strands are counted, so the fraction stays in [0, 1].
 #'
 #' When \code{skip_gaps=TRUE}, characters specified in \code{gap_chars} are treated as gaps.
-#' Windows are defined as k consecutive non-gap bases. The \code{frac} denominator counts the
-#' number of possible logical starts (non-gap windows) in the region. \code{start_pos} and
+#' Windows are k consecutive non-gap bases, anchored at their first base, and \code{extend}
+#' and the \code{frac} denominator count non-gap bases and windows. \code{start_pos} and
 #' \code{end_pos} are interpreted as physical coordinates on the full sequence.
 #'
 #' @seealso \code{\link{gvtrack.create}} for detailed k-mer parameter documentation
@@ -875,20 +887,21 @@ gseq.pwm_edits <- function(seqs,
 #' # Example sequences
 #' seqs <- c("CGCGCGCGCG", "ATATATATAT", "ACGTACGTACGT")
 #'
-#' # Count CG dinucleotides on both strands
+#' # Count CG dinucleotides on both strands (CG is its own reverse complement, so
+#' # each site counts twice and a warning is given)
 #' gseq.kmer(seqs, "CG", mode = "count", strand = 0)
 #'
 #' # Count on forward strand only
 #' gseq.kmer(seqs, "CG", mode = "count", strand = 1)
 #'
 #' # Get CG fraction
-#' gseq.kmer(seqs, "CG", mode = "frac", strand = 0)
+#' gseq.kmer(seqs, "CG", mode = "frac", strand = 1)
 #'
 #' # Count in a specific region
-#' gseq.kmer(seqs, "CG", mode = "count", start_pos = 2, end_pos = 8)
+#' gseq.kmer(seqs, "CG", mode = "count", strand = 1, start_pos = 2, end_pos = 8)
 #'
-#' # Allow k-mer to extend beyond ROI boundaries
-#' gseq.kmer(seqs, "CG", mode = "count", start_pos = 2, end_pos = 8, extend = TRUE)
+#' # Also count k-mers that start in the region and end past it
+#' gseq.kmer(seqs, "CG", mode = "count", strand = 1, start_pos = 2, end_pos = 8, extend = TRUE)
 #'
 #' # Calculate GC content by summing G and C fractions
 #' g_frac <- gseq.kmer(seqs, "G", mode = "frac", strand = 1)
@@ -896,11 +909,11 @@ gseq.pwm_edits <- function(seqs,
 #' gc_content <- g_frac + c_frac
 #' gc_content
 #'
-#' # Compare AT counts on different strands
-#' at_forward <- gseq.kmer(seqs, "AT", mode = "count", strand = 1)
-#' at_reverse <- gseq.kmer(seqs, "AT", mode = "count", strand = -1)
-#' at_both <- gseq.kmer(seqs, "AT", mode = "count", strand = 0)
-#' data.frame(forward = at_forward, reverse = at_reverse, both = at_both)
+#' # Compare AC counts on different strands (AC on the reverse strand is GT on the forward)
+#' ac_forward <- gseq.kmer(seqs, "AC", mode = "count", strand = 1)
+#' ac_reverse <- gseq.kmer(seqs, "AC", mode = "count", strand = -1)
+#' ac_both <- gseq.kmer(seqs, "AC", mode = "count", strand = 0)
+#' data.frame(forward = ac_forward, reverse = ac_reverse, both = ac_both)
 #' }
 #'
 #' @export
@@ -927,12 +940,15 @@ gseq.kmer <- function(seqs,
 
     seqs <- as.character(seqs)
 
-    w <- nchar(kmer, type = "chars")
-
     # Validate strand
     strand <- as.integer(strand)
     if (!strand %in% c(-1L, 0L, 1L)) {
         stop("strand must be -1, 0, or 1")
+    }
+
+    # Same warning as the kmer vtracks (.vtrack_params_kmer)
+    if (strand == 0L && kmer == grevcomp(kmer)) {
+        warning(paste0("kmer sequence '", kmer, "' is palindromic, please set strand to 1 or -1 to avoid double counting"))
     }
 
     # Validate gap parameters
@@ -950,7 +966,7 @@ gseq.kmer <- function(seqs,
     }
 
     # Normalize bounds
-    b <- .normalize_bounds(seqs, start_pos, end_pos, w, extend)
+    b <- .normalize_bounds(seqs, start_pos, end_pos, extend)
 
     # Call C++ implementation (returns counts or fractions depending on mode)
     result <- .Call(

@@ -34,11 +34,26 @@ struct Contribution {
 	double value;
 	double overlap_len;
 	double coverage_frac;
+	// where the contribution lies (a lifted piece, not its overlap with the locus), by which
+	// first, last and nth order contributions (contribution_order)
 	int64_t start;
 	int64_t end;
 	bool is_na;
 	int64_t chain_id;
 };
+
+// The order of first, last and nth: by start, then end, then chain_id (pieces that coincide, as
+// on an overlap the "agg" policy cut out, or two source bins landing on one target bin, go by
+// chain, lower first), then value
+inline bool contribution_order(const Contribution *a, const Contribution *b) {
+	if (a->start != b->start)
+		return a->start < b->start;
+	if (a->end != b->end)
+		return a->end < b->end;
+	if (a->chain_id != b->chain_id)
+		return a->chain_id < b->chain_id;
+	return a->value > b->value;
+}
 
 struct AggregationConfig {
 	AggregationType type;
@@ -231,37 +246,12 @@ inline double aggregate_values(const AggregationConfig &cfg, const AggregationSt
 			result = std::max(result, valid[i]->value);
 		return result;
 	}
-	case AggregationType::FIRST: {
-		const Contribution *first = *std::min_element(valid.begin(), valid.end(),
-			                                               [](const Contribution *a, const Contribution *b) {
-				if (a->start != b->start)
-					return a->start < b->start;
-				if (a->end != b->end)
-					return a->end < b->end;
-				return a->value > b->value;
-		});
-	return first->value;
-}
-case AggregationType::LAST: {
-	const Contribution *last = *std::max_element(valid.begin(), valid.end(),
-		                                              [](const Contribution *a, const Contribution *b) {
-				if (a->start != b->start)
-					return a->start < b->start;
-				if (a->end != b->end)
-					return a->end < b->end;
-				return a->value > b->value;
-	});
-	return last->value;
-}
-case AggregationType::NTH: {
-	std::sort(valid.begin(), valid.end(),
-	          [](const Contribution *a, const Contribution *b) {
-				  if (a->start != b->start)
-					  return a->start < b->start;
-				  if (a->end != b->end)
-					  return a->end < b->end;
-				  return a->value > b->value;
-	          });
+	case AggregationType::FIRST:
+		return (*std::min_element(valid.begin(), valid.end(), contribution_order))->value;
+	case AggregationType::LAST:
+		return (*std::max_element(valid.begin(), valid.end(), contribution_order))->value;
+	case AggregationType::NTH: {
+	std::sort(valid.begin(), valid.end(), contribution_order);
 	// nth
 	if (cfg.nth_index <= 0)
 		return numeric_limits<double>::quiet_NaN();
