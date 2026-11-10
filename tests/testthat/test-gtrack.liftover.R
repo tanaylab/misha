@@ -496,6 +496,41 @@ test_that("gtrack.liftover with discard policies removes overlapping intervals",
     }
 })
 
+test_that("gtrack.liftover with discard keeps the bases a single chain interval covers", {
+    local_db_state()
+
+    source_db <- setup_source_db(list(
+        paste0(">source1\n", paste(rep("A", 100), collapse = ""), "\n"),
+        paste0(">source3\n", paste(rep("G", 100), collapse = ""), "\n")
+    ))
+    gtrack.create_sparse("src_track", "Source track", data.frame(
+        chrom = c("chrsource1", "chrsource3"), start = 0, end = c(70, 50)
+    ), c(111, 333))
+    src_track_dir <- file.path(source_db, "tracks", "src_track.track")
+
+    setup_db(list(
+        paste0(">chr1\n", paste(rep("T", 100), collapse = ""), "\n"),
+        paste0(">chr2\n", paste(rep("T", 100), collapse = ""), "\n")
+    ))
+
+    # chrsource1 [0,50) -> chr1 [0,50) and chrsource1 [20,70) -> chr1 [50,100) share
+    # source bases [20,50): only chrsource1 [0,20) -> chr1 [0,20) and [50,70) -> chr1 [80,100)
+    # map. chrsource3 [0,50) -> chr2 [0,50) is clean.
+    chain_file <- new_chain_file()
+    write_chain_entry(chain_file, "chrsource1", 100, "+", 0, 50, "chr1", 100, "+", 0, 50, 1)
+    write_chain_entry(chain_file, "chrsource1", 100, "+", 20, 70, "chr1", 100, "+", 50, 100, 2)
+    write_chain_entry(chain_file, "chrsource3", 100, "+", 0, 50, "chr2", 100, "+", 0, 50, 3)
+
+    gtrack.liftover("lifted_discard", "", src_track_dir, chain_file,
+        src_overlap_policy = "discard", tgt_overlap_policy = "discard"
+    )
+    res <- gextract("lifted_discard", gintervals.all())
+    expect_equal(as.character(res$chrom), c("chr1", "chr1", "chr2"))
+    expect_equal(res$start, c(0, 80, 0))
+    expect_equal(res$end, c(20, 100, 50))
+    expect_equal(res$lifted_discard, c(111, 111, 333))
+})
+
 test_that("gtrack.liftover preserves sparse track gaps correctly", {
     local_db_state()
 

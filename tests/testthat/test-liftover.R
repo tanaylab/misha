@@ -608,6 +608,27 @@ test_that("tgt_overlap_policy 'discard' keeps the target bases a single interval
     expect_equal(chain$chain_id, 4)
 })
 
+test_that("src_overlap_policy 'discard' leaves the 'agg' pieces of a chain without source overlaps", {
+    local_db_state()
+    setup_db(list(paste0(">chr1\n", paste(rep("ACGT", 100), collapse = ""), "\n")))
+
+    # X -> [0,100) and Y -> [50,150) overlap in the target only. gintervals.liftover applies the
+    # target policy, then the source policy; "discard" finds nothing to drop, so it must not merge
+    # the two "agg" pieces of X back into one.
+    chain_file <- new_chain_file()
+    write_chain_entry(chain_file, "srcX", 1000, "+", 0, 100, "chr1", 400, "+", 0, 100, 1)
+    write_chain_entry(chain_file, "srcY", 1000, "+", 0, 100, "chr1", 400, "+", 50, 150, 2)
+    intervs <- data.frame(chrom = c("srcX", "srcY"), start = c(10, 20), end = c(90, 80))
+
+    lift <- function(src_policy) {
+        chain <- gintervals.load_chain(chain_file, src_overlap_policy = src_policy, tgt_overlap_policy = "agg")
+        res <- gintervals.liftover(intervs, chain)
+        res[order(res$start), c("chrom", "start", "end", "intervalID")]
+    }
+    expect_equal(lift("discard"), lift("keep"))
+    expect_equal(lift("discard")$start, c(10, 50, 70, 100))
+})
+
 test_that("complex chain with both source and target overlaps", {
     local_db_state()
 

@@ -1289,8 +1289,10 @@ void ChainIntervals::handle_tgt_overlaps(const string &policy, const GenomeChrom
 				continue;
 
 			if (active.size() == 1) {
-				bool allow_merge = effective_policy != "agg";
-				append_slice(resolved, (*this)[*active.begin()], pos, next_pos, allow_merge);
+				// Only the auto policies join a winner's slices back together. "agg" keeps
+				// its pieces apart, and "discard" keeps the pieces it is given: as the
+				// source-side pass it must not merge the "agg" pieces of the target pass.
+				append_slice(resolved, (*this)[*active.begin()], pos, next_pos, is_auto_policy);
 				continue;
 			}
 
