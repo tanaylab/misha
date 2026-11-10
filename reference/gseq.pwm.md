@@ -78,8 +78,13 @@ gseq.pwm(
 
 - extend:
 
-  logical or integer; extension of allowed window starts (default:
-  FALSE)
+  logical or integer; if TRUE, a motif anchored in the ROI may run up to
+  w - 1 bases past its end (w being the motif length), so
+  boundary-anchored motifs keep their full context; anchors must still
+  start inside the ROI. If FALSE (default), only windows fully contained
+  in the ROI are scored. An integer is the number of bases a window may
+  run past `end_pos`: TRUE is w - 1 and FALSE is 0. An integer above w -
+  1 also scores windows that start after `end_pos`.
 
 - spat.factor:
 
@@ -140,7 +145,11 @@ gseq.pwm(
 
 Numeric vector (for "lse"/"max"/"count" modes), integer vector (for
 "pos" mode), or data.frame with `pos` and `strand` columns (for "pos"
-mode with `return_strand=TRUE`). Returns NA when no valid windows exist.
+mode with `return_strand=TRUE`). A sequence whose windows are all
+unscorable (for example all `N`) gives `0` for `"count"`, as `pwm.count`
+does. A sequence or ROI with no window at all (shorter than the motif),
+or an `NA` sequence, gives `NA` in every mode, `"count"` included, as
+the PWM virtual tracks give for an interval without an anchor.
 
 ## Details
 
@@ -150,15 +159,18 @@ and spatial weighting, see
 [`gvtrack.create`](https://tanaylab.github.io/misha/reference/gvtrack.create.md)
 (functions "pwm", "pwm.max", "pwm.max.pos", "pwm.count").
 
-The ROI (region of interest) is defined by `start_pos` and `end_pos`.
-The `extend` parameter controls whether motif matches can extend beyond
-the ROI boundaries.
+The ROI (region of interest) is defined by `start_pos` and `end_pos`. As
+in the PWM virtual tracks, a window on either strand is anchored at its
+first (leftmost) base, which must not lie before `start_pos`. `extend`
+sets how many bases past `end_pos` a window may run (w - 1 with TRUE, so
+every anchor in the ROI is scored), never past the end of the sequence.
 
 When `skip_gaps=TRUE`, characters specified in `gap_chars` are treated
-as gaps. Windows are defined as w consecutive non-gap bases. All
-positions (`pos`) are reported as 1-based indices on the original full
-sequence (including gaps). `start_pos` and `end_pos` are interpreted as
-physical coordinates on the full sequence.
+as gaps. Windows are defined as w consecutive non-gap bases, and
+`extend` counts non-gap bases. All positions (`pos`) are reported as
+1-based indices on the original full sequence (including gaps).
+`start_pos` and `end_pos` are interpreted as physical coordinates on the
+full sequence.
 
 By default a window holding `N` or any other character that is not A, C,
 G or T (in either case) is not scored on either strand: it is left out,
@@ -234,7 +246,7 @@ gseq.pwm(seqs, pssm, mode = "count", score.thresh = -3)
 # Score only a region of interest
 gseq.pwm(seqs, pssm, mode = "max", start_pos = 3, end_pos = 10)
 
-# Allow matches to extend beyond ROI boundaries
+# Also score motifs that start in the region and end past it
 gseq.pwm(seqs, pssm, mode = "count", score.thresh = -3, start_pos = 5, end_pos = 8, extend = TRUE)
 
 # Spatial weighting example: higher weight in the center

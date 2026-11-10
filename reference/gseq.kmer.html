@@ -82,7 +82,7 @@ with optional extension controlled by <code>extend</code>.</p>
 
 
 <dt id="arg-strand">strand<a class="anchor" aria-label="anchor" href="#arg-strand"></a></dt>
-<dd><p>integer; 1=forward, -1=reverse, 0=both strands (default: 0)</p></dd>
+<dd><p>integer; 1=forward, -1=reverse, 0=both strands, summed (default: 0)</p></dd>
 
 
 <dt id="arg-start-pos">start_pos<a class="anchor" aria-label="anchor" href="#arg-start-pos"></a></dt>
@@ -94,7 +94,11 @@ with optional extension controlled by <code>extend</code>.</p>
 
 
 <dt id="arg-extend">extend<a class="anchor" aria-label="anchor" href="#arg-extend"></a></dt>
-<dd><p>logical or integer; extension of allowed window starts (default: FALSE)</p></dd>
+<dd><p>logical or integer; if TRUE, counts k-mers whose anchor lies in the ROI
+even if the k-mer extends beyond its end; if FALSE (default), only k-mers fully
+contained in the ROI are considered. An integer is the number of bases a k-mer may
+run past <code>end_pos</code>: TRUE is k-1 and FALSE is 0. An integer above k-1 also
+counts k-mers that start after <code>end_pos</code> (and <code>frac</code> counts their starts).</p></dd>
 
 
 <dt id="arg-skip-gaps">skip_gaps<a class="anchor" aria-label="anchor" href="#arg-skip-gaps"></a></dt>
@@ -109,19 +113,28 @@ scanning. Windows are k consecutive non-gap bases (default: TRUE)</p></dd>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>Numeric vector with counts (for "count" mode) or fractions (for "frac" mode).
-  Returns 0 when sequence is too short or ROI is invalid.</p>
+  Returns 0 when sequence is too short or ROI is invalid, and NA for an <code>NA</code> sequence.</p>
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
     <p>This function counts k-mer occurrences in DNA sequences directly without requiring
 a genomics database. For detailed documentation on k-mer counting parameters, see
 <code><a href="gvtrack.create.html">gvtrack.create</a></code> (functions "kmer.count" and "kmer.frac").</p>
-<p>The ROI (region of interest) is defined by <code>start_pos</code> and <code>end_pos</code>.
-The <code>extend</code> parameter controls whether k-mer matches can extend beyond the ROI boundaries.
-For palindromic k-mers, use <code>strand=1</code> or <code>-1</code> to avoid double counting.</p>
+<p>The ROI (region of interest) is defined by <code>start_pos</code> and <code>end_pos</code>. As in the
+k-mer virtual tracks, a match on either strand is anchored at its first (leftmost) base,
+which must not lie before <code>start_pos</code>. <code>extend</code> sets how many bases past
+<code>end_pos</code> a match may run (k-1 with TRUE, so every anchor in the ROI counts), never
+past the end of the sequence.</p>
+<p>With <code>strand=0</code> the matches on the two strands are summed, as in the k-mer virtual
+tracks, so a palindromic k-mer (its own reverse complement) counts twice per site and
+<code>strand=0</code> issues a warning; use <code>strand=1</code> or <code>-1</code> to count it once.</p>
+<p>For <code>mode="frac"</code> the denominator is the number of possible anchors in the ROI:
+every anchor with <code>extend=TRUE</code> (minus the last k-1 at the end of the sequence), the
+first n-k+1 of an n-base ROI with <code>extend=FALSE</code>; with <code>strand=0</code> anchors on
+both strands are counted, so the fraction stays in [0, 1].</p>
 <p>When <code>skip_gaps=TRUE</code>, characters specified in <code>gap_chars</code> are treated as gaps.
-Windows are defined as k consecutive non-gap bases. The <code>frac</code> denominator counts the
-number of possible logical starts (non-gap windows) in the region. <code>start_pos</code> and
+Windows are k consecutive non-gap bases, anchored at their first base, and <code>extend</code>
+and the <code>frac</code> denominator count non-gap bases and windows. <code>start_pos</code> and
 <code>end_pos</code> are interpreted as physical coordinates on the full sequence.</p>
     </div>
     <div class="section level2">
@@ -135,20 +148,21 @@ number of possible logical starts (non-gap windows) in the region. <code>start_p
 <span class="r-in"><span><span class="co"># Example sequences</span></span></span>
 <span class="r-in"><span><span class="va">seqs</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"CGCGCGCGCG"</span>, <span class="st">"ATATATATAT"</span>, <span class="st">"ACGTACGTACGT"</span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="co"># Count CG dinucleotides on both strands</span></span></span>
+<span class="r-in"><span><span class="co"># Count CG dinucleotides on both strands (CG is its own reverse complement, so</span></span></span>
+<span class="r-in"><span><span class="co"># each site counts twice and a warning is given)</span></span></span>
 <span class="r-in"><span><span class="fu">gseq.kmer</span><span class="op">(</span><span class="va">seqs</span>, <span class="st">"CG"</span>, mode <span class="op">=</span> <span class="st">"count"</span>, strand <span class="op">=</span> <span class="fl">0</span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Count on forward strand only</span></span></span>
 <span class="r-in"><span><span class="fu">gseq.kmer</span><span class="op">(</span><span class="va">seqs</span>, <span class="st">"CG"</span>, mode <span class="op">=</span> <span class="st">"count"</span>, strand <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Get CG fraction</span></span></span>
-<span class="r-in"><span><span class="fu">gseq.kmer</span><span class="op">(</span><span class="va">seqs</span>, <span class="st">"CG"</span>, mode <span class="op">=</span> <span class="st">"frac"</span>, strand <span class="op">=</span> <span class="fl">0</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu">gseq.kmer</span><span class="op">(</span><span class="va">seqs</span>, <span class="st">"CG"</span>, mode <span class="op">=</span> <span class="st">"frac"</span>, strand <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Count in a specific region</span></span></span>
-<span class="r-in"><span><span class="fu">gseq.kmer</span><span class="op">(</span><span class="va">seqs</span>, <span class="st">"CG"</span>, mode <span class="op">=</span> <span class="st">"count"</span>, start_pos <span class="op">=</span> <span class="fl">2</span>, end_pos <span class="op">=</span> <span class="fl">8</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu">gseq.kmer</span><span class="op">(</span><span class="va">seqs</span>, <span class="st">"CG"</span>, mode <span class="op">=</span> <span class="st">"count"</span>, strand <span class="op">=</span> <span class="fl">1</span>, start_pos <span class="op">=</span> <span class="fl">2</span>, end_pos <span class="op">=</span> <span class="fl">8</span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="co"># Allow k-mer to extend beyond ROI boundaries</span></span></span>
-<span class="r-in"><span><span class="fu">gseq.kmer</span><span class="op">(</span><span class="va">seqs</span>, <span class="st">"CG"</span>, mode <span class="op">=</span> <span class="st">"count"</span>, start_pos <span class="op">=</span> <span class="fl">2</span>, end_pos <span class="op">=</span> <span class="fl">8</span>, extend <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="co"># Also count k-mers that start in the region and end past it</span></span></span>
+<span class="r-in"><span><span class="fu">gseq.kmer</span><span class="op">(</span><span class="va">seqs</span>, <span class="st">"CG"</span>, mode <span class="op">=</span> <span class="st">"count"</span>, strand <span class="op">=</span> <span class="fl">1</span>, start_pos <span class="op">=</span> <span class="fl">2</span>, end_pos <span class="op">=</span> <span class="fl">8</span>, extend <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Calculate GC content by summing G and C fractions</span></span></span>
 <span class="r-in"><span><span class="va">g_frac</span> <span class="op">&lt;-</span> <span class="fu">gseq.kmer</span><span class="op">(</span><span class="va">seqs</span>, <span class="st">"G"</span>, mode <span class="op">=</span> <span class="st">"frac"</span>, strand <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span></span>
@@ -156,11 +170,11 @@ number of possible logical starts (non-gap windows) in the region. <code>start_p
 <span class="r-in"><span><span class="va">gc_content</span> <span class="op">&lt;-</span> <span class="va">g_frac</span> <span class="op">+</span> <span class="va">c_frac</span></span></span>
 <span class="r-in"><span><span class="va">gc_content</span></span></span>
 <span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="co"># Compare AT counts on different strands</span></span></span>
-<span class="r-in"><span><span class="va">at_forward</span> <span class="op">&lt;-</span> <span class="fu">gseq.kmer</span><span class="op">(</span><span class="va">seqs</span>, <span class="st">"AT"</span>, mode <span class="op">=</span> <span class="st">"count"</span>, strand <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="va">at_reverse</span> <span class="op">&lt;-</span> <span class="fu">gseq.kmer</span><span class="op">(</span><span class="va">seqs</span>, <span class="st">"AT"</span>, mode <span class="op">=</span> <span class="st">"count"</span>, strand <span class="op">=</span> <span class="op">-</span><span class="fl">1</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="va">at_both</span> <span class="op">&lt;-</span> <span class="fu">gseq.kmer</span><span class="op">(</span><span class="va">seqs</span>, <span class="st">"AT"</span>, mode <span class="op">=</span> <span class="st">"count"</span>, strand <span class="op">=</span> <span class="fl">0</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>forward <span class="op">=</span> <span class="va">at_forward</span>, reverse <span class="op">=</span> <span class="va">at_reverse</span>, both <span class="op">=</span> <span class="va">at_both</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="co"># Compare AC counts on different strands (AC on the reverse strand is GT on the forward)</span></span></span>
+<span class="r-in"><span><span class="va">ac_forward</span> <span class="op">&lt;-</span> <span class="fu">gseq.kmer</span><span class="op">(</span><span class="va">seqs</span>, <span class="st">"AC"</span>, mode <span class="op">=</span> <span class="st">"count"</span>, strand <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">ac_reverse</span> <span class="op">&lt;-</span> <span class="fu">gseq.kmer</span><span class="op">(</span><span class="va">seqs</span>, <span class="st">"AC"</span>, mode <span class="op">=</span> <span class="st">"count"</span>, strand <span class="op">=</span> <span class="op">-</span><span class="fl">1</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">ac_both</span> <span class="op">&lt;-</span> <span class="fu">gseq.kmer</span><span class="op">(</span><span class="va">seqs</span>, <span class="st">"AC"</span>, mode <span class="op">=</span> <span class="st">"count"</span>, strand <span class="op">=</span> <span class="fl">0</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>forward <span class="op">=</span> <span class="va">ac_forward</span>, reverse <span class="op">=</span> <span class="va">ac_reverse</span>, both <span class="op">=</span> <span class="va">ac_both</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="op">}</span> <span class="co"># }</span></span></span>
 <span class="r-in"><span></span></span>
 </code></pre></div>

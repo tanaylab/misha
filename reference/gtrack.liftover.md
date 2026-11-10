@@ -76,7 +76,9 @@ gtrack.liftover(
   aggregation/selection policy for contributors that land on the same
   target locus. When multiple source intervals map to overlapping
   regions in the target genome (after applying tgt_overlap_policy),
-  their values must be combined into a single value.
+  their values must be combined into a single value. On a dense track
+  "count" gives 0 in a bin that nothing lands in (NaN if 'min_n' is
+  above 0), where the other aggregators give NaN.
 
 - params:
 

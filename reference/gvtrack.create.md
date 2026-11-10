@@ -172,8 +172,14 @@ the start of the iterator interval after all modifier adjustments.
 |  |  |  |  |
 |----|----|----|----|
 | Source | func | params | Description |
-| 2D track | area | NULL | Area covered by intersections of track rectangles with the iterator interval. |
-| 2D track | weighted.sum | NULL | Weighted sum of values where each weight equals the intersection area. |
+| 2D track | area | NULL | Area covered by intersections of track rectangles with the iterator interval, rectangles whose value is NaN included. |
+| 2D track | weighted.sum | NULL | Weighted sum of values where each weight equals the intersection area. NaN values are skipped; `NaN` when no value overlaps the interval. |
+
+On a 2D track `avg`, `min`, `max` and `weighted.sum` skip NaN values, as
+the 1D summarizers do, and give `NaN` when no value overlaps the
+interval; `avg` is the mean over the area that has a value. `area`
+counts every rectangle, so where a rectangle is NaN, `avg` differs from
+`weighted.sum` / `area`.
 
 **Motif (PWM) summarizers**
 
@@ -263,9 +269,13 @@ k-mer, and masked sequence functions.
 
 - A window containing `N` or any other character that is not A, C, G or
   T (in either case) is not scored, on either strand: it is left out, as
-  an anchor outside the interval would be. An interval with no scorable
-  window gives `-Inf` for `pwm` and `pwm.max`, `NA` for `pwm.max.pos`
-  and `0` for `pwm.count`.
+  an anchor outside the interval would be. An interval that has anchors
+  but no scorable window gives `-Inf` for `pwm` and `pwm.max`, `NA` for
+  `pwm.max.pos` and `0` for `pwm.count`: it counted, and found none. An
+  interval with no anchor at all (narrower than the motif with
+  `extend = FALSE`, or at a chromosome end that leaves no room for the
+  motif) gives `NA` for all four, `pwm.count` included: there was
+  nothing to count.
 
 - `strand`: Used only when `bidirect = FALSE`; 1 scans the forward
   strand, -1 scans the reverse strand. The `*.pos` funcs report the same
@@ -328,8 +338,7 @@ k-mer, and masked sequence functions.
   line above. That covers an interval narrower than the model with
   `extend = FALSE`; a chromosome end with the default `extend = TRUE`,
   where the end padding is clipped at the contig boundary and the
-  fetched sequence comes back shorter than the model (`pwm.count`
-  reports `0` rather than `NA` in this one case); and a
+  fetched sequence comes back shorter than the model; and a
   [`gvtrack.filter`](https://tanaylab.github.io/misha/reference/gvtrack.filter.md)
   that leaves no unmasked part, or only parts narrower than the model.
 

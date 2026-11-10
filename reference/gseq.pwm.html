@@ -124,7 +124,12 @@ spatial weights - calibrate with <code>mode="max"</code> before choosing one.</p
 
 
 <dt id="arg-extend">extend<a class="anchor" aria-label="anchor" href="#arg-extend"></a></dt>
-<dd><p>logical or integer; extension of allowed window starts (default: FALSE)</p></dd>
+<dd><p>logical or integer; if TRUE, a motif anchored in the ROI may run up to
+w - 1 bases past its end (w being the motif length), so boundary-anchored motifs keep
+their full context; anchors must still start inside the ROI. If FALSE (default), only
+windows fully contained in the ROI are scored. An integer is the number of bases a
+window may run past <code>end_pos</code>: TRUE is w - 1 and FALSE is 0. An integer above
+w - 1 also scores windows that start after <code>end_pos</code>.</p></dd>
 
 
 <dt id="arg-spat-factor">spat.factor<a class="anchor" aria-label="anchor" href="#arg-spat-factor"></a></dt>
@@ -181,17 +186,25 @@ scanning window). Has no effect when <code>neutral_chars</code> is empty.</p></d
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>Numeric vector (for "lse"/"max"/"count" modes), integer vector (for "pos" mode),
   or data.frame with <code>pos</code> and <code>strand</code> columns (for "pos" mode with
-  <code>return_strand=TRUE</code>). Returns NA when no valid windows exist.</p>
+  <code>return_strand=TRUE</code>). A sequence whose windows are all unscorable (for example
+  all <code>N</code>) gives <code>0</code> for <code>"count"</code>, as <code>pwm.count</code> does. A sequence
+  or ROI with no window at all (shorter than the motif), or an <code>NA</code> sequence, gives
+  <code>NA</code> in every mode, <code>"count"</code> included, as the PWM virtual tracks give for an
+  interval without an anchor.</p>
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
     <p>This function scores DNA sequences directly without requiring a genomics database.
 For detailed documentation on PWM scoring modes, parameters, and spatial weighting,
 see <code><a href="gvtrack.create.html">gvtrack.create</a></code> (functions "pwm", "pwm.max", "pwm.max.pos", "pwm.count").</p>
-<p>The ROI (region of interest) is defined by <code>start_pos</code> and <code>end_pos</code>.
-The <code>extend</code> parameter controls whether motif matches can extend beyond the ROI boundaries.</p>
+<p>The ROI (region of interest) is defined by <code>start_pos</code> and <code>end_pos</code>. As in the
+PWM virtual tracks, a window on either strand is anchored at its first (leftmost) base,
+which must not lie before <code>start_pos</code>. <code>extend</code> sets how many bases past
+<code>end_pos</code> a window may run (w - 1 with TRUE, so every anchor in the ROI is scored),
+never past the end of the sequence.</p>
 <p>When <code>skip_gaps=TRUE</code>, characters specified in <code>gap_chars</code> are treated as gaps.
-Windows are defined as w consecutive non-gap bases. All positions (<code>pos</code>) are reported
+Windows are defined as w consecutive non-gap bases, and <code>extend</code> counts non-gap
+bases. All positions (<code>pos</code>) are reported
 as 1-based indices on the original full sequence (including gaps). <code>start_pos</code> and
 <code>end_pos</code> are interpreted as physical coordinates on the full sequence.</p>
 <p>By default a window holding <code>N</code> or any other character that is not A, C, G or T (in
@@ -266,7 +279,7 @@ combine.</p>
 <span class="r-in"><span><span class="co"># Score only a region of interest</span></span></span>
 <span class="r-in"><span><span class="fu">gseq.pwm</span><span class="op">(</span><span class="va">seqs</span>, <span class="va">pssm</span>, mode <span class="op">=</span> <span class="st">"max"</span>, start_pos <span class="op">=</span> <span class="fl">3</span>, end_pos <span class="op">=</span> <span class="fl">10</span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="co"># Allow matches to extend beyond ROI boundaries</span></span></span>
+<span class="r-in"><span><span class="co"># Also score motifs that start in the region and end past it</span></span></span>
 <span class="r-in"><span><span class="fu">gseq.pwm</span><span class="op">(</span><span class="va">seqs</span>, <span class="va">pssm</span>, mode <span class="op">=</span> <span class="st">"count"</span>, score.thresh <span class="op">=</span> <span class="op">-</span><span class="fl">3</span>, start_pos <span class="op">=</span> <span class="fl">5</span>, end_pos <span class="op">=</span> <span class="fl">8</span>, extend <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Spatial weighting example: higher weight in the center</span></span></span>

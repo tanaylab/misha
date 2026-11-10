@@ -95,7 +95,7 @@ database: it is read by the chromosome ids of that database.</p></dd>
 
 
 <dt id="arg-multi-target-agg">multi_target_agg<a class="anchor" aria-label="anchor" href="#arg-multi-target-agg"></a></dt>
-<dd><p>aggregation/selection policy for contributors that land on the same target locus. When multiple source intervals map to overlapping regions in the target genome (after applying tgt_overlap_policy), their values must be combined into a single value.</p></dd>
+<dd><p>aggregation/selection policy for contributors that land on the same target locus. When multiple source intervals map to overlapping regions in the target genome (after applying tgt_overlap_policy), their values must be combined into a single value. On a dense track "count" gives 0 in a bin that nothing lands in (NaN if 'min_n' is above 0), where the other aggregators give NaN.</p></dd>
 
 
 <dt id="arg-params">params<a class="anchor" aria-label="anchor" href="#arg-params"></a></dt>

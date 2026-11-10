@@ -45,6 +45,13 @@
 <li><p>New overlap policy <code>"discard_intervals"</code>: drops every chain interval involved in an overlap.</p></li>
 <li><p><code>tgt_overlap_policy = "auto*"</code> returns a winning minus-strand chain interval as one interval.</p></li>
 <li><p><strong>Behavior fix:</strong> <code><a href="../reference/gintervals.liftover.html">gintervals.liftover()</a></code> and <code><a href="../reference/gtrack.liftover.html">gtrack.liftover()</a></code> resolve the source overlaps of a chain before its target overlaps, as <code><a href="../reference/gintervals.load_chain.html">gintervals.load_chain()</a></code> does.</p></li>
+<li><p><strong>Behavior fix:</strong> <code><a href="../reference/gtrack.liftover.html">gtrack.liftover()</a></code> of a sparse track aggregates each overlapping stretch separately, as <code>gintervals.liftover(value_col =)</code> does.</p></li>
+<li><p><strong>Behavior fix:</strong> <code>multi_target_agg = "first"</code>, <code>"last"</code> and <code>"nth"</code> in <code><a href="../reference/gintervals.liftover.html">gintervals.liftover()</a></code> and <code><a href="../reference/gtrack.liftover.html">gtrack.liftover()</a></code> order the lifted pieces by position, then by chain id, not by value.</p></li>
+<li><p><strong>Behavior fix:</strong> <code>gtrack.liftover(multi_target_agg = "count")</code> of a dense track gives 0, not <code>NaN</code>, where nothing maps.</p></li>
+<li><p><strong>Behavior fix:</strong> 2D virtual tracks (<code>avg</code>, <code>min</code>, <code>max</code>, <code>weighted.sum</code>) and 2D track expressions skip NaN values.</p></li>
+<li><p><strong>Behavior fix:</strong> <code><a href="../reference/gseq.kmer.html">gseq.kmer()</a></code> and <code><a href="../reference/gseq.pwm.html">gseq.pwm()</a></code> match the kmer and pwm virtual tracks: <code>gseq.kmer(strand = 0)</code> sums both strands, and <code>extend</code> lets a match run past <code>end_pos</code> only.</p></li>
+<li><p><strong>Behavior fix:</strong> <code>pwm.count</code> and <code>gseq.pwm(mode = "count")</code> give <code>NA</code> where there is no window to count (a sequence or chromosome end shorter than the motif), as the other pwm functions do.</p></li>
+<li><p><strong>Behavior fix:</strong> <code><a href="../reference/gseq.pwm.html">gseq.pwm()</a></code> and <code><a href="../reference/gseq.kmer.html">gseq.kmer()</a></code> give <code>NA</code> for an <code>NA</code> sequence.</p></li>
 </ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="5.17.0" id="misha-5170">misha 5.17.0<a class="anchor" aria-label="anchor" href="#misha-5170"></a></h2>

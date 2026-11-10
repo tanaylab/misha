@@ -133,7 +133,11 @@ Default TRUE. For interval input it means what it means for the
 <code>pwm.edit_distance</code> virtual track: <code>TRUE</code> or a positive integer
 lets a window start at every position of the interval and read bases past
 its end; <code>FALSE</code> or 0 keeps every window (deletions included) inside
-the interval.</p></dd>
+the interval. For a sequence, its end acts as a chromosome end: with
+<code>max_indels &gt; 0</code>, <code>TRUE</code> lets a window start wherever at least
+<code>max(1, w - max_indels)</code> bases remain (insertions supply the rest),
+as the virtual track does at a chromosome end, and an integer lets a
+window run at most that many bases past the end.</p></dd>
 
 
 <dt id="arg-strand">strand<a class="anchor" aria-label="anchor" href="#arg-strand"></a></dt>

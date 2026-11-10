@@ -87,7 +87,12 @@ gseq.pwm_edits(
   For interval input it means what it means for the `pwm.edit_distance`
   virtual track: `TRUE` or a positive integer lets a window start at
   every position of the interval and read bases past its end; `FALSE` or
-  0 keeps every window (deletions included) inside the interval.
+  0 keeps every window (deletions included) inside the interval. For a
+  sequence, its end acts as a chromosome end: with `max_indels > 0`,
+  `TRUE` lets a window start wherever at least `max(1, w - max_indels)`
+  bases remain (insertions supply the rest), as the virtual track does
+  at a chromosome end, and an integer lets a window run at most that
+  many bases past the end.
 
 - strand:
 
