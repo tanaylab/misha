@@ -98,7 +98,7 @@ gseq.comp <- function(seq) {
 }
 
 # Helper function to normalize ROI bounds for sequence scoring
-.normalize_bounds <- function(seqs, start_pos, end_pos, w, extend) {
+.normalize_bounds <- function(seqs, start_pos, end_pos, extend) {
     n <- length(seqs)
     L <- nchar(seqs, type = "chars", allowNA = TRUE, keepNA = TRUE)
 
@@ -106,19 +106,9 @@ gseq.comp <- function(seq) {
     roi_start <- if (is.null(start_pos)) rep.int(1L, n) else rep_len(as.integer(start_pos), n)
     roi_end <- if (is.null(end_pos)) L else rep_len(as.integer(end_pos), n)
 
-    # Handle extend parameter; an NA would act as TRUE in C_gseq_pwm/C_gseq_kmer
-    if (length(extend) != 1 || is.na(extend)) {
-        stop("extend must be FALSE, TRUE, or a non-negative integer")
-    }
-    E <- if (isFALSE(extend)) {
-        0L
-    } else if (isTRUE(extend)) {
-        w - 1L
-    } else {
-        as.integer(extend)
-    }
-
-    if (any(E < 0L, na.rm = TRUE)) {
+    # Check extend here; C_gseq_pwm/C_gseq_kmer turn it into a number of bases, and an NA
+    # would act as TRUE there
+    if (length(extend) != 1 || is.na(extend) || (!is.logical(extend) && isTRUE(as.integer(extend) < 0L))) {
         stop("extend must be FALSE, TRUE, or a non-negative integer")
     }
 
@@ -154,7 +144,8 @@ gseq.comp <- function(seq) {
 #'   w - 1 bases past its end (w being the motif length), so boundary-anchored motifs keep
 #'   their full context; anchors must still start inside the ROI. If FALSE (default), only
 #'   windows fully contained in the ROI are scored. An integer is the number of bases a
-#'   window may run past \code{end_pos}: TRUE is w - 1 and FALSE is 0.
+#'   window may run past \code{end_pos}: TRUE is w - 1 and FALSE is 0. An integer above
+#'   w - 1 also scores windows that start after \code{end_pos}.
 #' @param spat.factor numeric vector; spatial weighting factors (optional)
 #' @param spat.bin integer; bin size for spatial weighting
 #' @param spat.min numeric; 1-based position, counted from \code{start_pos}, where the
@@ -387,7 +378,7 @@ gseq.pwm <- function(seqs,
     }
 
     # Normalize bounds
-    b <- .normalize_bounds(seqs, start_pos, end_pos, w, extend)
+    b <- .normalize_bounds(seqs, start_pos, end_pos, extend)
 
     for (nm in c("spat.min", "spat.max")) {
         v <- get(nm)
@@ -855,7 +846,8 @@ gseq.pwm_edits <- function(seqs,
 #' @param extend logical or integer; if TRUE, counts k-mers whose anchor lies in the ROI
 #'   even if the k-mer extends beyond its end; if FALSE (default), only k-mers fully
 #'   contained in the ROI are considered. An integer is the number of bases a k-mer may
-#'   run past \code{end_pos}: TRUE is k-1 and FALSE is 0.
+#'   run past \code{end_pos}: TRUE is k-1 and FALSE is 0. An integer above k-1 also
+#'   counts k-mers that start after \code{end_pos} (and \code{frac} counts their starts).
 #' @param skip_gaps logical; if TRUE, treat gap characters as holes and skip them while
 #'   scanning. Windows are k consecutive non-gap bases (default: TRUE)
 #' @param gap_chars character vector; which characters count as gaps (default: c("-", "."))
@@ -917,11 +909,11 @@ gseq.pwm_edits <- function(seqs,
 #' gc_content <- g_frac + c_frac
 #' gc_content
 #'
-#' # Compare AT counts on different strands
-#' at_forward <- gseq.kmer(seqs, "AT", mode = "count", strand = 1)
-#' at_reverse <- gseq.kmer(seqs, "AT", mode = "count", strand = -1)
-#' at_both <- gseq.kmer(seqs, "AT", mode = "count", strand = 0)
-#' data.frame(forward = at_forward, reverse = at_reverse, both = at_both)
+#' # Compare AC counts on different strands (AC on the reverse strand is GT on the forward)
+#' ac_forward <- gseq.kmer(seqs, "AC", mode = "count", strand = 1)
+#' ac_reverse <- gseq.kmer(seqs, "AC", mode = "count", strand = -1)
+#' ac_both <- gseq.kmer(seqs, "AC", mode = "count", strand = 0)
+#' data.frame(forward = ac_forward, reverse = ac_reverse, both = ac_both)
 #' }
 #'
 #' @export
@@ -947,8 +939,6 @@ gseq.kmer <- function(seqs,
     }
 
     seqs <- as.character(seqs)
-
-    w <- nchar(kmer, type = "chars")
 
     # Validate strand
     strand <- as.integer(strand)
@@ -976,7 +966,7 @@ gseq.kmer <- function(seqs,
     }
 
     # Normalize bounds
-    b <- .normalize_bounds(seqs, start_pos, end_pos, w, extend)
+    b <- .normalize_bounds(seqs, start_pos, end_pos, extend)
 
     # Call C++ implementation (returns counts or fractions depending on mode)
     result <- .Call(

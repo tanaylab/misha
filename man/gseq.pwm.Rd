@@ -56,7 +56,8 @@ spatial weights - calibrate with \code{mode="max"} before choosing one.}
 w - 1 bases past its end (w being the motif length), so boundary-anchored motifs keep
 their full context; anchors must still start inside the ROI. If FALSE (default), only
 windows fully contained in the ROI are scored. An integer is the number of bases a
-window may run past \code{end_pos}: TRUE is w - 1 and FALSE is 0.}
+window may run past \code{end_pos}: TRUE is w - 1 and FALSE is 0. An integer above
+w - 1 also scores windows that start after \code{end_pos}.}
 
 \item{spat.factor}{numeric vector; spatial weighting factors (optional)}
 

@@ -16,7 +16,7 @@
 
 * **Behavior fix:** `pwm.count` and `gseq.pwm(mode = "count")` give `NA` where there is no window to count (a sequence or chromosome end shorter than the motif), as the other pwm functions do.
 
-* `gseq.pwm()` and `gseq.kmer()` give `NA` for an `NA` sequence.
+* **Behavior fix:** `gseq.pwm()` and `gseq.kmer()` give `NA` for an `NA` sequence.
 
 # misha 5.17.0
 

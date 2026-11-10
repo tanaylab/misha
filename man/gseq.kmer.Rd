@@ -32,7 +32,8 @@ gseq.kmer(
 \item{extend}{logical or integer; if TRUE, counts k-mers whose anchor lies in the ROI
 even if the k-mer extends beyond its end; if FALSE (default), only k-mers fully
 contained in the ROI are considered. An integer is the number of bases a k-mer may
-run past \code{end_pos}: TRUE is k-1 and FALSE is 0.}
+run past \code{end_pos}: TRUE is k-1 and FALSE is 0. An integer above k-1 also
+counts k-mers that start after \code{end_pos} (and \code{frac} counts their starts).}
 
 \item{skip_gaps}{logical; if TRUE, treat gap characters as holes and skip them while
 scanning. Windows are k consecutive non-gap bases (default: TRUE)}
@@ -100,11 +101,11 @@ c_frac <- gseq.kmer(seqs, "C", mode = "frac", strand = 1)
 gc_content <- g_frac + c_frac
 gc_content
 
-# Compare AT counts on different strands
-at_forward <- gseq.kmer(seqs, "AT", mode = "count", strand = 1)
-at_reverse <- gseq.kmer(seqs, "AT", mode = "count", strand = -1)
-at_both <- gseq.kmer(seqs, "AT", mode = "count", strand = 0)
-data.frame(forward = at_forward, reverse = at_reverse, both = at_both)
+# Compare AC counts on different strands (AC on the reverse strand is GT on the forward)
+ac_forward <- gseq.kmer(seqs, "AC", mode = "count", strand = 1)
+ac_reverse <- gseq.kmer(seqs, "AC", mode = "count", strand = -1)
+ac_both <- gseq.kmer(seqs, "AC", mode = "count", strand = 0)
+data.frame(forward = ac_forward, reverse = ac_reverse, both = ac_both)
 }
 
 }
