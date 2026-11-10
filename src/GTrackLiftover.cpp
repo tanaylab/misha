@@ -310,7 +310,8 @@ struct LiftedPiecesSweep {
 	LiftedPiecesSweep(const vector<GIntervalVal> &_pieces) : pieces(_pieces), next(0) {}
 
 	// Adds to agg_state each piece that overlaps [start, end), weighed by its overlap, with
-	// coverage_frac = overlap / locus_len. start and end must not decrease from call to call.
+	// coverage_frac = overlap / locus_len and the piece's own start and end, by which first, last
+	// and nth order the pieces. start and end must not decrease from call to call.
 	void add_overlapping(int64_t start, int64_t end, double locus_len, AggregationState &agg_state) {
 		while (next < pieces.size() && pieces[next].interval.start < end)
 			active.push_back(next++);
@@ -322,7 +323,7 @@ struct LiftedPiecesSweep {
 			int64_t overlap_end = min(end, piece.interval.end);
 			if (overlap_start < overlap_end)
 				aggregation_state_add(agg_state, (double)piece.val, (double)(overlap_end - overlap_start), locus_len,
-									  overlap_start, overlap_end, piece.chain_id);
+									  piece.interval.start, piece.interval.end, piece.chain_id);
 		}
 	}
 };

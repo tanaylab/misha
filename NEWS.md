@@ -10,6 +10,8 @@
 
 * **Behavior fix:** `gtrack.liftover()` of a sparse track aggregates each overlapping stretch separately, as `gintervals.liftover(value_col =)` does.
 
+* **Behavior fix:** `multi_target_agg = "first"`, `"last"` and `"nth"` in `gintervals.liftover()` and `gtrack.liftover()` order the lifted pieces by position, then by chain id, not by value.
+
 * **Behavior fix:** `gtrack.liftover(multi_target_agg = "count")` of a dense track gives 0, not `NaN`, where nothing maps.
 
 * **Behavior fix:** 2D virtual tracks (`avg`, `min`, `max`, `weighted.sum`) and 2D track expressions skip NaN values.

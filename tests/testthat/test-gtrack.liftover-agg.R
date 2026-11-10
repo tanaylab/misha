@@ -169,7 +169,7 @@ test_that("gtrack.liftover aggregation edge cases: ties and sorting with dense t
         if (gtrack.exists(lifted_track)) gtrack.rm(lifted_track, force = TRUE)
     })
 
-    # first: all start at 50, end at 60, sorted by value descending: 5,5,3,2 -> pick first (5)
+    # first: all lie at [50,60), so they go by chain id: chains 1-4 hold 5,3,5,2 -> first (5)
     gtrack.liftover(
         lifted_track, "first", src_track_dir, chain_file,
         tgt_overlap_policy = "agg",
@@ -179,7 +179,7 @@ test_that("gtrack.liftover aggregation edge cases: ties and sorting with dense t
     expect_equal(unique(res[[lifted_track]]), 5)
     gtrack.rm(lifted_track, force = TRUE)
 
-    # last: pick last in sorted order (2)
+    # last: chain 4 (2)
     gtrack.liftover(
         lifted_track, "last", src_track_dir, chain_file,
         tgt_overlap_policy = "agg",
@@ -189,7 +189,7 @@ test_that("gtrack.liftover aggregation edge cases: ties and sorting with dense t
     expect_equal(unique(res[[lifted_track]]), 2)
     gtrack.rm(lifted_track, force = TRUE)
 
-    # nth with n=2: sorted by value desc is 5,5,3,2, second is 5
+    # nth with n=2: chain 2 (3)
     gtrack.liftover(
         lifted_track, "nth", src_track_dir, chain_file,
         tgt_overlap_policy = "agg",
@@ -197,7 +197,7 @@ test_that("gtrack.liftover aggregation edge cases: ties and sorting with dense t
         params = 2
     )
     res <- gextract(lifted_track, gintervals("chrB", 50, 60))
-    expect_equal(unique(res[[lifted_track]]), 5)
+    expect_equal(unique(res[[lifted_track]]), 3)
     gtrack.rm(lifted_track, force = TRUE)
 
     # min: should be 2
@@ -343,8 +343,9 @@ test_that("gtrack.liftover aggregation for sparse tracks", {
         tgt_overlap_policy = "agg",
         multi_target_agg = "first"
     )
+    # the three pieces lie at [100,110), so they go by chain id: chain 1 holds 5
     vals <- gextract(lifted_track, gintervals("chrB", 100, 110))[[lifted_track]]
-    expect_true(all(vals == 11))
+    expect_true(all(vals == 5))
 
     gtrack.rm(lifted_track, force = TRUE)
     gtrack.liftover(
