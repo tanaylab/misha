@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">misha</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.17.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.18.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -36,39 +36,45 @@
   <main id="main" class="col-md-9"><div class="page-header">
 
       <h1>Changelog</h1>
-      <small>Source: <a href="https://github.com/tanaylab/misha/blob/v5.17.0/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
+      <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
     <div class="section level2">
+<h2 class="pkg-version" data-toc-text="5.18.0" id="misha-5180">misha 5.18.0<a class="anchor" aria-label="anchor" href="#misha-5180"></a></h2>
+<ul><li><p><strong>Behavior fix:</strong> the <code>"discard"</code> overlap policies of <code><a href="../reference/gintervals.load_chain.html">gintervals.load_chain()</a></code>, <code><a href="../reference/gintervals.liftover.html">gintervals.liftover()</a></code> and <code><a href="../reference/gtrack.liftover.html">gtrack.liftover()</a></code> drop only the bases covered by more than one chain interval, not whole intervals.</p></li>
+<li><p>New overlap policy <code>"discard_intervals"</code>: drops every chain interval involved in an overlap.</p></li>
+<li><p><code>tgt_overlap_policy = "auto*"</code> returns a winning minus-strand chain interval as one interval.</p></li>
+<li><p><strong>Behavior fix:</strong> <code><a href="../reference/gintervals.liftover.html">gintervals.liftover()</a></code> and <code><a href="../reference/gtrack.liftover.html">gtrack.liftover()</a></code> resolve the source overlaps of a chain before its target overlaps, as <code><a href="../reference/gintervals.load_chain.html">gintervals.load_chain()</a></code> does.</p></li>
+</ul></div>
+    <div class="section level2">
 <h2 class="pkg-version" data-toc-text="5.17.0" id="misha-5170">misha 5.17.0<a class="anchor" aria-label="anchor" href="#misha-5170"></a></h2>
-<p>This release fixes defects found in a review of 5.16.1, speeds up large computations, and adds features for sequence-to-function models. Fixes marked <strong>Behavior fix</strong> change results; recompute anything that depends on them.</p>
-<ul><li><p><strong>Behavior fix:</strong> an indexed track read with two different shifts in one call (e.g. two virtual tracks on it with different <code>sshift</code>/<code>eshift</code>) gave the first shift the other’s values on the first chromosome of each process. Present since 5.6.15.</p></li>
+<p>Fixes marked <strong>Behavior fix</strong> change results; recompute anything that depends on them.</p>
+<ul><li><p><strong>Behavior fix:</strong> an indexed track read with two different shifts in one call (e.g. two virtual tracks with different <code>sshift</code>/<code>eshift</code>) gave wrong values for one of them.</p></li>
 <li><p><strong>Behavior fix:</strong> <code><a href="../reference/gintervals.rbind.html">gintervals.rbind()</a></code> no longer mixes up rows when the inputs’ factor levels differ.</p></li>
-<li><p><strong>Behavior fix:</strong> <code><a href="../reference/gintervals.neighbors.html">gintervals.neighbors()</a></code> breaks ties by coordinates, so results no longer depend on input order, and no longer returns a farther 2D neighbor.</p></li>
-<li><p><strong>Behavior fix:</strong> a 2D <code><a href="../reference/gintervals.annotate.html">gintervals.annotate()</a></code> returns <code>dist1</code> and <code>dist2</code>; <code>max_dist</code> limits their sum.</p></li>
-<li><p><strong>Behavior fix:</strong> virtual tracks with a filter: <code>first</code>, <code>last</code>, <code>sample</code> and <code>nearest</code> use all unmasked values; value-based <code>size</code> and <code>exists</code> are 0 when nothing unmasked has a value.</p></li>
-<li><p><strong>Behavior fix:</strong> PWM edit distance with <code>max_indels &gt; 0</code> no longer underestimates the edits needed; <code>score.min</code> and <code>score.max</code> apply with indels; <code><a href="../reference/gseq.pwm_edits.html">gseq.pwm_edits()</a></code> agrees with the virtual track.</p></li>
-<li><p><strong>Behavior fix:</strong> random draws (<code><a href="../reference/gsample.html">gsample()</a></code>, sampled quantiles, <code>sample</code> virtual tracks) follow <code><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed()</a></code> and differ between parallel processes.</p></li>
-<li><p><strong>Behavior fix:</strong> gsynth: saved models keep their iterator, <code><a href="../reference/gsynth.random.html">gsynth.random()</a></code> follows <code>nuc_probs</code> everywhere, overlapping or masked regions are counted correctly, and <code><a href="../reference/gsynth.load.html">gsynth.load()</a></code> reads a model file without a <code>prior</code> entry.</p></li>
+<li><p><strong>Behavior fix:</strong> <code><a href="../reference/gintervals.neighbors.html">gintervals.neighbors()</a></code> breaks ties by coordinates and no longer returns a farther 2D neighbor.</p></li>
+<li><p><strong>Behavior fix:</strong> 2D <code><a href="../reference/gintervals.annotate.html">gintervals.annotate()</a></code> returns <code>dist1</code> and <code>dist2</code>; <code>max_dist</code> limits their sum.</p></li>
+<li><p><strong>Behavior fix:</strong> filtered virtual tracks: <code>first</code>, <code>last</code>, <code>sample</code> and <code>nearest</code> use all unmasked values; <code>size</code> and <code>exists</code> are 0 when no unmasked value exists.</p></li>
+<li><p><strong>Behavior fix:</strong> PWM edit distance with <code>max_indels &gt; 0</code> no longer underestimates the edits; <code>score.min</code> and <code>score.max</code> apply with indels.</p></li>
+<li><p><strong>Behavior fix:</strong> random draws (<code><a href="../reference/gsample.html">gsample()</a></code>, sampled quantiles, <code>sample</code> virtual tracks) follow <code><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed()</a></code>.</p></li>
+<li><p><strong>Behavior fix:</strong> gsynth: saved models keep their iterator, <code><a href="../reference/gsynth.random.html">gsynth.random()</a></code> follows <code>nuc_probs</code>, and overlapping or masked regions are counted correctly.</p></li>
 <li><p><strong>Behavior fix:</strong> <code>gdb.create(format = "per-chromosome")</code> makes one chromosome per FASTA record.</p></li>
-<li><p><strong>Behavior fix:</strong> <code>gextract(file = "*.parquet")</code> writes values as double; float32 rounded large positions.</p></li>
+<li><p><strong>Behavior fix:</strong> <code>gextract(file = "*.parquet")</code> writes values as double.</p></li>
 <li><p><strong>Behavior fix:</strong> a parallel <code><a href="../reference/gextract.html">gextract()</a></code> stops with an error when a worker dies, instead of dropping its columns.</p></li>
-<li><p><strong>Behavior fix:</strong> imports clip a record that runs past a chromosome end, with a warning, in every format.</p></li>
-<li><p><strong>Behavior fix:</strong> with <code>gmulticontig.2d.cache = TRUE</code>, a change of <code>gmulticontig.2d.mode</code> takes effect.</p></li>
-<li><p><code>gseq.extract(pad = TRUE)</code> returns fixed-width windows past chromosome ends, padded with “N”.</p></li>
-<li><p>New virtual track function <code>weighted.sum</code>: value times overlapping bp, for windows that cut bins (<code>sum</code> counts every touched bin in full).</p></li>
-<li><p>Track attributes travel through Parquet export and import. Suggested attribute names for model predictions: <code>value.scale</code>, <code>model</code>, <code>checkpoint</code>, <code>heldout.chroms</code>.</p></li>
+<li><p><strong>Behavior fix:</strong> all imports clip records that run past a chromosome end, with a warning.</p></li>
+<li><p><strong>Behavior fix:</strong> changing <code>gmulticontig.2d.mode</code> takes effect when <code>gmulticontig.2d.cache = TRUE</code>.</p></li>
+<li><p>New <code>gseq.extract(pad = TRUE)</code>: fixed-width sequences past chromosome ends, padded with “N”.</p></li>
+<li><p>New virtual track function <code>weighted.sum</code>: values weighted by the overlapping bases.</p></li>
+<li><p>Track attributes are kept through Parquet export and import.</p></li>
 <li><p>PSSM input is checked: counts are accepted; log-odds, <code>NA</code> and all-zero rows are errors.</p></li>
-<li><p>An error inside a misha call no longer leaves the rest of the session running in one process.</p></li>
 <li><p><code>NA</code> logical arguments and <code>NA</code> or infinite coordinates are errors.</p></li>
-<li><p>Intervals passed by value (e.g. through <code><a href="https://rdrr.io/r/base/do.call.html" class="external-link">do.call()</a></code>) are no longer slow (about 80x faster for 2M intervals).</p></li>
-<li><p>Database fixes: stale <code>.db.cache</code> locks, refused dataset re-loads, copies into datasets and failed overwrites no longer leave the database in a bad state.</p></li>
-<li><p><code><a href="../reference/gtrack.export_bigwig.html">gtrack.export_bigwig()</a></code> works on databases whose chromosome order is not alphabetical. bedGraph export is about 10x faster and bedGraph/WIG import about 6x.</p></li>
-<li><p><code>gtrack.2d.import_contacts(fends =)</code> needs memory for the fends only, not up to the largest id. <code>gmax.data.size</code> is documented as a number of records, and the <code><a href="../reference/gtrack.smooth.html">gtrack.smooth()</a></code> window rule is documented.</p></li>
-<li><p>Faster, with the same results: genome-wide <code><a href="../reference/gextract.html">gextract()</a></code> of many virtual tracks (about 2x, with about half the memory), dense tracks read at their own bin size (about 4x), <code><a href="../reference/gquantiles.html">gquantiles()</a></code>, <code><a href="../reference/gtrack.create_dense.html">gtrack.create_dense()</a></code>, <code><a href="../reference/gextract.variants.html">gextract.variants()</a></code>, small calls on databases with many tracks, and Potts scans.</p></li>
-<li><p>Parallel computations over many intervals, such as genomes of many contigs, split the work evenly; the last process did twice the others’ work. Sums combined across processes can differ in the last digits.</p></li>
-<li><p>A warning, once per session, when starting parallel processes from a large R session will take seconds (seen on RHEL 7 hosts).</p></li>
-<li><p>Zero quantiles are returned as 0, not -0. <code><a href="../reference/gseq.extract.html">gseq.extract()</a></code> checks <code>gmax.data.size</code> before reading. A worker thread that cannot start no longer aborts R.</p></li>
+<li><p>An error inside a misha call no longer leaves the session running in one process.</p></li>
+<li><p>Database fixes: stale <code>.db.cache</code> locks, dataset re-loads, copies into datasets and failed overwrites.</p></li>
+<li><p><code><a href="../reference/gtrack.export_bigwig.html">gtrack.export_bigwig()</a></code> works on databases whose chromosome order is not alphabetical.</p></li>
+<li><p><code>gtrack.2d.import_contacts(fends =)</code> uses less memory.</p></li>
+<li><p>Faster: <code><a href="../reference/gextract.html">gextract()</a></code> of many virtual tracks, dense tracks, <code><a href="../reference/gquantiles.html">gquantiles()</a></code>, <code><a href="../reference/gtrack.create_dense.html">gtrack.create_dense()</a></code>, <code><a href="../reference/gextract.variants.html">gextract.variants()</a></code>, Potts scans, bedGraph/WIG import and export, and intervals passed by value.</p></li>
+<li><p>Parallel runs over many contigs split the work evenly; sums can differ in the last digits.</p></li>
+<li><p>A warning when starting parallel processes from a large R session will be slow.</p></li>
+<li><p>Zero quantiles are 0, not -0. <code><a href="../reference/gseq.extract.html">gseq.extract()</a></code> checks <code>gmax.data.size</code>. A worker thread that fails to start no longer aborts R.</p></li>
 </ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="5.16.1" id="misha-5161">misha 5.16.1<a class="anchor" aria-label="anchor" href="#misha-5161"></a></h2>
@@ -80,7 +86,7 @@
 </ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="5.16.0" id="misha-5160">misha 5.16.0<a class="anchor" aria-label="anchor" href="#misha-5160"></a></h2>
-<p>This release fixes the remaining defects found in the review of 5.14.4. Several change results, marked <strong>Behavior fix</strong>; recompute anything that depends on them.</p>
+<p>Fixes marked <strong>Behavior fix</strong> change results; recompute anything that depends on them.</p>
 <ul><li><p><strong>Behavior fix:</strong> <code><a href="../reference/gcor.html">gcor()</a></code> computes standard deviations, covariance and correlation without cancellation; values far from zero relative to their spread gave NaN or wrong correlations, also in multitask runs.</p></li>
 <li><p><strong>Behavior fix:</strong> <code><a href="../reference/gsummary.html">gsummary()</a></code>, <code><a href="../reference/gintervals.summary.html">gintervals.summary()</a></code> and <code><a href="../reference/gbins.summary.html">gbins.summary()</a></code> give a NaN standard deviation when a value is infinite (was 0), and report <code>-Inf</code>/<code>Inf</code> as the minimum or maximum when all values are infinite (was +-1.8e308).</p></li>
 <li><p><strong>Behavior fix:</strong> <code>first</code>, <code>last</code>, <code>sample</code>, <code>lse</code> and their <code>.pos</code> functions work on array tracks; they returned NA, and <code>lse</code> returned garbage.</p></li>
@@ -136,7 +142,7 @@
 </ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="5.15.0" id="misha-5150">misha 5.15.0<a class="anchor" aria-label="anchor" href="#misha-5150"></a></h2>
-<p>This release fixes defects found in a review of 5.14.4. Several change results, marked <strong>Behavior fix</strong>; recompute anything that depends on them.</p>
+<p>Fixes marked <strong>Behavior fix</strong> change results; recompute anything that depends on them.</p>
 <ul><li><p><strong>Behavior fix:</strong> PWM scoring never uses a window that holds N or another non-ACGT base, in every function: the PWM virtual tracks (<code>pwm.max.pos</code> and spatially weighted <code>pwm</code>/<code>pwm.max</code> used to charge N the column mean and score IUPAC codes as perfect matches), <code><a href="../reference/gseq.pwm.html">gseq.pwm()</a></code>, the edit distance functions (<code>pwm.edit_distance*</code>, <code>pwm.max.edit_distance</code>, <code>pwm.n_mutations</code>, <code><a href="../reference/gseq.pwm_edits.html">gseq.pwm_edits()</a></code>) and <code><a href="../reference/gtrack.create_pwm_energy.html">gtrack.create_pwm_energy()</a></code>. <code><a href="../reference/gseq.pwm.html">gseq.pwm()</a></code> now defaults to <code>neutral_chars = character(0)</code>; pass <code>neutral_chars = c("N", "n", "*")</code> for the old scores. An interval with no scorable window gives NA (<code>gseq.pwm(mode = "pos")</code> used to return 1), and a <code><a href="../reference/gtrack.create_pwm_energy.html">gtrack.create_pwm_energy()</a></code> bin with none is NaN.</p></li>
 <li><p><strong>Behavior fix:</strong> <code><a href="../reference/gtrack.create_pwm_energy.html">gtrack.create_pwm_energy()</a></code> scores the windows that start in each bin, as the <code>pwm</code> virtual track does; it also scored the window starting at the bin’s end.</p></li>
 <li><p><strong>Behavior fix:</strong> with <code>bidirect = FALSE, strand = -1</code>, <code>spat_factor</code>/<code>spat_bin</code> and <code>spat_min</code>/<code>spat_max</code> count from the interval’s 5’ start, as with <code>strand = 1</code> and in <code><a href="../reference/gseq.pwm.html">gseq.pwm()</a></code>.</p></li>

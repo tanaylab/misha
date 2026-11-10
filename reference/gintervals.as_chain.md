@@ -27,12 +27,13 @@ gintervals.as_chain(
 
 - src_overlap_policy:
 
-  source overlap policy: "error", "keep", or "discard"
+  source overlap policy: "error", "keep", "discard", or
+  "discard_intervals"
 
 - tgt_overlap_policy:
 
   target overlap policy: "error", "auto", "auto_first", "auto_longer",
-  "auto_score", "discard", "keep", or "agg"
+  "auto_score", "discard", "discard_intervals", "keep", or "agg"
 
 - min_score:
 

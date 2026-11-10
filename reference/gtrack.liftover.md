@@ -45,10 +45,13 @@ gtrack.liftover(
 
 - src_overlap_policy:
 
-  policy for handling source overlaps: "error" (default), "keep", or
-  "discard". "keep" allows one source interval to map to multiple target
-  intervals, "discard" discards all source intervals that have overlaps
-  and "error" throws an error if source overlaps are detected.
+  policy for handling source overlaps: "error" (default), "keep",
+  "discard" or "discard_intervals". "keep" allows one source interval to
+  map to multiple target intervals, "discard" removes the source bases
+  covered by more than one chain interval and keeps the rest of each
+  chain interval, "discard_intervals" discards every chain interval that
+  has a source overlap, and "error" throws an error if source overlaps
+  are detected.
 
 - tgt_overlap_policy:
 
@@ -63,9 +66,10 @@ gtrack.liftover(
   | auto_longer | Resolves overlaps by segmenting and selecting the chain with the longest span for each segment. Tie-breakers: highest score, then lowest chain_id. |
   | auto_first | Resolves overlaps by segmenting and selecting the chain with the lowest chain_id for each segment. |
   | keep | Preserves all overlapping intervals. |
-  | discard | Discards any chain interval that has a target overlap with another chain interval. |
+  | discard | Removes the target bases covered by more than one chain interval and keeps the rest of each chain interval. |
+  | discard_intervals | Discards any chain interval that has a target overlap with another chain interval. |
   | agg | Segments overlaps into smaller disjoint regions where each region contains all contributing chains, allowing downstream aggregation to process multiple values per region. |
-  | best_source_cluster | Best source cluster strategy based on source overlap. When multiple chains map a source interval, clusters them by source overlap: if chain source intervals overlap (indicating true duplications), all mappings are retained; if chain source intervals are disjoint (indicating conflicting/alternative mappings), only the cluster with the largest total target length is kept. |
+  | best_source_cluster | Best source cluster strategy based on source overlap. When multiple chains map a source interval, clusters them by source overlap: if chain source intervals overlap (indicating true duplications), all mappings are retained; if chain source intervals are disjoint (indicating conflicting/alternative mappings), only the cluster with the largest total target length is kept. Supported by gintervals.liftover only, not gtrack.liftover. |
 
 - multi_target_agg:
 

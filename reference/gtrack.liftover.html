@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">misha</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.17.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.18.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -36,7 +36,7 @@
   <main id="main" class="col-md-9"><div class="page-header">
 
       <h1>Imports a track from another assembly</h1>
-      <small class="dont-index">Source: <a href="https://github.com/tanaylab/misha/blob/v5.17.0/R/track-liftover.R" class="external-link"><code>R/track-liftover.R</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/tanaylab/misha/blob/master/R/track-liftover.R" class="external-link"><code>R/track-liftover.R</code></a></small>
       <div class="d-none name"><code>gtrack.liftover.Rd</code></div>
     </div>
 
@@ -87,11 +87,11 @@ database: it is read by the chromosome ids of that database.</p></dd>
 
 
 <dt id="arg-src-overlap-policy">src_overlap_policy<a class="anchor" aria-label="anchor" href="#arg-src-overlap-policy"></a></dt>
-<dd><p>policy for handling source overlaps: "error" (default), "keep", or "discard". "keep" allows one source interval to map to multiple target intervals, "discard" discards all source intervals that have overlaps and "error" throws an error if source overlaps are detected.</p></dd>
+<dd><p>policy for handling source overlaps: "error" (default), "keep", "discard" or "discard_intervals". "keep" allows one source interval to map to multiple target intervals, "discard" removes the source bases covered by more than one chain interval and keeps the rest of each chain interval, "discard_intervals" discards every chain interval that has a source overlap, and "error" throws an error if source overlaps are detected.</p></dd>
 
 
 <dt id="arg-tgt-overlap-policy">tgt_overlap_policy<a class="anchor" aria-label="anchor" href="#arg-tgt-overlap-policy"></a></dt>
-<dd><p>policy for handling target overlaps. One of:</p><table class="table table"><tr><td>Policy</td><td>Description</td></tr><tr><td>error</td><td>Throws an error if any target overlaps are detected.</td></tr><tr><td>auto</td><td>Default. Alias for "auto_score".</td></tr><tr><td>auto_score</td><td>Resolves overlaps by segmenting the target region and selecting the best chain for each segment based on alignment score (highest score wins). Tie-breakers: longest span, then lowest chain_id.</td></tr><tr><td>auto_longer</td><td>Resolves overlaps by segmenting and selecting the chain with the longest span for each segment. Tie-breakers: highest score, then lowest chain_id.</td></tr><tr><td>auto_first</td><td>Resolves overlaps by segmenting and selecting the chain with the lowest chain_id for each segment.</td></tr><tr><td>keep</td><td>Preserves all overlapping intervals.</td></tr><tr><td>discard</td><td>Discards any chain interval that has a target overlap with another chain interval.</td></tr><tr><td>agg</td><td>Segments overlaps into smaller disjoint regions where each region contains all contributing chains, allowing downstream aggregation to process multiple values per region.</td></tr><tr><td>best_source_cluster</td><td>Best source cluster strategy based on source overlap. When multiple chains map a source interval, clusters them by source overlap: if chain source intervals overlap (indicating true duplications), all mappings are retained; if chain source intervals are disjoint (indicating conflicting/alternative mappings), only the cluster with the largest total target length is kept.</td></tr></table></dd>
+<dd><p>policy for handling target overlaps. One of:</p><table class="table table"><tr><td>Policy</td><td>Description</td></tr><tr><td>error</td><td>Throws an error if any target overlaps are detected.</td></tr><tr><td>auto</td><td>Default. Alias for "auto_score".</td></tr><tr><td>auto_score</td><td>Resolves overlaps by segmenting the target region and selecting the best chain for each segment based on alignment score (highest score wins). Tie-breakers: longest span, then lowest chain_id.</td></tr><tr><td>auto_longer</td><td>Resolves overlaps by segmenting and selecting the chain with the longest span for each segment. Tie-breakers: highest score, then lowest chain_id.</td></tr><tr><td>auto_first</td><td>Resolves overlaps by segmenting and selecting the chain with the lowest chain_id for each segment.</td></tr><tr><td>keep</td><td>Preserves all overlapping intervals.</td></tr><tr><td>discard</td><td>Removes the target bases covered by more than one chain interval and keeps the rest of each chain interval.</td></tr><tr><td>discard_intervals</td><td>Discards any chain interval that has a target overlap with another chain interval.</td></tr><tr><td>agg</td><td>Segments overlaps into smaller disjoint regions where each region contains all contributing chains, allowing downstream aggregation to process multiple values per region.</td></tr><tr><td>best_source_cluster</td><td>Best source cluster strategy based on source overlap. When multiple chains map a source interval, clusters them by source overlap: if chain source intervals overlap (indicating true duplications), all mappings are retained; if chain source intervals are disjoint (indicating conflicting/alternative mappings), only the cluster with the largest total target length is kept. Supported by gintervals.liftover only, not gtrack.liftover.</td></tr></table></dd>
 
 
 <dt id="arg-multi-target-agg">multi_target_agg<a class="anchor" aria-label="anchor" href="#arg-multi-target-agg"></a></dt>

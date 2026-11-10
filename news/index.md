@@ -1,16 +1,37 @@
 # Changelog
 
+## misha 5.18.0
+
+- **Behavior fix:** the `"discard"` overlap policies of
+  [`gintervals.load_chain()`](https://tanaylab.github.io/misha/reference/gintervals.load_chain.md),
+  [`gintervals.liftover()`](https://tanaylab.github.io/misha/reference/gintervals.liftover.md)
+  and
+  [`gtrack.liftover()`](https://tanaylab.github.io/misha/reference/gtrack.liftover.md)
+  drop only the bases covered by more than one chain interval, not whole
+  intervals.
+
+- New overlap policy `"discard_intervals"`: drops every chain interval
+  involved in an overlap.
+
+- `tgt_overlap_policy = "auto*"` returns a winning minus-strand chain
+  interval as one interval.
+
+- **Behavior fix:**
+  [`gintervals.liftover()`](https://tanaylab.github.io/misha/reference/gintervals.liftover.md)
+  and
+  [`gtrack.liftover()`](https://tanaylab.github.io/misha/reference/gtrack.liftover.md)
+  resolve the source overlaps of a chain before its target overlaps, as
+  [`gintervals.load_chain()`](https://tanaylab.github.io/misha/reference/gintervals.load_chain.md)
+  does.
+
 ## misha 5.17.0
 
-This release fixes defects found in a review of 5.16.1, speeds up large
-computations, and adds features for sequence-to-function models. Fixes
-marked **Behavior fix** change results; recompute anything that depends
-on them.
+Fixes marked **Behavior fix** change results; recompute anything that
+depends on them.
 
 - **Behavior fix:** an indexed track read with two different shifts in
-  one call (e.g. two virtual tracks on it with different
-  `sshift`/`eshift`) gave the first shift the other’s values on the
-  first chromosome of each process. Present since 5.6.15.
+  one call (e.g. two virtual tracks with different `sshift`/`eshift`)
+  gave wrong values for one of them.
 
 - **Behavior fix:**
   [`gintervals.rbind()`](https://tanaylab.github.io/misha/reference/gintervals.rbind.md)
@@ -18,109 +39,91 @@ on them.
 
 - **Behavior fix:**
   [`gintervals.neighbors()`](https://tanaylab.github.io/misha/reference/gintervals.neighbors.md)
-  breaks ties by coordinates, so results no longer depend on input
-  order, and no longer returns a farther 2D neighbor.
+  breaks ties by coordinates and no longer returns a farther 2D
+  neighbor.
 
-- **Behavior fix:** a 2D
+- **Behavior fix:** 2D
   [`gintervals.annotate()`](https://tanaylab.github.io/misha/reference/gintervals.annotate.md)
   returns `dist1` and `dist2`; `max_dist` limits their sum.
 
-- **Behavior fix:** virtual tracks with a filter: `first`, `last`,
-  `sample` and `nearest` use all unmasked values; value-based `size` and
-  `exists` are 0 when nothing unmasked has a value.
+- **Behavior fix:** filtered virtual tracks: `first`, `last`, `sample`
+  and `nearest` use all unmasked values; `size` and `exists` are 0 when
+  no unmasked value exists.
 
 - **Behavior fix:** PWM edit distance with `max_indels > 0` no longer
-  underestimates the edits needed; `score.min` and `score.max` apply
-  with indels;
-  [`gseq.pwm_edits()`](https://tanaylab.github.io/misha/reference/gseq.pwm_edits.md)
-  agrees with the virtual track.
+  underestimates the edits; `score.min` and `score.max` apply with
+  indels.
 
 - **Behavior fix:** random draws
   ([`gsample()`](https://tanaylab.github.io/misha/reference/gsample.md),
   sampled quantiles, `sample` virtual tracks) follow
-  [`set.seed()`](https://rdrr.io/r/base/Random.html) and differ between
-  parallel processes.
+  [`set.seed()`](https://rdrr.io/r/base/Random.html).
 
 - **Behavior fix:** gsynth: saved models keep their iterator,
   [`gsynth.random()`](https://tanaylab.github.io/misha/reference/gsynth.random.md)
-  follows `nuc_probs` everywhere, overlapping or masked regions are
-  counted correctly, and
-  [`gsynth.load()`](https://tanaylab.github.io/misha/reference/gsynth.load.md)
-  reads a model file without a `prior` entry.
+  follows `nuc_probs`, and overlapping or masked regions are counted
+  correctly.
 
 - **Behavior fix:** `gdb.create(format = "per-chromosome")` makes one
   chromosome per FASTA record.
 
 - **Behavior fix:** `gextract(file = "*.parquet")` writes values as
-  double; float32 rounded large positions.
+  double.
 
 - **Behavior fix:** a parallel
   [`gextract()`](https://tanaylab.github.io/misha/reference/gextract.md)
   stops with an error when a worker dies, instead of dropping its
   columns.
 
-- **Behavior fix:** imports clip a record that runs past a chromosome
-  end, with a warning, in every format.
+- **Behavior fix:** all imports clip records that run past a chromosome
+  end, with a warning.
 
-- **Behavior fix:** with `gmulticontig.2d.cache = TRUE`, a change of
-  `gmulticontig.2d.mode` takes effect.
+- **Behavior fix:** changing `gmulticontig.2d.mode` takes effect when
+  `gmulticontig.2d.cache = TRUE`.
 
-- `gseq.extract(pad = TRUE)` returns fixed-width windows past chromosome
+- New `gseq.extract(pad = TRUE)`: fixed-width sequences past chromosome
   ends, padded with “N”.
 
-- New virtual track function `weighted.sum`: value times overlapping bp,
-  for windows that cut bins (`sum` counts every touched bin in full).
+- New virtual track function `weighted.sum`: values weighted by the
+  overlapping bases.
 
-- Track attributes travel through Parquet export and import. Suggested
-  attribute names for model predictions: `value.scale`, `model`,
-  `checkpoint`, `heldout.chroms`.
+- Track attributes are kept through Parquet export and import.
 
 - PSSM input is checked: counts are accepted; log-odds, `NA` and
   all-zero rows are errors.
 
-- An error inside a misha call no longer leaves the rest of the session
-  running in one process.
-
 - `NA` logical arguments and `NA` or infinite coordinates are errors.
 
-- Intervals passed by value (e.g. through
-  [`do.call()`](https://rdrr.io/r/base/do.call.html)) are no longer slow
-  (about 80x faster for 2M intervals).
+- An error inside a misha call no longer leaves the session running in
+  one process.
 
-- Database fixes: stale `.db.cache` locks, refused dataset re-loads,
-  copies into datasets and failed overwrites no longer leave the
-  database in a bad state.
+- Database fixes: stale `.db.cache` locks, dataset re-loads, copies into
+  datasets and failed overwrites.
 
 - [`gtrack.export_bigwig()`](https://tanaylab.github.io/misha/reference/gtrack.export_bigwig.md)
   works on databases whose chromosome order is not alphabetical.
-  bedGraph export is about 10x faster and bedGraph/WIG import about 6x.
 
-- `gtrack.2d.import_contacts(fends =)` needs memory for the fends only,
-  not up to the largest id. `gmax.data.size` is documented as a number
-  of records, and the
-  [`gtrack.smooth()`](https://tanaylab.github.io/misha/reference/gtrack.smooth.md)
-  window rule is documented.
+- `gtrack.2d.import_contacts(fends =)` uses less memory.
 
-- Faster, with the same results: genome-wide
+- Faster:
   [`gextract()`](https://tanaylab.github.io/misha/reference/gextract.md)
-  of many virtual tracks (about 2x, with about half the memory), dense
-  tracks read at their own bin size (about 4x),
+  of many virtual tracks, dense tracks,
   [`gquantiles()`](https://tanaylab.github.io/misha/reference/gquantiles.md),
   [`gtrack.create_dense()`](https://tanaylab.github.io/misha/reference/gtrack.create_dense.md),
   [`gextract.variants()`](https://tanaylab.github.io/misha/reference/gextract.variants.md),
-  small calls on databases with many tracks, and Potts scans.
+  Potts scans, bedGraph/WIG import and export, and intervals passed by
+  value.
 
-- Parallel computations over many intervals, such as genomes of many
-  contigs, split the work evenly; the last process did twice the others’
-  work. Sums combined across processes can differ in the last digits.
+- Parallel runs over many contigs split the work evenly; sums can differ
+  in the last digits.
 
-- A warning, once per session, when starting parallel processes from a
-  large R session will take seconds (seen on RHEL 7 hosts).
+- A warning when starting parallel processes from a large R session will
+  be slow.
 
-- Zero quantiles are returned as 0, not -0.
+- Zero quantiles are 0, not -0.
   [`gseq.extract()`](https://tanaylab.github.io/misha/reference/gseq.extract.md)
-  checks `gmax.data.size` before reading. A worker thread that cannot
-  start no longer aborts R.
+  checks `gmax.data.size`. A worker thread that fails to start no longer
+  aborts R.
 
 ## misha 5.16.1
 
@@ -151,8 +154,7 @@ on them.
 
 ## misha 5.16.0
 
-This release fixes the remaining defects found in the review of 5.14.4.
-Several change results, marked **Behavior fix**; recompute anything that
+Fixes marked **Behavior fix** change results; recompute anything that
 depends on them.
 
 - **Behavior fix:**
@@ -420,9 +422,8 @@ depends on them.
 
 ## misha 5.15.0
 
-This release fixes defects found in a review of 5.14.4. Several change
-results, marked **Behavior fix**; recompute anything that depends on
-them.
+Fixes marked **Behavior fix** change results; recompute anything that
+depends on them.
 
 - **Behavior fix:** PWM scoring never uses a window that holds N or
   another non-ACGT base, in every function: the PWM virtual tracks
