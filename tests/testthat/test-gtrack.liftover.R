@@ -531,6 +531,26 @@ test_that("gtrack.liftover with discard keeps the bases a single chain interval 
     expect_equal(res$lifted_discard, c(111, 111, 333))
 })
 
+test_that("gtrack.liftover resolves a pre-loaded chain's source overlaps first", {
+    local_db_state()
+
+    source_db <- setup_source_db(list(paste0(">source1\n", paste(rep("A", 200), collapse = ""), "\n")))
+    gtrack.create_sparse("src_track", "", data.frame(chrom = "chrsource1", start = 0, end = 150), 7)
+    src_track_dir <- file.path(source_db, "tracks", "src_track.track")
+    setup_db(list(paste0(">chr1\n", paste(rep("T", 200), collapse = ""), "\n")))
+
+    # A src [0,100) -> [0,100) and B src [50,150) -> [50,150) overlap on both sides
+    pre <- gintervals.as_chain(data.frame(
+        chrom = "chr1", start = c(0, 50), end = c(100, 150), strand = 1,
+        chromsrc = "chrsource1", startsrc = c(0, 50), endsrc = c(100, 150), strandsrc = 1,
+        chain_id = 1:2, score = 1000
+    ), src_overlap_policy = "discard", tgt_overlap_policy = "auto")
+    gtrack.liftover("lifted", "", src_track_dir, pre)
+    res <- gextract("lifted", gintervals.all())
+    expect_equal(res$start, c(0, 100))
+    expect_equal(res$end, c(50, 150))
+})
+
 test_that("gtrack.liftover preserves sparse track gaps correctly", {
     local_db_state()
 

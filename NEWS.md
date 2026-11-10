@@ -6,6 +6,8 @@
 
 * `tgt_overlap_policy = "auto*"` returns a winning minus-strand chain interval as one interval.
 
+* **Behavior fix:** `gintervals.liftover()` and `gtrack.liftover()` resolve the source overlaps of a chain before its target overlaps, as `gintervals.load_chain()` does.
+
 * **Behavior fix:** `gtrack.liftover()` of a sparse track aggregates each overlapping stretch separately, as `gintervals.liftover(value_col =)` does.
 
 * **Behavior fix:** `gtrack.liftover(multi_target_agg = "count")` of a dense track gives 0, not `NaN`, where nothing maps.
