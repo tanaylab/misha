@@ -167,7 +167,8 @@ public:
 	void verify_no_tgt_overlaps(const GenomeChromKey &chromkey, const vector<string> &src_id2chrom) const;
 
 	// Handles source overlaps according to the specified policy.
-	// Policy: "error" - throw exception, "keep" - allow overlaps, "discard" - remove all overlapping intervals.
+	// Policy: "error" - throw exception, "keep" - allow overlaps, "discard" - remove the source bases
+	// covered by more than one interval, "discard_intervals" - remove all overlapping intervals.
 	// Intervals are expected to be already sorted by source.
 	void handle_src_overlaps(const string &policy, const GenomeChromKey &chromkey, const vector<string> &src_id2chrom);
 
@@ -175,7 +176,8 @@ public:
 	// Policies:
 	//   "keep"        - keep overlaps unchanged (no trimming)
 	//   "error"       - throw on the first target overlap
-	//   "discard"     - drop any interval that participates in a target overlap
+	//   "discard"     - segment the union and drop the overlapped segments from every chain
+	//   "discard_intervals" - drop any interval that participates in a target overlap
 	//   "auto_first"  - segment the union and keep the smallest chain_id in each overlapped segment
 	//   "auto_longer" - segment the union and keep the longest span in each overlapped segment (ties: score, then chain_id)
 	//   "auto_score"  - segment the union and keep the highest score in each overlapped segment (ties: span, then chain_id)

@@ -651,15 +651,14 @@ SEXP gtrack_liftover(SEXP _track,
 
 		iu.convert_rchain_intervs(_chain, chain_intervs, src_id2chrom);
 
-		// Handle target overlaps first
+		// Source overlaps first, then target overlaps, as gintervals.load_chain resolves them
+		chain_intervs.sort_by_src();
+		chain_intervs.handle_src_overlaps(src_overlap_policy, iu.get_chromkey(), src_id2chrom);
 		chain_intervs.sort_by_tgt();
 		chain_intervs.handle_tgt_overlaps(effective_tgt_policy, iu.get_chromkey(), src_id2chrom);
 
-		// Handle source overlaps
-		chain_intervs.sort_by_src();
-		chain_intervs.handle_src_overlaps(src_overlap_policy, iu.get_chromkey(), src_id2chrom);
-
 		// Build auxiliary structures for efficient source interval mapping
+		chain_intervs.sort_by_src();
 		chain_intervs.buildSrcAux();
 
 		// Set the target overlap policy for score-based selection during liftover
