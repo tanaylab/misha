@@ -1,5 +1,11 @@
 # misha 5.18.1
 
+* **Behavior fix:** `gseq.pwm()` and `gseq.kmer()` scan to the end of a sequence with non-ASCII characters.
+
+* `gextract.variants()` and `ggenome.implant()` accept sequences with bytes above 127.
+
+* `gintervals.2d.intersect()` reports an `NA` or infinite coordinate as "Invalid format of interval".
+
 * `gdataset.ls()` and `gdb.reload()` no longer fail with "invalid connection" or leave connections open when a `.db.cache` file cannot be read.
 
 # misha 5.18.0

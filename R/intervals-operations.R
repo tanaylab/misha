@@ -79,6 +79,11 @@ gintervals.2d.band_intersect <- function(intervals = NULL, band = NULL, interval
     if (is.null(intervals) || !is.data.frame(intervals) || !.gintervals.is2d(intervals)) {
         stop(sprintf("'%s' must be a set of 2D intervals", argname), call. = FALSE)
     }
+    # as the C++ interval readers say of an NA, infinite or out-of-range coordinate
+    ok <- Reduce(`&`, lapply(intervals[c("start1", "end1", "start2", "end2")], function(v) is.finite(v) & abs(v) < 9.2e18))
+    if (!all(ok)) {
+        stop(sprintf("Invalid format of interval at index %d", which(!ok)[1]), call. = FALSE)
+    }
     intervals
 }
 
