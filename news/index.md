@@ -2,6 +2,21 @@
 
 ## misha 5.18.1
 
+- **Behavior fix:**
+  [`gseq.pwm()`](https://tanaylab.github.io/misha/reference/gseq.pwm.md)
+  and
+  [`gseq.kmer()`](https://tanaylab.github.io/misha/reference/gseq.kmer.md)
+  scan to the end of a sequence with non-ASCII characters.
+
+- [`gextract.variants()`](https://tanaylab.github.io/misha/reference/gextract.variants.md)
+  and
+  [`ggenome.implant()`](https://tanaylab.github.io/misha/reference/ggenome.implant.md)
+  accept sequences with bytes above 127.
+
+- [`gintervals.2d.intersect()`](https://tanaylab.github.io/misha/reference/gintervals.2d.intersect.md)
+  reports an `NA` or infinite coordinate as “Invalid format of
+  interval”.
+
 - [`gdataset.ls()`](https://tanaylab.github.io/misha/reference/gdataset.ls.md)
   and
   [`gdb.reload()`](https://tanaylab.github.io/misha/reference/gdb.reload.md)

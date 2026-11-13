@@ -41,8 +41,10 @@
 
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="5.18.1" id="misha-5181">misha 5.18.1<a class="anchor" aria-label="anchor" href="#misha-5181"></a></h2>
-<ul><li>
-<code><a href="../reference/gdataset.ls.html">gdataset.ls()</a></code> and <code><a href="../reference/gdb.reload.html">gdb.reload()</a></code> no longer fail with “invalid connection” or leave connections open when a <code>.db.cache</code> file cannot be read.</li>
+<ul><li><p><strong>Behavior fix:</strong> <code><a href="../reference/gseq.pwm.html">gseq.pwm()</a></code> and <code><a href="../reference/gseq.kmer.html">gseq.kmer()</a></code> scan to the end of a sequence with non-ASCII characters.</p></li>
+<li><p><code><a href="../reference/gextract.variants.html">gextract.variants()</a></code> and <code><a href="../reference/ggenome.implant.html">ggenome.implant()</a></code> accept sequences with bytes above 127.</p></li>
+<li><p><code><a href="../reference/gintervals.2d.intersect.html">gintervals.2d.intersect()</a></code> reports an <code>NA</code> or infinite coordinate as “Invalid format of interval”.</p></li>
+<li><p><code><a href="../reference/gdataset.ls.html">gdataset.ls()</a></code> and <code><a href="../reference/gdb.reload.html">gdb.reload()</a></code> no longer fail with “invalid connection” or leave connections open when a <code>.db.cache</code> file cannot be read.</p></li>
 </ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="5.18.0" id="misha-5180">misha 5.18.0<a class="anchor" aria-label="anchor" href="#misha-5180"></a></h2>
