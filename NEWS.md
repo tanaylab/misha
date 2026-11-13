@@ -1,34 +1,34 @@
 # misha 5.18.1
 
-* **Behavior fix:** `gseq.pwm()` and `gseq.kmer()` scan to the end of a sequence with non-ASCII characters.
+* **Behavior fix:** `gseq.pwm()` and `gseq.kmer()` scan to the end of sequences with non-ASCII characters.
 
-* `gextract.variants()` and `ggenome.implant()` accept sequences with bytes above 127.
+* `gextract.variants()` and `ggenome.implant()` accept sequences with non-ASCII characters.
 
-* `gintervals.2d.intersect()` reports an `NA` or infinite coordinate as "Invalid format of interval".
+* `gintervals.2d.intersect()` gives a clear error for an `NA` or infinite coordinate.
 
-* `gdataset.ls()` and `gdb.reload()` no longer fail with "invalid connection" or leave connections open when a `.db.cache` file cannot be read.
+* `gdataset.ls()` and `gdb.reload()` no longer fail with "invalid connection" when a database cache file is unreadable.
 
 # misha 5.18.0
 
-* **Behavior fix:** the `"discard"` overlap policies of `gintervals.load_chain()`, `gintervals.liftover()` and `gtrack.liftover()` drop only the bases covered by more than one chain interval, not whole intervals.
+* **Behavior fix:** the `"discard"` overlap policies of `gintervals.load_chain()`, `gintervals.liftover()` and `gtrack.liftover()` drop only the overlapping bases, not whole chain intervals.
 
-* New overlap policy `"discard_intervals"`: drops every chain interval involved in an overlap.
+* New overlap policy `"discard_intervals"` drops every chain interval involved in an overlap.
 
 * `tgt_overlap_policy = "auto*"` returns a winning minus-strand chain interval as one interval.
 
-* **Behavior fix:** `gintervals.liftover()` and `gtrack.liftover()` resolve the source overlaps of a chain before its target overlaps, as `gintervals.load_chain()` does.
+* **Behavior fix:** `gintervals.liftover()` and `gtrack.liftover()` resolve source overlaps before target overlaps, as `gintervals.load_chain()` does.
 
-* **Behavior fix:** `gtrack.liftover()` of a sparse track aggregates each overlapping stretch separately, as `gintervals.liftover(value_col =)` does.
+* **Behavior fix:** `gtrack.liftover()` of a sparse track aggregates each overlapping stretch separately.
 
-* **Behavior fix:** `multi_target_agg = "first"`, `"last"` and `"nth"` in `gintervals.liftover()` and `gtrack.liftover()` order the lifted pieces by position, then by chain id, not by value.
+* **Behavior fix:** liftover `multi_target_agg = "first"`, `"last"` and `"nth"` order pieces by position, not by value.
 
 * **Behavior fix:** `gtrack.liftover(multi_target_agg = "count")` of a dense track gives 0, not `NaN`, where nothing maps.
 
 * **Behavior fix:** 2D virtual tracks (`avg`, `min`, `max`, `weighted.sum`) and 2D track expressions skip NaN values.
 
-* **Behavior fix:** `gseq.kmer()` and `gseq.pwm()` match the kmer and pwm virtual tracks: `gseq.kmer(strand = 0)` sums both strands, and `extend` lets a match run past `end_pos` only.
+* **Behavior fix:** `gseq.kmer()` and `gseq.pwm()` match their virtual tracks: `strand = 0` sums both strands, and `extend` runs past `end_pos` only.
 
-* **Behavior fix:** `pwm.count` and `gseq.pwm(mode = "count")` give `NA` where there is no window to count (a sequence or chromosome end shorter than the motif), as the other pwm functions do.
+* **Behavior fix:** `pwm.count` and `gseq.pwm(mode = "count")` give `NA` where no motif fits.
 
 * **Behavior fix:** `gseq.pwm()` and `gseq.kmer()` give `NA` for an `NA` sequence.
 
