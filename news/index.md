@@ -1,5 +1,13 @@
 # Changelog
 
+## misha 5.18.1
+
+- [`gdataset.ls()`](https://tanaylab.github.io/misha/reference/gdataset.ls.md)
+  and
+  [`gdb.reload()`](https://tanaylab.github.io/misha/reference/gdb.reload.md)
+  no longer fail with “invalid connection” or leave connections open
+  when a `.db.cache` file cannot be read.
+
 ## misha 5.18.0
 
 - **Behavior fix:** the `"discard"` overlap policies of

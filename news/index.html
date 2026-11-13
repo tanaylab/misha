@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">misha</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.18.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.18.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -39,6 +39,11 @@
       <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="5.18.1" id="misha-5181">misha 5.18.1<a class="anchor" aria-label="anchor" href="#misha-5181"></a></h2>
+<ul><li>
+<code><a href="../reference/gdataset.ls.html">gdataset.ls()</a></code> and <code><a href="../reference/gdb.reload.html">gdb.reload()</a></code> no longer fail with “invalid connection” or leave connections open when a <code>.db.cache</code> file cannot be read.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="5.18.0" id="misha-5180">misha 5.18.0<a class="anchor" aria-label="anchor" href="#misha-5180"></a></h2>
 <ul><li><p><strong>Behavior fix:</strong> the <code>"discard"</code> overlap policies of <code><a href="../reference/gintervals.load_chain.html">gintervals.load_chain()</a></code>, <code><a href="../reference/gintervals.liftover.html">gintervals.liftover()</a></code> and <code><a href="../reference/gtrack.liftover.html">gtrack.liftover()</a></code> drop only the bases covered by more than one chain interval, not whole intervals.</p></li>
