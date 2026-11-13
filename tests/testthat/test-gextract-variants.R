@@ -302,3 +302,25 @@ test_that("a reach with zero span reads nothing and gives NULL", {
     gvtrack.iterator("v_empty", sshift = 0, eshift = -1)
     expect_null(gextract.variants("v_empty", gintervals(1, 1000, 1003), iterator = 1))
 })
+
+test_that("a reference byte >= 128 reads as no base, as N does", {
+    local_db_state()
+    seq <- charToRaw(variant_test_seq(seed = 11L))
+    seq[101] <- charToRaw("N")
+    db_n <- make_seq_db(rawToChar(seq))
+    db_b <- make_seq_db(rawToChar(seq))
+    # gdb.create() refuses such a byte in a FASTA, so it goes into the sequence file directly
+    seq_file <- file.path(db_b, "seq", "genome.seq")
+    expect_equal(file.size(seq_file), length(seq))
+    seq[101] <- as.raw(0xe9)
+    writeBin(seq, seq_file)
+    run <- function(db) {
+        suppressMessages(gsetroot(db))
+        define_variant_vtracks()
+        gextract.variants("v_kmer", gintervals("chr1", 96, 106), iterator = 1)
+    }
+    res_b <- run(db_b)
+    expect_equal(charToRaw(gseq.extract(gintervals("chr1", 100, 101))), as.raw(0xe9))
+    expect_false(100 %in% res_b$pos)
+    expect_equal(res_b, run(db_n))
+})

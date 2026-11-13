@@ -107,7 +107,7 @@ gextract.variants <- function(expr = NULL, intervals = NULL, variants = NULL, it
     if (!is.null(variants)) {
         variants <- .gvariants_check(variants)
         # Checked once, against the genome, whether or not any bin reads them.
-        genome_ref <- toupper(gseq.extract(data.frame(chrom = variants$chrom, start = variants$pos, end = variants$pos + 1)))
+        genome_ref <- .gseq_toupper(gseq.extract(data.frame(chrom = variants$chrom, start = variants$pos, end = variants$pos + 1)))
         variants$ok <- genome_ref == variants$ref
         if (!all(variants$ok)) {
             warning(sprintf(
@@ -212,8 +212,9 @@ gextract.variants <- function(expr = NULL, intervals = NULL, variants = NULL, it
     span_hi <- pmin(bins$end + max(reach[, "hi"]), chrom_size)
     has <- span_hi > span_lo
     seqs <- rep(NA_character_, nrow(bins))
-    seqs[has] <- toupper(gseq.extract(data.frame(chrom = bins$chrom[has], start = span_lo[has], end = span_hi[has])))
+    seqs[has] <- .gseq_toupper(gseq.extract(data.frame(chrom = bins$chrom[has], start = span_lo[has], end = span_hi[has])))
     off <- p$pos - span_lo[p$bin] + 1
+    Encoding(seqs) <- "bytes" # so that substr() counts bytes, as off does
     p$ref <- substr(seqs[p$bin], off, off)
     p
 }

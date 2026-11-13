@@ -52,6 +52,21 @@ test_that("ggenome.implant replaces intervals with literal sequences", {
     expect_equal(seqs[["chrB"]], "TTTTAAAA")
 })
 
+test_that("ggenome.implant takes a donor with a byte >= 128", {
+    local_db_state()
+    ref_fasta <- tempfile(fileext = ".fa")
+    out_fasta <- tempfile(fileext = ".fa")
+    withr::defer(unlink(c(ref_fasta, out_fasta, paste0(out_fasta, ".fai"))))
+    cat(">chrA\nACGTACGTAC\n", file = ref_fasta)
+
+    donor <- rawToChar(as.raw(c(0x61, 0xe9, 0x63, 0x67)))
+    ggenome.implant(data.frame(chrom = "chrA", start = 2, end = 6), donor, out_fasta,
+        genome_fasta = ref_fasta, create_trackdb = FALSE, overwrite = TRUE
+    )
+    out <- readBin(out_fasta, "raw", file.size(out_fasta))
+    expect_equal(out, charToRaw(paste0(">chrA\nAC", rawToChar(as.raw(c(0x41, 0xe9, 0x43, 0x47))), "GTAC\n")))
+})
+
 test_that("ggenome.implant handles multiple perturbations on same chromosome", {
     local_db_state()
 

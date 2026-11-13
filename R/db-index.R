@@ -660,11 +660,11 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
 
                     # Read from old file
                     old_con <- file(seq_file, "rb")
-                    old_seq <- toupper(rawToChar(readBin(old_con, "raw", n = 100)))
+                    old_seq <- .gseq_toupper(rawToChar(readBin(old_con, "raw", n = 100)))
                     close(old_con)
 
                     # Extract from indexed format
-                    new_seq <- toupper(gseq.extract(gintervals(chrom_name, 0, min(100, updated_chrom_sizes$size[i]))))
+                    new_seq <- .gseq_toupper(gseq.extract(gintervals(chrom_name, 0, min(100, updated_chrom_sizes$size[i]))))
 
                     if (old_seq != new_seq) {
                         if (verbose) {

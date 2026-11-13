@@ -56,3 +56,12 @@ test_that("2D set ops reject 1D intervals", {
     expect_error(gintervals.2d.intersect(iv1, iv1), "2D")
     expect_error(gintervals.2d.union(iv1, iv1), "2D")
 })
+
+test_that("gintervals.2d.intersect refuses an NA or infinite coordinate", {
+    a <- gintervals.2d("chr1", 0, 100, "chr2", 0, 100)
+    b <- rbind(a, a)
+    b$end2[2] <- NA
+    expect_error(gintervals.2d.intersect(a, b), "Invalid format of interval at index 2")
+    b$end2[2] <- Inf
+    expect_error(gintervals.2d.intersect(b, a), "Invalid format of interval at index 2")
+})

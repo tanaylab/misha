@@ -2465,3 +2465,18 @@ test_that("gseq.pwm count separates 'counted nothing' from 'nothing to count', a
     }
     expect_equal(gseq.kmer(c(NA, "AA"), "A", strand = 1), c(NA, 2))
 })
+
+test_that("gseq.kmer and gseq.pwm take a sequence's length in bytes", {
+    # a 2-byte UTF-8 character, a byte that is not UTF-8, and plain ASCII: ACGT is found in each
+    s <- c(paste0("é", "ACGT"), rawToChar(as.raw(c(0xe9, 0x41, 0x43, 0x47, 0x54))), "ACGT")
+    expect_equal(gseq.kmer(s, "ACGT", mode = "count", strand = 1), c(1, 1, 1))
+    pssm <- data.frame(A = c(1, 0, 0, 0), C = c(0, 1, 0, 0), G = c(0, 0, 1, 0), T = c(0, 0, 0, 1))
+    m <- gseq.pwm(s, pssm, mode = "max", bidirect = FALSE, prior = 0.01)
+    expect_equal(m[1:2], rep(m[3], 2))
+})
+
+test_that("DNA is upper-cased byte by byte", {
+    x <- c(rawToChar(as.raw(c(0x61, 0xe9, 0x63, 0x67))), "acgtN", NA)
+    expect_equal(lapply(misha:::.gseq_toupper(x)[1:2], charToRaw), list(as.raw(c(0x41, 0xe9, 0x43, 0x47)), charToRaw("ACGTN")))
+    expect_true(is.na(misha:::.gseq_toupper(x)[3]))
+})

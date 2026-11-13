@@ -162,7 +162,7 @@ ggenome.implant <- function(intervals, donor, output, genome_fasta = NULL,
 
     # --- validate donor sequence lengths match interval widths ---
     interval_widths <- intervals$end - intervals$start
-    donor_widths <- nchar(donor_seqs)
+    donor_widths <- nchar(donor_seqs, type = "bytes")
     mismatches <- which(donor_widths != interval_widths)
     if (length(mismatches) > 0L) {
         first_mm <- mismatches[1L]
@@ -194,7 +194,7 @@ ggenome.implant <- function(intervals, donor, output, genome_fasta = NULL,
         as.character(intervals$chrom),
         as.integer(intervals$start),
         as.integer(intervals$end),
-        toupper(donor_seqs),
+        .gseq_toupper(donor_seqs),
         as.integer(line_width)
     )
 

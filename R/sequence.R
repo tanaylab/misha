@@ -97,10 +97,13 @@ gseq.comp <- function(seq) {
     return(comp_s)
 }
 
+# toupper() for DNA, byte by byte: toupper() fails on a sequence byte >= 128 in a UTF-8 locale
+.gseq_toupper <- function(x) gsub("([a-z]+)", "\\U\\1", x, perl = TRUE, useBytes = TRUE)
+
 # Helper function to normalize ROI bounds for sequence scoring
 .normalize_bounds <- function(seqs, start_pos, end_pos, extend) {
     n <- length(seqs)
-    L <- nchar(seqs, type = "chars", allowNA = TRUE, keepNA = TRUE)
+    L <- nchar(seqs, type = "bytes", keepNA = TRUE)
 
     # Handle start_pos and end_pos (can be NULL, scalar, or vector)
     roi_start <- if (is.null(start_pos)) rep.int(1L, n) else rep_len(as.integer(start_pos), n)

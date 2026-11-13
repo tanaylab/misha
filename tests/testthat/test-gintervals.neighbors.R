@@ -63,7 +63,7 @@ test_that("columns are maintained", {
     res <- gintervals.neighbors(intervs1, intervs2, 1)
     expect_true(all(colnames(res) %in% c("chrom", "start", "end", "chrom1", "start1", "end1", "usercol1", "usercol2", "dist")))
     expect_true(all(c("usercol1", "usercol2") %in% colnames(res)))
-    expect_regression(res, "gintervals.neighbors.8")
+    expect_regression(res, "gintervals.neighbors.8_v2")
 })
 
 test_that("columns are maintained (2d)", {
