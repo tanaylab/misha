@@ -36,28 +36,28 @@
   <main id="main" class="col-md-9"><div class="page-header">
 
       <h1>Changelog</h1>
-      <small>Source: <a href="https://github.com/tanaylab/misha/blob/v5.18.1/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
+      <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="5.18.1" id="misha-5181">misha 5.18.1<a class="anchor" aria-label="anchor" href="#misha-5181"></a></h2>
-<ul><li><p><strong>Behavior fix:</strong> <code><a href="../reference/gseq.pwm.html">gseq.pwm()</a></code> and <code><a href="../reference/gseq.kmer.html">gseq.kmer()</a></code> scan to the end of a sequence with non-ASCII characters.</p></li>
-<li><p><code><a href="../reference/gextract.variants.html">gextract.variants()</a></code> and <code><a href="../reference/ggenome.implant.html">ggenome.implant()</a></code> accept sequences with bytes above 127.</p></li>
-<li><p><code><a href="../reference/gintervals.2d.intersect.html">gintervals.2d.intersect()</a></code> reports an <code>NA</code> or infinite coordinate as “Invalid format of interval”.</p></li>
-<li><p><code><a href="../reference/gdataset.ls.html">gdataset.ls()</a></code> and <code><a href="../reference/gdb.reload.html">gdb.reload()</a></code> no longer fail with “invalid connection” or leave connections open when a <code>.db.cache</code> file cannot be read.</p></li>
+<ul><li><p><strong>Behavior fix:</strong> <code><a href="../reference/gseq.pwm.html">gseq.pwm()</a></code> and <code><a href="../reference/gseq.kmer.html">gseq.kmer()</a></code> scan to the end of sequences with non-ASCII characters.</p></li>
+<li><p><code><a href="../reference/gextract.variants.html">gextract.variants()</a></code> and <code><a href="../reference/ggenome.implant.html">ggenome.implant()</a></code> accept sequences with non-ASCII characters.</p></li>
+<li><p><code><a href="../reference/gintervals.2d.intersect.html">gintervals.2d.intersect()</a></code> gives a clear error for an <code>NA</code> or infinite coordinate.</p></li>
+<li><p><code><a href="../reference/gdataset.ls.html">gdataset.ls()</a></code> and <code><a href="../reference/gdb.reload.html">gdb.reload()</a></code> no longer fail with “invalid connection” when a database cache file is unreadable.</p></li>
 </ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="5.18.0" id="misha-5180">misha 5.18.0<a class="anchor" aria-label="anchor" href="#misha-5180"></a></h2>
-<ul><li><p><strong>Behavior fix:</strong> the <code>"discard"</code> overlap policies of <code><a href="../reference/gintervals.load_chain.html">gintervals.load_chain()</a></code>, <code><a href="../reference/gintervals.liftover.html">gintervals.liftover()</a></code> and <code><a href="../reference/gtrack.liftover.html">gtrack.liftover()</a></code> drop only the bases covered by more than one chain interval, not whole intervals.</p></li>
-<li><p>New overlap policy <code>"discard_intervals"</code>: drops every chain interval involved in an overlap.</p></li>
+<ul><li><p><strong>Behavior fix:</strong> the <code>"discard"</code> overlap policies of <code><a href="../reference/gintervals.load_chain.html">gintervals.load_chain()</a></code>, <code><a href="../reference/gintervals.liftover.html">gintervals.liftover()</a></code> and <code><a href="../reference/gtrack.liftover.html">gtrack.liftover()</a></code> drop only the overlapping bases, not whole chain intervals.</p></li>
+<li><p>New overlap policy <code>"discard_intervals"</code> drops every chain interval involved in an overlap.</p></li>
 <li><p><code>tgt_overlap_policy = "auto*"</code> returns a winning minus-strand chain interval as one interval.</p></li>
-<li><p><strong>Behavior fix:</strong> <code><a href="../reference/gintervals.liftover.html">gintervals.liftover()</a></code> and <code><a href="../reference/gtrack.liftover.html">gtrack.liftover()</a></code> resolve the source overlaps of a chain before its target overlaps, as <code><a href="../reference/gintervals.load_chain.html">gintervals.load_chain()</a></code> does.</p></li>
-<li><p><strong>Behavior fix:</strong> <code><a href="../reference/gtrack.liftover.html">gtrack.liftover()</a></code> of a sparse track aggregates each overlapping stretch separately, as <code>gintervals.liftover(value_col =)</code> does.</p></li>
-<li><p><strong>Behavior fix:</strong> <code>multi_target_agg = "first"</code>, <code>"last"</code> and <code>"nth"</code> in <code><a href="../reference/gintervals.liftover.html">gintervals.liftover()</a></code> and <code><a href="../reference/gtrack.liftover.html">gtrack.liftover()</a></code> order the lifted pieces by position, then by chain id, not by value.</p></li>
+<li><p><strong>Behavior fix:</strong> <code><a href="../reference/gintervals.liftover.html">gintervals.liftover()</a></code> and <code><a href="../reference/gtrack.liftover.html">gtrack.liftover()</a></code> resolve source overlaps before target overlaps, as <code><a href="../reference/gintervals.load_chain.html">gintervals.load_chain()</a></code> does.</p></li>
+<li><p><strong>Behavior fix:</strong> <code><a href="../reference/gtrack.liftover.html">gtrack.liftover()</a></code> of a sparse track aggregates each overlapping stretch separately.</p></li>
+<li><p><strong>Behavior fix:</strong> liftover <code>multi_target_agg = "first"</code>, <code>"last"</code> and <code>"nth"</code> order pieces by position, not by value.</p></li>
 <li><p><strong>Behavior fix:</strong> <code>gtrack.liftover(multi_target_agg = "count")</code> of a dense track gives 0, not <code>NaN</code>, where nothing maps.</p></li>
 <li><p><strong>Behavior fix:</strong> 2D virtual tracks (<code>avg</code>, <code>min</code>, <code>max</code>, <code>weighted.sum</code>) and 2D track expressions skip NaN values.</p></li>
-<li><p><strong>Behavior fix:</strong> <code><a href="../reference/gseq.kmer.html">gseq.kmer()</a></code> and <code><a href="../reference/gseq.pwm.html">gseq.pwm()</a></code> match the kmer and pwm virtual tracks: <code>gseq.kmer(strand = 0)</code> sums both strands, and <code>extend</code> lets a match run past <code>end_pos</code> only.</p></li>
-<li><p><strong>Behavior fix:</strong> <code>pwm.count</code> and <code>gseq.pwm(mode = "count")</code> give <code>NA</code> where there is no window to count (a sequence or chromosome end shorter than the motif), as the other pwm functions do.</p></li>
+<li><p><strong>Behavior fix:</strong> <code><a href="../reference/gseq.kmer.html">gseq.kmer()</a></code> and <code><a href="../reference/gseq.pwm.html">gseq.pwm()</a></code> match their virtual tracks: <code>gseq.kmer(strand = 0)</code> sums both strands, and <code>extend</code> runs past <code>end_pos</code> only.</p></li>
+<li><p><strong>Behavior fix:</strong> <code>pwm.count</code> and <code>gseq.pwm(mode = "count")</code> give <code>NA</code> where no motif fits.</p></li>
 <li><p><strong>Behavior fix:</strong> <code><a href="../reference/gseq.pwm.html">gseq.pwm()</a></code> and <code><a href="../reference/gseq.kmer.html">gseq.kmer()</a></code> give <code>NA</code> for an <code>NA</code> sequence.</p></li>
 </ul></div>
     <div class="section level2">

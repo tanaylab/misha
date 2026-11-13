@@ -6,22 +6,21 @@
   [`gseq.pwm()`](https://tanaylab.github.io/misha/reference/gseq.pwm.md)
   and
   [`gseq.kmer()`](https://tanaylab.github.io/misha/reference/gseq.kmer.md)
-  scan to the end of a sequence with non-ASCII characters.
+  scan to the end of sequences with non-ASCII characters.
 
 - [`gextract.variants()`](https://tanaylab.github.io/misha/reference/gextract.variants.md)
   and
   [`ggenome.implant()`](https://tanaylab.github.io/misha/reference/ggenome.implant.md)
-  accept sequences with bytes above 127.
+  accept sequences with non-ASCII characters.
 
 - [`gintervals.2d.intersect()`](https://tanaylab.github.io/misha/reference/gintervals.2d.intersect.md)
-  reports an `NA` or infinite coordinate as “Invalid format of
-  interval”.
+  gives a clear error for an `NA` or infinite coordinate.
 
 - [`gdataset.ls()`](https://tanaylab.github.io/misha/reference/gdataset.ls.md)
   and
   [`gdb.reload()`](https://tanaylab.github.io/misha/reference/gdb.reload.md)
-  no longer fail with “invalid connection” or leave connections open
-  when a `.db.cache` file cannot be read.
+  no longer fail with “invalid connection” when a database cache file is
+  unreadable.
 
 ## misha 5.18.0
 
@@ -30,10 +29,9 @@
   [`gintervals.liftover()`](https://tanaylab.github.io/misha/reference/gintervals.liftover.md)
   and
   [`gtrack.liftover()`](https://tanaylab.github.io/misha/reference/gtrack.liftover.md)
-  drop only the bases covered by more than one chain interval, not whole
-  intervals.
+  drop only the overlapping bases, not whole chain intervals.
 
-- New overlap policy `"discard_intervals"`: drops every chain interval
+- New overlap policy `"discard_intervals"` drops every chain interval
   involved in an overlap.
 
 - `tgt_overlap_policy = "auto*"` returns a winning minus-strand chain
@@ -43,21 +41,16 @@
   [`gintervals.liftover()`](https://tanaylab.github.io/misha/reference/gintervals.liftover.md)
   and
   [`gtrack.liftover()`](https://tanaylab.github.io/misha/reference/gtrack.liftover.md)
-  resolve the source overlaps of a chain before its target overlaps, as
+  resolve source overlaps before target overlaps, as
   [`gintervals.load_chain()`](https://tanaylab.github.io/misha/reference/gintervals.load_chain.md)
   does.
 
 - **Behavior fix:**
   [`gtrack.liftover()`](https://tanaylab.github.io/misha/reference/gtrack.liftover.md)
-  of a sparse track aggregates each overlapping stretch separately, as
-  `gintervals.liftover(value_col =)` does.
+  of a sparse track aggregates each overlapping stretch separately.
 
-- **Behavior fix:** `multi_target_agg = "first"`, `"last"` and `"nth"`
-  in
-  [`gintervals.liftover()`](https://tanaylab.github.io/misha/reference/gintervals.liftover.md)
-  and
-  [`gtrack.liftover()`](https://tanaylab.github.io/misha/reference/gtrack.liftover.md)
-  order the lifted pieces by position, then by chain id, not by value.
+- **Behavior fix:** liftover `multi_target_agg = "first"`, `"last"` and
+  `"nth"` order pieces by position, not by value.
 
 - **Behavior fix:** `gtrack.liftover(multi_target_agg = "count")` of a
   dense track gives 0, not `NaN`, where nothing maps.
@@ -69,12 +62,11 @@
   [`gseq.kmer()`](https://tanaylab.github.io/misha/reference/gseq.kmer.md)
   and
   [`gseq.pwm()`](https://tanaylab.github.io/misha/reference/gseq.pwm.md)
-  match the kmer and pwm virtual tracks: `gseq.kmer(strand = 0)` sums
-  both strands, and `extend` lets a match run past `end_pos` only.
+  match their virtual tracks: `gseq.kmer(strand = 0)` sums both strands,
+  and `extend` runs past `end_pos` only.
 
 - **Behavior fix:** `pwm.count` and `gseq.pwm(mode = "count")` give `NA`
-  where there is no window to count (a sequence or chromosome end
-  shorter than the motif), as the other pwm functions do.
+  where no motif fits.
 
 - **Behavior fix:**
   [`gseq.pwm()`](https://tanaylab.github.io/misha/reference/gseq.pwm.md)
