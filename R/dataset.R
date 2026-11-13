@@ -597,17 +597,7 @@ gdataset.ls <- function(dataframe = FALSE) {
         cache_path <- file.path(db, ".db.cache")
         used_cache <- FALSE
         if (file.exists(cache_path) && !.gdb.cache_is_dirty(db)) {
-            res <- tryCatch(
-                {
-                    f <- file(cache_path, "rb")
-                    on.exit(close(f), add = TRUE)
-                    data <- unserialize(f)
-                    close(f)
-                    on.exit(NULL)
-                    data
-                },
-                error = function(e) NULL
-            )
+            res <- .gdb.cache_read_file(cache_path)
             if (!is.null(res) && length(res) >= 2) {
                 result$tracks_total[i] <- length(res[[1]])
                 result$intervals_total[i] <- length(res[[2]])
@@ -780,17 +770,7 @@ gdataset.example_path <- function() {
     # Try to read .db.cache first (fastest path)
     cache_path <- file.path(db, ".db.cache")
     if (file.exists(cache_path) && !.gdb.cache_is_dirty(db)) {
-        res <- tryCatch(
-            {
-                f <- file(cache_path, "rb")
-                on.exit(close(f))
-                data <- unserialize(f)
-                close(f)
-                on.exit(NULL)
-                data
-            },
-            error = function(e) NULL
-        )
+        res <- .gdb.cache_read_file(cache_path)
         if (!is.null(res) && length(res) >= 2) {
             return(list(tracks = res[[1]], intervals = res[[2]]))
         }
