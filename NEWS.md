@@ -26,7 +26,7 @@
 
 * **Behavior fix:** 2D virtual tracks (`avg`, `min`, `max`, `weighted.sum`) and 2D track expressions skip NaN values.
 
-* **Behavior fix:** `gseq.kmer()` and `gseq.pwm()` match their virtual tracks: `strand = 0` sums both strands, and `extend` runs past `end_pos` only.
+* **Behavior fix:** `gseq.kmer()` and `gseq.pwm()` match their virtual tracks: `gseq.kmer(strand = 0)` sums both strands, and `extend` runs past `end_pos` only.
 
 * **Behavior fix:** `pwm.count` and `gseq.pwm(mode = "count")` give `NA` where no motif fits.
 
