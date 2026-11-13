@@ -1979,3 +1979,39 @@ test_that("gdataset.load gives no warning for a dataset's index names", {
     gsetroot(p)
     expect_no_warning(suppressMessages(gdataset.load(d)))
 })
+
+test_that("unreadable .db.cache files fall back to a scan and leave no connection open", {
+    withr::with_tempdir({
+        for (d in c("work", "ds1", "ds2")) {
+            create_test_db(d)
+            gsetroot(d)
+            gtrack.create_sparse(paste0("t_", d), "x", gintervals(1, 0, 1000), 5)
+        }
+        # a truncated cache, as a reader sees one being replaced by another process
+        truncate_caches <- function() {
+            for (d in c("work", "ds1", "ds2")) {
+                p <- file.path(d, ".db.cache")
+                expect_true(file.exists(p))
+                writeBin(readBin(p, "raw", 1e6)[1:20], p)
+            }
+        }
+        n_open <- function() nrow(showConnections())
+        n0 <- n_open()
+
+        gsetroot("work")
+        gdataset.load("ds1")
+        truncate_caches()
+        expect_equal(gdataset.load("ds2")$tracks, 1)
+        expect_equal(n_open(), n0)
+
+        truncate_caches()
+        ls_res <- gdataset.ls(dataframe = TRUE)
+        expect_equal(ls_res$tracks_total, c(1, 1, 1))
+        expect_equal(n_open(), n0)
+
+        truncate_caches()
+        gdb.reload(rescan = FALSE)
+        expect_setequal(gtrack.ls(), c("t_work", "t_ds1", "t_ds2"))
+        expect_equal(n_open(), n0)
+    })
+})

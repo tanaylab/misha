@@ -1,3 +1,7 @@
+# misha 5.18.1
+
+* `gdataset.ls()` and `gdb.reload()` no longer fail with "invalid connection" or leave connections open when a `.db.cache` file cannot be read.
+
 # misha 5.18.0
 
 * **Behavior fix:** the `"discard"` overlap policies of `gintervals.load_chain()`, `gintervals.liftover()` and `gtrack.liftover()` drop only the bases covered by more than one chain interval, not whole intervals.

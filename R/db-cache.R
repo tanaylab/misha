@@ -94,17 +94,7 @@ gdb.reload <- function(rescan = TRUE) {
         use_cache <- !rescan && !.gdb.cache_is_dirty(groot)
         suppressWarnings({
             if (use_cache) {
-                retv <- try(
-                    {
-                        f <- file(db.filename, "rb")
-                        res <- unserialize(f)
-                        close(f)
-                    },
-                    silent = TRUE
-                )
-                if (inherits(retv, "try-error")) {
-                    res <- NULL
-                }
+                res <- .gdb.cache_read_file(db.filename)
             }
 
             if (is.null(res)) {
@@ -135,18 +125,7 @@ gdb.reload <- function(rescan = TRUE) {
 
             suppressWarnings({
                 if (use_cache) {
-                    retv <- try(
-                        {
-                            f <- file(db.filename, "rb")
-                            res <- unserialize(f)
-                            close(f)
-                        },
-                        silent = TRUE
-                    )
-
-                    if (inherits(retv, "try-error")) {
-                        res <- NULL
-                    }
+                    res <- .gdb.cache_read_file(db.filename)
                 }
 
                 if (is.null(res)) {
@@ -679,12 +658,7 @@ gdb.reload <- function(rescan = TRUE) {
     # which older versions read too
     success <- FALSE
     on.exit(if (!success) .gdb.cache_mark_dirty(groot), add = TRUE)
-    read_cache <- function() {
-        f <- file(cache_path, "rb")
-        on.exit(close(f))
-        unserialize(f)
-    }
-    lists <- tryCatch(read_cache(), error = function(e) NULL, warning = function(w) NULL)
+    lists <- .gdb.cache_read_file(cache_path)
     if (!is.list(lists) || length(lists) < 2) {
         return(invisible(FALSE))
     }
@@ -703,6 +677,19 @@ gdb.reload <- function(rescan = TRUE) {
         .gdb.cache_clear_dirty(groot, token)
     }
     invisible(success)
+}
+
+# Reads the lists of a .db.cache, or NULL when it cannot be read (missing, truncated, replaced
+# mid-read). The connection is closed here on every path: an on.exit() inside a caller's
+# tryCatch() stays registered on the caller after a failed read and closed a connection twice
+# ("invalid connection").
+.gdb.cache_read_file <- function(cache_path) {
+    f <- tryCatch(suppressWarnings(file(cache_path, "rb")), error = function(e) NULL)
+    if (is.null(f)) {
+        return(NULL)
+    }
+    on.exit(close(f))
+    tryCatch(suppressWarnings(unserialize(f)), error = function(e) NULL)
 }
 
 # Writes the lists of a .db.cache (a temporary file of this writer's renamed over it)
