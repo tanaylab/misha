@@ -142,7 +142,7 @@ gvtrack.info("vtrack1")
 #> [1] "avg"
 #> 
 #> $filter
-#> [1] "filter__tmp_Rtmpo94Kv6_trackdb_test_tracks_2_7d54e8370e6eb979"
+#> [1] "filter__tmp_Rtmp3eLIUJ_trackdb_test_tracks_2_7d54e8370e6eb979"
 #> 
 #> $filter_stats
 #> $filter_stats$num_chroms
