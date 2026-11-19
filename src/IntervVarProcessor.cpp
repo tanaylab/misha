@@ -214,17 +214,15 @@ void IntervVarProcessor::process_neighbor_count(
 		counted.reserve(eval_intervals.size() * 2);
 
 		for (const auto &eval_int : eval_intervals) {
-			auto it = lower_bound(expanded.begin(), expanded.end(), eval_int, GIntervals::compare_by_start_coord);
-
-			// Walk backward to the first interval on this chromosome
-			// Since intervals are only sorted by start (not end), we can't make assumptions
-			// about whether earlier intervals might have large spans that overlap the query
-			while (it != expanded.begin()) {
-				auto prev = it - 1;
-				if (prev->chromid != eval_int.chromid)
-					break;
-				--it;
-			}
+			// Start at the first interval of this chromosome whose running max end
+			// passes the query start: every interval before it ends by the query start.
+			// emax_end does not decrease within a chromosome, so this is a binary search.
+			size_t hi = lower_bound(expanded.begin(), expanded.end(), eval_int, GIntervals::compare_by_start_coord) - expanded.begin();
+			size_t lo = partition_point(expanded.begin(), expanded.begin() + hi,
+				[&](const GInterval &g) { return g.chromid < eval_int.chromid; }) - expanded.begin();
+			lo = partition_point(var.emax_end.begin() + lo, var.emax_end.begin() + hi,
+				[&](int64_t e) { return e <= eval_int.start; }) - var.emax_end.begin();
+			auto it = expanded.begin() + lo;
 
 			// Scan forward checking all intervals on this chromosome for overlaps
 			for (; it != expanded.end() && it->chromid == eval_int.chromid; ++it) {
