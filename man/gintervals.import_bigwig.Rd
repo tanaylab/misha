@@ -55,10 +55,9 @@ peaks <- gintervals(c(1, 2), c(1000, 3000), c(1500, 3600))
 signal <- gintervals.import_bigwig(f, peaks)
 head(signal)
 
-# the signal over each peak, without importing the file
-gvtrack.create("sig", src = gintervals.import_bigwig(f, peaks), func = "sum")
-gvtrack.create("sig_bp", src = signal, func = "weighted.sum")
-gextract(c("sig", "sig_bp"), peaks, iterator = peaks)
+# the signal summed over each peak's bases, without importing the file
+gvtrack.create("sig", src = signal, func = "weighted.sum")
+gextract("sig", peaks, iterator = peaks)
 
 }
 \seealso{
