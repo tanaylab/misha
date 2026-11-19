@@ -220,6 +220,172 @@ gextract <- function(..., intervals = NULL, colnames = NULL, iterator = NULL, ba
 }
 
 
+#' Returns track expression values over equal-width intervals as a matrix
+#'
+#' Evaluates track expressions in fixed bins over each interval, like
+#' \code{\link{gextract}} with an iterator, and returns the values as a matrix
+#' with one row per interval and one column per bin.
+#'
+#' All intervals must have the same width \code{W}, and \code{iterator} must
+#' divide it. Row \code{i} of the result holds the values of row \code{i} of
+#' 'intervals', in \code{W / iterator} columns ordered by genomic coordinate,
+#' left to right. A 'strand' column is ignored: columns are in genomic order on
+#' both strands. Rows may be unsorted, duplicated, overlapping or on several
+#' chromosomes; each one is extracted on its own.
+#'
+#' The bins start at each interval's start, as in
+#' \code{\link{giterator.intervals}} with \code{interval_relative = TRUE}:
+#' column \code{j} of row \code{i} covers \code{[start_i + (j - 1) * iterator,
+#' start_i + j * iterator)}. When every start is a multiple of \code{iterator}
+#' these are the bins of gextract's numeric iterator. As in gextract, an
+#' interval that extends past the end of its chromosome is an error.
+#'
+#' Each value is the one gextract returns for that bin as an iterator interval,
+#' NaN included. For a dense track, a bin that overlaps several of the track's
+#' bins gets the plain mean of their non-NaN values, not weighted by the length
+#' of each overlap. The result is allocated once and filled by calling gextract
+#' on consecutive chunks of 'intervals', so memory use stays close to the size
+#' of the result.
+#'
+#' @param ... track expressions, as in \code{\link{gextract}}
+#' @param intervals 1D intervals of equal width: a data frame or the name of
+#' an intervals set
+#' @param iterator bin size: a positive integer that divides the width of the
+#' intervals
+#' @param colnames names of the third dimension when there are several
+#' expressions. If 'NULL' the names are the track expressions.
+#' @return For one track expression, a numeric matrix with \code{nrow(intervals)}
+#' rows and \code{W / iterator} columns. For several, a numeric array of
+#' dimensions \code{nrow(intervals)}, \code{W / iterator} and the number of
+#' expressions.
+#' @seealso \code{\link{gextract}}, \code{\link{giterator.intervals}}
+#' @keywords ~extract
+#' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
+#'
+#' gdb.init_examples()
+#' intervs <- gintervals(c(1, 2), c(1000, 2000), c(1100, 2100))
+#'
+#' ## per-base values: a 2 x 100 matrix
+#' m <- gextract.matrix("dense_track", intervals = intervs)
+#' dim(m)
+#'
+#' ## a 0/1 mask of the intervals of 'annotations' inside each interval
+#' gvtrack.create("annot_cov", "annotations", func = "coverage")
+#' mask <- gextract.matrix("annot_cov", intervals = intervs)
+#' rowSums(mask)
+#'
+#' ## two expressions in 10 bp bins: a 2 x 10 x 2 array
+#' a <- gextract.matrix("dense_track", "sparse_track",
+#'     intervals = intervs, iterator = 10,
+#'     colnames = c("dense", "sparse")
+#' )
+#' a[, , "dense"]
+#'
+#' ## 32 bp bins counted from each start: a 2 x 3 matrix
+#' gextract.matrix("dense_track",
+#'     intervals = gintervals(c(1, 2), c(1005, 2017), c(1101, 2113)),
+#'     iterator = 32
+#' )
+#'
+#' @inheritSection misha-NaN NaN values
+#' @export gextract.matrix
+gextract.matrix <- function(..., intervals = NULL, iterator = 1, colnames = NULL) {
+    args <- as.list(substitute(list(...)))[-1L]
+    if (is.null(intervals) && length(args) < 2 || !is.null(intervals) && length(args) < 1) {
+        stop("Usage: gextract.matrix([expr]+, intervals, iterator = 1, colnames = NULL)", call. = FALSE)
+    }
+    .gcheckroot()
+
+    if (is.null(intervals)) {
+        intervals <- eval.parent(args[[length(args)]])
+        args <- args[-length(args)]
+    }
+
+    exprs <- c()
+    for (track in args) {
+        exprs <- c(exprs, do.call(.gexpr2str, list(track), envir = parent.frame()))
+    }
+    if (is.null(colnames)) {
+        colnames <- exprs
+    } else if (length(colnames) != length(exprs)) {
+        stop("Number of column names must match the number of track expressions", call. = FALSE)
+    }
+
+    if (is.character(intervals) && length(intervals) == 1) {
+        intervals <- gintervals.load(intervals)
+    }
+    if (!is.data.frame(intervals) || !isTRUE(.gintervals.is1d(intervals))) {
+        stop("intervals must be 1D intervals", call. = FALSE)
+    }
+    if (!nrow(intervals)) {
+        stop("intervals is empty", call. = FALSE)
+    }
+    if (!is.numeric(iterator) || length(iterator) != 1 || !is.finite(iterator) || iterator <= 0 || iterator != round(iterator)) {
+        stop("iterator must be a positive integer bin size", call. = FALSE)
+    }
+
+    starts <- intervals$start
+    width <- intervals$end[1] - starts[1]
+    if (!isTRUE(all(intervals$end - starts == width)) || width <= 0) {
+        stop("All intervals must have the same positive width", call. = FALSE)
+    }
+    if (width %% iterator != 0) {
+        stop(sprintf("iterator (%g) does not divide the width of the intervals (%g)", iterator, width), call. = FALSE)
+    }
+    # gextract's numeric iterator places bins at multiples of iterator on the
+    # chromosome; they are the interval-relative bins only when every start is
+    # on that grid
+    relative <- any(starts %% iterator != 0)
+
+    num_intervals <- nrow(intervals)
+    num_bins <- width / iterator
+    num_exprs <- length(exprs)
+    res_size <- num_intervals * num_bins
+
+    res <- array(NA_real_, dim = c(num_intervals, num_bins, num_exprs))
+    intervals <- intervals[, c("chrom", "start", "end")]
+    # about 1e7 values per gextract call, within gmax.data.size rows
+    chunk_rows <- max(1, floor(min(1e7 / num_exprs, .ggetOption("gmax.data.size", 1e7)) / num_bins))
+
+    for (first in seq(1, num_intervals, by = chunk_rows)) {
+        rows <- first:min(first + chunk_rows - 1, num_intervals)
+        if (relative) {
+            bins <- giterator.intervals(NULL, intervals[rows, ], iterator = iterator, interval_relative = TRUE)
+            bin_rows <- bins$intervalID
+            bins <- bins[, c("chrom", "start", "end")]
+            # the bins are also the scope: as an iterator alone, overlapping bins
+            # of different intervals are merged into one block, but each scope
+            # interval gets its own row, with intervalID pointing into bins
+            vals <- gextract(exprs, intervals = bins, iterator = bins)
+            win <- bin_rows[vals$intervalID]
+            rm(bins, bin_rows)
+        } else {
+            vals <- gextract(exprs, intervals = intervals[rows, ], iterator = iterator)
+            win <- vals$intervalID
+        }
+        # rows of vals map to cells by interval and start, not by their order
+        idx <- (first - 1) + win + (vals$start - starts[rows][win]) / iterator * num_intervals
+        for (i in seq_len(num_exprs)) {
+            res[idx + (i - 1) * res_size] <- vals[[3 + i]]
+        }
+        # free the chunk before the next call; left to R's own schedule, the
+        # garbage of several chunks piles up next to the result
+        rm(vals, idx, win)
+        gc()
+    }
+
+    if (num_exprs == 1) {
+        dim(res) <- c(num_intervals, num_bins)
+    } else {
+        dimnames(res) <- list(NULL, NULL, colnames)
+    }
+    res
+}
+
+
 #' Calculates quantiles of a track expression
 #'
 #' Calculates the quantiles of a track expression for the given percentiles.

@@ -98,6 +98,7 @@ reference:
       - gintervals.annotate
       - gintervals.import_genes
       - gintervals.import_bed
+      - gintervals.import_bigwig
       - gintervals.import_gff
       - gintervals.import_vcf
       - gintervals.intersect
@@ -137,6 +138,7 @@ reference:
       - gcompute_strands_autocorr
       - gdist
       - gextract
+      - gextract.matrix
       - gextract.variants
       - glookup
       - gpartition

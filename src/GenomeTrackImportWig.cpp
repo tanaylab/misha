@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstdint>
 #include <cmath>
 #include <cstring>
@@ -119,6 +120,21 @@ void report_skipped_chroms(const char *fname, const UnknownChroms &unknown, uint
 	// Queued for .gcall() to raise once the call has returned (see add_pending_diagnostic
 	// for why it cannot be raised here), and only once the import can no longer fail.
 	add_pending_diagnostic(envir, severity, msg);
+}
+
+// Warns about the records of an import that ran past the end of their chromosome. Like
+// report_skipped_chroms, it may only be called once the import can no longer fail.
+static void report_clipped(const char *fname, uint64_t num_clipped, uint64_t num_dropped, const string &first_clipped, SEXP envir)
+{
+	if (!num_clipped && !num_dropped)
+		return;
+
+	char msg[10000];
+	snprintf(msg, sizeof(msg),
+	         "File %s: %llu record(s) running past the end of their chromosome were clipped to it, and %llu record(s) "
+	         "starting at or past the chromosome end were dropped; the first: %s",
+	         fname, (unsigned long long)num_clipped, (unsigned long long)num_dropped, first_clipped.c_str());
+	add_pending_diagnostic(envir, "warning", msg);
 }
 
 // Turns records into the bins of a dense track as they arrive. Records must be sorted and must
@@ -396,17 +412,9 @@ SEXP gtrackimportwig(SEXP _track, SEXP _wig, SEXP _srcname, SEXP _binsize, SEXP 
 
 		// Only now, when nothing downstream can throw, is it safe to leave a pending
 		// message behind for .gcall() to raise.
-		uint64_t num_clipped = is_bigwig ? bigwig.get_num_clipped() : is_csv ? csv.get_num_clipped() : wig.get_num_clipped();
-		uint64_t num_dropped = is_bigwig ? bigwig.get_num_dropped() : is_csv ? csv.get_num_dropped() : wig.get_num_dropped();
-		const string &first_clipped = is_bigwig ? bigwig.get_first_clipped() : is_csv ? csv.get_first_clipped() : wig.get_first_clipped();
-		if (num_clipped || num_dropped) {
-			char msg[10000];
-			snprintf(msg, sizeof(msg),
-			         "File %s: %llu record(s) running past the end of their chromosome were clipped to it, and %llu record(s) "
-			         "starting at or past the chromosome end were dropped; the first: %s",
-			         srcname, (unsigned long long)num_clipped, (unsigned long long)num_dropped, first_clipped.c_str());
-			add_pending_diagnostic(_envir, "warning", msg);
-		}
+		report_clipped(srcname, is_bigwig ? bigwig.get_num_clipped() : is_csv ? csv.get_num_clipped() : wig.get_num_clipped(),
+		               is_bigwig ? bigwig.get_num_dropped() : is_csv ? csv.get_num_dropped() : wig.get_num_dropped(),
+		               is_bigwig ? bigwig.get_first_clipped() : is_csv ? csv.get_first_clipped() : wig.get_first_clipped(), _envir);
 		report_skipped_chroms(srcname, unknown_chroms, num_matched_chroms, _envir);
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
@@ -415,6 +423,134 @@ SEXP gtrackimportwig(SEXP _track, SEXP _wig, SEXP _srcname, SEXP _binsize, SEXP 
     } catch (const std::exception &e) {
         rerror("%s", e.what());
     }
+
+	return R_NilValue;
+}
+
+// gintervals.import_bigwig: the records of a bigWig that overlap _intervals (all its records if
+// _intervals is NULL), as chrom, start, end, value, sorted
+SEXP gintervals_import_bigwig(SEXP _file, SEXP _intervals, SEXP _envir)
+{
+	try {
+		RdbInitializer rdb_init;
+
+		if (!Rf_isString(_file) || Rf_length(_file) != 1)
+			verror("File argument is not a string");
+
+		const char *fname = CHAR(STRING_ELT(_file, 0));
+		IntervUtils iu(_envir);
+		const GenomeChromKey &chromkey = iu.get_chromkey();
+		bool all = Rf_isNull(_intervals);
+		BigWig bigwig;
+		GIntervals query, chrom_query, data, res;
+
+		bigwig.init(chromkey, fname);
+		verify_chroms_matched(chromkey, fname, bigwig.get_unknown_chroms(), bigwig.get_num_matched_chroms(), _envir);
+
+		if (!all) {
+			iu.convert_rintervs(_intervals, &query, NULL);
+			query.sort();
+			query.unify_overlaps();
+		}
+
+		GIntervals::const_iterator iquery = query.begin();
+
+		for (int chromid = 0; chromid < (int)chromkey.get_num_chroms(); ++chromid) {
+			if (all) {
+				for (uint64_t iblock = 0; bigwig.get_data(chromid, iblock, data); ++iblock) {
+					res.insert(res.end(), data.begin(), data.end());
+					iu.verify_max_data_size(res.size(), "Result");
+					check_interrupt();
+				}
+			} else {
+				chrom_query.clear();
+				for (; iquery != query.end() && iquery->chromid == chromid; ++iquery)
+					chrom_query.push_back(*iquery);
+				if (!chrom_query.empty()) {
+					bigwig.get_data(chromid, chrom_query, data);
+					res.insert(res.end(), data.begin(), data.end());
+					iu.verify_max_data_size(res.size(), "Result");
+				}
+			}
+			check_interrupt();
+		}
+
+		// no record over the intervals is a zero-row result; a file of no records is an error
+		if (res.empty() && all)
+			verror("bigWig file %s contains no records", fname);
+
+		SEXP answer = iu.convert_intervs(&res, GInterval::NUM_COLS + 1, false);
+		SEXP values = rprotect_ptr(RSaneAllocVector(REALSXP, res.size()));
+
+		for (uint64_t i = 0; i < res.size(); ++i) {
+			float v;
+			memcpy(&v, &res[i].udata, sizeof(v));
+			REAL(values)[i] = v;
+		}
+		SET_VECTOR_ELT(answer, GInterval::NUM_COLS, values);
+		SET_STRING_ELT(Rf_getAttrib(answer, R_NamesSymbol), GInterval::NUM_COLS, RSaneMkChar("value"));
+
+		report_clipped(fname, bigwig.get_num_clipped(), bigwig.get_num_dropped(), bigwig.get_first_clipped(), _envir);
+		if (all)
+			report_skipped_chroms(fname, bigwig.get_unknown_chroms(), bigwig.get_num_matched_chroms(), _envir);
+		return answer;
+	} catch (TGLException &e) {
+		rerror("%s", e.msg());
+	} catch (const bad_alloc &e) {
+		rerror("Out of memory");
+	}
+
+	return R_NilValue;
+}
+
+// gintervals.import_bed of a bigBed: all its records, in file order, as chrom, start, end and the
+// fields the file declares past them
+SEXP gintervals_import_bigbed(SEXP _file, SEXP _envir)
+{
+	try {
+		RdbInitializer rdb_init;
+
+		if (!Rf_isString(_file) || Rf_length(_file) != 1)
+			verror("File argument is not a string");
+
+		const char *fname = CHAR(STRING_ELT(_file, 0));
+		IntervUtils iu(_envir);
+		BigWig bigbed;
+		BigWig::BedRecords records;
+
+		bigbed.init(iu.get_chromkey(), fname, true);
+		bigbed.read_bed(records);
+		verify_chroms_matched(iu.get_chromkey(), fname, bigbed.get_unknown_chroms(), bigbed.get_num_matched_chroms(), _envir);
+		iu.verify_max_data_size(records.intervals.size(), "Result");
+
+		const vector<BigWig::Field> &fields = bigbed.get_fields();
+		uint64_t num_records = records.intervals.size();
+		SEXP answer = iu.convert_intervs(&records.intervals, GInterval::NUM_COLS + fields.size(), false);
+		SEXP colnames = Rf_getAttrib(answer, R_NamesSymbol);
+
+		for (uint64_t ifield = 0; ifield < fields.size(); ++ifield) {
+			SEXP col;
+
+			if (fields[ifield].numeric) {
+				col = rprotect_ptr(RSaneAllocVector(REALSXP, num_records));
+				copy(records.values[ifield].begin(), records.values[ifield].end(), REAL(col));
+			} else {
+				col = rprotect_ptr(RSaneAllocVector(STRSXP, num_records));
+				for (uint64_t i = 0; i < num_records; ++i)
+					SET_STRING_ELT(col, i, RSaneMkChar(records.texts[ifield][i].c_str()));
+			}
+			SET_VECTOR_ELT(answer, GInterval::NUM_COLS + ifield, col);
+			SET_STRING_ELT(colnames, GInterval::NUM_COLS + ifield, RSaneMkChar(fields[ifield].name.c_str()));
+		}
+
+		report_clipped(fname, bigbed.get_num_clipped(), bigbed.get_num_dropped(), bigbed.get_first_clipped(), _envir);
+		report_skipped_chroms(fname, bigbed.get_unknown_chroms(), bigbed.get_num_matched_chroms(), _envir);
+		return answer;
+	} catch (TGLException &e) {
+		rerror("%s", e.msg());
+	} catch (const bad_alloc &e) {
+		rerror("Out of memory");
+	}
 
 	return R_NilValue;
 }

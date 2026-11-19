@@ -114,6 +114,7 @@ Pick the verb by *what's returned*, not by alphabetical proximity.
 | Verb | Returns | When |
 |---|---|---|
 | `gextract` | data.frame | Values to look at, plot, or join. |
+| `gextract.matrix` | N x L matrix (N x L x E array) | Per-bin values over equal-width windows, one row per window in input order. |
 | `gscreen`  | intervals frame | Filter to a region set (peaks above threshold). |
 | `gquantiles` | quantile cutoffs | Pick a threshold, normalize. Argument is `percentiles=` (0..1), **not** `probs=`. |
 | `gdist`    | N-d count array | Binned joint distribution (signal × distance, etc.). |
@@ -151,7 +152,6 @@ Pick the verb by *what's returned*, not by alphabetical proximity.
 
 | Wrong | Right | Why it bites |
 |---|---|---|
-| `gquantiles(x, probs = 0.9)` | `gquantiles(x, percentiles = 0.9)` | `probs` is silently ignored; default `percentiles = 0.5` (median) is used. |
 | Bare unquoted track names: `gextract(epi.k27me3.es, ...)` | `gextract("epi.k27me3.es", ...)` | The character-vector form is unambiguous and works with sprintf'd names. |
 
 ## 4. Recipes
@@ -180,6 +180,23 @@ genes <- gintervals.import_gff("refseq.gff", feature = "exon", attrs = TRUE)
 snps  <- gintervals.import_vcf("snps.vcf",  info = TRUE)
 ```
 
+`gintervals.import_bed` sorts by default; `keep_order = TRUE` keeps the file's row order (header lines skipped), which peak IDs that are row numbers need. `format = "narrowPeak"` / `"broadPeak"` (guessed from a `.narrowPeak` / `.broadPeak` name, `.gz` too) adds `signalValue`, `pValue`, `qValue` and, for narrowPeak, `peak`, the summit's offset from `start` (`-1` = no summit). Summit-centred windows, with the summit at `(start + end) %/% 2L`:
+
+```r
+peaks <- gintervals.import_bed("ENCFF000ABC.narrowPeak.gz", keep_order = TRUE)
+peaks <- peaks[peaks$peak >= 0, ]
+win <- transform(peaks, start = start + peak - 250L, end = start + peak + 250L, peak = 250L)
+```
+
+`gintervals.import_bed` also reads a bigBed (detected by its magic number, not its name): columns are chrom, start, end, then the file's fields in order, named and typed by its autoSql (numeric autoSql types -> numeric; strings, arrays, enums and itemRgb stay text). `format` must be `NULL` for a bigBed.
+
+**bigWig signal over intervals, without importing a track.** `gintervals.import_bigwig(file, intervals)` returns the records (chrom, start, end, value) overlapping the intervals, whole and each once, reading only the data blocks under them. Feed it to a value-based vtrack; `weighted.sum` is the per-base sum (what `bbi.stackup(..., summary = "sum")` gives), `sum` adds each touched record's value once:
+
+```r
+gvtrack.create("sig", src = gintervals.import_bigwig("signal.bigWig", peaks), func = "weighted.sum")
+gextract("sig", peaks, iterator = peaks)   # NaN where no record overlaps
+```
+
 **Sort and merge overlaps (`gintervals.canonic`).** When you want a non-overlapping, sorted set - typical after rbind'ing per-condition `gscreen` results. To fold per-row metadata into the merged set, use `gintervals.mark_overlaps` (tags each source row with its merge-group ID) and aggregate per group:
 
 ```r
@@ -195,6 +212,8 @@ merged <- rbind(set_a, set_b) |>
 ```
 
 `gintervals.mark_overlaps` is `gintervals.canonic` plus a join-friendly group column; reach for it when you need custom per-merged-region aggregation. Bare `gintervals.canonic(...)` is fine when you only want the merged intervals frame and don't need to carry source metadata.
+
+Both also merge intervals that only touch (`end` of one == `start` of the next). To merge overlapping sites but keep adjacent ones apart, pass `unify_touching_intervals = FALSE` to either. `attr(gintervals.canonic(x), "mapping")` gives, for each row of `x`, the row of the merged set it went into; that vector is the `overlap_group` column.
 
 If you want to *keep* duplicate / overlapping rows (paired matches, parallel rows per sample), skip canonic.
 
@@ -222,7 +241,7 @@ peaks <- gintervals(chrom = peaks$chrom,
 peaks <- gintervals.canonic(peaks)
 ```
 
-**Clip to genome bounds.** `gintervals.force_range(intervs)` clamps `start >= 0` and `end <= chrom_len`. Use after any expansion that may push past chromosome ends.
+**Clip to genome bounds.** `gintervals.force_range(intervs)` clamps `start >= 0` and `end <= chrom_len`. Use after any expansion that may push past chromosome ends. It shortens windows silently, so for fixed-width windows (model inputs, `gextract.matrix`) drop the rows whose width changed: `win <- gintervals.force_range(win); win <- win[win$end - win$start == width, ]`.
 
 **Symmetric expansion shortcut.** If `misha.ext` is installed, `misha.ext::gintervals.expand(intervs, expansion = 100)` does the symmetric expand-by-N + `gintervals.force_range` clamp in one call. Use it in place of the explicit arithmetic when expansion is symmetric.
 
@@ -236,7 +255,7 @@ my_peaks <- gintervals.load("intervs.my.peaks")
 **Avoid:**
 - `(start + end) / 2` - float division yields non-integer centers. Always `(start + end) %/% 2L`.
 - `gintervals.canonic` reflexively after every `rbind` - only run it when you actually want overlaps merged.
-- Base `data.frame(chrom = ..., start = ..., end = ...)` - turns `chrom` into a factor with stale levels. Pass through `gintervals(...)` for validation.
+- Base `data.frame(chrom = ..., start = ..., end = ...)` - checked against the genome only when a query reads it. Pass through `gintervals(...)` for validation, unless the row order matters (A9).
 - Hand-rolling fixed-width peaks via mutate when `gintervals.normalize(intervs, size)` does the same in one call.
 
 ### 4.2 Annotate intervals with nearby features
@@ -257,6 +276,11 @@ near <- gintervals.neighbors(peaks, tss, maxdist = 50e3, na.if.notfound = TRUE)
 
 # k nearest neighbors:
 knn <- gintervals.neighbors(peaks, tss, maxneighbors = 5)
+
+# Every overlapping pair (e.g. motif hits inside peaks). maxdist = 0 also returns
+# intervals that only touch (end == start), so keep the true overlaps:
+ov <- gintervals.neighbors(peaks, hits, maxneighbors = 1e6, mindist = 0, maxdist = 0)
+ov <- ov[ov$start1 < ov$end & ov$end1 > ov$start, ]
 
 # Strand-aware variants:
 gintervals.neighbors.upstream(peaks, tss, maxdist = 100e3)
@@ -331,7 +355,7 @@ For 2D, bind a 1D `distance` vtrack to one axis of a 2D iteration with `dim = 1`
 
 ### 4.4 Extract per-region values
 
-Signature: `gextract(expr, intervals, iterator, colnames, band, file, intervals.set.out)`. `expr` is a character vector of expressions - bare track names, vtrack names, or arithmetic involving them.
+Signature: `gextract(..., intervals, colnames, iterator, band, file, intervals.set.out, intervals_join)`. The expressions (`...`) are a character vector - bare track names, vtrack names, or arithmetic involving them.
 
 **Many tracks, one call - the central concept.** A single `gextract` over a `c("expr1", "expr2", ...)` vector makes ONE pass over the genome:
 
@@ -383,7 +407,7 @@ gextract(c("ifelse(is.na(epi.atac.es), 0, epi.atac.es)",
 
 Treat this as a default, not an edge case.
 
-**Expression functions must be vectorized.** The C++ engine passes track *vectors* to your expression and expects a same-length vector back. Standard vectorized R ops all work (basic arithmetic, `ifelse`, `pmin`/`pmax`, log/exp). The pitfall is scalar-result functions like `mean(track)` or `min(track)`: those collapse the vector to one number, which the engine then recycles across every bin. Base R has no `pmean`; for per-element averaging across two tracks, use `tgutil::pmean(a, b, na.rm = TRUE)` (`(a + b) / 2` is wrong: it propagates NA whenever *either* input is NA, so any position where one track has data and the other doesn't comes out as NA instead of the value you have).
+**Expression functions must be vectorized.** The C++ engine passes track *vectors* to your expression and expects a same-length vector back. Standard vectorized R ops all work (basic arithmetic, `ifelse`, `pmin`/`pmax`, log/exp). A function that returns one value, such as `mean(track)` or `min(a, b)`, is not an error: misha sees that the result is shorter than its input and evaluates the expression one bin at a time instead. `min(a, b)` then gives the per-bin minimum, but the call is much slower (about 40x slower than `pmin(a, b)` over 1M bins), and `mean(track)` is just the bin's own value, not a window mean - use an `avg` vtrack for that. Base R has no `pmean`; for per-element averaging across two tracks, use `tgutil::pmean(a, b, na.rm = TRUE)` (`(a + b) / 2` is wrong: it propagates NA whenever *either* input is NA, so any position where one track has data and the other doesn't comes out as NA instead of the value you have).
 
 **Tiled bins inside intervals.** For sub-region resolution (per-bin profile), pass an integer iterator:
 
@@ -394,6 +418,22 @@ prof <- gextract("epi.k27me3.es",
 ```
 
 **Iterator coordinate gotcha.** `iterator = 20` tiles bins relative to **chromosome start**, not to each interval's start - so two peaks at different chromosome offsets get *misaligned* bin grids. For interval-relative bin indices use `giterator.intervals(intervals = peaks, iterator = 20, interval_relative = TRUE)`.
+
+**Equal-width windows as an N x L matrix (`gextract.matrix`).** For per-base (or per-bin) profiles over many windows of the same width, e.g. model inputs or motif-hit masks, skip the long table:
+
+```r
+# windows around the summits, in the peaks' row order (gintervals() would sort them, A14b)
+peaks <- gintervals.import_bed("peaks.narrowPeak.gz", keep_order = TRUE)
+peaks <- peaks[peaks$peak >= 0, ]
+win <- transform(peaks, start = start + peak - 1057L, end = start + peak + 1057L)    # 2114bp
+sig  <- gextract.matrix("atac.es", intervals = win)                      # nrow(win) x 2114
+gvtrack.create("hit_cov", motif_hits, func = "coverage")
+mask <- gextract.matrix("hit_cov", intervals = win) > 0                  # logical mask
+win32 <- transform(peaks, start = start + peak - 1056L, end = start + peak + 1056L)  # 2112 = 66 x 32
+arr  <- gextract.matrix(c("atac.es", "k27"), intervals = win32, iterator = 32)  # N x 66 x 2
+```
+
+Row `i` is input row `i` (unsorted, duplicated and overlapping rows are fine); columns are in genomic order whatever the strand. Several expressions give an N x L x E array named by `colnames`. All windows must have the same width and `iterator` must divide it. Unlike gextract's numeric iterator, the bins start at each window's start (as `giterator.intervals(..., interval_relative = TRUE)`), so any start works. Values are what gextract gives for each bin as an iterator interval, NaN included; a dense-track bin that overlaps several track bins gets their plain mean, not weighted by overlap. A window past a chromosome end is an error, as in gextract.
 
 **One row per stored position (`iterator = <track>`).** For sparse-aligned data - per-CpG methylation, per-fragment coverage:
 
@@ -431,7 +471,7 @@ The intervals are carried in `attr(mat, "intervals")` - rownames are display-onl
 - Looping `gextract` over a vector of tracks. Always one call with `c("track1", "track2", ...)`.
 - Bare unquoted expression arguments. Always use the character-vector form.
 - Post-extract `prof[is.na(prof)] <- 0` when you can write `ifelse(is.na(track), 0, track)` inside the expression.
-- Scalar-result functions (`mean(track)`, `min(track)`, `sum(track)`) inside an expression - they collapse per-bin vectors.
+- Scalar-result functions (`mean(track)`, `min(a, b)`, `sum(track)`) inside an expression - misha falls back to evaluating them one bin at a time, which is slow, and `mean(track)` is just the bin's value. Use `pmin` / `pmax` / `ifelse` or a vtrack.
 - `iterator = peaks` when you want sub-region resolution. Use `iterator = 20`.
 - Forgetting that `iterator = 20` is chromosome-relative, not interval-relative.
 - Skipping `arrange(intervalID)` when downstream code assumes input row order.
@@ -530,7 +570,7 @@ gscreen("abs(d_tss) > 5000 & abs(d_rmsk) > 100",
 
 ### 4.7 Joint distributions, summaries, correlations
 
-Three primitives:
+Four primitives:
 
 - **`gdist(track1, breaks1, track2, breaks2, ..., intervals, iterator)`** - N-d count histogram. Pass `dataframe = TRUE` for a long-format frame with one column per axis + count column `n`.
 - **`gbins.summary(strat_track, breaks, expr = value_track, ...)`** - per-bin n/mean/sum/var/min/max of `value_track` stratified by `strat_track` bins.
@@ -574,7 +614,7 @@ Four creation primitives:
 
 - **`gtrack.create(track, description, expr, iterator)`** - evaluate an expression genome-wide and write the result as a dense track.
 - **`gtrack.create_sparse(track, description, intervals, values)`** - values at irregular positions; NA elsewhere.
-- **`gtrack.create_dense(track, description, intervals, values, binsize, defval, func)`** - fully dense fixed-bin track from interval/value pairs.
+- **`gtrack.create_dense(track, description, intervals, values, binsize, defval, func)`** - fully dense fixed-bin track from interval/value pairs. `func` ∈ {`"weighted.mean"` (default), `"weighted.sum"`, `"coverage"`, `"max"`, `"min"`, `"median"`, `"count"`}.
 - **`gtrack.smooth(track, description, expr, winsize, alg)`** - windowed-mean track. `alg = "LINEAR_RAMP"` (triangular, default) or `"MEAN"` (boxcar).
 
 ```r

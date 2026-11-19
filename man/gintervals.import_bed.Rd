@@ -4,11 +4,18 @@
 \alias{gintervals.import_bed}
 \title{Import intervals from a BED file}
 \usage{
-gintervals.import_bed(file = NULL, name = TRUE, score = TRUE, strand = TRUE)
+gintervals.import_bed(
+  file = NULL,
+  name = TRUE,
+  score = TRUE,
+  strand = TRUE,
+  keep_order = FALSE,
+  format = NULL
+)
 }
 \arguments{
-\item{file}{path to a BED file (\code{.bed} or \code{.bed.gz}). Zip
-archives are not supported - unzip them first.}
+\item{file}{path to a BED file (\code{.bed} or \code{.bed.gz}) or a
+bigBed file. Zip archives are not supported - unzip them first.}
 
 \item{name}{if \code{TRUE} and a 4th column exists, include it as
 \code{name}.}
@@ -18,9 +25,19 @@ it as \code{score}.}
 
 \item{strand}{if \code{TRUE} and a 6th column exists, include it as
 \code{strand} (mapped to \code{1}/\code{-1}/\code{0}).}
+
+\item{keep_order}{if \code{TRUE}, return the intervals in the file's
+order (header and comment lines skipped) instead of sorting them.}
+
+\item{format}{one of \code{"bed"}, \code{"narrowPeak"} or
+\code{"broadPeak"}. \code{NULL} guesses from the file name: a name
+ending in \code{.narrowPeak} or \code{.narrowPeak.gz} (any case) is
+narrowPeak, \code{.broadPeak} or \code{.broadPeak.gz} is broadPeak,
+anything else is BED.}
 }
 \value{
-A 1D intervals data frame, sorted by chrom and start.
+A 1D intervals data frame, sorted by chrom and start unless
+  \code{keep_order} is \code{TRUE}.
 }
 \description{
 Reads a BED file, plain or gzipped, and returns a misha 1D intervals data
@@ -31,6 +48,61 @@ explicit configuration).
 }
 \details{
 BED is already 0-based half-open, so coordinates are taken as-is.
+
+A bigBed file (recognized by its first bytes, whatever its name) is read
+natively. Its columns are chrom, start, end and then its other fields in
+the file's order, named by the file's autoSql: fields of a numeric autoSql
+type (int, uint, short, ushort, byte, ubyte, float, double, bigint) are
+numeric, the others (string, lstring, char[n], enum, set, arrays) are kept
+as the text stored, and so is itemRgb (BED field 9, "R,G,B" text although
+autoSql declares it a uint). \code{name}, \code{score} and \code{strand}
+apply to the fields of those names. The fields of a bigBed without autoSql
+get the names UCSC's tools give them (name, score, strand, thickStart,
+thickEnd, reserved, blockCount, blockSizes, chromStarts, ...).
+As in \code{\link{gtrack.import}} of a bigWig, records on chromosomes the
+database lacks are skipped with a message (a warning if one of them looks
+like a primary chromosome), and records past the end of their chromosome
+are clipped to it (dropped if they start past it) with a warning.
+\code{format} must be \code{NULL} for a bigBed.
+
+ENCODE narrowPeak (BED6+4) and broadPeak (BED6+3) files carry extra
+columns, which are added after the BED columns under their UCSC names:
+\code{signalValue}, \code{pValue} and \code{qValue} (numeric) for both,
+and \code{peak} (integer) for narrowPeak. \code{peak} is the summit's
+offset from \code{start}; -1 means no summit was called, and is kept
+as-is.
+
+By default the intervals are sorted by chrom and start. With
+\code{keep_order = TRUE} they stay in the file's order, so row \code{i}
+is the \code{i}-th data line, as peak IDs that are row numbers expect.
+The functions below accept unsorted intervals. \code{gextract},
+\code{gscreen}, \code{gintervals.canonic} and the set operations return
+their rows in genomic order (\code{gextract}'s \code{intervalID} column
+gives the input row), while \code{gseq.extract},
+\code{gintervals.neighbors}, \code{gintervals.annotate},
+\code{gintervals.normalize} and \code{gintervals.summary} return one row
+per input row in input order. \code{gintervals()} sorts its input.
+}
+\examples{
+\dontshow{
+options(gmax.processes = 2)
+}
+
+gdb.init_examples()
+f <- tempfile(fileext = ".narrowPeak")
+writeLines(c(
+    "chr1\t20000\t20400\tpeak_1\t500\t.\t8.1\t12.3\t10.2\t150",
+    "chr1\t10000\t10300\tpeak_2\t800\t.\t9.4\t15.0\t12.8\t120"
+), f)
+peaks <- gintervals.import_bed(f, keep_order = TRUE)
+peaks
+
+# 200 bp windows centred on the summits, in the file's order: the summit
+# is at (start + end) \%/\% 2. Drop rows with peak = -1 (no summit) first.
+summit <- peaks$start + peaks$peak
+windows <- transform(peaks, start = summit - 100, end = summit + 100, peak = 100L)
+windows
+
 }
 \seealso{
 \code{\link{gintervals.import_gff}},

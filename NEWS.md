@@ -1,3 +1,13 @@
+# misha (development version)
+
+* New `gintervals.import_bigwig()` reads the records of a bigWig over a set of intervals without importing a track, reading only the data blocks under them. The result works as a value-based virtual track source.
+
+* New `gextract.matrix()` returns track expression values over equal-width intervals as an intervals x bins matrix (an array for several expressions), with bins counted from each interval's start, without building the long gextract table.
+
+* `gintervals.import_bed()` reads bigBed files, with the extra fields named and typed by the file's autoSql.
+
+* `gintervals.import_bed()` gains `keep_order` (keep the file's row order) and `format` (`"narrowPeak"` and `"broadPeak"` files get their `signalValue`, `pValue`, `qValue` and, for narrowPeak, `peak` columns; guessed from the file name).
+
 # misha 5.18.1
 
 * **Behavior fix:** `gseq.pwm()` and `gseq.kmer()` scan to the end of sequences with non-ASCII characters.
