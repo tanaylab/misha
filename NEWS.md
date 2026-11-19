@@ -6,6 +6,8 @@
 
 * `gintervals.import_bed()` gains `keep_order` (keep the file's row order) and `format` (`"narrowPeak"` and `"broadPeak"` files get their `signalValue`, `pValue`, `qValue` and, for narrowPeak, `peak` columns; guessed from the file name).
 
+* New `gextract.matrix()` returns track expression values over equal-width intervals as an intervals x bins matrix (an array for several expressions), without building the long gextract table.
+
 # misha 5.18.1
 
 * **Behavior fix:** `gseq.pwm()` and `gseq.kmer()` scan to the end of sequences with non-ASCII characters.

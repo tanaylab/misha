@@ -138,6 +138,7 @@ reference:
       - gcompute_strands_autocorr
       - gdist
       - gextract
+      - gextract.matrix
       - gextract.variants
       - glookup
       - gpartition

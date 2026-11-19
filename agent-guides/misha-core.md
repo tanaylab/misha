@@ -114,6 +114,7 @@ Pick the verb by *what's returned*, not by alphabetical proximity.
 | Verb | Returns | When |
 |---|---|---|
 | `gextract` | data.frame | Values to look at, plot, or join. |
+| `gextract.matrix` | N x L matrix (N x L x E array) | Per-bin values over equal-width windows, one row per window in input order. |
 | `gscreen`  | intervals frame | Filter to a region set (peaks above threshold). |
 | `gquantiles` | quantile cutoffs | Pick a threshold, normalize. Argument is `percentiles=` (0..1), **not** `probs=`. |
 | `gdist`    | N-d count array | Binned joint distribution (signal × distance, etc.). |
@@ -413,6 +414,19 @@ prof <- gextract("epi.k27me3.es",
 ```
 
 **Iterator coordinate gotcha.** `iterator = 20` tiles bins relative to **chromosome start**, not to each interval's start - so two peaks at different chromosome offsets get *misaligned* bin grids. For interval-relative bin indices use `giterator.intervals(intervals = peaks, iterator = 20, interval_relative = TRUE)`.
+
+**Equal-width windows as an N x L matrix (`gextract.matrix`).** For per-base (or per-bin) profiles over many windows of the same width, e.g. model inputs or motif-hit masks, skip the long table:
+
+```r
+win <- gintervals(peaks$chrom, peaks$start - 1057, peaks$start + 1057)   # all 2114bp wide
+sig  <- gextract.matrix("atac.es", intervals = win)                      # nrow(win) x 2114
+gvtrack.create("hit_cov", motif_hits, func = "coverage")
+mask <- gextract.matrix("hit_cov", intervals = win) > 0                  # logical mask
+win10 <- gintervals(peaks$chrom, peaks$start %/% 10 * 10 - 1000, peaks$start %/% 10 * 10 + 1000)
+arr  <- gextract.matrix(c("atac.es", "k27"), intervals = win10, iterator = 10)  # N x 200 x 2
+```
+
+Row `i` is input row `i` (unsorted, duplicated and overlapping rows are fine); columns are in genomic order whatever the strand. Several expressions give an N x L x E array named by `colnames`. All windows must have the same width, `iterator` must divide it, and with `iterator > 1` every start must be a multiple of `iterator` (gextract's bins are chromosome-aligned). Values are gextract's, NaN included; a window past a chromosome end is an error, as in gextract.
 
 **One row per stored position (`iterator = <track>`).** For sparse-aligned data - per-CpG methylation, per-fragment coverage:
 
