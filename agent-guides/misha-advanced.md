@@ -16,57 +16,40 @@ Specialized recipes that aren't part of the everyday flow. Read [`misha-core.md`
 **Goal.** For a peak set, get a `(peak × offset)` signal matrix you can heatmap, row-cluster, or average into a smooth meta-profile.
 
 ```r
-# 1. Anchor: per-peak center as a 1bp interval frame.
-# With misha.ext available, this is one call: center_1bp <- misha.ext::gintervals.centers(peaks)
-peaks$center <- (peaks$start + peaks$end) %/% 2L
-center_1bp   <- gintervals(chrom = peaks$chrom,
-                            start = peaks$center,
-                            end   = peaks$center + 1L)
+# 1. Equal-width windows centered on the peak midpoints, in the peaks' row order.
+W   <- 1000L
+mid <- (peaks$start + peaks$end) %/% 2L
+win <- transform(peaks, start = mid - W, end = mid + W)
+win <- gintervals.force_range(win)
+win <- win[win$end - win$start == 2L * W, ]      # drop windows clipped at a chromosome end
 
-# 2. Distance vtrack -> signed offset at each iterator bin.
-gvtrack.create("d_center", src = center_1bp, func = "distance.center")
-
-# 3. Expand region symmetrically and extract one or more tracks at fine bins.
-region <- transform(peaks,
-                    start = center - W,
-                    end   = center + W + 20L)
-spat <- gextract(c("d_center", track_names),
-                 intervals = region,
-                 iterator  = 20,
-                 colnames  = c("d_center", track_names))
-
-# 4. Reshape long -> wide (peak x offset bin) for one track at a time.
-mat <- spat |>
-    mutate(bin = floor(d_center / 20)) |>
-    filter(abs(bin) <= W / 20) |>
-    pivot_wider(id_cols     = intervalID,
-                names_from  = bin,
-                values_from = !!sym(track_names[1]),
-                values_fn   = mean,
-                values_fill = 0) |>
-    arrange(intervalID) |>
-    select(-intervalID) |>
-    as.matrix()
+# 2. Row i = window i, column j = the 20bp bin starting at -W + 20 * (j - 1).
+mat <- gextract.matrix("ifelse(is.na(epi.k27me3.es), 0, epi.k27me3.es)",
+                       intervals = win, iterator = 20)
+colnames(mat) <- seq(-W, W - 20L, by = 20L)
+profile <- colMeans(mat)
 ```
 
-`distance.center` is the right flavor here - anchor → anchor.
+The bins start at each window's start, so every row shares the same offset axis (an integer `gextract` iterator would put them on the chromosome's grid, A13).
 
 **Variants.**
-- **Multi-track in one pass.** Pass the whole vector to `gextract`; reshape once per track from the same long-format frame.
-- **Pre-aggregated sum (no offset axis).** If you don't need the offset axis, skip `d_center` and build a window vtrack: `gvtrack.create("v", track, "sum", sshift = -W, eshift = W)`, then `gextract("v", intervals = peaks, iterator = peaks)`.
-- **Argmax-recenter first.** When peak centers are coarse, refine via the `slice_max` recipe in misha-core §4.6 before building `center_1bp`.
+- **Multi-track in one pass.** `gextract.matrix(track_names, intervals = win, iterator = 20, colnames = track_names)` returns an N x L x E array, one slice per track.
+- **Stranded anchors (TSS).** Columns are in genomic order whatever the strand; flip the minus-strand rows to read upstream -> downstream: `mat[win$strand == -1, ] <- mat[win$strand == -1, ncol(mat):1]`.
+- **Pre-aggregated sum (no offset axis).** If you don't need the offset axis, skip the matrix and build a window vtrack: `gvtrack.create("v", track, "sum", sshift = -W, eshift = W)`, then `gextract("v", intervals = peaks, iterator = peaks)`.
+- **Argmax-recenter first.** When peak centers are coarse, refine via the `slice_max` recipe in misha-core §4.6 before building the windows.
 - **Row-clustering.** `tglkmeans::TGL_kmeans_tidy(mat, k = 8)` is the lab-standard meta-profile clustering pass.
 
 **Avoid:**
 - `(peaks$start + peaks$end) / 2` - float division yields non-integer centers. Always `%/% 2L`.
 - Forgetting to wrap the signal column with `ifelse(is.na(...), 0, ...)` inside the extract expression.
-- Using `func = "distance"` instead of `func = "distance.center"` - the default `distance` mixes edge and normalized-in-interval semantics, which is *not* what an anchor-relative offset matrix needs.
+- Building the offset axis from a `distance.center` vtrack on 1bp centers - `distance.center` is NaN wherever the bin center is outside a source interval, so every bin but the center's comes back NaN.
+- Rebuilding the windows with `gintervals()` - it sorts them, so row `i` of the matrix is no longer peak `i` (A14b).
 
 ## 2. 2D contact pile-ups
 
 **Goal.** From a 2D contact track (Hi-C / capture-HiC), build a feature-pair contact density matrix - e.g. CTCF × CTCF, enhancer × promoter - stratified by genomic distance.
 
-**Build a 2D pair iterator.** `giterator.cartesian_grid(intervals1, expansion1, intervals2, expansion2, min.band.idx, max.band.idx)` produces a 2D iterator over the cartesian product of two 1D intervals sets, each row expanded by `expansionN`.
+**Build a 2D pair iterator.** `giterator.cartesian_grid(intervals1, expansion1, intervals2, expansion2, min.band.idx, max.band.idx)` produces a 2D iterator over the cartesian product of two 1D intervals sets. `expansionN` is a sorted vector of offsets from each interval's center, and consecutive values are bin edges: `c(-1000, 1000)` gives one 2kb bin per center, `seq(-1000, 1000, by = 200)` ten. A single value is an error.
 
 Self-pair (CTCF × CTCF) restricted to a cis off-diagonal band - the common case. `intervals2 = NULL` makes it a self-pair, which is the form that supports `min.band.idx` / `max.band.idx`:
 
@@ -74,8 +57,8 @@ Self-pair (CTCF × CTCF) restricted to a cis off-diagonal band - the common case
 sites <- gintervals.load("intervs.ctcf_peaks")
 
 it <- giterator.cartesian_grid(
-    intervals1   = sites,  expansion1 = 1000,
-    intervals2   = NULL,   expansion2 = 1000,
+    intervals1   = sites,  expansion1 = c(-1000, 1000),
+    intervals2   = NULL,   expansion2 = NULL,     # NULL: same as expansion1
     min.band.idx = 1, max.band.idx = Inf)         # cis-only, off-diagonal
 ```
 
@@ -97,12 +80,18 @@ pair_mat <- gextract("obs", intervals = it, iterator = it,
 ```r
 sites_x <- gintervals.load("intervs.ctcf_peaks")
 sites_y <- gintervals.load("intervs.global.tss")
+grid    <- seq(-1000, 1000, by = 200)
 it_pair <- giterator.cartesian_grid(
-    intervals1 = sites_x, expansion1 = 1000,
-    intervals2 = sites_y, expansion2 = 1000)        # no band.idx in explicit-pair mode
+    intervals1 = sites_x, expansion1 = grid,
+    intervals2 = sites_y, expansion2 = grid)        # no band.idx in explicit-pair mode
 
-gvtrack.create("dx", src = sites_x, func = "distance.center"); gvtrack.iterator("dx", dim = 1)
-gvtrack.create("dy", src = sites_y, func = "distance.center"); gvtrack.iterator("dy", dim = 2)
+# Signed offset of each bin from the nearest center: `distance` to 1bp + strand centers.
+centers <- function(x) {
+    m <- (x$start + x$end) %/% 2L
+    gintervals(x$chrom, m, m + 1L, strands = 1)
+}
+gvtrack.create("dx", src = centers(sites_x), func = "distance"); gvtrack.iterator("dx", dim = 1)
+gvtrack.create("dy", src = centers(sites_y), func = "distance"); gvtrack.iterator("dy", dim = 2)
 
 h <- gdist("dx", dist_breaks,
            "dy", dist_breaks,
@@ -138,6 +127,7 @@ gtrack.2d.create("hic.derived", "Per-rectangle scores",
 - 2D iterator without `min.band.idx` / `max.band.idx` when you only care about cis - the implicit "everything" scope is much slower.
 - `gtrack.2d.create` with overlapping rectangles - 2D tracks expect non-overlapping cells.
 - Forgetting `band = c(-X, -Y)` on cis extracts - the near-diagonal dominates the signal numerically.
+- Per-axis offsets from `distance.center` vtracks on the sites - NaN for every grid bin whose center lies outside a site. Note that `distance` measures to the nearest center, which near clustered sites can be a neighbor's.
 
 ## 3. Insulation, directionality index, domain borders
 
@@ -225,7 +215,7 @@ for (W in c(5e4, 1e5, 2e5, 5e5)) {
 
 **Goal.** Extract genome sequence under intervals, score PSSMs on the fly via vtracks, and persist motif energies as tracks when reuse warrants it.
 
-**Before writing string-level sequence code, check `gseq.*`.** Misha ships a sequence-manipulation family - `gseq.extract`, `gseq.rev`, `gseq.comp` (reverse / complement), `gseq.kmer` / `gseq.kmer.dist` (kmer counting / distance), `gseq.pwm` / `gseq.pwm_edits` (direct PWM scoring on R character strings), `gseq.read_homer` / `.read_jaspar` / `.read_meme` (motif file readers). Reach for these before hand-rolling reverse complement / kmer scans / PWM scoring in base R.
+**Before writing string-level sequence code, check `gseq.*`.** Misha ships a sequence-manipulation family - `gseq.extract`, `gseq.rev`, `gseq.comp`, `gseq.revcomp` (reverse / complement / both), `gseq.kmer` / `gseq.kmer.dist` (kmer counting / distance), `gseq.pwm` / `gseq.pwm_edits` (direct PWM scoring on R character strings), `gseq.read_homer` / `.read_jaspar` / `.read_meme` (motif file readers). Reach for these before hand-rolling reverse complement / kmer scans / PWM scoring in base R.
 
 **Extract sequence.**
 
@@ -248,7 +238,7 @@ gextract("g_frac + c_frac", intervals = peaks, iterator = peaks, colnames = "gc_
 gvtrack.create("cg_frac", NULL, "kmer.frac", kmer = "CG", strand = 1)
 ```
 
-`src = NULL` selects the genome sequence as the source. Optional named args via `...`: `strand` (0 = both, default; 1 / -1 = stranded), `extend` (TRUE by default, scan past iterator bin edges so a k-mer straddling the boundary still gets counted).
+`src = NULL` selects the genome sequence as the source. Optional named args via `...`: `strand` (0 = both, default; 1 / -1 = stranded), `extend` (TRUE by default, scan past iterator bin edges so a k-mer straddling the boundary still gets counted). `kmer.frac` divides by the anchors whose k-mer fits: all L of an interval of length L with `extend = TRUE`, L-k+1 with `extend = FALSE` (twice that with `strand = 0`).
 
 **Materialize a k-mer track in one call.** When the multi-k-mer-sum-over-window pattern is something you want to persist as a track (not just an ephemeral vtrack), `misha.ext::gtrack.create_kmer` does it in one call - and accepts a *vector* of k-mers, so GC content is direct:
 
@@ -289,6 +279,7 @@ For de-novo motifs, train a PSSM from labelled sequences with `prego::regress_pw
 | `pwm.edit_distance` | min #edits to raise (`direction = "above"`) or disrupt (`direction = "below"`) the best-window score across `score.thresh` | search over edit budget |
 | `pwm.edit_distance.lse` | same but LSE of windows, not the max | LSE-based |
 | `pwm.edit_distance.pos` / `pwm.edit_distance.lse.pos` | 1-based position of the most impactful single edit; same sign-by-strand convention as `pwm.max.pos` when `bidirect = TRUE` | argmax over edit positions |
+| `pwm.n_mutations` | number of single-base substitutions that each *independently* bring a window across `score.thresh`; `0` if already met, `NaN` if no single edit suffices | max across windows |
 
 **`score.thresh` is mandatory for `pwm.count`** (and for `gseq.pwm(mode = "count")`), with no default. A PWM score is a log-likelihood, so its usable range depends entirely on the PSSM, the `prior` and any spatial weights - a threshold of 0 counts nothing for any realistic matrix, and a threshold far below the matrix's minimum counts every window. Calibrate first: run the same scan with `pwm.max` (or `gseq.pwm(mode = "max")`) over the intervals you care about, look at the score range, and pick a threshold inside it.
 
@@ -332,6 +323,8 @@ gvtrack.create("ctcf_rev", func = "pwm.max",
 **Position semantics (`pwm.max.pos`, `pwm.edit_distance.pos`).** All `*.pos` values are **1-based** bp offsets *relative to the iterator interval* (after any `gvtrack.iterator()` `sshift` / `eshift` shifts), pointing at the first base of the best window. `pos = 1` means the best window starts at the very first base of the (possibly shifted) iterator interval; the motif occupies `pos .. pos + nrow(pssm) - 1`. The sign convention above only applies under `bidirect = TRUE`; under `bidirect = FALSE` the value is always positive regardless of `strand`.
 
 **Which end does `*.pos` point at.** `|pos|` is always the **start** of the match in *forward-strand* coordinates - on both strands, under either `bidirect` setting. Under `bidirect = TRUE` the sign tells you which strand won, not which end you are pointed at. So span arithmetic is `pos .. pos + nrow(pssm) - 1` in forward coordinates in every case. Note the consequence of the LSE/max split above: the window `pwm.max.pos` points at is **not** guaranteed to be the window that produced the `pwm.max` score - `*.pos` is the argmax of the per-position max, `pwm.max` is the max of the per-position LSE, and they diverge whenever the reverse strand contributes enough at a neighbouring position to flip which window wins the LSE. Measured over ~3M motif hits the two agree for 99.6%; the rest re-score up to `log 2` below the bin score. Do not treat `pwm.max` as "the score at `pwm.max.pos`".
+
+Ties break by scan order, which is strand-dependent: `strand = 1` (and `bidirect = TRUE`) keeps the most 5' tied anchor and the forward strand wins a tie at the same coordinate, but `bidirect = FALSE, strand = -1` scans a reverse-complemented buffer and so keeps the most 3' tied anchor in forward coordinates.
 
 > **Version caveat.** That uniform convention holds from misha 5.11.25. In 5.11.24 and earlier, `bidirect = FALSE, strand = -1` returned a position one less than the 1-based forward start, `pwm.edit_distance.pos` returned reverse-complemented target coordinates, and passing `strand = -1` alongside `bidirect = TRUE` inverted the reported strand sign. Reading positions off an older build: verify the offset on a planted motif before building spans from it.
 

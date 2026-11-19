@@ -152,7 +152,6 @@ Pick the verb by *what's returned*, not by alphabetical proximity.
 
 | Wrong | Right | Why it bites |
 |---|---|---|
-| `gquantiles(x, probs = 0.9)` | `gquantiles(x, percentiles = 0.9)` | `probs` is silently ignored; default `percentiles = 0.5` (median) is used. |
 | Bare unquoted track names: `gextract(epi.k27me3.es, ...)` | `gextract("epi.k27me3.es", ...)` | The character-vector form is unambiguous and works with sprintf'd names. |
 
 ## 4. Recipes
@@ -256,7 +255,7 @@ my_peaks <- gintervals.load("intervs.my.peaks")
 **Avoid:**
 - `(start + end) / 2` - float division yields non-integer centers. Always `(start + end) %/% 2L`.
 - `gintervals.canonic` reflexively after every `rbind` - only run it when you actually want overlaps merged.
-- Base `data.frame(chrom = ..., start = ..., end = ...)` - turns `chrom` into a factor with stale levels. Pass through `gintervals(...)` for validation.
+- Base `data.frame(chrom = ..., start = ..., end = ...)` - checked against the genome only when a query reads it. Pass through `gintervals(...)` for validation, unless the row order matters (A9).
 - Hand-rolling fixed-width peaks via mutate when `gintervals.normalize(intervs, size)` does the same in one call.
 
 ### 4.2 Annotate intervals with nearby features
@@ -356,7 +355,7 @@ For 2D, bind a 1D `distance` vtrack to one axis of a 2D iteration with `dim = 1`
 
 ### 4.4 Extract per-region values
 
-Signature: `gextract(expr, intervals, iterator, colnames, band, file, intervals.set.out)`. `expr` is a character vector of expressions - bare track names, vtrack names, or arithmetic involving them.
+Signature: `gextract(..., intervals, colnames, iterator, band, file, intervals.set.out, intervals_join)`. The expressions (`...`) are a character vector - bare track names, vtrack names, or arithmetic involving them.
 
 **Many tracks, one call - the central concept.** A single `gextract` over a `c("expr1", "expr2", ...)` vector makes ONE pass over the genome:
 
@@ -408,7 +407,7 @@ gextract(c("ifelse(is.na(epi.atac.es), 0, epi.atac.es)",
 
 Treat this as a default, not an edge case.
 
-**Expression functions must be vectorized.** The C++ engine passes track *vectors* to your expression and expects a same-length vector back. Standard vectorized R ops all work (basic arithmetic, `ifelse`, `pmin`/`pmax`, log/exp). The pitfall is scalar-result functions like `mean(track)` or `min(track)`: those collapse the vector to one number, which the engine then recycles across every bin. Base R has no `pmean`; for per-element averaging across two tracks, use `tgutil::pmean(a, b, na.rm = TRUE)` (`(a + b) / 2` is wrong: it propagates NA whenever *either* input is NA, so any position where one track has data and the other doesn't comes out as NA instead of the value you have).
+**Expression functions must be vectorized.** The C++ engine passes track *vectors* to your expression and expects a same-length vector back. Standard vectorized R ops all work (basic arithmetic, `ifelse`, `pmin`/`pmax`, log/exp). A function that returns one value, such as `mean(track)` or `min(a, b)`, is not an error: misha sees that the result is shorter than its input and evaluates the expression one bin at a time instead. `min(a, b)` then gives the per-bin minimum, but the call is much slower (about 40x slower than `pmin(a, b)` over 1M bins), and `mean(track)` is just the bin's own value, not a window mean - use an `avg` vtrack for that. Base R has no `pmean`; for per-element averaging across two tracks, use `tgutil::pmean(a, b, na.rm = TRUE)` (`(a + b) / 2` is wrong: it propagates NA whenever *either* input is NA, so any position where one track has data and the other doesn't comes out as NA instead of the value you have).
 
 **Tiled bins inside intervals.** For sub-region resolution (per-bin profile), pass an integer iterator:
 
@@ -472,7 +471,7 @@ The intervals are carried in `attr(mat, "intervals")` - rownames are display-onl
 - Looping `gextract` over a vector of tracks. Always one call with `c("track1", "track2", ...)`.
 - Bare unquoted expression arguments. Always use the character-vector form.
 - Post-extract `prof[is.na(prof)] <- 0` when you can write `ifelse(is.na(track), 0, track)` inside the expression.
-- Scalar-result functions (`mean(track)`, `min(track)`, `sum(track)`) inside an expression - they collapse per-bin vectors.
+- Scalar-result functions (`mean(track)`, `min(a, b)`, `sum(track)`) inside an expression - misha falls back to evaluating them one bin at a time, which is slow, and `mean(track)` is just the bin's value. Use `pmin` / `pmax` / `ifelse` or a vtrack.
 - `iterator = peaks` when you want sub-region resolution. Use `iterator = 20`.
 - Forgetting that `iterator = 20` is chromosome-relative, not interval-relative.
 - Skipping `arrange(intervalID)` when downstream code assumes input row order.
@@ -571,7 +570,7 @@ gscreen("abs(d_tss) > 5000 & abs(d_rmsk) > 100",
 
 ### 4.7 Joint distributions, summaries, correlations
 
-Three primitives:
+Four primitives:
 
 - **`gdist(track1, breaks1, track2, breaks2, ..., intervals, iterator)`** - N-d count histogram. Pass `dataframe = TRUE` for a long-format frame with one column per axis + count column `n`.
 - **`gbins.summary(strat_track, breaks, expr = value_track, ...)`** - per-bin n/mean/sum/var/min/max of `value_track` stratified by `strat_track` bins.
@@ -615,7 +614,7 @@ Four creation primitives:
 
 - **`gtrack.create(track, description, expr, iterator)`** - evaluate an expression genome-wide and write the result as a dense track.
 - **`gtrack.create_sparse(track, description, intervals, values)`** - values at irregular positions; NA elsewhere.
-- **`gtrack.create_dense(track, description, intervals, values, binsize, defval, func)`** - fully dense fixed-bin track from interval/value pairs.
+- **`gtrack.create_dense(track, description, intervals, values, binsize, defval, func)`** - fully dense fixed-bin track from interval/value pairs. `func` ∈ {`"weighted.mean"` (default), `"weighted.sum"`, `"coverage"`, `"max"`, `"min"`, `"median"`, `"count"`}.
 - **`gtrack.smooth(track, description, expr, winsize, alg)`** - windowed-mean track. `alg = "LINEAR_RAMP"` (triangular, default) or `"MEAN"` (boxcar).
 
 ```r

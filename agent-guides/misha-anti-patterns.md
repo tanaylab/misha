@@ -2,6 +2,8 @@
 
 The silent footguns - code runs, output looks plausible, downstream conclusions are subtly wrong. Inline `Avoid:` callouts in [`misha-core.md`](misha-core.md) and [`misha-advanced.md`](misha-advanced.md) reference entries here.
 
+Entry ids are shared with pymisha's `pymisha-anti-patterns.md`: the same id is the same pitfall in both. A1 applies only to R; the ids missing here (A9c, A14f, A16) apply only to pymisha.
+
 ## Contents
 
 - [Configuration](#configuration)
@@ -33,9 +35,9 @@ The silent footguns - code runs, output looks plausible, downstream conclusions 
 
 **A8. Reflexive `gintervals.canonic` after every `rbind`.** Canonicalizing destroys per-row identity - paired matched-control rows, per-sample replicate identity, parallel rows for downstream joins all collapse into the merged set. Run `gintervals.canonic` *only* when you actually want overlaps merged (typical: union-of-peak-sets across conditions). When the rows mean "distinct things at the same location", skip canonic.
 
-**A9. Base `data.frame(chrom, start, end)` instead of `gintervals(...)`.** `data.frame` produces unvalidated coordinates and turns `chrom` into a factor with stale levels (especially after subsetting). Equality filters then silently miss rows. Always pass through `gintervals(chrom, start, end)` which validates against the active genome and gives integer-typed coordinates. Exception: when the row order matters (rows aligned with another table, or file row numbers used as ids), derive the new frame from one that is already validated, e.g. `transform(peaks, start = ..., end = ...)` on the output of `gintervals.import_bed(..., keep_order = TRUE)`, because `gintervals()` sorts (A14b).
+**A9. Base `data.frame(chrom, start, end)` instead of `gintervals(...)`.** `gintervals(chrom, start, end)` checks the intervals against the active genome when you build them and gives integer-typed coordinates; a plain `data.frame` is checked only when a query reads it, which then stops with an error (unknown chromosome, end past the chromosome) far from the code that built it. Before R 4.0, or with `stringsAsFactors = TRUE`, its `chrom` is also a factor that keeps stale levels after subsetting. Exception: when the row order matters (rows aligned with another table, or file row numbers used as ids), derive the new frame from one that is already validated, e.g. `transform(peaks, start = ..., end = ...)` on the output of `gintervals.import_bed(..., keep_order = TRUE)`, because `gintervals()` sorts (A14b).
 
-**A9b. Joining misha output with an external table by the chrom string.** misha resolves chromosome aliases on input (`chr1`, `1`, `NC_000001.11`, ...), but a `merge`/`%in%`/pandas join between misha output and a table read from another source compares strings: `"1"` never equals `"chr1"`, and the join comes back silently empty. Bring the external table to the database's names first (`gintervals.force_range(ext)` returns them and keeps row order and extra columns), or do the join itself with `gintervals.neighbors` (overlaps: `mindist = 0, maxdist = 0`).
+**A9b. Joining misha output with an external table by the chrom string.** misha resolves chromosome aliases on input (`chr1`, `1`, `NC_000001.11`, ...), but a `merge` / `%in%` / dplyr join between misha output and a table read from another source compares strings: `"1"` never equals `"chr1"`, and the join comes back silently empty. Bring the external table to the database's names first (`gintervals.force_range(ext)` returns them and keeps row order and extra columns), or do the join itself with `gintervals.neighbors` (overlaps: `mindist = 0, maxdist = 0`).
 
 ## Extraction & expressions
 
@@ -55,11 +57,11 @@ The silent footguns - code runs, output looks plausible, downstream conclusions 
 
 **A14d. One-hot encoding `gseq.extract` output as is.** Sequences keep the genome's soft mask: in a database built from a soft-masked FASTA (UCSC hg38, for one) repeat bases come back lowercase. An encoder that only knows `ACGT` turns them into zeros or `N` without a warning. Call `toupper()` first, unless you want the mask.
 
+**A14e. `(a + b) / 2` for per-element averaging across two tracks.** `(a + b) / 2` propagates NA whenever *either* input is NA, so any position where one track has data and the other doesn't comes out as NA instead of the value you have. Base R has no `pmean`; use `tgutil::pmean(a, b, na.rm = TRUE)` inside the expression, or spell out the NA cases: `ifelse(is.na(a), b, ifelse(is.na(b), a, (a + b) / 2))`.
+
 ## Quantiles / thresholds
 
 **A15. Hardcoded threshold values.** `gscreen("track > 1870", ...)` makes the analysis uninterpretable across datasets and silently breaks on retraining or track replacement. Derive the threshold from `gquantiles(track, percentiles = p, ...)` so the rule is "top p-percentile of the empirical distribution" - re-evaluable on any new track.
-
-**A16. `gquantiles(x, probs = 0.9, ...)` instead of `percentiles =`.** R does not partial-match across function definitions; `probs` is silently dropped and `gquantiles` returns the default `percentiles = 0.5` (median) regardless of what you passed. The threshold is wrong; the downstream screen call returns the wrong intervals; nothing errors.
 
 **A17. `gquantiles` on a track with many NAs assumed to include zeros.** `gquantiles` silently drops NA positions when computing percentiles. For "top 1% of covered positions" that's right; for "top 1% of all positions including zero-coverage", wrap with `ifelse(is.na(track), 0, track)` first.
 
