@@ -1,5 +1,9 @@
 # misha (development version)
 
+* New `gintervals.import_bigwig()` reads the records of a bigWig over a set of intervals without importing a track, reading only the data blocks under them. The result works as a value-based virtual track source.
+
+* `gintervals.import_bed()` reads bigBed files, with the extra fields named and typed by the file's autoSql.
+
 * `gintervals.import_bed()` gains `keep_order` (keep the file's row order) and `format` (`"narrowPeak"` and `"broadPeak"` files get their `signalValue`, `pValue`, `qValue` and, for narrowPeak, `peak` columns; guessed from the file name).
 
 # misha 5.18.1

@@ -21,6 +21,27 @@
     length(magic) == 2 && magic[1] == as.raw(0x1f) && magic[2] == as.raw(0x8b)
 }
 
+# Internal: does `file` start with the bigBed magic number (0x8789F2EB), in
+# either byte order?
+.gis_bigbed_file <- function(file) {
+    con <- file(file, "rb")
+    on.exit(close(con))
+    magic <- tryCatch(readBin(con, "raw", n = 4), error = function(e) raw(0))
+    bytes <- as.raw(c(0xeb, 0xf2, 0x89, 0x87))
+    identical(magic, bytes) || identical(magic, rev(bytes))
+}
+
+# Internal: all the records of a bigBed file, in file order: chrom, start, end
+# and the fields the file declares past them, named by its autoSql.
+.gread_bigbed <- function(file) {
+    df <- .gcall("gintervals_import_bigbed", path.expand(file), .misha_env())
+    dup <- unique(names(df)[duplicated(names(df))])
+    if (length(dup)) {
+        stop(sprintf("bigBed file %s has more than one column named %s", file, paste(dup, collapse = ", ")), call. = FALSE)
+    }
+    df
+}
+
 # Internal: decompress a gzipped file to a temp file, the same way
 # gtrack.import() does (R/track-import.R), and check the exit status.
 # Returns the temp file path when the data came out whole, or NULL when gunzip
@@ -210,6 +231,22 @@
 #'
 #' BED is already 0-based half-open, so coordinates are taken as-is.
 #'
+#' A bigBed file (recognized by its first bytes, whatever its name) is read
+#' natively. Its columns are chrom, start, end and then its other fields in
+#' the file's order, named by the file's autoSql: fields of a numeric autoSql
+#' type (int, uint, short, ushort, byte, ubyte, float, double, bigint) are
+#' numeric, the others (string, lstring, char[n], enum, set, arrays) are kept
+#' as the text stored, and so is itemRgb (BED field 9, "R,G,B" text although
+#' autoSql declares it a uint). \code{name}, \code{score} and \code{strand}
+#' apply to the fields of those names. The fields of a bigBed without autoSql
+#' get the names UCSC's tools give them (name, score, strand, thickStart,
+#' thickEnd, reserved, blockCount, blockSizes, chromStarts, ...).
+#' As in \code{\link{gtrack.import}} of a bigWig, records on chromosomes the
+#' database lacks are skipped with a message (a warning if one of them looks
+#' like a primary chromosome), and records past the end of their chromosome
+#' are clipped to it (dropped if they start past it) with a warning.
+#' \code{format} must be \code{NULL} for a bigBed.
+#'
 #' ENCODE narrowPeak (BED6+4) and broadPeak (BED6+3) files carry extra
 #' columns, which are added after the BED columns under their UCSC names:
 #' \code{signalValue}, \code{pValue} and \code{qValue} (numeric) for both,
@@ -228,8 +265,8 @@
 #' \code{gintervals.normalize} and \code{gintervals.summary} return one row
 #' per input row in input order. \code{gintervals()} sorts its input.
 #'
-#' @param file path to a BED file (\code{.bed} or \code{.bed.gz}). Zip
-#'   archives are not supported - unzip them first.
+#' @param file path to a BED file (\code{.bed} or \code{.bed.gz}) or a
+#'   bigBed file. Zip archives are not supported - unzip them first.
 #' @param name if \code{TRUE} and a 4th column exists, include it as
 #'   \code{name}.
 #' @param score if \code{TRUE} and a 5th (numeric) column exists, include
@@ -280,6 +317,35 @@ gintervals.import_bed <- function(file = NULL, name = TRUE, score = TRUE, strand
     if (!is.logical(keep_order) || length(keep_order) != 1 || is.na(keep_order)) {
         stop("keep_order must be TRUE or FALSE", call. = FALSE)
     }
+    if (.gis_bigbed_file(file)) {
+        if (!is.null(format)) {
+            stop(sprintf("format cannot be given for bigBed file %s: a bigBed names its columns in its autoSql", file), call. = FALSE)
+        }
+        df <- .gread_bigbed(file)
+        if (nrow(df) == 0) {
+            stop(sprintf("BED file %s appears to be empty or contains no data intervals", file), call. = FALSE)
+        }
+        if (!name) {
+            df$name <- NULL
+        }
+        if (!score) {
+            df$score <- NULL
+        }
+        if (!strand) {
+            df$strand <- NULL
+        }
+        if (!is.null(df[["score"]])) {
+            df$score <- suppressWarnings(as.numeric(df[["score"]]))
+        }
+        if (!is.null(df[["strand"]])) {
+            df$strand <- .gparse_strand_vec(df[["strand"]], context = sprintf("BED file %s", file))
+        }
+        if (keep_order) {
+            return(df)
+        }
+        return(.gsort_intervals_df(df))
+    }
+
     format <- .gbed_format(file, format)
     format_cols <- .gbed_format_columns[[format]]
 

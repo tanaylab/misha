@@ -188,6 +188,15 @@ peaks <- peaks[peaks$peak >= 0, ]
 win <- transform(peaks, start = start + peak - 250L, end = start + peak + 250L, peak = 250L)
 ```
 
+`gintervals.import_bed` also reads a bigBed (detected by its magic number, not its name): columns are chrom, start, end, then the file's fields in order, named and typed by its autoSql (numeric autoSql types -> numeric; strings, arrays, enums and itemRgb stay text). `format` must be `NULL` for a bigBed.
+
+**bigWig signal over intervals, without importing a track.** `gintervals.import_bigwig(file, intervals)` returns the records (chrom, start, end, value) overlapping the intervals, whole and each once, reading only the data blocks under them. Feed it to a value-based vtrack; `weighted.sum` is the per-base sum (what `bbi.stackup(..., summary = "sum")` gives), `sum` adds each touched record's value once:
+
+```r
+gvtrack.create("sig", src = gintervals.import_bigwig("signal.bigWig", peaks), func = "weighted.sum")
+gextract("sig", peaks, iterator = peaks)   # NaN where no record overlaps
+```
+
 **Sort and merge overlaps (`gintervals.canonic`).** When you want a non-overlapping, sorted set - typical after rbind'ing per-condition `gscreen` results. To fold per-row metadata into the merged set, use `gintervals.mark_overlaps` (tags each source row with its merge-group ID) and aggregate per group:
 
 ```r

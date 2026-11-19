@@ -14,8 +14,8 @@ gintervals.import_bed(
 )
 }
 \arguments{
-\item{file}{path to a BED file (\code{.bed} or \code{.bed.gz}). Zip
-archives are not supported - unzip them first.}
+\item{file}{path to a BED file (\code{.bed} or \code{.bed.gz}) or a
+bigBed file. Zip archives are not supported - unzip them first.}
 
 \item{name}{if \code{TRUE} and a 4th column exists, include it as
 \code{name}.}
@@ -48,6 +48,22 @@ explicit configuration).
 }
 \details{
 BED is already 0-based half-open, so coordinates are taken as-is.
+
+A bigBed file (recognized by its first bytes, whatever its name) is read
+natively. Its columns are chrom, start, end and then its other fields in
+the file's order, named by the file's autoSql: fields of a numeric autoSql
+type (int, uint, short, ushort, byte, ubyte, float, double, bigint) are
+numeric, the others (string, lstring, char[n], enum, set, arrays) are kept
+as the text stored, and so is itemRgb (BED field 9, "R,G,B" text although
+autoSql declares it a uint). \code{name}, \code{score} and \code{strand}
+apply to the fields of those names. The fields of a bigBed without autoSql
+get the names UCSC's tools give them (name, score, strand, thickStart,
+thickEnd, reserved, blockCount, blockSizes, chromStarts, ...).
+As in \code{\link{gtrack.import}} of a bigWig, records on chromosomes the
+database lacks are skipped with a message (a warning if one of them looks
+like a primary chromosome), and records past the end of their chromosome
+are clipped to it (dropped if they start past it) with a warning.
+\code{format} must be \code{NULL} for a bigBed.
 
 ENCODE narrowPeak (BED6+4) and broadPeak (BED6+3) files carry extra
 columns, which are added after the BED columns under their UCSC names:
