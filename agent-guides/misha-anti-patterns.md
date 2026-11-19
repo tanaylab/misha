@@ -33,7 +33,9 @@ The silent footguns - code runs, output looks plausible, downstream conclusions 
 
 **A8. Reflexive `gintervals.canonic` after every `rbind`.** Canonicalizing destroys per-row identity - paired matched-control rows, per-sample replicate identity, parallel rows for downstream joins all collapse into the merged set. Run `gintervals.canonic` *only* when you actually want overlaps merged (typical: union-of-peak-sets across conditions). When the rows mean "distinct things at the same location", skip canonic.
 
-**A9. Base `data.frame(chrom, start, end)` instead of `gintervals(...)`.** `data.frame` produces unvalidated coordinates and turns `chrom` into a factor with stale levels (especially after subsetting). Equality filters then silently miss rows. Always pass through `gintervals(chrom, start, end)` which validates against the active genome and gives integer-typed coordinates.
+**A9. Base `data.frame(chrom, start, end)` instead of `gintervals(...)`.** `data.frame` produces unvalidated coordinates and turns `chrom` into a factor with stale levels (especially after subsetting). Equality filters then silently miss rows. Always pass through `gintervals(chrom, start, end)` which validates against the active genome and gives integer-typed coordinates. Exception: when the row order matters (rows aligned with another table, or file row numbers used as ids), derive the new frame from one that is already validated, e.g. `transform(peaks, start = ..., end = ...)` on the output of `gintervals.import_bed(..., keep_order = TRUE)`, because `gintervals()` sorts (A14b).
+
+**A9b. Joining misha output with an external table by the chrom string.** misha resolves chromosome aliases on input (`chr1`, `1`, `NC_000001.11`, ...), but a `merge`/`%in%`/pandas join between misha output and a table read from another source compares strings: `"1"` never equals `"chr1"`, and the join comes back silently empty. Bring the external table to the database's names first (`gintervals.force_range(ext)` returns them and keeps row order and extra columns), or do the join itself with `gintervals.neighbors` (overlaps: `mindist = 0, maxdist = 0`).
 
 ## Extraction & expressions
 
@@ -50,6 +52,8 @@ The silent footguns - code runs, output looks plausible, downstream conclusions 
 **A14b. `order(intervalID)` back into a frame you built with `gintervals()`.** `gintervals()` sorts its input (it ends in a `gintervsort` call), so `intervalID` indexes the *sorted* frame, not the one you handed it. A9 and A14 therefore interact: build an intervals frame in a meaningful non-genomic order (sampled rows, paired controls, an order you intend to index positionally), pass it through `gintervals()`, then `cbind` `res$value[order(res$intervalID)]` back onto your original frame, and you get a silent row shuffle. A plain `data.frame` round-trips (its `intervalID`s come back permuted and `order()` undoes it); the `gintervals()` one does not. Either sort your own frame first so the two orders agree, or carry your own id column and join on it - never index positionally from `order(intervalID)` into a frame you did not sort yourself.
 
 **A14c. Rebuilding a frame with `gintervals()` before `gseq.extract`.** `gseq.extract` on a plain data frame returns one sequence per row, in the input order, and reverse-complements rows with `strand == -1`. `gintervals(chrom, start, end)` sorts the rows and, without `strands =`, drops the strand, so sequences extracted from its result no longer line up with the original rows and all come from the + strand. Pass the data frame itself (with its `strand` column) to `gseq.extract`.
+
+**A14d. One-hot encoding `gseq.extract` output as is.** Sequences keep the genome's soft mask: in a database built from a soft-masked FASTA (UCSC hg38, for one) repeat bases come back lowercase. An encoder that only knows `ACGT` turns them into zeros or `N` without a warning. Call `toupper()` first, unless you want the mask.
 
 ## Quantiles / thresholds
 

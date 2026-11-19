@@ -242,7 +242,7 @@ peaks <- gintervals(chrom = peaks$chrom,
 peaks <- gintervals.canonic(peaks)
 ```
 
-**Clip to genome bounds.** `gintervals.force_range(intervs)` clamps `start >= 0` and `end <= chrom_len`. Use after any expansion that may push past chromosome ends.
+**Clip to genome bounds.** `gintervals.force_range(intervs)` clamps `start >= 0` and `end <= chrom_len`. Use after any expansion that may push past chromosome ends. It shortens windows silently, so for fixed-width windows (model inputs, `gextract.matrix`) drop the rows whose width changed: `win <- gintervals.force_range(win); win <- win[win$end - win$start == width, ]`.
 
 **Symmetric expansion shortcut.** If `misha.ext` is installed, `misha.ext::gintervals.expand(intervs, expansion = 100)` does the symmetric expand-by-N + `gintervals.force_range` clamp in one call. Use it in place of the explicit arithmetic when expansion is symmetric.
 
@@ -277,6 +277,11 @@ near <- gintervals.neighbors(peaks, tss, maxdist = 50e3, na.if.notfound = TRUE)
 
 # k nearest neighbors:
 knn <- gintervals.neighbors(peaks, tss, maxneighbors = 5)
+
+# Every overlapping pair (e.g. motif hits inside peaks). maxdist = 0 also returns
+# intervals that only touch (end == start), so keep the true overlaps:
+ov <- gintervals.neighbors(peaks, hits, maxneighbors = 1e6, mindist = 0, maxdist = 0)
+ov <- ov[ov$start1 < ov$end & ov$end1 > ov$start, ]
 
 # Strand-aware variants:
 gintervals.neighbors.upstream(peaks, tss, maxdist = 100e3)
@@ -418,11 +423,14 @@ prof <- gextract("epi.k27me3.es",
 **Equal-width windows as an N x L matrix (`gextract.matrix`).** For per-base (or per-bin) profiles over many windows of the same width, e.g. model inputs or motif-hit masks, skip the long table:
 
 ```r
-win <- gintervals(peaks$chrom, peaks$start - 1057, peaks$start + 1057)   # all 2114bp wide
+# windows around the summits, in the peaks' row order (gintervals() would sort them, A14b)
+peaks <- gintervals.import_bed("peaks.narrowPeak.gz", keep_order = TRUE)
+peaks <- peaks[peaks$peak >= 0, ]
+win <- transform(peaks, start = start + peak - 1057L, end = start + peak + 1057L)    # 2114bp
 sig  <- gextract.matrix("atac.es", intervals = win)                      # nrow(win) x 2114
 gvtrack.create("hit_cov", motif_hits, func = "coverage")
 mask <- gextract.matrix("hit_cov", intervals = win) > 0                  # logical mask
-win32 <- gintervals(peaks$chrom, peaks$start - 1056, peaks$start + 1056)  # 2112 = 66 x 32
+win32 <- transform(peaks, start = start + peak - 1056L, end = start + peak + 1056L)  # 2112 = 66 x 32
 arr  <- gextract.matrix(c("atac.es", "k27"), intervals = win32, iterator = 32)  # N x 66 x 2
 ```
 
