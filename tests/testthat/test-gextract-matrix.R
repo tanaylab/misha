@@ -42,12 +42,71 @@ test_that("gextract.matrix matches gextract per base on unsorted, duplicated and
     expect_identical(gextract.matrix("test.fixedbin", intervs), m)
 })
 
-test_that("gextract.matrix matches gextract with iterator > 1", {
-    intervs <- gxmat_windows(500, align = 50)
-    ref <- gxmat_reference("test.fixedbin", intervs, iterator = 50)
-    m <- gextract.matrix("test.fixedbin", intervals = intervs, iterator = 50)
-    expect_equal(dim(m), c(nrow(intervs), 10))
-    expect_identical(m, ref[, , 1])
+# values of every bin of every window, from one gextract call per window with
+# the window's bins, built here, as the iterator (the bins of one window touch
+# but do not overlap, so gextract reports each one as it is)
+gxmat_bin_reference <- function(exprs, intervals, iterator) {
+    num_bins <- (intervals$end[1] - intervals$start[1]) / iterator
+    res <- array(NA_real_, dim = c(nrow(intervals), num_bins, length(exprs)))
+    for (i in seq_len(nrow(intervals))) {
+        bin_starts <- intervals$start[i] + (seq_len(num_bins) - 1) * iterator
+        bins <- data.frame(chrom = intervals$chrom[i], start = bin_starts, end = bin_starts + iterator)
+        r <- gextract(exprs, intervals = intervals[i, c("chrom", "start", "end")], iterator = bins, colnames = paste0("v", seq_along(exprs)))
+        r <- r[order(r$start), ]
+        expect_equal(r$start, bin_starts)
+        expect_equal(r$end, bin_starts + iterator)
+        for (j in seq_along(exprs)) {
+            res[i, , j] <- r[[paste0("v", j)]]
+        }
+    }
+    res
+}
+
+test_that("gextract.matrix counts bins from each interval's start", {
+    gvtrack.create("gxmat_cov", gscreen("test.fixedbin > 0.2", gintervals(c(1, 2, "X"), 0, 3000)), func = "coverage")
+    withr::defer(gvtrack.rm("gxmat_cov"))
+    exprs <- c("test.fixedbin", "test.sparse", "gxmat_cov")
+    # stored values of the dense track, one per 50 bp track bin
+    dense <- lapply(c("chr1", "chr2", "chrX"), function(chrom) gextract("test.fixedbin", gintervals(chrom, 0, 3000))$test.fixedbin)
+    names(dense) <- c("chr1", "chr2", "chrX")
+    intervs <- gxmat_windows(350)
+    for (k in c(7, 10, 50)) {
+        expect_true(any(intervs$start %% k != 0))
+        ref <- withr::with_options(list(gmultitasking = FALSE), gxmat_bin_reference(exprs, intervs, k))
+        a <- gextract.matrix(exprs, intervals = intervs, iterator = k)
+        expect_equal(dim(a), c(nrow(intervs), 350 / k, 3))
+        expect_identical(unname(a), ref)
+        expect_identical(gextract.matrix("test.sparse", intervals = intervs, iterator = k), ref[, , 2])
+        expect_true(any(is.nan(a[, , 2])) && any(!is.na(a[, , 2])))
+        expect_true(all(a[, , 3] >= 0 & a[, , 3] <= 1) && any(a[, , 3] > 0 & a[, , 3] < 1))
+        # three intervals per gextract call
+        withr::with_options(list(gmax.data.size = 3 * 350 / k), {
+            expect_identical(unname(gextract.matrix(exprs, intervals = intervs, iterator = k)), ref)
+        })
+        withr::with_options(list(gmultitasking = FALSE), {
+            expect_identical(unname(gextract.matrix(exprs, intervals = intervs, iterator = k)), ref)
+        })
+        # a bin of the dense track gets the plain mean of the track bins it overlaps
+        bin_starts <- outer(intervs$start, (seq_len(350 / k) - 1) * k, "+")
+        direct <- matrix(mapply(function(chrom, s) {
+            mean(dense[[chrom]][(s %/% 50):((s + k - 1) %/% 50) + 1], na.rm = TRUE)
+        }, rep(intervs$chrom, 350 / k), as.vector(bin_starts)), nrow = nrow(intervs))
+        expect_equal(a[, , 1], direct, tolerance = 1e-6)
+    }
+})
+
+test_that("gextract.matrix gives gextract's numeric-iterator bins when every start is on the grid", {
+    exprs <- c("test.fixedbin", "test.sparse")
+    for (k in c(10, 50)) {
+        intervs <- gxmat_windows(500, align = k)
+        ref <- gxmat_reference(exprs, intervs, iterator = k)
+        a <- gextract.matrix(exprs, intervals = intervs, iterator = k)
+        expect_equal(dim(a), c(nrow(intervs), 500 / k, 2))
+        expect_identical(unname(a), ref)
+        # one interval off the grid: all rows go through the interval-relative bins
+        mixed <- rbind(intervs, data.frame(chrom = "chr1", start = 3, end = 503))
+        expect_identical(unname(gextract.matrix(exprs, intervals = mixed, iterator = k))[seq_len(nrow(intervs)), , ], ref)
+    }
 })
 
 test_that("gextract.matrix keeps the NaN values of a sparse track", {
@@ -121,10 +180,10 @@ test_that("gextract.matrix rejects invalid input", {
     expect_error(gextract.matrix("test.fixedbin", intervals = intervs, iterator = "test.fixedbin"), "positive integer")
     expect_error(gextract.matrix("test.fixedbin", intervals = intervs, iterator = 2.5), "positive integer")
     expect_error(gextract.matrix("test.fixedbin", intervals = intervs, iterator = intervs), "positive integer")
-    expect_error(gextract.matrix("test.fixedbin", intervals = gintervals(1, 105, 205), iterator = 10), "multiple of iterator")
     expect_error(gextract.matrix("test.fixedbin", intervals = intervs, colnames = c("a", "b")), "column names")
     expect_error(gextract.matrix("test.fixedbin", intervals = intervs[0, ]), "empty")
     expect_error(gextract.matrix("test.fixedbin", intervals = gintervals.2d(1, 0, 100, 1, 0, 100)), "1D")
     chrom_end <- gintervals.all()$end[gintervals.all()$chrom == "chr1"]
     expect_error(gextract.matrix("test.fixedbin", intervals = gintervals(1, chrom_end - 50, chrom_end + 50)), "chromosome boundaries")
+    expect_error(gextract.matrix("test.fixedbin", intervals = gintervals(1, chrom_end - 53, chrom_end + 47), iterator = 10), "chromosome boundaries")
 })

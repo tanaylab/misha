@@ -422,11 +422,11 @@ win <- gintervals(peaks$chrom, peaks$start - 1057, peaks$start + 1057)   # all 2
 sig  <- gextract.matrix("atac.es", intervals = win)                      # nrow(win) x 2114
 gvtrack.create("hit_cov", motif_hits, func = "coverage")
 mask <- gextract.matrix("hit_cov", intervals = win) > 0                  # logical mask
-win10 <- gintervals(peaks$chrom, peaks$start %/% 10 * 10 - 1000, peaks$start %/% 10 * 10 + 1000)
-arr  <- gextract.matrix(c("atac.es", "k27"), intervals = win10, iterator = 10)  # N x 200 x 2
+win32 <- gintervals(peaks$chrom, peaks$start - 1056, peaks$start + 1056)  # 2112 = 66 x 32
+arr  <- gextract.matrix(c("atac.es", "k27"), intervals = win32, iterator = 32)  # N x 66 x 2
 ```
 
-Row `i` is input row `i` (unsorted, duplicated and overlapping rows are fine); columns are in genomic order whatever the strand. Several expressions give an N x L x E array named by `colnames`. All windows must have the same width, `iterator` must divide it, and with `iterator > 1` every start must be a multiple of `iterator` (gextract's bins are chromosome-aligned). Values are gextract's, NaN included; a window past a chromosome end is an error, as in gextract.
+Row `i` is input row `i` (unsorted, duplicated and overlapping rows are fine); columns are in genomic order whatever the strand. Several expressions give an N x L x E array named by `colnames`. All windows must have the same width and `iterator` must divide it. Unlike gextract's numeric iterator, the bins start at each window's start (as `giterator.intervals(..., interval_relative = TRUE)`), so any start works. Values are what gextract gives for each bin as an iterator interval, NaN included; a dense-track bin that overlaps several track bins gets their plain mean, not weighted by overlap. A window past a chromosome end is an error, as in gextract.
 
 **One row per stored position (`iterator = <track>`).** For sparse-aligned data - per-CpG methylation, per-fragment coverage:
 

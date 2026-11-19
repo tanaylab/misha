@@ -26,8 +26,8 @@ expressions.
 }
 \description{
 Evaluates track expressions in fixed bins over each interval, like
-\code{\link{gextract}} with a numeric iterator, and returns the values as a
-matrix with one row per interval and one column per bin.
+\code{\link{gextract}} with an iterator, and returns the values as a matrix
+with one row per interval and one column per bin.
 }
 \details{
 All intervals must have the same width \code{W}, and \code{iterator} must
@@ -37,14 +37,19 @@ left to right. A 'strand' column is ignored: columns are in genomic order on
 both strands. Rows may be unsorted, duplicated, overlapping or on several
 chromosomes; each one is extracted on its own.
 
-gextract places the bins of a numeric iterator at multiples of
-\code{iterator} on the chromosome, so with \code{iterator > 1} every interval
-start must be a multiple of \code{iterator}. As in gextract, an interval
-that extends past the end of its chromosome is an error.
+The bins start at each interval's start, as in
+\code{\link{giterator.intervals}} with \code{interval_relative = TRUE}:
+column \code{j} of row \code{i} covers \code{[start_i + (j - 1) * iterator,
+start_i + j * iterator)}. When every start is a multiple of \code{iterator}
+these are the bins of gextract's numeric iterator. As in gextract, an
+interval that extends past the end of its chromosome is an error.
 
-The values are the ones gextract returns, NaN included. The result is
-allocated once and filled by calling gextract on consecutive chunks of
-'intervals', so memory use stays close to the size of the result.
+Each value is the one gextract returns for that bin as an iterator interval,
+NaN included. For a dense track, a bin that overlaps several of the track's
+bins gets the plain mean of their non-NaN values, not weighted by the length
+of each overlap. The result is allocated once and filled by calling gextract
+on consecutive chunks of 'intervals', so memory use stays close to the size
+of the result.
 }
 \section{NaN values}{
 
@@ -104,8 +109,14 @@ a <- gextract.matrix("dense_track", "sparse_track",
 )
 a[, , "dense"]
 
+## 32 bp bins counted from each start: a 2 x 3 matrix
+gextract.matrix("dense_track",
+    intervals = gintervals(c(1, 2), c(1005, 2017), c(1101, 2113)),
+    iterator = 32
+)
+
 }
 \seealso{
-\code{\link{gextract}}
+\code{\link{gextract}}, \code{\link{giterator.intervals}}
 }
 \keyword{~extract}
