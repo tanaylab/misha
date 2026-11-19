@@ -220,7 +220,7 @@
 #' By default the intervals are sorted by chrom and start. With
 #' \code{keep_order = TRUE} they stay in the file's order, so row \code{i}
 #' is the \code{i}-th data line, as peak IDs that are row numbers expect.
-#' misha functions accept unsorted intervals. \code{gextract},
+#' The functions below accept unsorted intervals. \code{gextract},
 #' \code{gscreen}, \code{gintervals.canonic} and the set operations return
 #' their rows in genomic order (\code{gextract}'s \code{intervalID} column
 #' gives the input row), while \code{gseq.extract},
