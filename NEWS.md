@@ -1,3 +1,8 @@
+# misha (development version)
+
+* **Behavior fix:** `neighbor.count` virtual tracks no longer miss a long source interval in bins revisited by overlapping scope intervals.
+* **Performance:** `neighbor.count` virtual tracks with `sshift`/`eshift` or a filter find each bin's first candidate by binary search instead of scanning the chromosome's source intervals from the start (30,000 intervals on hg38 chr1, 1 kb bins: 4.3 s -> 0.04 s).
+
 # misha 5.18.1
 
 * **Behavior fix:** `gseq.pwm()` and `gseq.kmer()` scan to the end of sequences with non-ASCII characters.
