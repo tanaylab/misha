@@ -111,6 +111,19 @@ test_that("the records serve as a value-based virtual track", {
     })
 })
 
+test_that("intervals no record overlaps give a result of no rows that serves as a virtual track", {
+    local_db_state()
+    bw <- bigwig_fixture("bg.bw")
+    withr::with_tempdir({
+        setup_bigwig_db()
+        empty <- gintervals.import_bigwig(bw, gintervals(1, 132, 134)) # between the records 94-132 and 134-140
+        expect_identical(empty, gintervals.import_bigwig(bw, gintervals(1, 100, 110))[0, ])
+        gvtrack.create("sig", src = empty, func = "weighted.sum")
+        x <- gextract("sig", gintervals(1, 0, 10000), iterator = gintervals(1, 0, 10000))
+        expect_true(is.nan(x$sig))
+    })
+})
+
 test_that("records past the chromosome end are clipped as gtrack.import clips them", {
     local_db_state()
     bw <- bigwig_fixture("bg.bw")
@@ -148,7 +161,6 @@ test_that("bad input is an error", {
     bw <- paths[["bg.bw"]]
     withr::with_tempdir({
         setup_bigwig_db()
-        expect_error(gintervals.import_bigwig(bw, gintervals(1, 132, 134)), "No records of bigWig file .* overlap the intervals")
         expect_error(gintervals.import_bigwig("no_such_file.bw"), "does not exist")
         expect_error(gintervals.import_bigwig(paths[["bg.bedGraph"]]), "is not a bigWig file")
         create_test_db("other_db", chrom_sizes = data.frame(chrom = c("contigA", "contigB"), size = c(10000, 10000)))

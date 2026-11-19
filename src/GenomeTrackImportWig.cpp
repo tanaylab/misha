@@ -475,11 +475,9 @@ SEXP gintervals_import_bigwig(SEXP _file, SEXP _intervals, SEXP _envir)
 			check_interrupt();
 		}
 
-		if (res.empty()) {
-			if (all)
-				verror("bigWig file %s contains no records", fname);
-			verror("No records of bigWig file %s overlap the intervals", fname);
-		}
+		// no record over the intervals is a zero-row result; a file of no records is an error
+		if (res.empty() && all)
+			verror("bigWig file %s contains no records", fname);
 
 		SEXP answer = iu.convert_intervs(&res, GInterval::NUM_COLS + 1, false);
 		SEXP values = rprotect_ptr(RSaneAllocVector(REALSXP, res.size()));

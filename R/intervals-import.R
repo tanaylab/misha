@@ -567,7 +567,10 @@ gintervals.import_vcf <- function(file = NULL, info = TRUE) {
 #' chromosome is clipped to it (dropped if it starts past it) with a warning.
 #' With \code{intervals = NULL}, records on chromosomes the database lacks are
 #' skipped with a message, or a warning if one of them looks like a primary
-#' chromosome. No record overlapping the intervals is an error.
+#' chromosome. If no record overlaps \code{intervals}, the result is a data
+#' frame of no rows with the same columns (a sparse signal often has no record
+#' over a region); with \code{intervals = NULL}, a file of no records is an
+#' error.
 #'
 #' The result works directly as the source of a value-based virtual track
 #' (\code{\link{gvtrack.create}}), which computes the signal over intervals
@@ -591,6 +594,8 @@ gintervals.import_vcf <- function(file = NULL, info = TRUE) {
 #' }
 #'
 #' gdb.init_examples()
+#' # dense_track.bw holds only chr1 and chr2, positions 0-5000, of the example
+#' # database's dense_track: no record overlaps intervals outside them
 #' f <- system.file("extdata", "dense_track.bw", package = "misha")
 #' peaks <- gintervals(c(1, 2), c(1000, 3000), c(1500, 3600))
 #' signal <- gintervals.import_bigwig(f, peaks)
