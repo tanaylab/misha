@@ -183,12 +183,16 @@ void IntervVarProcessor::process_neighbor_count(
 		GIntervals::const_iterator &eiter = var.eiinterv;
 		const GIntervals &expanded = var.eintervs;
 
-		// Scan backward to handle non-monotone access (overlapping regions)
+		// The scan below needs every interval before eiter to end by the query
+		// start. A query that moves back (overlapping scope intervals) breaks that.
+		// The intervals are sorted by start, not by end, so a long interval can sit
+		// before shorter ones that end earlier: step back while the running max
+		// end, not the interval's own end, reaches past the query start.
 		while (eiter != expanded.begin()) {
 			GIntervals::const_iterator prev = eiter - 1;
 			if (prev->chromid != eval_interval.chromid)
 				break;
-			if (prev->end > eval_interval.start)
+			if (var.emax_end[prev - expanded.begin()] > eval_interval.start)
 				--eiter;
 			else
 				break;

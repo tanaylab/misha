@@ -1,3 +1,7 @@
+# misha (development version)
+
+* **Behavior fix:** `neighbor.count` virtual tracks no longer miss a long source interval in bins revisited by overlapping scope intervals.
+
 # misha 5.18.1
 
 * **Behavior fix:** `gseq.pwm()` and `gseq.kmer()` scan to the end of sequences with non-ASCII characters.
