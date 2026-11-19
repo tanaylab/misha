@@ -180,6 +180,14 @@ genes <- gintervals.import_gff("refseq.gff", feature = "exon", attrs = TRUE)
 snps  <- gintervals.import_vcf("snps.vcf",  info = TRUE)
 ```
 
+`gintervals.import_bed` sorts by default; `keep_order = TRUE` keeps the file's row order (header lines skipped), which peak IDs that are row numbers need. `format = "narrowPeak"` / `"broadPeak"` (guessed from a `.narrowPeak` / `.broadPeak` name, `.gz` too) adds `signalValue`, `pValue`, `qValue` and, for narrowPeak, `peak`, the summit's offset from `start` (`-1` = no summit). Summit-centred windows, with the summit at `(start + end) %/% 2L`:
+
+```r
+peaks <- gintervals.import_bed("ENCFF000ABC.narrowPeak.gz", keep_order = TRUE)
+peaks <- peaks[peaks$peak >= 0, ]
+win <- transform(peaks, start = start + peak - 250L, end = start + peak + 250L, peak = 250L)
+```
+
 **Sort and merge overlaps (`gintervals.canonic`).** When you want a non-overlapping, sorted set - typical after rbind'ing per-condition `gscreen` results. To fold per-row metadata into the merged set, use `gintervals.mark_overlaps` (tags each source row with its merge-group ID) and aggregate per group:
 
 ```r
@@ -195,6 +203,8 @@ merged <- rbind(set_a, set_b) |>
 ```
 
 `gintervals.mark_overlaps` is `gintervals.canonic` plus a join-friendly group column; reach for it when you need custom per-merged-region aggregation. Bare `gintervals.canonic(...)` is fine when you only want the merged intervals frame and don't need to carry source metadata.
+
+Both also merge intervals that only touch (`end` of one == `start` of the next). To merge overlapping sites but keep adjacent ones apart, pass `unify_touching_intervals = FALSE` to either. `attr(gintervals.canonic(x), "mapping")` gives, for each row of `x`, the row of the merged set it went into; that vector is the `overlap_group` column.
 
 If you want to *keep* duplicate / overlapping rows (paired matches, parallel rows per sample), skip canonic.
 
