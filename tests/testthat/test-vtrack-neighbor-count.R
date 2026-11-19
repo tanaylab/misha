@@ -572,3 +572,28 @@ test_that("neighbor.count works with overlapping input intervals", {
     merged <- merge(res_overlap, res_individual, by = c("chrom", "start", "end"), suffixes = c(".overlap", ".individual"))
     expect_equal(merged$nc_overlap.overlap, merged$nc_overlap.individual)
 })
+
+test_that("neighbor.count finds a long source interval after an overlapping scope moves back", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    # In start order the long [0,1000) is followed by [10,20), which ends before
+    # the later queries but does not hide [0,1000) from them
+    src <- rbind(
+        gintervals(1, 0, 1000),
+        gintervals(1, 10, 20),
+        gintervals(1, 1100, 1200)
+    )
+    gvtrack.create("nc_back", src, "neighbor.count", 0)
+
+    scope <- rbind(gintervals(1, 400, 1160), gintervals(1, 500, 520))
+    res <- gextract("nc_back", scope, iterator = 10)
+    expect_equal(res$nc_back[res$intervalID == 2], c(1, 1))
+    alone <- do.call(rbind, lapply(1:2, function(i) gextract("nc_back", scope[i, ], iterator = 10)))
+    expect_equal(res$nc_back, alone$nc_back)
+
+    scope <- rbind(gintervals(1, 0, 1200), gintervals(1, 420, 600))
+    itr <- rbind(gintervals(1, 400, 450), gintervals(1, 1100, 1150))
+    res <- gextract("nc_back", scope, iterator = itr)
+    expect_equal(res$nc_back, c(1, 1, 1))
+})
