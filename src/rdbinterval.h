@@ -479,10 +479,15 @@ public:
 						 uint64_t res_record_size,   // size in bytes per datum in the result
 						 rdb::MultitaskingMode mode);
 	// Overload with explicit mode and max record count (caps shared memory allocation).
+	// num_results: the records are those of this many results (gcor's pairs), each of which
+	// gmax.data.size limits on its own, as in one process. The shared memory then holds
+	// num_results times the limit, and the kids' records together are checked against that while
+	// they run; the caller checks each result once they are done.
 	bool distribute_task(uint64_t res_const_size,    // data size in bytes for all the result
 						 uint64_t res_record_size,   // size in bytes per datum in the result
 						 rdb::MultitaskingMode mode,
-						 uint64_t max_records);      // max number of result records (0 = use gmax.data.size)
+						 uint64_t max_records,       // max number of result records (0 = use gmax.data.size)
+						 unsigned num_results = 1);
 
 private:
 	// Held by reference so a process-static cache can share a single

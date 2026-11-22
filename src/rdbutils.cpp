@@ -595,7 +595,7 @@ void RdbInitializer::check_kids_state(bool ignore_errors)
     }
 }
 
-void RdbInitializer::wait_for_kids(rdb::IntervUtils &iu)
+void RdbInitializer::wait_for_kids(rdb::IntervUtils &iu, unsigned num_results)
 {
 	int64_t delay_msec = LAUNCH_DELAY / 2;
     // bool slept_once = false;
@@ -626,7 +626,9 @@ void RdbInitializer::wait_for_kids(rdb::IntervUtils &iu)
 
             for (int i = 0; i < get_num_kids(); ++i)
                 res_num_records += s_shm->kid_res_num_records[i];
-            iu.verify_max_data_size(res_num_records, "Result");
+            // The records of num_results results, each limited on its own: the largest holds at
+            // least 1 / num_results of them
+            iu.verify_max_data_size((res_num_records + num_results - 1) / num_results, "Result");
         }
 
         if (s_running_pids.empty()) 

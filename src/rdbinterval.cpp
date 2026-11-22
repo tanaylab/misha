@@ -923,14 +923,18 @@ bool IntervUtils::distribute_task(uint64_t res_const_size,    // data size in by
 bool IntervUtils::distribute_task(uint64_t res_const_size,    // data size in bytes for all the result
 								  uint64_t res_record_size,   // size in bytes per datum in the result
 								  rdb::MultitaskingMode mode,
-								  uint64_t max_records)
+								  uint64_t max_records,
+								  unsigned num_results)
 {
 	// For now, we only support MMAP mode in this function
 	// MT_MODE_SINGLE should be handled by the caller (not calling distribute_task at all)
 	if (mode != rdb::MT_MODE_MMAP)
 		verror("distribute_task called with unsupported mode %d", mode);
 
-	uint64_t max_records_limit = get_max_data_size();
+	uint64_t data_size_limit;
+	if (__builtin_mul_overflow(get_max_data_size(), (uint64_t)num_results, &data_size_limit))
+		data_size_limit = numeric_limits<uint64_t>::max();
+	uint64_t max_records_limit = data_size_limit;
 	if (max_records > 0 && max_records < max_records_limit)
 		max_records_limit = max_records;
 
@@ -958,7 +962,7 @@ bool IntervUtils::distribute_task(uint64_t res_const_size,    // data size in by
 		// and then fail, which a finite limit too large to map (gquantiles, gcor) used to report
 		// at once.
 		uint64_t ram_shm_size = get_ram_shm_size();
-		if (max_records_limit != get_max_data_size() || max_res_size <= ram_shm_size || const_size > ram_shm_size ||
+		if (max_records_limit != data_size_limit || max_res_size <= ram_shm_size || const_size > ram_shm_size ||
 			!strstr(e.msg(), "Failed to allocate shared memory"))
 			throw;
 		rdb::prepare4multitasking(res_const_size, res_record_size, ram_shm_size, get_max_mem_usage(), m_num_planned_kids, true);
@@ -976,7 +980,7 @@ bool IntervUtils::distribute_task(uint64_t res_const_size,    // data size in by
 			return true;
 	}
 
-	wait_for_kids(*this);
+	wait_for_kids(*this, num_results);
 	return false;
 }
 
