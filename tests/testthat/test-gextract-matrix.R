@@ -187,3 +187,24 @@ test_that("gextract.matrix rejects invalid input", {
     expect_error(gextract.matrix("test.fixedbin", intervals = gintervals(1, chrom_end - 50, chrom_end + 50)), "chromosome boundaries")
     expect_error(gextract.matrix("test.fixedbin", intervals = gintervals(1, chrom_end - 53, chrom_end + 47), iterator = 10), "chromosome boundaries")
 })
+
+test_that("gextract.matrix looks up the R variables of an expression in the caller's frame", {
+    intervs <- gintervals(1, c(1000, 3000), c(1200, 3200))
+    expected <- gextract.matrix("test.fixedbin", intervals = intervs, iterator = 20)
+    # a variable of the calling function was not found
+    f <- function() {
+        thr <- 2
+        gextract.matrix("test.fixedbin * thr", intervals = intervs, iterator = 20)
+    }
+    expect_equal(f(), expected * 2)
+    # a variable named as one of gextract.matrix's locals took the local's value
+    width <- 0.5
+    expect_equal(gextract.matrix("test.fixedbin * width", intervals = intervs, iterator = 20), expected * 0.5)
+    iterator <- 1000
+    expect_equal(gextract.matrix("test.fixedbin + iterator", intervals = intervs, iterator = 20), expected + 1000)
+})
+
+test_that("gextract.matrix rejects coordinates that are not whole numbers", {
+    intervs <- data.frame(chrom = "chr1", start = 1000.5, end = 1100.5)
+    expect_error(gextract.matrix("test.fixedbin", intervals = intervs, iterator = 10), "whole numbers")
+})

@@ -298,6 +298,10 @@ gextract.matrix <- function(..., intervals = NULL, iterator = 1, colnames = NULL
         stop("Usage: gextract.matrix([expr]+, intervals, iterator = 1, colnames = NULL)", call. = FALSE)
     }
     .gcheckroot()
+    # gextract looks up the R variables of the expressions in the frame it is called from: it is
+    # called from the caller's, not from this one, whose locals (width, iterator, ...) would
+    # shadow them
+    envir <- parent.frame()
 
     if (is.null(intervals)) {
         intervals <- eval.parent(args[[length(args)]])
@@ -328,6 +332,9 @@ gextract.matrix <- function(..., intervals = NULL, iterator = 1, colnames = NULL
     }
 
     starts <- intervals$start
+    if (any(starts != round(starts))) {
+        stop("Interval coordinates must be whole numbers", call. = FALSE)
+    }
     width <- intervals$end[1] - starts[1]
     if (!isTRUE(all(intervals$end - starts == width)) || width <= 0) {
         stop("All intervals must have the same positive width", call. = FALSE)
@@ -359,11 +366,11 @@ gextract.matrix <- function(..., intervals = NULL, iterator = 1, colnames = NULL
             # the bins are also the scope: as an iterator alone, overlapping bins
             # of different intervals are merged into one block, but each scope
             # interval gets its own row, with intervalID pointing into bins
-            vals <- gextract(exprs, intervals = bins, iterator = bins)
+            vals <- do.call(gextract, list(exprs, intervals = bins, iterator = bins), envir = envir)
             win <- bin_rows[vals$intervalID]
             rm(bins, bin_rows)
         } else {
-            vals <- gextract(exprs, intervals = intervals[rows, ], iterator = iterator)
+            vals <- do.call(gextract, list(exprs, intervals = intervals[rows, ], iterator = iterator), envir = envir)
             win <- vals$intervalID
         }
         # rows of vals map to cells by interval and start, not by their order

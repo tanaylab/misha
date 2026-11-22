@@ -261,7 +261,7 @@
 #' \code{gscreen}, \code{gintervals.canonic} and the set operations return
 #' their rows in genomic order (\code{gextract}'s \code{intervalID} column
 #' gives the input row), while \code{gseq.extract},
-#' \code{gintervals.neighbors}, \code{gintervals.annotate},
+#' \code{gintervals.annotate},
 #' \code{gintervals.normalize} and \code{gintervals.summary} return one row
 #' per input row in input order. \code{gintervals()} sorts its input.
 #'
