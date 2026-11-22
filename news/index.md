@@ -14,6 +14,13 @@
   binary search instead of scanning the chromosome’s source intervals
   from the start (30,000 intervals on hg38 chr1, 1 kb bins: 4.3 s -\>
   0.04 s).
+- misha calls no longer collect child processes that misha did not
+  start, such as the command of a
+  [`pipe()`](https://rdrr.io/r/base/connections.html) connection, whose
+  exit status [`close()`](https://rdrr.io/r/base/connections.html) then
+  lost. A multitasking process of misha that something else collects is
+  now an error (“reaped outside misha”); the call used to wait for it
+  forever.
 
 ## misha 5.18.1
 
