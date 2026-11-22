@@ -509,7 +509,8 @@ void prepare4multitasking(uint64_t res_const_size, uint64_t res_var_size, uint64
 
 pid_t launch_process();
 
-void wait_for_kids(IntervUtils &iu);
+// num_results: see IntervUtils::distribute_task()
+void wait_for_kids(IntervUtils &iu, unsigned num_results = 1);
 
 int get_num_kids();
 
@@ -749,8 +750,7 @@ private:
 	static void    prepare4multitasking(uint64_t res_const_size, uint64_t res_var_size, uint64_t max_res_size, uint64_t max_mem_usage, unsigned num_planned_kids, bool res_size_from_ram = false);
 	static pid_t   launch_process();
     static void    check_kids_state(bool ignore_errors);
-	static void    forget_reaped_kids();
-	static void    wait_for_kids(rdb::IntervUtils &iu);
+	static void    wait_for_kids(rdb::IntervUtils &iu, unsigned num_results);
 	static int64_t update_kids_mem_usage(bool &counted);
 	static int     get_num_kids() { return s_kid_index; }
 	[[noreturn]] static void handle_error(const char *msg);
@@ -834,7 +834,7 @@ private:
 	friend void rdb::verror(const char *fmt, ...);
 	friend void rdb::prepare4multitasking(uint64_t res_const_size, uint64_t res_var_size, uint64_t max_res_size, uint64_t max_mem_usage, unsigned num_planned_kids, bool res_size_from_ram);
 	friend pid_t rdb::launch_process();
-	friend void rdb::wait_for_kids(rdb::IntervUtils &iu);
+	friend void rdb::wait_for_kids(rdb::IntervUtils &iu, unsigned num_results);
 	friend int rdb::get_num_kids();
 	friend void rdb::update_progress(unsigned char progress);
 	friend void rdb::update_res_data_size(uint64_t size);
@@ -937,7 +937,7 @@ inline void rdb::prepare4multitasking(uint64_t res_const_size, uint64_t res_var_
 
 inline pid_t rdb::launch_process() { return RdbInitializer::launch_process(); }
 
-inline void rdb::wait_for_kids(IntervUtils &iu) { RdbInitializer::wait_for_kids(iu); }
+inline void rdb::wait_for_kids(IntervUtils &iu, unsigned num_results) { RdbInitializer::wait_for_kids(iu, num_results); }
 
 inline int rdb::get_num_kids() { return RdbInitializer::get_num_kids(); }
 

@@ -211,6 +211,8 @@ public:
 
         GIntervals                 sintervs;
         GIntervals                 eintervs;
+        // neighbor.count: running max of eintervs' ends, restarted on each chromosome
+        vector<int64_t>            emax_end;
         GIntervals::const_iterator siinterv;
         GIntervals::const_iterator eiinterv;
         double                     dist_margin;

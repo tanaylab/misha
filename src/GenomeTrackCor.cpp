@@ -626,14 +626,21 @@ SEXP gtrackcor_spearman_exact_multitask(SEXP _track_exprs, SEXP _intervals, SEXP
         uint64_t record_size = sizeof(ValuePair);
 
         uint64_t estimated_bins = iu.estimate_num_bins(_iterator_policy, intervals1d, intervals2d);
-        // Multiply by num_pairs since each bin produces one value per pair
-        uint64_t estimated_records = estimated_bins > 0 ? estimated_bins * num_pairs : 0;
+        // Multiply by num_pairs since each bin produces one value per pair. An estimate over
+        // gmax.data.size is not passed: the limit then sizes the shared memory, which may fall back
+        // to one sized from RAM where it cannot be mapped (gcor does not back off an estimate).
+        uint64_t estimated_records = 0;
+        if (__builtin_mul_overflow(estimated_bins, (uint64_t)num_pairs, &estimated_records) ||
+            estimated_records > iu.get_max_data_size())
+            estimated_records = 0;
 
-        if (iu.distribute_task(header_size, record_size, rdb::MT_MODE_MMAP, estimated_records)) {
+        // gmax.data.size limits the values of each pair on its own, as in one process
+        if (iu.distribute_task(header_size, record_size, rdb::MT_MODE_MMAP, estimated_records, num_pairs)) {
             // Child process: collect all pairs
             TrackExprScanner scanner(iu);
             vector<vector<ValuePair>> all_pairs(num_pairs);
             vector<double> total_bins(num_pairs, 0);
+            uint64_t num_records = 0;
 
             for (scanner.begin(_track_exprs, iu.get_kid_intervals1d(), iu.get_kid_intervals2d(), _iterator_policy, _band); !scanner.isend(); scanner.next()) {
                 for (unsigned i = 0; i < num_pairs; ++i) {
@@ -642,7 +649,9 @@ SEXP gtrackcor_spearman_exact_multitask(SEXP _track_exprs, SEXP _intervals, SEXP
                     ++total_bins[i];
                     if (!std::isnan(x) && !std::isnan(y)) {
                         all_pairs[i].push_back({x, y});
-                        iu.verify_max_data_size(all_pairs[i].size(), "Result");
+                        iu.verify_max_data_size(all_pairs[i].size(), "Result", false);
+                        // the parent checks the values of all the pairs together
+                        update_res_data_size(++num_records);
                     }
                 }
             }
