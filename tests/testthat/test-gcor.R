@@ -300,7 +300,8 @@ test_that("gcor spearman.exact applies gmax.data.size to each pair, also when mu
         expect_equal(unname(two_pairs(multitask, 1.5 * n, "dense_track + 1")), c(1, 1))
     }
 
-    # the first pair over the limit and the second empty: the same error both ways
+    # the first pair over the limit and the second empty: here the same error both ways (a pair
+    # over the limit across several kids can report a different lower bound)
     err <- function(multitask) tryCatch(two_pairs(multitask, n - 1, "dense_track + NA"), error = conditionMessage)
     expect_match(err(FALSE), sprintf("Result size (at least %d records) exceeded the maximum allowed", n), fixed = TRUE)
     expect_identical(err(TRUE), err(FALSE))

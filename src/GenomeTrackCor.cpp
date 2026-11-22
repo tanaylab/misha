@@ -626,8 +626,13 @@ SEXP gtrackcor_spearman_exact_multitask(SEXP _track_exprs, SEXP _intervals, SEXP
         uint64_t record_size = sizeof(ValuePair);
 
         uint64_t estimated_bins = iu.estimate_num_bins(_iterator_policy, intervals1d, intervals2d);
-        // Multiply by num_pairs since each bin produces one value per pair
-        uint64_t estimated_records = estimated_bins > 0 ? estimated_bins * num_pairs : 0;
+        // Multiply by num_pairs since each bin produces one value per pair. An estimate over
+        // gmax.data.size is not passed: the limit then sizes the shared memory, which may fall back
+        // to one sized from RAM where it cannot be mapped (gcor does not back off an estimate).
+        uint64_t estimated_records = 0;
+        if (__builtin_mul_overflow(estimated_bins, (uint64_t)num_pairs, &estimated_records) ||
+            estimated_records > iu.get_max_data_size())
+            estimated_records = 0;
 
         // gmax.data.size limits the values of each pair on its own, as in one process
         if (iu.distribute_task(header_size, record_size, rdb::MT_MODE_MMAP, estimated_records, num_pairs)) {
