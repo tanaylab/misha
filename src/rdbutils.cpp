@@ -110,6 +110,22 @@ sem_t               *RdbInitializer::s_alloc_suspend_sem = SEM_FAILED;
 int                  RdbInitializer::s_kid_index;
 unsigned             RdbInitializer::s_num_planned_kids = 0;
 vector<RdbInitializer::LiveStat>     RdbInitializer::s_running_pids;
+// Kids given up on: still alive 30 s after SIGKILL, or left by a call whose scope leaked. A later
+// call reaps them once they end, so that they do not stay zombies for the rest of the session.
+static vector<pid_t> s_abandoned_pids;
+
+static void reap_abandoned_kids()
+{
+	for (size_t i = 0; i < s_abandoned_pids.size();) {
+		int status;
+		pid_t res = waitpid(s_abandoned_pids[i], &status, WNOHANG);
+		if (res == s_abandoned_pids[i] || (res < 0 && errno == ECHILD)) {
+			s_abandoned_pids[i] = s_abandoned_pids.back();
+			s_abandoned_pids.pop_back();
+		} else
+			++i;
+	}
+}
 // Keys already used by rdb::once_per_call() during the current top-level .Call.
 // Cleared by the outermost RdbInitializer.
 static set<string> s_once_per_call_keys;
@@ -183,6 +199,8 @@ RdbInitializer::RdbInitializer()
 		s_shm = (Shm *)MAP_FAILED;
 		s_kid_index = 0;
 		s_num_planned_kids = 0;
+		for (size_t i = 0; i < s_running_pids.size(); ++i)
+			s_abandoned_pids.push_back(s_running_pids[i].pid);
 		s_running_pids.clear();
 		s_once_per_call_keys.clear();
 
@@ -255,6 +273,7 @@ void RdbInitializer::release_process_state()
 	// if exception is thrown ~RdbInitializer is called first and then the child might need
 	// to write the error into the shared memory
 	if (!s_is_kid) {
+		reap_abandoned_kids();
 		check_kids_state(true);
 
 		if (s_shm_sem != SEM_FAILED) {
@@ -281,6 +300,8 @@ void RdbInitializer::release_process_state()
 					kill(ipid->pid, SIGKILL);
 			}
 			if (waited_ms >= 30000) {
+				for (size_t i = 0; i < s_running_pids.size(); ++i)
+					s_abandoned_pids.push_back(s_running_pids[i].pid);
 				s_running_pids.clear();
 				break;
 			}

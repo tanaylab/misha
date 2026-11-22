@@ -19,7 +19,8 @@ test_that("a misha call leaves the exit status of other child processes to their
     expect_gt(expected, 0)
 
     expect_equal(pipe_status_after(function() gextract("test.fixedbin", gintervals(1, 0, 1000))), expected)
-    withr::with_options(list(gmultitasking = TRUE), {
+    # gmax.processes pinned: by default it is 1 on a host of 2 cores, which does not fork
+    withr::with_options(list(gmultitasking = TRUE, gmax.processes = 4), {
         expect_equal(pipe_status_after(function() gsummary("test.fixedbin")), expected)
     })
 })

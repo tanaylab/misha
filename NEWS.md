@@ -1,6 +1,6 @@
 # misha (development version)
 
-* misha calls no longer collect child processes that misha did not start, such as the command of a `pipe()` connection, whose exit status `close()` then lost.
+* misha calls no longer collect child processes that misha did not start, such as the command of a `pipe()` connection, whose exit status `close()` then lost. A multitasking process of misha that something else collects is now an error ("reaped outside misha"); the call used to wait for it forever.
 
 # misha 5.18.1
 
