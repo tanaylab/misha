@@ -267,7 +267,7 @@ gsetroot("/path/to/mm9")   # target assembly
 lifted <- gintervals.liftover(intervs_mm10, chain = "mm10ToMm9.over.chain.fixed1")
 
 # Recenter to a fixed 300bp window so stretched/shrunk intervals don't confound downstream extracts:
-mid          <- round((lifted$start + lifted$end) / 2)
+mid          <- (lifted$start + lifted$end) %/% 2L
 lifted$start <- mid - 150
 lifted$end   <- mid + 150
 lifted       <- gintervals.force_range(lifted)        # clamp to chrom bounds
@@ -287,7 +287,8 @@ Output always carries `intervalID` (index into the input) and `chain_id` (which 
 |---|---|
 | `"error"` (default) | Strict: fail if input contains source duplications. Right for curated chains and 1:1 lift between close assemblies (mm9↔mm10, hg19↔hg38) |
 | `"keep"` | Cross-species / paralog-rich (e.g. cross-primate). One source → many output rows; distinguish by `chain_id` |
-| `"discard"` | Drop any source that has duplications. Use when downstream tooling can't tolerate ambiguity |
+| `"discard"` | Drop the source bases that several chains map, keep the rest of each chain. Use when downstream tooling can't tolerate ambiguity |
+| `"discard_intervals"` | Drop every chain interval whose source overlaps another, whole |
 
 **`tgt_overlap_policy` - multiple chains converging on overlapping target loci:**
 
@@ -298,7 +299,8 @@ Output always carries `intervalID` (index into the input) and `chain_id` (which 
 | `"auto_longer"` | Prefer the longer chain per segment. Useful when alignment scores are noisy or uniform across the chain file |
 | `"auto_first"` | Prefer the lowest `chain_id` per segment (= original chain-file order). Use when the chain file encodes ranked preference |
 | `"keep"` | Leave target overlaps untouched (downstream must handle them) |
-| `"discard"` | Drop any chain involved in a target overlap |
+| `"discard"` | Drop the target bases that several chains map to, keep the rest of each chain |
+| `"discard_intervals"` | Drop every chain interval involved in a target overlap, whole |
 | `"agg"` | Segment into disjoint regions and retain all contributors per region. **Pair with `value_col` + `multi_target_agg`** for proper value aggregation |
 | `"best_source_cluster"` | Cluster chains by source-side overlap: keep every "true duplication" cluster (chains whose source intervals overlap) but pick only the largest "conflicting alternative" cluster (disjoint source intervals). For paralog-aware lifts where you want duplications but not alternative competing mappings |
 | `"best_cluster_union"` / `"best_cluster_sum"` / `"best_cluster_max"` | Cluster-best variants for specialised cases (cluster scoring by union / sum / max). Most users want `"best_source_cluster"` or `"auto_score"` |

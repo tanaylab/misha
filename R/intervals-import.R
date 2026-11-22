@@ -21,6 +21,27 @@
     length(magic) == 2 && magic[1] == as.raw(0x1f) && magic[2] == as.raw(0x8b)
 }
 
+# Internal: does `file` start with the bigBed magic number (0x8789F2EB), in
+# either byte order?
+.gis_bigbed_file <- function(file) {
+    con <- file(file, "rb")
+    on.exit(close(con))
+    magic <- tryCatch(readBin(con, "raw", n = 4), error = function(e) raw(0))
+    bytes <- as.raw(c(0xeb, 0xf2, 0x89, 0x87))
+    identical(magic, bytes) || identical(magic, rev(bytes))
+}
+
+# Internal: all the records of a bigBed file, in file order: chrom, start, end
+# and the fields the file declares past them, named by its autoSql.
+.gread_bigbed <- function(file) {
+    df <- .gcall("gintervals_import_bigbed", path.expand(file), .misha_env())
+    dup <- unique(names(df)[duplicated(names(df))])
+    if (length(dup)) {
+        stop(sprintf("bigBed file %s has more than one column named %s", file, paste(dup, collapse = ", ")), call. = FALSE)
+    }
+    df
+}
+
 # Internal: decompress a gzipped file to a temp file, the same way
 # gtrack.import() does (R/track-import.R), and check the exit status.
 # Returns the temp file path when the data came out whole, or NULL when gunzip
@@ -173,6 +194,32 @@
     as.numeric(out)
 }
 
+# Internal: the columns that each gintervals.import_bed format adds after the
+# six BED columns, named as in the UCSC format descriptions.
+.gbed_format_columns <- list(
+    bed = character(0),
+    narrowPeak = c("signalValue", "pValue", "qValue", "peak"),
+    broadPeak = c("signalValue", "pValue", "qValue")
+)
+
+# Internal: the format argument of gintervals.import_bed, or its guess from the
+# file name when NULL.
+.gbed_format <- function(file, format) {
+    formats <- names(.gbed_format_columns)
+    if (is.null(format)) {
+        for (f in setdiff(formats, "bed")) {
+            if (grepl(sprintf("\\.%s(\\.gz)?$", f), file, ignore.case = TRUE)) {
+                return(f)
+            }
+        }
+        return("bed")
+    }
+    if (!is.character(format) || length(format) != 1 || !(format %in% formats)) {
+        stop(sprintf("format must be one of %s", paste0("\"", formats, "\"", collapse = ", ")), call. = FALSE)
+    }
+    format
+}
+
 
 #' Import intervals from a BED file
 #'
@@ -184,30 +231,132 @@
 #'
 #' BED is already 0-based half-open, so coordinates are taken as-is.
 #'
-#' @param file path to a BED file (\code{.bed} or \code{.bed.gz}). Zip
-#'   archives are not supported - unzip them first.
+#' A bigBed file (recognized by its first bytes, whatever its name) is read
+#' natively. Its columns are chrom, start, end and then its other fields in
+#' the file's order, named by the file's autoSql: fields of a numeric autoSql
+#' type (int, uint, short, ushort, byte, ubyte, float, double, bigint) are
+#' numeric, the others (string, lstring, char[n], enum, set, arrays) are kept
+#' as the text stored, and so is itemRgb (BED field 9, "R,G,B" text although
+#' autoSql declares it a uint). \code{name}, \code{score} and \code{strand}
+#' apply to the fields of those names. The fields of a bigBed without autoSql
+#' get the names UCSC's tools give them (name, score, strand, thickStart,
+#' thickEnd, reserved, blockCount, blockSizes, chromStarts, ...).
+#' As in \code{\link{gtrack.import}} of a bigWig, records on chromosomes the
+#' database lacks are skipped with a message (a warning if one of them looks
+#' like a primary chromosome), and records past the end of their chromosome
+#' are clipped to it (dropped if they start past it) with a warning.
+#' \code{format} must be \code{NULL} for a bigBed.
+#'
+#' ENCODE narrowPeak (BED6+4) and broadPeak (BED6+3) files carry extra
+#' columns, which are added after the BED columns under their UCSC names:
+#' \code{signalValue}, \code{pValue} and \code{qValue} (numeric) for both,
+#' and \code{peak} (integer) for narrowPeak. \code{peak} is the summit's
+#' offset from \code{start}; -1 means no summit was called, and is kept
+#' as-is.
+#'
+#' By default the intervals are sorted by chrom and start. With
+#' \code{keep_order = TRUE} they stay in the file's order, so row \code{i}
+#' is the \code{i}-th data line, as peak IDs that are row numbers expect.
+#' The functions below accept unsorted intervals. \code{gextract},
+#' \code{gscreen}, \code{gintervals.canonic} and the set operations return
+#' their rows in genomic order (\code{gextract}'s \code{intervalID} column
+#' gives the input row), while \code{gseq.extract},
+#' \code{gintervals.annotate},
+#' \code{gintervals.normalize} and \code{gintervals.summary} return one row
+#' per input row in input order. \code{gintervals()} sorts its input.
+#'
+#' @param file path to a BED file (\code{.bed} or \code{.bed.gz}) or a
+#'   bigBed file. Zip archives are not supported - unzip them first.
 #' @param name if \code{TRUE} and a 4th column exists, include it as
 #'   \code{name}.
 #' @param score if \code{TRUE} and a 5th (numeric) column exists, include
 #'   it as \code{score}.
 #' @param strand if \code{TRUE} and a 6th column exists, include it as
 #'   \code{strand} (mapped to \code{1}/\code{-1}/\code{0}).
-#' @return A 1D intervals data frame, sorted by chrom and start.
+#' @param keep_order if \code{TRUE}, return the intervals in the file's
+#'   order (header and comment lines skipped) instead of sorting them.
+#' @param format one of \code{"bed"}, \code{"narrowPeak"} or
+#'   \code{"broadPeak"}. \code{NULL} guesses from the file name: a name
+#'   ending in \code{.narrowPeak} or \code{.narrowPeak.gz} (any case) is
+#'   narrowPeak, \code{.broadPeak} or \code{.broadPeak.gz} is broadPeak,
+#'   anything else is BED.
+#' @return A 1D intervals data frame, sorted by chrom and start unless
+#'   \code{keep_order} is \code{TRUE}.
 #' @seealso \code{\link{gintervals.import_gff}},
 #'   \code{\link{gintervals.import_vcf}}.
 #' @keywords ~intervals ~import ~BED
+#' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
+#'
+#' gdb.init_examples()
+#' f <- tempfile(fileext = ".narrowPeak")
+#' writeLines(c(
+#'     "chr1\t20000\t20400\tpeak_1\t500\t.\t8.1\t12.3\t10.2\t150",
+#'     "chr1\t10000\t10300\tpeak_2\t800\t.\t9.4\t15.0\t12.8\t120"
+#' ), f)
+#' peaks <- gintervals.import_bed(f, keep_order = TRUE)
+#' peaks
+#'
+#' # 200 bp windows centred on the summits, in the file's order: the summit
+#' # is at (start + end) %/% 2. Drop rows with peak = -1 (no summit) first.
+#' summit <- peaks$start + peaks$peak
+#' windows <- transform(peaks, start = summit - 100, end = summit + 100, peak = 100L)
+#' windows
+#'
 #' @export
-gintervals.import_bed <- function(file = NULL, name = TRUE, score = TRUE, strand = TRUE) {
+gintervals.import_bed <- function(file = NULL, name = TRUE, score = TRUE, strand = TRUE, keep_order = FALSE, format = NULL) {
     if (is.null(file)) {
-        stop("Usage: gintervals.import_bed(file, name = TRUE, score = TRUE, strand = TRUE)", call. = FALSE)
+        stop("Usage: gintervals.import_bed(file, name = TRUE, score = TRUE, strand = TRUE, keep_order = FALSE, format = NULL)", call. = FALSE)
     }
     .gcheckroot()
     if (!file.exists(file)) {
         stop(sprintf("BED file %s does not exist", file), call. = FALSE)
     }
+    if (!is.logical(keep_order) || length(keep_order) != 1 || is.na(keep_order)) {
+        stop("keep_order must be TRUE or FALSE", call. = FALSE)
+    }
+    if (.gis_bigbed_file(file)) {
+        if (!is.null(format)) {
+            stop(sprintf("format cannot be given for bigBed file %s: a bigBed names its columns in its autoSql", file), call. = FALSE)
+        }
+        df <- .gread_bigbed(file)
+        if (nrow(df) == 0) {
+            stop(sprintf("BED file %s appears to be empty or contains no data intervals", file), call. = FALSE)
+        }
+        if (!name) {
+            df$name <- NULL
+        }
+        if (!score) {
+            df$score <- NULL
+        }
+        if (!strand) {
+            df$strand <- NULL
+        }
+        if (!is.null(df[["score"]])) {
+            df$score <- suppressWarnings(as.numeric(df[["score"]]))
+        }
+        if (!is.null(df[["strand"]])) {
+            df$strand <- .gparse_strand_vec(df[["strand"]], context = sprintf("BED file %s", file))
+        }
+        if (keep_order) {
+            return(df)
+        }
+        return(.gsort_intervals_df(df))
+    }
+
+    format <- .gbed_format(file, format)
+    format_cols <- .gbed_format_columns[[format]]
 
     bed <- .gread_bed_table(file)
     n <- ncol(bed)
+    if (length(format_cols) && n < 6 + length(format_cols)) {
+        stop(sprintf(
+            "BED file %s has %d columns, but format \"%s\" needs %d",
+            file, n, format, 6 + length(format_cols)
+        ), call. = FALSE)
+    }
 
     starts <- suppressWarnings(as.numeric(bed[[2]]))
     ends <- suppressWarnings(as.numeric(bed[[3]]))
@@ -231,7 +380,26 @@ gintervals.import_bed <- function(file = NULL, name = TRUE, score = TRUE, strand
     if (n >= 5 && score) {
         df$score <- suppressWarnings(as.numeric(as.character(bed[[5]])))
     }
+    for (i in seq_along(format_cols)) {
+        df[[format_cols[i]]] <- suppressWarnings(as.numeric(as.character(bed[[6 + i]])))
+    }
+    if (format == "narrowPeak") {
+        # an offset that is not a whole number (or is missing) would silently
+        # shift every window centred on it
+        bad <- !is.finite(df$peak) | df$peak != round(df$peak)
+        if (any(bad)) {
+            i <- which(bad)[1]
+            stop(sprintf(
+                "narrowPeak file %s: peak (column 10) must be a whole number, got \"%s\" at data row %d",
+                file, bed[[10]][i], i
+            ), call. = FALSE)
+        }
+        df$peak <- as.integer(df$peak)
+    }
 
+    if (keep_order) {
+        return(df)
+    }
     .gsort_intervals_df(df)
 }
 
@@ -378,4 +546,70 @@ gintervals.import_vcf <- function(file = NULL, info = TRUE) {
     if (info && ncol(vcf) >= 8) df$info <- as.character(vcf[[8]])
 
     .gsort_intervals_df(df)
+}
+
+
+#' Read the records of a bigWig file that overlap intervals
+#'
+#' Reads the records of a bigWig file over a set of intervals without
+#' importing the file into a track. Only the data blocks that the file's index
+#' places over the intervals are read and decompressed, so reading a few
+#' thousand regions of a large bigWig is fast.
+#'
+#' Each record that overlaps \code{intervals} is returned once, whole (not
+#' clipped to the intervals), also when it overlaps several of them, and the
+#' records are sorted by chrom and start. The full-resolution records are read
+#' (bedGraph, variableStep and fixedStep sections alike), never the zoom
+#' levels; zero-length records are skipped. As in \code{\link{gtrack.import}},
+#' chromosome names are matched to the database through its aliases
+#' (\code{chr1} <-> \code{1}, ...), a file none of whose chromosomes the
+#' database has is an error, and a record that runs past the end of its
+#' chromosome is clipped to it (dropped if it starts past it) with a warning.
+#' With \code{intervals = NULL}, records on chromosomes the database lacks are
+#' skipped with a message, or a warning if one of them looks like a primary
+#' chromosome. If no record overlaps \code{intervals}, the result is a data
+#' frame of no rows with the same columns (a sparse signal often has no record
+#' over a region); with \code{intervals = NULL}, a file of no records is an
+#' error.
+#'
+#' The result works directly as the source of a value-based virtual track
+#' (\code{\link{gvtrack.create}}), which computes the signal over intervals
+#' without importing the file. \code{func = "sum"} adds up the values of the
+#' records an interval touches, each counted once; \code{"weighted.sum"} weighs
+#' each by the number of its bases inside the interval, which is the sum of the
+#' signal over the interval's bases. An interval that no record overlaps gets
+#' \code{NaN} from \code{sum}, \code{weighted.sum}, \code{avg}, \code{min},
+#' \code{max} and \code{lse}, and 0 from \code{size} and \code{exists}.
+#'
+#' @param file path to a bigWig file.
+#' @param intervals intervals to read the records of. \code{NULL} reads all
+#'   the records of the file.
+#' @return A data frame with columns chrom, start, end and value.
+#' @seealso \code{\link{gtrack.import}}, \code{\link{gvtrack.create}},
+#'   \code{\link{gintervals.import_bed}}.
+#' @keywords ~intervals ~import ~bigwig
+#' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
+#'
+#' gdb.init_examples()
+#' # dense_track.bw holds only chr1 and chr2, positions 0-5000, of the example
+#' # database's dense_track: no record overlaps intervals outside them
+#' f <- system.file("extdata", "dense_track.bw", package = "misha")
+#' peaks <- gintervals(c(1, 2), c(1000, 3000), c(1500, 3600))
+#' signal <- gintervals.import_bigwig(f, peaks)
+#' head(signal)
+#'
+#' # the signal summed over each peak's bases, without importing the file
+#' gvtrack.create("sig", src = signal, func = "weighted.sum")
+#' gextract("sig", peaks, iterator = peaks)
+#'
+#' @export
+gintervals.import_bigwig <- function(file, intervals = NULL) {
+    .gcheckroot()
+    if (!file.exists(file)) {
+        stop(sprintf("bigWig file %s does not exist", file), call. = FALSE)
+    }
+    .gcall("gintervals_import_bigwig", path.expand(file), intervals, .misha_env())
 }

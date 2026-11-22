@@ -89,6 +89,8 @@ extern "C" {
     extern SEXP gtrackimport_mappedseq(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gtrackimportwig(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gimport_check_chroms(SEXP, SEXP, SEXP, SEXP);
+    extern SEXP gintervals_import_bigwig(SEXP, SEXP, SEXP);
+    extern SEXP gintervals_import_bigbed(SEXP, SEXP);
     extern SEXP gtrackimportparquet(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gtrack_bedgraph_lines(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP parquet_columns(SEXP, SEXP, SEXP);
@@ -225,6 +227,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"gtrackimport_mappedseq", (DL_FUNC)&gtrackimport_mappedseq, 11},
     {"gtrackimportwig", (DL_FUNC)&gtrackimportwig, 6},
     {"gimport_check_chroms", (DL_FUNC)&gimport_check_chroms, 4},
+    {"gintervals_import_bigwig", (DL_FUNC)&gintervals_import_bigwig, 3},
+    {"gintervals_import_bigbed", (DL_FUNC)&gintervals_import_bigbed, 2},
     {"gtrackimportparquet", (DL_FUNC)&gtrackimportparquet, 7},
     {"gtrack_bedgraph_lines", (DL_FUNC)&gtrack_bedgraph_lines, 10},
     {"parquet_columns", (DL_FUNC)&parquet_columns, 3},

@@ -1,0 +1,20 @@
+table typed
+"BED9+7 with extra fields of several autoSql types"
+(
+string chrom;        "Reference sequence chromosome or scaffold"
+uint   chromStart;   "Start position in chromosome"
+uint   chromEnd;     "End position in chromosome"
+string name;         "Name of item"
+uint   score;        "Score from 0-1000"
+char[1] strand;      "+ or - for strand"
+uint   thickStart;   "Start of where display should be thick"
+uint   thickEnd;     "End of where display should be thick"
+uint   itemRgb;      "RGB value for item color"
+int    count;        "A signed integer"
+float  signal;       "A float"
+double pval;         "A double"
+bigint big;          "A 64-bit integer"
+lstring note;        "Long text, may hold spaces"
+enum(on, off) state; "An enum"
+int[3] triple;       "A fixed-size array"
+)
