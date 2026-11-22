@@ -110,6 +110,22 @@ sem_t               *RdbInitializer::s_alloc_suspend_sem = SEM_FAILED;
 int                  RdbInitializer::s_kid_index;
 unsigned             RdbInitializer::s_num_planned_kids = 0;
 vector<RdbInitializer::LiveStat>     RdbInitializer::s_running_pids;
+// Kids given up on: still alive 30 s after SIGKILL, or left by a call whose scope leaked. A later
+// call reaps them once they end, so that they do not stay zombies for the rest of the session.
+static vector<pid_t> s_abandoned_pids;
+
+static void reap_abandoned_kids()
+{
+	for (size_t i = 0; i < s_abandoned_pids.size();) {
+		int status;
+		pid_t res = waitpid(s_abandoned_pids[i], &status, WNOHANG);
+		if (res == s_abandoned_pids[i] || (res < 0 && errno == ECHILD)) {
+			s_abandoned_pids[i] = s_abandoned_pids.back();
+			s_abandoned_pids.pop_back();
+		} else
+			++i;
+	}
+}
 // Keys already used by rdb::once_per_call() during the current top-level .Call.
 // Cleared by the outermost RdbInitializer.
 static set<string> s_once_per_call_keys;
@@ -183,6 +199,8 @@ RdbInitializer::RdbInitializer()
 		s_shm = (Shm *)MAP_FAILED;
 		s_kid_index = 0;
 		s_num_planned_kids = 0;
+		for (size_t i = 0; i < s_running_pids.size(); ++i)
+			s_abandoned_pids.push_back(s_running_pids[i].pid);
 		s_running_pids.clear();
 		s_once_per_call_keys.clear();
 
@@ -255,7 +273,8 @@ void RdbInitializer::release_process_state()
 	// if exception is thrown ~RdbInitializer is called first and then the child might need
 	// to write the error into the shared memory
 	if (!s_is_kid) {
-		forget_reaped_kids();
+		reap_abandoned_kids();
+		check_kids_state(true);
 
 		if (s_shm_sem != SEM_FAILED) {
 			SemLocker sl(s_shm_sem);
@@ -273,7 +292,6 @@ void RdbInitializer::release_process_state()
 			{
 				SigBlocker sb;
 				check_kids_state(true);
-				forget_reaped_kids();
 				if (s_running_pids.empty())
 					break;
 			}
@@ -282,6 +300,8 @@ void RdbInitializer::release_process_state()
 					kill(ipid->pid, SIGKILL);
 			}
 			if (waited_ms >= 30000) {
+				for (size_t i = 0; i < s_running_pids.size(); ++i)
+					s_abandoned_pids.push_back(s_running_pids[i].pid);
 				s_running_pids.clear();
 				break;
 			}
@@ -306,22 +326,6 @@ void RdbInitializer::release_process_state()
 	sigaction(SIGCHLD, &s_old_sigchld_act, NULL);
 
 	umask(s_old_umask);
-}
-
-// Drops from s_running_pids the kids that are already gone: one that ended is reaped here, and one
-// that someone else reaped (waitpid gives ECHILD) is no longer ours - its pid may even belong to
-// another process by now, which must not be signaled.
-void RdbInitializer::forget_reaped_kids()
-{
-	for (size_t i = 0; i < s_running_pids.size();) {
-		int status;
-		pid_t res = waitpid(s_running_pids[i].pid, &status, WNOHANG);
-		if (res == s_running_pids[i].pid || (res < 0 && errno == ECHILD)) {
-			s_running_pids[i] = s_running_pids.back();
-			s_running_pids.pop_back();
-		} else
-			++i;
-	}
 }
 
 bool RdbInitializer::repair_leaked_scope()
@@ -519,69 +523,75 @@ pid_t RdbInitializer::launch_process()
 	return pid;
 }
 
+// Reaps the kids that ended and drops them from s_running_pids. Each kid is waited for by its own
+// pid: waitpid(-1) would also take the exit status of a child that R or another package started,
+// and its owner could then no longer get it. A kid that someone else reaped (waitpid gives ECHILD)
+// is dropped as well, so that no wait loop hangs on it and its pid, which may belong to another
+// process by now, is not signaled; its exit status is unknown, which is an error unless errors
+// are ignored.
 void RdbInitializer::check_kids_state(bool ignore_errors)
 {
-    int status;
-    pid_t pid;
+    for (size_t i = 0; i < s_running_pids.size();) {
+        int status;
+        pid_t pid = s_running_pids[i].pid;
+        pid_t res = waitpid(pid, &status, WNOHANG);
+        bool reaped = res == pid;
 
-    while ((pid = waitpid((pid_t)-1, &status, WNOHANG)) > 0) {
-        int kid_idx = -1;
+        if (!reaped && !(res < 0 && errno == ECHILD)) {  // still running
+            ++i;
+            continue;
+        }
 
-        for (vector<LiveStat>::iterator ipid = s_running_pids.begin(); ipid != s_running_pids.end(); ++ipid) {
-            if (ipid->pid == pid) {
-                kid_idx = ipid->index;
-                swap(*ipid, s_running_pids.back());
-                s_running_pids.pop_back();
+        int kid_idx = s_running_pids[i].index;
+        s_running_pids[i] = s_running_pids.back();
+        s_running_pids.pop_back();
 
-                if (!ignore_errors) {
-                    // Expected exit: killed by MISHA_EXIT_SIG (SIGTERM with SIG_DFL).
-                    // Any other exit is abnormal — either a different signal, or
-                    // a normal exit(0) from R that escaped rexit().
-                    bool expected_exit = WIFSIGNALED(status) && WTERMSIG(status) == MISHA_EXIT_SIG;
+        if (!ignore_errors) {
+            // Expected exit: killed by MISHA_EXIT_SIG (SIGTERM with SIG_DFL).
+            // Any other exit is abnormal - either a different signal, or
+            // a normal exit(0) from R that escaped rexit().
+            bool expected_exit = reaped && WIFSIGNALED(status) && WTERMSIG(status) == MISHA_EXIT_SIG;
 
-                    if (!expected_exit) {
-                        // Check if the child wrote an error message to shared memory
-                        char error_msg_copy[1000];
-                        bool has_error_msg = false;
-                        {
-                            SemLocker sl(s_shm_sem);
-                            if (s_shm->error_msg[0]) {
-                                strncpy(error_msg_copy, s_shm->error_msg, sizeof(error_msg_copy) - 1);
-                                error_msg_copy[sizeof(error_msg_copy) - 1] = '\0';
-                                has_error_msg = true;
-                            }
-                        }
-                        // Call verror AFTER releasing the semaphore to avoid deadlock
-                        if (has_error_msg) {
-                            verror("%s", error_msg_copy);
-                        } else if (WIFEXITED(status)) {
-                            verror("Child process %d exited unexpectedly with status %d (expected signal termination via rexit)",
-                                   (int)pid, WEXITSTATUS(status));
-                        } else {
-                            verror("Child process %d ended unexpectedly (signal %d)", (int)pid, WTERMSIG(status));
-                        }
+            if (!expected_exit) {
+                // Check if the child wrote an error message to shared memory
+                char error_msg_copy[1000];
+                bool has_error_msg = false;
+                {
+                    SemLocker sl(s_shm_sem);
+                    if (s_shm->error_msg[0]) {
+                        strncpy(error_msg_copy, s_shm->error_msg, sizeof(error_msg_copy) - 1);
+                        error_msg_copy[sizeof(error_msg_copy) - 1] = '\0';
+                        has_error_msg = true;
                     }
                 }
-
-                // choose a new untouchable kid: the one with maximal memory consumption
-                if (kid_idx == s_shm->untouchable_kid_idx && s_running_pids.size()) {
-                    int untouchable_kid_idx = s_running_pids.begin()->index;
-                    int64_t max_kid_mem_usage = s_shm->mem_usage[untouchable_kid_idx];
-                    for (vector<LiveStat>::iterator ipid2 = s_running_pids.begin() + 1; ipid2 < s_running_pids.end(); ++ipid2) {
-                        if (max_kid_mem_usage < s_shm->mem_usage[ipid2->index]) {
-                            untouchable_kid_idx = ipid2->index;
-                            max_kid_mem_usage = s_shm->mem_usage[untouchable_kid_idx];
-                        }
-                    }
-                    s_shm->untouchable_kid_idx = untouchable_kid_idx;
+                // Call verror AFTER releasing the semaphore to avoid deadlock
+                if (has_error_msg) {
+                    verror("%s", error_msg_copy);
+                } else if (!reaped) {
+                    verror("Child process %d was reaped outside misha, its exit status is unknown", (int)pid);
+                } else if (WIFEXITED(status)) {
+                    verror("Child process %d exited unexpectedly with status %d (expected signal termination via rexit)",
+                           (int)pid, WEXITSTATUS(status));
+                } else {
+                    verror("Child process %d ended unexpectedly (signal %d)", (int)pid, WTERMSIG(status));
                 }
-                s_shm->num_kids_running--;
-                break;
             }
         }
 
-        if (kid_idx >= 0)
-            s_shm->is_alive[kid_idx] = false;
+        // choose a new untouchable kid: the one with maximal memory consumption
+        if (kid_idx == s_shm->untouchable_kid_idx && s_running_pids.size()) {
+            int untouchable_kid_idx = s_running_pids.begin()->index;
+            int64_t max_kid_mem_usage = s_shm->mem_usage[untouchable_kid_idx];
+            for (vector<LiveStat>::iterator ipid2 = s_running_pids.begin() + 1; ipid2 < s_running_pids.end(); ++ipid2) {
+                if (max_kid_mem_usage < s_shm->mem_usage[ipid2->index]) {
+                    untouchable_kid_idx = ipid2->index;
+                    max_kid_mem_usage = s_shm->mem_usage[untouchable_kid_idx];
+                }
+            }
+            s_shm->untouchable_kid_idx = untouchable_kid_idx;
+        }
+        s_shm->num_kids_running--;
+        s_shm->is_alive[kid_idx] = false;
     }
 }
 
