@@ -1,3 +1,7 @@
+# misha (development version)
+
+* misha calls no longer collect child processes that misha did not start, such as the command of a `pipe()` connection, whose exit status `close()` then lost.
+
 # misha 5.18.1
 
 * **Behavior fix:** `gseq.pwm()` and `gseq.kmer()` scan to the end of sequences with non-ASCII characters.
