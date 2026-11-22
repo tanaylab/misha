@@ -40,6 +40,13 @@
     </div>
 
     <div class="section level2">
+<h2 class="pkg-version" data-toc-text="development version" id="misha-development-version">misha (development version)<a class="anchor" aria-label="anchor" href="#misha-development-version"></a></h2>
+<ul><li>
+<strong>Behavior fix:</strong> <code>neighbor.count</code> virtual tracks no longer miss a long source interval in bins revisited by overlapping scope intervals. This also changed the per-interval results of <code><a href="../reference/gintervals.summary.html">gintervals.summary()</a></code> and <code><a href="../reference/gintervals.quantiles.html">gintervals.quantiles()</a></code> over overlapping intervals.</li>
+<li>
+<strong>Performance:</strong> <code>neighbor.count</code> virtual tracks with <code>sshift</code>/<code>eshift</code> or a filter find each bin’s first candidate by binary search instead of scanning the chromosome’s source intervals from the start (30,000 intervals on hg38 chr1, 1 kb bins: 4.3 s -&gt; 0.04 s).</li>
+</ul></div>
+    <div class="section level2">
 <h2 class="pkg-version" data-toc-text="5.18.1" id="misha-5181">misha 5.18.1<a class="anchor" aria-label="anchor" href="#misha-5181"></a></h2>
 <ul><li><p><strong>Behavior fix:</strong> <code><a href="../reference/gseq.pwm.html">gseq.pwm()</a></code> and <code><a href="../reference/gseq.kmer.html">gseq.kmer()</a></code> scan to the end of sequences with non-ASCII characters.</p></li>
 <li><p><code><a href="../reference/gextract.variants.html">gextract.variants()</a></code> and <code><a href="../reference/ggenome.implant.html">ggenome.implant()</a></code> accept sequences with non-ASCII characters.</p></li>
