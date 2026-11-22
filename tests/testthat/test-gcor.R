@@ -281,3 +281,27 @@ test_that("gcor spearman.exact enforces gmax.data.size (multitask)", {
         "gmax.data.size"
     )
 })
+
+test_that("gcor spearman.exact applies gmax.data.size to each pair, also when multitasking", {
+    gdb.init_examples()
+    s <- gsummary("dense_track")
+    n <- s[["Total intervals"]] - s[["NaN intervals"]]
+    two_pairs <- function(multitask, limit, expr4) {
+        withr::with_options(
+            list(gmultitasking = multitask, gmax.processes = 4, gmax.data.size = limit),
+            gcor("dense_track", "dense_track * 2", "dense_track", expr4,
+                intervals = gintervals.all(), method = "spearman.exact"
+            )
+        )
+    }
+
+    # n values in each pair: within the limit, though the two pairs together are not
+    for (multitask in c(FALSE, TRUE)) {
+        expect_equal(unname(two_pairs(multitask, 1.5 * n, "dense_track + 1")), c(1, 1))
+    }
+
+    # the first pair over the limit and the second empty: the same error both ways
+    err <- function(multitask) tryCatch(two_pairs(multitask, n - 1, "dense_track + NA"), error = conditionMessage)
+    expect_match(err(FALSE), sprintf("Result size (at least %d records) exceeded the maximum allowed", n), fixed = TRUE)
+    expect_identical(err(TRUE), err(FALSE))
+})

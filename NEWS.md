@@ -1,3 +1,7 @@
+# misha (development version)
+
+* Multitasked `gcor(method = "spearman.exact")` with several pairs of expressions applies `gmax.data.size` to each pair, as one process does. It applied it to all the pairs together and failed where one process succeeded.
+
 # misha 5.18.1
 
 * **Behavior fix:** `gseq.pwm()` and `gseq.kmer()` scan to the end of sequences with non-ASCII characters.
