@@ -172,6 +172,8 @@ Functions to manipulate and create intervals
   : Imports genes and annotations from files
 - [`gintervals.import_bed()`](https://tanaylab.github.io/misha/reference/gintervals.import_bed.md)
   : Import intervals from a BED file
+- [`gintervals.import_bigwig()`](https://tanaylab.github.io/misha/reference/gintervals.import_bigwig.md)
+  : Read the records of a bigWig file that overlap intervals
 - [`gintervals.import_gff()`](https://tanaylab.github.io/misha/reference/gintervals.import_gff.md)
   : Import intervals from a GFF/GTF file
 - [`gintervals.import_vcf()`](https://tanaylab.github.io/misha/reference/gintervals.import_vcf.md)
@@ -246,6 +248,9 @@ Data manipulation functions
   sequences
 - [`gextract()`](https://tanaylab.github.io/misha/reference/gextract.md)
   : Returns evaluated track expression
+- [`gextract.matrix()`](https://tanaylab.github.io/misha/reference/gextract.matrix.md)
+  : Returns track expression values over equal-width intervals as a
+  matrix
 - [`gextract.variants()`](https://tanaylab.github.io/misha/reference/gextract.variants.md)
   : Evaluate a track expression under single-base substitutions
 - [`glookup()`](https://tanaylab.github.io/misha/reference/glookup.md) :

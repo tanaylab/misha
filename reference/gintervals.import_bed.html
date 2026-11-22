@@ -58,7 +58,14 @@ explicit configuration).</p>
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">gintervals.import_bed</span><span class="op">(</span>file <span class="op">=</span> <span class="cn">NULL</span>, name <span class="op">=</span> <span class="cn">TRUE</span>, score <span class="op">=</span> <span class="cn">TRUE</span>, strand <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">gintervals.import_bed</span><span class="op">(</span></span>
+<span>  file <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  name <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  score <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  strand <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  keep_order <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  format <span class="op">=</span> <span class="cn">NULL</span></span>
+<span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -66,8 +73,8 @@ explicit configuration).</p>
 
 
 <dl><dt id="arg-file">file<a class="anchor" aria-label="anchor" href="#arg-file"></a></dt>
-<dd><p>path to a BED file (<code>.bed</code> or <code>.bed.gz</code>). Zip
-archives are not supported - unzip them first.</p></dd>
+<dd><p>path to a BED file (<code>.bed</code> or <code>.bed.gz</code>) or a
+bigBed file. Zip archives are not supported - unzip them first.</p></dd>
 
 
 <dt id="arg-name">name<a class="anchor" aria-label="anchor" href="#arg-name"></a></dt>
@@ -84,14 +91,59 @@ it as <code>score</code>.</p></dd>
 <dd><p>if <code>TRUE</code> and a 6th column exists, include it as
 <code>strand</code> (mapped to <code>1</code>/<code>-1</code>/<code>0</code>).</p></dd>
 
+
+<dt id="arg-keep-order">keep_order<a class="anchor" aria-label="anchor" href="#arg-keep-order"></a></dt>
+<dd><p>if <code>TRUE</code>, return the intervals in the file's
+order (header and comment lines skipped) instead of sorting them.</p></dd>
+
+
+<dt id="arg-format">format<a class="anchor" aria-label="anchor" href="#arg-format"></a></dt>
+<dd><p>one of <code>"bed"</code>, <code>"narrowPeak"</code> or
+<code>"broadPeak"</code>. <code>NULL</code> guesses from the file name: a name
+ending in <code>.narrowPeak</code> or <code>.narrowPeak.gz</code> (any case) is
+narrowPeak, <code>.broadPeak</code> or <code>.broadPeak.gz</code> is broadPeak,
+anything else is BED.</p></dd>
+
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
-    <p>A 1D intervals data frame, sorted by chrom and start.</p>
+    <p>A 1D intervals data frame, sorted by chrom and start unless
+  <code>keep_order</code> is <code>TRUE</code>.</p>
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
     <p>BED is already 0-based half-open, so coordinates are taken as-is.</p>
+<p>A bigBed file (recognized by its first bytes, whatever its name) is read
+natively. Its columns are chrom, start, end and then its other fields in
+the file's order, named by the file's autoSql: fields of a numeric autoSql
+type (int, uint, short, ushort, byte, ubyte, float, double, bigint) are
+numeric, the others (string, lstring, char[n], enum, set, arrays) are kept
+as the text stored, and so is itemRgb (BED field 9, "R,G,B" text although
+autoSql declares it a uint). <code>name</code>, <code>score</code> and <code>strand</code>
+apply to the fields of those names. The fields of a bigBed without autoSql
+get the names UCSC's tools give them (name, score, strand, thickStart,
+thickEnd, reserved, blockCount, blockSizes, chromStarts, ...).
+As in <code><a href="gtrack.import.html">gtrack.import</a></code> of a bigWig, records on chromosomes the
+database lacks are skipped with a message (a warning if one of them looks
+like a primary chromosome), and records past the end of their chromosome
+are clipped to it (dropped if they start past it) with a warning.
+<code>format</code> must be <code>NULL</code> for a bigBed.</p>
+<p>ENCODE narrowPeak (BED6+4) and broadPeak (BED6+3) files carry extra
+columns, which are added after the BED columns under their UCSC names:
+<code>signalValue</code>, <code>pValue</code> and <code>qValue</code> (numeric) for both,
+and <code>peak</code> (integer) for narrowPeak. <code>peak</code> is the summit's
+offset from <code>start</code>; -1 means no summit was called, and is kept
+as-is.</p>
+<p>By default the intervals are sorted by chrom and start. With
+<code>keep_order = TRUE</code> they stay in the file's order, so row <code>i</code>
+is the <code>i</code>-th data line, as peak IDs that are row numbers expect.
+The functions below accept unsorted intervals. <code>gextract</code>,
+<code>gscreen</code>, <code>gintervals.canonic</code> and the set operations return
+their rows in genomic order (<code>gextract</code>'s <code>intervalID</code> column
+gives the input row), while <code>gseq.extract</code>,
+<code>gintervals.annotate</code>,
+<code>gintervals.normalize</code> and <code>gintervals.summary</code> return one row
+per input row in input order. <code><a href="gintervals.html">gintervals()</a></code> sorts its input.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
@@ -99,6 +151,32 @@ it as <code>score</code>.</p></dd>
   <code><a href="gintervals.import_vcf.html">gintervals.import_vcf</a></code>.</p></div>
     </div>
 
+    <div class="section level2">
+    <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="fu"><a href="gdb.init_examples.html">gdb.init_examples</a></span><span class="op">(</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">f</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span>fileext <span class="op">=</span> <span class="st">".narrowPeak"</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/writeLines.html" class="external-link">writeLines</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span></span>
+<span class="r-in"><span>    <span class="st">"chr1\t20000\t20400\tpeak_1\t500\t.\t8.1\t12.3\t10.2\t150"</span>,</span></span>
+<span class="r-in"><span>    <span class="st">"chr1\t10000\t10300\tpeak_2\t800\t.\t9.4\t15.0\t12.8\t120"</span></span></span>
+<span class="r-in"><span><span class="op">)</span>, <span class="va">f</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">peaks</span> <span class="op">&lt;-</span> <span class="fu">gintervals.import_bed</span><span class="op">(</span><span class="va">f</span>, keep_order <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">peaks</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   chrom start   end strand   name score signalValue pValue qValue peak</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1  chr1 20000 20400      0 peak_1   500         8.1   12.3   10.2  150</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2  chr1 10000 10300      0 peak_2   800         9.4   15.0   12.8  120</span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co"># 200 bp windows centred on the summits, in the file's order: the summit</span></span></span>
+<span class="r-in"><span><span class="co"># is at (start + end) %/% 2. Drop rows with peak = -1 (no summit) first.</span></span></span>
+<span class="r-in"><span><span class="va">summit</span> <span class="op">&lt;-</span> <span class="va">peaks</span><span class="op">$</span><span class="va">start</span> <span class="op">+</span> <span class="va">peaks</span><span class="op">$</span><span class="va">peak</span></span></span>
+<span class="r-in"><span><span class="va">windows</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/transform.html" class="external-link">transform</a></span><span class="op">(</span><span class="va">peaks</span>, start <span class="op">=</span> <span class="va">summit</span> <span class="op">-</span> <span class="fl">100</span>, end <span class="op">=</span> <span class="va">summit</span> <span class="op">+</span> <span class="fl">100</span>, peak <span class="op">=</span> <span class="fl">100L</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">windows</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   chrom start   end strand   name score signalValue pValue qValue peak</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1  chr1 20050 20250      0 peak_1   500         8.1   12.3   10.2  100</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2  chr1 10020 10220      0 peak_2   800         9.4   15.0   12.8  100</span>
+<span class="r-in"><span></span></span>
+</code></pre></div>
+    </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside></div>
 

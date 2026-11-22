@@ -9,11 +9,13 @@
   and
   [`gintervals.quantiles()`](https://tanaylab.github.io/misha/reference/gintervals.quantiles.md)
   over overlapping intervals.
+
 - **Performance:** `neighbor.count` virtual tracks with
   `sshift`/`eshift` or a filter find each bin’s first candidate by
   binary search instead of scanning the chromosome’s source intervals
   from the start (30,000 intervals on hg38 chr1, 1 kb bins: 4.3 s -\>
   0.04 s).
+
 - misha calls no longer collect child processes that misha did not
   start, such as the command of a
   [`pipe()`](https://rdrr.io/r/base/connections.html) connection, whose
@@ -21,6 +23,34 @@
   lost. A multitasking process of misha that something else collects is
   now an error (“reaped outside misha”); the call used to wait for it
   forever.
+
+- Multitasked `gcor(method = "spearman.exact")` with several pairs of
+  expressions applies `gmax.data.size` to each pair, as one process
+  does. It applied it to all the pairs together and failed where one
+  process succeeded.
+
+- New
+  [`gintervals.import_bigwig()`](https://tanaylab.github.io/misha/reference/gintervals.import_bigwig.md)
+  reads the records of a bigWig over a set of intervals without
+  importing a track, reading only the data blocks under them. The result
+  works as a value-based virtual track source.
+
+- New
+  [`gextract.matrix()`](https://tanaylab.github.io/misha/reference/gextract.matrix.md)
+  returns track expression values over equal-width intervals as an
+  intervals x bins matrix (an array for several expressions), with bins
+  counted from each interval’s start, without building the long gextract
+  table.
+
+- [`gintervals.import_bed()`](https://tanaylab.github.io/misha/reference/gintervals.import_bed.md)
+  reads bigBed files, with the extra fields named and typed by the
+  file’s autoSql.
+
+- [`gintervals.import_bed()`](https://tanaylab.github.io/misha/reference/gintervals.import_bed.md)
+  gains `keep_order` (keep the file’s row order) and `format`
+  (`"narrowPeak"` and `"broadPeak"` files get their `signalValue`,
+  `pValue`, `qValue` and, for narrowPeak, `peak` columns; guessed from
+  the file name).
 
 ## misha 5.18.1
 
