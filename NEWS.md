@@ -1,5 +1,7 @@
 # misha (development version)
 
+* **Behavior fix:** `neighbor.count` virtual tracks no longer miss a long source interval in bins revisited by overlapping scope intervals. This also changed the per-interval results of `gintervals.summary()` and `gintervals.quantiles()` over overlapping intervals.
+* **Performance:** `neighbor.count` virtual tracks with `sshift`/`eshift` or a filter find each bin's first candidate by binary search instead of scanning the chromosome's source intervals from the start (30,000 intervals on hg38 chr1, 1 kb bins: 4.3 s -> 0.04 s).
 * misha calls no longer collect child processes that misha did not start, such as the command of a `pipe()` connection, whose exit status `close()` then lost. A multitasking process of misha that something else collects is now an error ("reaped outside misha"); the call used to wait for it forever.
 
 # misha 5.18.1

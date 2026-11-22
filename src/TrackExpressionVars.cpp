@@ -271,7 +271,7 @@ void TrackExpressionVars::parse_exprs(const vector<string> &track_exprs)
 
 	for (Interv_vars::iterator ivar = m_interv_vars.begin(); ivar != m_interv_vars.end(); ++ivar) {
 		ivar->siinterv = ivar->sintervs.begin();
-		// Only neighbor.count still uses the end-sorted (expanded) list; the
+		// Only neighbor.count still uses the expanded list (sorted by start); the
 		// distance family now queries the nearest-neighbor index instead.
 		if (ivar->val_func == Interv_var::NEIGHBOR_COUNT)
 			ivar->eiinterv = ivar->eintervs.begin();
@@ -1415,6 +1415,11 @@ TrackExpressionVars::Interv_var &TrackExpressionVars::add_vtrack_var_src_interv(
 			var.eintervs.push_back(GInterval(interv.chromid, new_start, new_end, interv.strand));
 		}
 		var.eintervs.sort();
+
+		var.emax_end.resize(var.eintervs.size());
+		for (size_t i = 0; i < var.eintervs.size(); ++i)
+			var.emax_end[i] = i && var.eintervs[i - 1].chromid == var.eintervs[i].chromid ?
+				max(var.emax_end[i - 1], var.eintervs[i].end) : var.eintervs[i].end;
 	} else {
 		verror("Virtual track %s: invalid function %s used with intervals", vtrack.c_str(), func.c_str());
 	}
