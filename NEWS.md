@@ -1,6 +1,6 @@
 # misha 5.19.0
 
-* **Behavior fix:** `neighbor.count` virtual tracks count long source intervals correctly over overlapping intervals, as in `gintervals.summary()` and `gintervals.quantiles()`.
+* **Behavior fix:** `neighbor.count` virtual tracks count long source intervals correctly over overlapping intervals. This changes `gintervals.summary()` and `gintervals.quantiles()` results over overlapping intervals.
 
 * New `gextract.matrix()` returns track expression values over equal-width intervals as an intervals x bins matrix (an array for several expressions).
 
@@ -12,7 +12,7 @@
 
 * Multitasked `gcor(method = "spearman.exact")` applies `gmax.data.size` to each pair of expressions, as without multitasking.
 
-* misha no longer collects child processes it did not start, so `close()` of a `pipe()` connection keeps the command's exit status.
+* misha collects only the child processes it started: `close()` of a `pipe()` connection keeps the command's exit status, and a call whose processes something else collects stops with an error instead of hanging.
 
 # misha 5.18.1
 
