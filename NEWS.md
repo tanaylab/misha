@@ -1,16 +1,18 @@
-# misha (development version)
+# misha 5.19.0
 
-* **Behavior fix:** `neighbor.count` virtual tracks no longer miss a long source interval in bins revisited by overlapping scope intervals. This also changed the per-interval results of `gintervals.summary()` and `gintervals.quantiles()` over overlapping intervals.
-* **Performance:** `neighbor.count` virtual tracks with `sshift`/`eshift` or a filter find each bin's first candidate by binary search instead of scanning the chromosome's source intervals from the start (30,000 intervals on hg38 chr1, 1 kb bins: 4.3 s -> 0.04 s).
-* misha calls no longer collect child processes that misha did not start, such as the command of a `pipe()` connection, whose exit status `close()` then lost. A multitasking process of misha that something else collects is now an error ("reaped outside misha"); the call used to wait for it forever.
-* Multitasked `gcor(method = "spearman.exact")` with several pairs of expressions applies `gmax.data.size` to each pair, as one process does. It applied it to all the pairs together and failed where one process succeeded.
-* New `gintervals.import_bigwig()` reads the records of a bigWig over a set of intervals without importing a track, reading only the data blocks under them. The result works as a value-based virtual track source.
+* **Behavior fix:** `neighbor.count` virtual tracks count long source intervals correctly over overlapping intervals, as in `gintervals.summary()` and `gintervals.quantiles()`.
 
-* New `gextract.matrix()` returns track expression values over equal-width intervals as an intervals x bins matrix (an array for several expressions), with bins counted from each interval's start, without building the long gextract table.
+* New `gextract.matrix()` returns track expression values over equal-width intervals as an intervals x bins matrix (an array for several expressions).
 
-* `gintervals.import_bed()` reads bigBed files, with the extra fields named and typed by the file's autoSql.
+* New `gintervals.import_bigwig()` reads a bigWig's records over a set of intervals without importing a track. The result can be used as a value-based virtual track source.
 
-* `gintervals.import_bed()` gains `keep_order` (keep the file's row order) and `format` (`"narrowPeak"` and `"broadPeak"` files get their `signalValue`, `pValue`, `qValue` and, for narrowPeak, `peak` columns; guessed from the file name).
+* `gintervals.import_bed()` reads bigBed files, gains `keep_order` to keep the file's row order, and gives narrowPeak and broadPeak files their named columns (`format`).
+
+* `neighbor.count` virtual tracks with `sshift`/`eshift` or a filter are faster.
+
+* Multitasked `gcor(method = "spearman.exact")` applies `gmax.data.size` to each pair of expressions, as without multitasking.
+
+* misha no longer collects child processes it did not start, so `close()` of a `pipe()` connection keeps the command's exit status.
 
 # misha 5.18.1
 
