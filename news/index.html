@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">misha</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.18.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.19.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -40,15 +40,14 @@
     </div>
 
     <div class="section level2">
-<h2 class="pkg-version" data-toc-text="development version" id="misha-development-version">misha (development version)<a class="anchor" aria-label="anchor" href="#misha-development-version"></a></h2>
-<ul><li><p><strong>Behavior fix:</strong> <code>neighbor.count</code> virtual tracks no longer miss a long source interval in bins revisited by overlapping scope intervals. This also changed the per-interval results of <code><a href="../reference/gintervals.summary.html">gintervals.summary()</a></code> and <code><a href="../reference/gintervals.quantiles.html">gintervals.quantiles()</a></code> over overlapping intervals.</p></li>
-<li><p><strong>Performance:</strong> <code>neighbor.count</code> virtual tracks with <code>sshift</code>/<code>eshift</code> or a filter find each bin’s first candidate by binary search instead of scanning the chromosome’s source intervals from the start (30,000 intervals on hg38 chr1, 1 kb bins: 4.3 s -&gt; 0.04 s).</p></li>
-<li><p>misha calls no longer collect child processes that misha did not start, such as the command of a <code><a href="https://rdrr.io/r/base/connections.html" class="external-link">pipe()</a></code> connection, whose exit status <code><a href="https://rdrr.io/r/base/connections.html" class="external-link">close()</a></code> then lost. A multitasking process of misha that something else collects is now an error (“reaped outside misha”); the call used to wait for it forever.</p></li>
-<li><p>Multitasked <code>gcor(method = "spearman.exact")</code> with several pairs of expressions applies <code>gmax.data.size</code> to each pair, as one process does. It applied it to all the pairs together and failed where one process succeeded.</p></li>
-<li><p>New <code><a href="../reference/gintervals.import_bigwig.html">gintervals.import_bigwig()</a></code> reads the records of a bigWig over a set of intervals without importing a track, reading only the data blocks under them. The result works as a value-based virtual track source.</p></li>
-<li><p>New <code><a href="../reference/gextract.matrix.html">gextract.matrix()</a></code> returns track expression values over equal-width intervals as an intervals x bins matrix (an array for several expressions), with bins counted from each interval’s start, without building the long gextract table.</p></li>
-<li><p><code><a href="../reference/gintervals.import_bed.html">gintervals.import_bed()</a></code> reads bigBed files, with the extra fields named and typed by the file’s autoSql.</p></li>
-<li><p><code><a href="../reference/gintervals.import_bed.html">gintervals.import_bed()</a></code> gains <code>keep_order</code> (keep the file’s row order) and <code>format</code> (<code>"narrowPeak"</code> and <code>"broadPeak"</code> files get their <code>signalValue</code>, <code>pValue</code>, <code>qValue</code> and, for narrowPeak, <code>peak</code> columns; guessed from the file name).</p></li>
+<h2 class="pkg-version" data-toc-text="5.19.0" id="misha-5190">misha 5.19.0<a class="anchor" aria-label="anchor" href="#misha-5190"></a></h2>
+<ul><li><p><strong>Behavior fix:</strong> <code>neighbor.count</code> virtual tracks count long source intervals correctly over overlapping intervals. This changes <code><a href="../reference/gintervals.summary.html">gintervals.summary()</a></code> and <code><a href="../reference/gintervals.quantiles.html">gintervals.quantiles()</a></code> results over overlapping intervals.</p></li>
+<li><p>New <code><a href="../reference/gextract.matrix.html">gextract.matrix()</a></code> returns track expression values over equal-width intervals as an intervals x bins matrix (an array for several expressions).</p></li>
+<li><p>New <code><a href="../reference/gintervals.import_bigwig.html">gintervals.import_bigwig()</a></code> reads a bigWig’s records over a set of intervals without importing a track. The result can be used as a value-based virtual track source.</p></li>
+<li><p><code><a href="../reference/gintervals.import_bed.html">gintervals.import_bed()</a></code> reads bigBed files, gains <code>keep_order</code> to keep the file’s row order, and gives narrowPeak and broadPeak files their named columns (<code>format</code>).</p></li>
+<li><p><code>neighbor.count</code> virtual tracks with <code>sshift</code>/<code>eshift</code> or a filter are faster.</p></li>
+<li><p>Multitasked <code>gcor(method = "spearman.exact")</code> applies <code>gmax.data.size</code> to each pair of expressions, as without multitasking.</p></li>
+<li><p>misha collects only the child processes it started: <code><a href="https://rdrr.io/r/base/connections.html" class="external-link">close()</a></code> of a <code><a href="https://rdrr.io/r/base/connections.html" class="external-link">pipe()</a></code> connection keeps the command’s exit status, and a call whose processes something else collects stops with an error instead of hanging.</p></li>
 </ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="5.18.1" id="misha-5181">misha 5.18.1<a class="anchor" aria-label="anchor" href="#misha-5181"></a></h2>
