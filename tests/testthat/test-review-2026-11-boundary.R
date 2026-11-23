@@ -273,9 +273,10 @@ test_that("options(gmax.data.size = Inf) is no limit for gbins.quantiles, gtrack
     withr::defer(if (gtrack.exists("temp.review_2d_inf")) gtrack.rm("temp.review_2d_inf", force = TRUE))
     set.seed(1)
     n <- 5000
-    pts <- data.frame(chrom1 = "chr1", start1 = sample(1e6, n) - 1, chrom2 = "chr2", start2 = sample(1e6, n) - 1, value = seq_len(n))
-    pts$end1 <- pts$start1 + 1
-    pts$end2 <- pts$start2 + 1
+    # integer coordinates, so that write.table never writes one as 1e+05
+    pts <- data.frame(chrom1 = "chr1", start1 = sample(1e6, n) - 1L, chrom2 = "chr2", start2 = sample(1e6, n) - 1L, value = seq_len(n))
+    pts$end1 <- pts$start1 + 1L
+    pts$end2 <- pts$start2 + 1L
     f <- tempfile(fileext = ".tsv")
     write.table(pts[, c("chrom1", "start1", "end1", "chrom2", "start2", "end2", "value")], f, sep = "\t", quote = FALSE, row.names = FALSE)
     gtrack.2d.import("temp.review_2d_inf", "", f)

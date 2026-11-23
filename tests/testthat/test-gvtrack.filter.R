@@ -1086,7 +1086,11 @@ vf_sources <- function(vv, env = parent.frame()) {
     gtrack.create_sparse("vf_sp", "x", vv[, 1:3], vv$score)
     gtrack.create_dense("vf_dn", "x", vv[, 1:3], vv$score, 50, NaN)
     f <- tempfile(fileext = ".tsv")
-    write.table(setNames(vv, c("chrom", "start", "end", "a")), f, sep = "\t", quote = FALSE, row.names = FALSE)
+    out <- setNames(vv, c("chrom", "start", "end", "a"))
+    # integers, so that write.table never writes a coordinate as 1e+05
+    out$start <- as.integer(out$start)
+    out$end <- as.integer(out$end)
+    write.table(out, f, sep = "\t", quote = FALSE, row.names = FALSE)
     suppressMessages(gtrack.array.import("vf_arr", "x", f))
     unlink(f)
     withr::defer(
