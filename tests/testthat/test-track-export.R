@@ -591,6 +591,20 @@ test_that("bigwig export leaves no file when it fails", {
     expect_false(file.exists(f))
 })
 
+test_that("a bigwig export that cannot open its file keeps the file already there", {
+    skip_on_os("windows")
+    f <- tempfile(fileext = ".bw")
+    writeLines("keep me", f)
+    Sys.chmod(f, "0444")
+    withr::defer({
+        Sys.chmod(f, "0644")
+        unlink(f)
+    })
+    skip_if(file.access(f, 2) == 0, "file is writable (running as root)")
+    expect_error(gtrack.export_bigwig("dense_track", f))
+    expect_equal(readLines(f), "keep me")
+})
+
 test_that("the bigWig writer refuses unsorted and overlapping records", {
     f <- tempfile(fileext = ".bw")
     withr::defer(unlink(f))

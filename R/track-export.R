@@ -333,10 +333,11 @@ gtrack.export_bigwig <- function(track, file, intervals = NULL, iterator = NULL)
 
     groups <- .gbigwig_batches(intervals, iterator, genome[ord, c("chrom", "start", "end")], file_chroms)
 
+    # The cleanup is registered only once create() has opened the file, so a failure before
+    # that (bad chromosome sizes, an unwritable path) never deletes a file already at the path.
+    state <- .gcall("gtrack_bigwig_create", file, file_chroms, genome$end[ord], .misha_env())
     success <- FALSE
     on.exit(if (!success) unlink(file), add = TRUE)
-
-    state <- .gcall("gtrack_bigwig_create", file, file_chroms, genome$end[ord], .misha_env())
     for (group in groups) {
         for (intervs in group()) {
             data <- gextract(track, intervals = intervs, iterator = iterator, colnames = "value")
