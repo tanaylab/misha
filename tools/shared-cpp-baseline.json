@@ -299,6 +299,16 @@
     "misha": "2d44a78d954e45a8",
     "pymisha": "2d44a78d954e45a8"
   },
+  "SeqShuffle.cpp": {
+    "identical": true,
+    "misha": "4b9dc72047c75a6c",
+    "pymisha": "4b9dc72047c75a6c"
+  },
+  "SeqShuffle.h": {
+    "identical": true,
+    "misha": "8ce7fb7707aba463",
+    "pymisha": "8ce7fb7707aba463"
+  },
   "StatQuadTree.h": {
     "identical": true,
     "misha": "2a298c7dba4f6d9f",

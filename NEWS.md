@@ -1,3 +1,7 @@
+# misha (development version)
+
+* New `gseq.shuffle()` shuffles sequences keeping their exact k-mer (default dinucleotide) counts, drawn uniformly; the same seed gives the same sequences as PyMisha's `gseq_shuffle()`.
+
 # misha 5.19.0
 
 * **Behavior fix:** `neighbor.count` virtual tracks count long source intervals correctly over overlapping intervals. This changes `gintervals.summary()` and `gintervals.quantiles()` results over overlapping intervals.

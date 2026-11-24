@@ -126,6 +126,7 @@ extern "C" {
     extern SEXP C_potts_score_codes_cmp(SEXP, SEXP);
     extern SEXP C_split_by_range_shares(SEXP, SEXP, SEXP);
     extern SEXP C_gseq_kmer(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP C_gseq_shuffle(SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gsynth_train(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gsynth_sample(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gsynth_implicit_binsize(SEXP, SEXP, SEXP);
@@ -264,6 +265,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"C_potts_score_codes_cmp", (DL_FUNC)&C_potts_score_codes_cmp, 2},
     {"C_split_by_range_shares", (DL_FUNC)&C_split_by_range_shares, 3},
     {"C_gseq_kmer", (DL_FUNC)&C_gseq_kmer, 9},
+    {"C_gseq_shuffle", (DL_FUNC)&C_gseq_shuffle, 4},
     {"C_gsynth_train", (DL_FUNC)&C_gsynth_train, 15},
     {"C_gsynth_sample", (DL_FUNC)&C_gsynth_sample, 15},
     {"C_gsynth_implicit_binsize", (DL_FUNC)&C_gsynth_implicit_binsize, 3},
