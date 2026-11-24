@@ -40,6 +40,7 @@ reference:
       - gtrack.import_mappedseq
       - gtrack.import_set
       - gtrack.import_parquet
+      - gtrack.import_figwig
       - gtrack.info
       - gtrack.path
       - gtrack.liftover

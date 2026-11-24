@@ -1,3 +1,7 @@
+# misha (development version)
+
+* New `gtrack.import_figwig()` imports the tracks of a figwig (`.fw`) multi-track file as sparse or binned tracks.
+
 # misha 5.19.0
 
 * **Behavior fix:** `neighbor.count` virtual tracks count long source intervals correctly over overlapping intervals. This changes `gintervals.summary()` and `gintervals.quantiles()` results over overlapping intervals.
