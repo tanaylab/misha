@@ -1,4 +1,14 @@
 {
+  "BamReader.cpp": {
+    "identical": true,
+    "misha": "0db937a8be4c877b",
+    "pymisha": "0db937a8be4c877b"
+  },
+  "BamReader.h": {
+    "identical": true,
+    "misha": "2423cb5b1801a345",
+    "pymisha": "2423cb5b1801a345"
+  },
   "BigWig.cpp": {
     "identical": true,
     "misha": "89c7f0bf200d46c6",
