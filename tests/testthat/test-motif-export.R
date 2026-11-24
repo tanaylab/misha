@@ -66,7 +66,12 @@ golden_cases <- function() {
         local({
             x <- sets[[nm]]
             cases[[paste0(nm, ".meme")]] <<- function(f) gseq.write_meme(x, f)
-            cases[[paste0(nm, ".jaspar")]] <<- function(f) gseq.write_jaspar(x, f)
+            # R22 in the random set has a position that rounds to zero counts (warned about)
+            cases[[paste0(nm, ".jaspar")]] <<- function(f) {
+                withCallingHandlers(gseq.write_jaspar(x, f), warning = function(w) {
+                    if (grepl("round to zero counts", conditionMessage(w))) invokeRestart("muffleWarning")
+                })
+            }
             cases[[paste0(nm, ".motif")]] <<- function(f) gseq.write_homer(x, f)
         })
     }
@@ -528,4 +533,11 @@ test_that("gseq.write_homer names motifs without a name by their ID", {
     gseq.write_homer(list(MY_ID = m), f)
     expect_equal(attr(gseq.read_homer(f)[[1]], "name"), "MY_ID")
     expect_equal(length(strsplit(readLines(f)[1], "\t")[[1]]), 3)
+})
+
+test_that("gseq.write_jaspar warns when rounding zeroes a position", {
+    mat <- data.frame(A = c(0.9, 0.3), C = c(0.1, 0.3), G = c(0, 0.2), T = c(0, 0.2))
+    f <- withr::local_tempfile(fileext = ".jaspar")
+    expect_warning(gseq.write_jaspar(list(m = mat), f, nsites = 1), "Motif 'm': 1 position\\(s\\) round to zero counts")
+    expect_no_warning(gseq.write_jaspar(list(m = mat), f, nsites = 1, round_counts = FALSE))
 })

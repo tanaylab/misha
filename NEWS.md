@@ -1,6 +1,6 @@
 # misha (development version)
 
-* New `gseq.write_meme()`, `gseq.write_jaspar()` and `gseq.write_homer()` write motifs in the formats the `gseq.read_*()` functions read, so motifs round-trip with their metadata.
+* New `gseq.write_meme()`, `gseq.write_jaspar()` and `gseq.write_homer()` write motifs in the formats the `gseq.read_*()` functions read, so motifs round-trip with their metadata (JASPAR counts are rounded to whole numbers unless `round_counts = FALSE`).
 
 # misha 5.19.0
 

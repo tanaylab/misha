@@ -407,6 +407,13 @@ gseq.write_jaspar <- function(motifs, file, nsites = NULL, format = c("jaspar", 
         counts <- t(m$mat * ns)
         if (round_counts) {
             counts <- round(counts) # half to even, as Python's round()
+            nzero <- sum(colSums(counts) == 0)
+            if (nzero > 0) {
+                warning(sprintf(
+                    "Motif '%s': %d position(s) round to zero counts; increase 'nsites' or use round_counts = FALSE",
+                    m$id, nzero
+                ), call. = FALSE)
+            }
         }
         counts <- .motif_fmt_count(counts)
         counts <- sprintf("%*s", max(nchar(counts)), counts)
