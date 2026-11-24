@@ -341,14 +341,14 @@ gseq.write_meme <- function(motifs, file, background = NULL, strands = NULL) {
 #' its number of sites: the \code{nsites} argument, else the motif's
 #' \code{nsites} attribute (as \code{\link{gseq.read_jaspar}} and
 #' \code{\link{gseq.read_meme}} return it), else 100. Every position then sums
-#' to that number. Counts are written with up to 6 decimals and without
-#' trailing zeros, so the integer counts of a JASPAR file are written as
-#' integers, and the probabilities read back within 1.5e-6 / \code{nsites}
-#' of the original. Some tools, such as the MEME Suite's \code{jaspar2meme},
-#' read only integer counts: \code{round_counts = TRUE} rounds the counts, at
-#' the cost of precision (probabilities then read back within about
-#' 0.5 / \code{nsites}; with an \code{nsites} of a few, whole positions can
-#' round to zero, which readers take as uniform).
+#' to that number. Counts are rounded to whole numbers (halves to even), as
+#' JASPAR files hold them and as tools such as the MEME Suite's
+#' \code{jaspar2meme} and universalmotif require, so probabilities read back
+#' within about 0.5 / \code{nsites}; the integer counts of a JASPAR file are
+#' written back unchanged. With an \code{nsites} of a few, whole positions can
+#' round to zero, which readers take as uniform. \code{round_counts = FALSE}
+#' writes counts with up to 6 decimals and without trailing zeros instead, so
+#' that probabilities read back within 1.5e-6 / \code{nsites} of the original.
 #'
 #' The header names a motif by its \code{name} attribute, or by its ID when it
 #' has none (JASPAR headers always carry a name). Rows that do not sum to 1 are
@@ -366,7 +366,8 @@ gseq.write_meme <- function(motifs, file, background = NULL, strands = NULL) {
 #'   \code{nsites} attribute, and 100 for motifs without one.
 #' @param format \code{"jaspar"} (headers and labeled rows) or \code{"simple"}
 #'   (four rows of counts per motif).
-#' @param round_counts round counts to integers.
+#' @param round_counts round counts to whole numbers (the default), or write
+#'   them with up to 6 decimals (\code{FALSE}).
 #'
 #' @return \code{file}, invisibly.
 #'
@@ -382,7 +383,7 @@ gseq.write_meme <- function(motifs, file, background = NULL, strands = NULL) {
 #'
 #' @family motif functions
 #' @export
-gseq.write_jaspar <- function(motifs, file, nsites = NULL, format = c("jaspar", "simple"), round_counts = FALSE) {
+gseq.write_jaspar <- function(motifs, file, nsites = NULL, format = c("jaspar", "simple"), round_counts = TRUE) {
     .motif_check_file(file)
     format <- match.arg(format)
     if (!is.logical(round_counts) || length(round_counts) != 1 || is.na(round_counts)) {

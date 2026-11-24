@@ -75,8 +75,9 @@ golden_cases <- function() {
         gseq.write_meme(edge, f, background = c(T = 0.3, G = 0.2, C = 0.2, A = 0.3), strands = "+")
     }
     cases[["edge_args.jaspar"]] <- function(f) gseq.write_jaspar(edge, f, nsites = c(10, 1000, 3))
-    cases[["edge_round.jaspar"]] <- function(f) gseq.write_jaspar(edge, f, nsites = c(10, 1000, 3), round_counts = TRUE)
-    cases[["random_round.jaspar"]] <- function(f) gseq.write_jaspar(rnd, f, round_counts = TRUE)
+    cases[["edge_exact.jaspar"]] <- function(f) gseq.write_jaspar(edge, f, nsites = c(10, 1000, 3), round_counts = FALSE)
+    cases[["random_exact.jaspar"]] <- function(f) gseq.write_jaspar(rnd, f, round_counts = FALSE)
+    cases[["from_meme_exact.jaspar"]] <- function(f) gseq.write_jaspar(meme, f, round_counts = FALSE)
     cases[["edge_args.motif"]] <- function(f) gseq.write_homer(edge, f, threshold_frac = 0.8)
     cases
 }
@@ -127,9 +128,11 @@ test_that("gseq.write_jaspar format = 'simple' round-trips the simple PFM fixtur
     d <- withr::local_tempdir()
     f <- file.path(d, "test_motifs_simple.pfm")
     # without nsites (simple files have none), counts are scaled to 100
-    gseq.write_jaspar(x, f, format = "simple")
+    gseq.write_jaspar(x, f, format = "simple", round_counts = FALSE)
     expect_equal(gseq.read_jaspar(f), x, tolerance = 1e-8)
     expect_equal(readLines(f)[1], "66.666667        80 26.666667  6.666667")
+    gseq.write_jaspar(x, f, format = "simple")
+    expect_equal(readLines(f)[1], "67 80 27  7")
     gseq.write_jaspar(x, f, nsites = 15, format = "simple")
     expect_equal(gseq.read_jaspar(f), x, tolerance = 1e-12)
     expect_equal(
@@ -169,7 +172,7 @@ test_that("random motifs round-trip through all three formats", {
     }
 
     f <- withr::local_tempfile(fileext = ".jaspar")
-    gseq.write_jaspar(x, f)
+    gseq.write_jaspar(x, f, round_counts = FALSE)
     y <- gseq.read_jaspar(f)
     for (id in names(x)) {
         ns <- attr(x[[id]], "nsites")
@@ -231,7 +234,7 @@ test_that("the writers produce the golden files byte for byte", {
 test_that("MEME motifs written as JASPAR and HOMER keep IDs, names and nsites", {
     x <- gseq.read_meme(file.path(fixture_dir, "test_motifs.meme"))
     f <- withr::local_tempfile()
-    gseq.write_jaspar(x, f)
+    gseq.write_jaspar(x, f, round_counts = FALSE)
     y <- gseq.read_jaspar(f)
     expect_same_matrices(x, y, tolerance = 1e-9)
     expect_equal(unname(sapply(y, attr, "name")), c("AGL3", "RUNX1", "TFAP2A"))
@@ -337,7 +340,11 @@ test_that("width-1 motifs and zero probabilities round-trip in every format", {
     x <- edge_motifs()
     for (fmt in c("meme", "jaspar", "homer")) {
         f <- withr::local_tempfile()
-        get(paste0("gseq.write_", fmt))(x, f)
+        if (fmt == "jaspar") {
+            gseq.write_jaspar(x, f, round_counts = FALSE)
+        } else {
+            get(paste0("gseq.write_", fmt))(x, f)
+        }
         y <- get(paste0("gseq.read_", fmt))(f)
         expect_length(y, 3)
         for (i in 1:3) {
@@ -445,10 +452,10 @@ test_that("gseq.write_jaspar scales by nsites: argument, then attribute, then 10
     lines <- readLines(f)
     expect_equal(lines[2], "A  [ 50 ]")
     expect_equal(lines[8], "A  [ 4 ]")
-    gseq.write_jaspar(list(a = m, b = m2), f, nsites = 1)
+    gseq.write_jaspar(list(a = m, b = m2), f, nsites = 1, round_counts = FALSE)
     expect_equal(readLines(f)[c(2, 3, 5)], c("A  [  0.5 ]", "C  [ 0.25 ]", "T  [    0 ]"))
     expect_equal(unname(sapply(gseq.read_jaspar(f), attr, "nsites")), c(1, 1))
-    gseq.write_jaspar(list(a = m, b = m2), f, nsites = c(2, 3))
+    gseq.write_jaspar(list(a = m, b = m2), f, nsites = c(2, 3), round_counts = FALSE)
     expect_equal(unname(sapply(gseq.read_jaspar(f), attr, "nsites")), c(2, 3))
     expect_error(gseq.write_jaspar(m, f, nsites = 0), "positive")
     expect_error(gseq.write_jaspar(m, f, nsites = c(1, 2)), "one per motif")
@@ -465,6 +472,9 @@ test_that("gseq.write_jaspar round_counts writes integer counts", {
     y <- gseq.read_jaspar(f)[[1]]
     expect_lte(max(abs(strip_attrs(y) - matrix(m, ncol = 4, dimnames = list(NULL, acgt)))), 1e-3)
     expect_error(gseq.write_jaspar(m, f, round_counts = NA), "round_counts")
+    # the default
+    gseq.write_jaspar(list(a = m), f, nsites = 3)
+    expect_equal(readLines(f)[2], "A  [ 0 1 ]")
 })
 
 # === HOMER options ===
