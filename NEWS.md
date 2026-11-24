@@ -1,3 +1,7 @@
+# misha (development version)
+
+* New `gextract.windows()` returns fixed-width windows around loci as arrays for sequence models: one-hot DNA (N x 4 x L) and track values (N x T x L'), with jitter margins, strand-aware reverse complement, exclusion intervals and count filters. New `gseq.onehot()` one-hot encodes intervals (read in C++ straight from the sequence files) or strings.
+
 # misha 5.19.0
 
 * **Behavior fix:** `neighbor.count` virtual tracks count long source intervals correctly over overlapping intervals. This changes `gintervals.summary()` and `gintervals.quantiles()` results over overlapping intervals.

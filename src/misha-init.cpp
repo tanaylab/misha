@@ -55,6 +55,8 @@ extern "C" {
     extern SEXP gseqimport(SEXP, SEXP, SEXP, SEXP);
     extern SEXP gseq_multifasta_import(SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gseqread(SEXP, SEXP);
+    extern SEXP C_gseq_onehot(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP C_gseq_onehot_strings(SEXP, SEXP, SEXP);
     extern SEXP gseq_validate_index(SEXP, SEXP);
     extern SEXP gset_tracks_attrs(SEXP, SEXP, SEXP, SEXP);
     extern SEXP gsmooth(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
@@ -193,6 +195,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"gseqimport", (DL_FUNC)&gseqimport, 4},
     {"gseq_multifasta_import", (DL_FUNC)&gseq_multifasta_import, 5},
     {"gseqread", (DL_FUNC)&gseqread, 2},
+    {"C_gseq_onehot", (DL_FUNC)&C_gseq_onehot, 7},
+    {"C_gseq_onehot_strings", (DL_FUNC)&C_gseq_onehot_strings, 3},
     {"gseq_validate_index", (DL_FUNC)&gseq_validate_index, 2},
     {"gset_tracks_attrs", (DL_FUNC)&gset_tracks_attrs, 4},
     {"gsmooth", (DL_FUNC)&gsmooth, 8},
