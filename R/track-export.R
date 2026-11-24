@@ -58,8 +58,7 @@ gtrack.export_bedgraph <- function(track, file, intervals = NULL, iterator = NUL
     .gtrack_export_bedgraph(track, file, intervals, iterator, name)
 }
 
-# gtrack.export_bedgraph with the chromosomes written in the order of chroms (names), genome order if NULL
-.gtrack_export_bedgraph <- function(track, file, intervals, iterator, name, chroms = NULL) {
+.gtrack_export_bedgraph <- function(track, file, intervals, iterator, name) {
     .gcheckroot()
 
     if (!is.character(track) || length(track) != 1) {
@@ -103,8 +102,8 @@ gtrack.export_bedgraph <- function(track, file, intervals = NULL, iterator = NUL
         name <- track
     }
 
-    # Extract the data. Overlapping intervals would extract the same bins twice, and bedGraph (and
-    # bedGraphToBigWig) does not allow overlapping records, so they are merged first.
+    # Extract the data. Overlapping intervals would extract the same bins twice, and bedGraph does
+    # not allow overlapping records, so they are merged first.
     extract_canonic <- function(intervals) {
         gextract(track, intervals = gintervals.canonic(intervals, unify_touching_intervals = FALSE), iterator = iterator)
     }
@@ -133,11 +132,11 @@ gtrack.export_bedgraph <- function(track, file, intervals = NULL, iterator = NUL
         )
     }
 
-    # Rows in genome order (chromosome as in the genome database, or as in chroms), then start.
-    # NULL when they already are (gextract's output usually is). NaN rows are dropped while writing.
+    # Rows in genome order (chromosome as in the genome database), then start. NULL when they
+    # already are (gextract's output usually is). NaN rows are dropped while writing.
     ord <- NULL
     if (!is.null(data) && nrow(data) > 1) {
-        genome_chroms <- if (is.null(chroms)) as.character(gintervals.all()$chrom) else chroms
+        genome_chroms <- as.character(gintervals.all()$chrom)
         chroms <- data$chrom
         chrom_order <- if (is.factor(chroms)) {
             match(levels(chroms), genome_chroms)[as.integer(chroms)]
@@ -178,8 +177,8 @@ gtrack.export_bedgraph <- function(track, file, intervals = NULL, iterator = NUL
 
 # The bedGraph lines of R: paste(chrom, sprintf("%.0f", start), sprintf("%.0f", end), value).
 # Coordinates are doubles, formatted as plain integers so large round values (e.g. 1e8) are not
-# written in scientific notation, which bedGraphToBigWig parses as 1 -> out-of-order intervals /
-# corrupt bigwig.
+# written in scientific notation, which UCSC's bedGraphToBigWig parses as 1 -> out-of-order
+# intervals / corrupt bigwig.
 .gbedgraph_lines_r <- function(chrom, start, end, value) {
     paste(chrom, sprintf("%.0f", start), sprintf("%.0f", end), value, sep = "\t")
 }
@@ -234,14 +233,20 @@ gtrack.export_bedgraph <- function(track, file, intervals = NULL, iterator = NUL
 
 #' Export a track to BigWig format
 #'
-#' Exports a track or track expression to BigWig format by first creating a
-#' temporary bedGraph file and then converting it using \code{bedGraphToBigWig}
-#' (or \code{wigToBigWig} as a fallback).
+#' Exports a track or track expression to a bigWig file.
 #'
-#' This function requires the UCSC \code{bedGraphToBigWig} utility to be
-#' installed and available on the system PATH, or bundled with the misha
-#' package. If not found, the function will raise an error with installation
-#' instructions.
+#' The track expression is evaluated over the intervals as by \code{\link{gextract}},
+#' one batch of chromosomes at a time, and the values are written to the file as they are
+#' extracted, so the whole genome's values are never held in memory. Overlapping intervals are
+#' merged first, so each base is written once. NaN values are not written. Values are stored as
+#' 32-bit floats, as in every bigWig file.
+#'
+#' The file is written by misha itself; no external tool is needed. Runs of bins of equal size
+#' (as from a dense track or a numeric iterator) are stored as fixedStep sections, other values as
+#' bedGraph sections. The file has zoom levels (summaries at coarser resolutions), which genome
+#' browsers and UCSC's \code{bigWigSummary} use for zoomed-out views. Chromosomes are written in
+#' the order of their names (as the bigWig format requires), and every chromosome of the genome
+#' is listed in the file, also those without values.
 #'
 #' @param track track name or track expression (character string)
 #' @param file output file path (typically ending in \code{.bw} or
@@ -253,20 +258,26 @@ gtrack.export_bedgraph <- function(track, file, intervals = NULL, iterator = NUL
 #' @return \code{NULL} (invisible). Called for its side effect of writing a
 #'   file.
 #' @seealso \code{\link{gextract}}, \code{\link{gtrack.export_bedgraph}},
-#'   \code{\link{gtrack.info}}
+#'   \code{\link{gtrack.import}}, \code{\link{gtrack.info}}
 #' @keywords ~track ~export ~bigwig
 #' @examples
-#' \dontrun{
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
+#'
 #' gdb.init_examples()
 #'
-#' # Export to BigWig (requires bedGraphToBigWig)
-#' gtrack.export_bigwig("dense_track", "/tmp/dense.bw")
+#' f <- tempfile(fileext = ".bw")
+#' gtrack.export_bigwig("dense_track", f)
 #'
-#' # With specific region
-#' gtrack.export_bigwig("dense_track", "/tmp/dense_chr1.bw",
-#'     intervals = gintervals(1, 0, 1e6)
+#' # A region, and a track expression in 100 bp bins
+#' gtrack.export_bigwig("dense_track * 2", f,
+#'     intervals = gintervals(1, 0, 1e5), iterator = 100
 #' )
-#' }
+#'
+#' # Read it back
+#' head(gintervals.import_bigwig(f, gintervals(1, 0, 1000)))
+#' unlink(f)
 #'
 #' @export gtrack.export_bigwig
 gtrack.export_bigwig <- function(track, file, intervals = NULL, iterator = NULL) {
@@ -312,92 +323,105 @@ gtrack.export_bigwig <- function(track, file, intervals = NULL, iterator = NULL)
         }
     )
 
-    # Locate bedGraphToBigWig converter
-    converter <- NULL
-    converter_name <- "bedGraphToBigWig"
+    # The chromosomes in the order of the file: by name, byte by byte, as the bigWig format's
+    # chromosome tree is keyed ("1", "10", "2"), which is not the genome order of a database whose
+    # chromosomes are 1, 2, ..., 10. Chromosome id i of the file is file_chroms[i + 1].
+    genome <- gintervals.all()
+    genome_chroms <- as.character(genome$chrom)
+    ord <- order(genome_chroms, method = "radix")
+    file_chroms <- genome_chroms[ord]
 
-    # 1. Check if bundled with the package
-    bundled <- system.file("bedGraphToBigWig", package = "misha")
-    if (nzchar(bundled) && file.exists(bundled)) {
-        converter <- bundled
-    }
+    groups <- .gbigwig_batches(intervals, iterator, genome[ord, c("chrom", "start", "end")], file_chroms)
 
-    # 2. Check PATH
-    if (is.null(converter)) {
-        path_result <- Sys.which("bedGraphToBigWig")
-        if (nzchar(path_result)) {
-            converter <- path_result
-        }
-    }
+    success <- FALSE
+    on.exit(if (!success) unlink(file), add = TRUE)
 
-    # 3. Fallback to wigToBigWig
-    if (is.null(converter)) {
-        bundled_wig <- system.file("wigToBigWig", package = "misha")
-        if (nzchar(bundled_wig) && file.exists(bundled_wig)) {
-            converter <- bundled_wig
-            converter_name <- "wigToBigWig"
-        } else {
-            path_wig <- Sys.which("wigToBigWig")
-            if (nzchar(path_wig)) {
-                converter <- path_wig
-                converter_name <- "wigToBigWig"
+    state <- .gcall("gtrack_bigwig_create", file, file_chroms, genome$end[ord], .misha_env())
+    for (group in groups) {
+        for (intervs in group()) {
+            data <- gextract(track, intervals = intervs, iterator = iterator, colnames = "value")
+            if (is.null(data) || !nrow(data)) {
+                next
             }
+            chroms <- data$chrom
+            ids <- if (is.factor(chroms)) {
+                match(levels(chroms), file_chroms)[as.integer(chroms)]
+            } else {
+                match(as.character(chroms), file_chroms)
+            }
+            rows <- order(ids, data$start)
+            if (!is.unsorted(rows)) {
+                rows <- seq_along(ids)
+            }
+            state <- .gcall(
+                "gtrack_bigwig_append", file, state, ids[rows] - 1L, data$start[rows], data$end[rows],
+                as.numeric(data$value[rows]), .misha_env()
+            )
         }
     }
+    num_records <- .gcall("gtrack_bigwig_finish", file, state, .misha_env())
+    success <- TRUE
 
-    if (is.null(converter)) {
-        stop(
-            "bedGraphToBigWig or wigToBigWig not found on PATH.\n",
-            "Install with: conda install -c bioconda ucsc-bedgraphtobigwig\n",
-            "Or download from https://hgdownload.cse.ucsc.edu/admin/exe/ - note that ",
-            "UCSC's prebuilt binaries require glibc 2.34 or newer, so on older ",
-            "distributions the conda build is the one that works.",
-            call. = FALSE
-        )
-    }
-
-    # Create temporary files
-    tmp_bedgraph <- tempfile(fileext = ".bedgraph")
-    tmp_chromsizes <- tempfile(fileext = ".chrom.sizes")
-    on.exit(
-        {
-            unlink(tmp_bedgraph)
-            unlink(tmp_chromsizes)
-        },
-        add = TRUE
-    )
-
-    # Write bedGraph (uncompressed temp file)
-    # bedGraphToBigWig wants the chromosomes sorted by name in the C locale ("10" before "9"),
-    # which is not the genome order of a database whose chromosomes are 1, 2, ..., 10
-    .gtrack_export_bedgraph(track, tmp_bedgraph, intervals, iterator, NULL,
-        chroms = sort(as.character(gintervals.all()$chrom), method = "radix")
-    )
-
-    # Write chrom.sizes from the genome database
-    # Format sizes as plain integers (no scientific notation) since
-    # bedGraphToBigWig requires integer values
-    genome_intervals <- gintervals.all()
-    chrom_lines <- paste0(
-        genome_intervals$chrom, "\t",
-        sprintf("%.0f", genome_intervals$end)
-    )
-    writeLines(chrom_lines, tmp_chromsizes)
-
-    # Run conversion
-    result <- system2(converter,
-        args = c(tmp_bedgraph, tmp_chromsizes, file),
-        stdout = TRUE, stderr = TRUE
-    )
-    exit_code <- attr(result, "status")
-
-    if (!is.null(exit_code) && exit_code != 0) {
-        stop(sprintf(
-            "%s failed (exit code %d): %s",
-            converter_name, exit_code,
-            paste(result, collapse = "\n")
-        ), call. = FALSE)
+    if (num_records == 0) {
+        warning("The track has no values in the intervals; the bigWig file holds no data", call. = FALSE)
     }
 
     invisible(NULL)
+}
+
+# The scope of a bigWig export, in the order of the file (by the rank of the chromosome in
+# file_chroms, then start), as a list of functions that each return a list of batches of intervals
+# (data frames): one function for an intervals set read one chromosome at a time, one in all
+# otherwise. Overlapping intervals are merged. A batch holds whole chromosomes of about 1e8 bases in
+# all (an interval is not cut); with a numeric iterator, about 2^22 bins, the intervals being cut at
+# multiples of 2^22 bins (bins do not cross them, so the values are those of the whole interval).
+.gbigwig_batches <- function(intervals, iterator, genome, file_chroms) {
+    batch_bases <- 1e8
+    cut <- is.numeric(iterator) && length(iterator) == 1 && is.finite(iterator) && iterator >= 1 && iterator == round(iterator)
+    if (cut) {
+        batch_bases <- iterator * 2^22
+    }
+
+    # the batches of intervals, cut and grouped (NULL or a data frame of any order)
+    split_batches <- function(intervs) {
+        if (is.null(intervs) || !nrow(intervs)) {
+            return(list())
+        }
+        intervs <- intervs[, c("chrom", "start", "end")]
+        intervs <- intervs[order(match(as.character(intervs$chrom), file_chroms), intervs$start), ]
+        first <- floor(intervs$start / batch_bases)
+        last <- floor((intervs$end - 1) / batch_bases)
+        n <- last - first + 1
+        if (cut && any(n > 1)) {
+            idx <- rep(seq_len(nrow(intervs)), n)
+            k <- sequence(n) - 1
+            intervs <- data.frame(
+                chrom = intervs$chrom[idx],
+                start = pmax(intervs$start[idx], (first[idx] + k) * batch_bases),
+                end = pmin(intervs$end[idx], (first[idx] + k + 1) * batch_bases)
+            )
+        }
+        widths <- intervs$end - intervs$start
+        batch <- floor((cumsum(widths) - widths) / batch_bases)
+        lapply(unname(split(seq_len(nrow(intervs)), batch)), function(rows) intervs[rows, ])
+    }
+
+    if (is.null(intervals)) {
+        return(list(function() split_batches(genome)))
+    }
+
+    if (is.character(intervals) && length(intervals) == 1 && .gintervals.is_bigset(intervals, FALSE)) {
+        # gintervals.canonic cannot read a big intervals set: one chromosome at a time
+        chroms <- as.character(gintervals.chrom_sizes(intervals)$chrom)
+        chroms <- chroms[order(match(chroms, file_chroms))]
+        return(lapply(chroms, function(chrom) {
+            force(chrom)
+            function() {
+                split_batches(gintervals.canonic(gintervals.load(intervals, chrom = chrom), unify_touching_intervals = FALSE))
+            }
+        }))
+    }
+
+    canonic <- gintervals.canonic(intervals, unify_touching_intervals = FALSE)
+    list(function() split_batches(canonic))
 }

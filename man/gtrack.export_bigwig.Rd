@@ -23,33 +23,45 @@ is determined automatically from the track expression.}
   file.
 }
 \description{
-Exports a track or track expression to BigWig format by first creating a
-temporary bedGraph file and then converting it using \code{bedGraphToBigWig}
-(or \code{wigToBigWig} as a fallback).
+Exports a track or track expression to a bigWig file.
 }
 \details{
-This function requires the UCSC \code{bedGraphToBigWig} utility to be
-installed and available on the system PATH, or bundled with the misha
-package. If not found, the function will raise an error with installation
-instructions.
+The track expression is evaluated over the intervals as by \code{\link{gextract}},
+one batch of chromosomes at a time, and the values are written to the file as they are
+extracted, so the whole genome's values are never held in memory. Overlapping intervals are
+merged first, so each base is written once. NaN values are not written. Values are stored as
+32-bit floats, as in every bigWig file.
+
+The file is written by misha itself; no external tool is needed. Runs of bins of equal size
+(as from a dense track or a numeric iterator) are stored as fixedStep sections, other values as
+bedGraph sections. The file has zoom levels (summaries at coarser resolutions), which genome
+browsers and UCSC's \code{bigWigSummary} use for zoomed-out views. Chromosomes are written in
+the order of their names (as the bigWig format requires), and every chromosome of the genome
+is listed in the file, also those without values.
 }
 \examples{
-\dontrun{
+\dontshow{
+options(gmax.processes = 2)
+}
+
 gdb.init_examples()
 
-# Export to BigWig (requires bedGraphToBigWig)
-gtrack.export_bigwig("dense_track", "/tmp/dense.bw")
+f <- tempfile(fileext = ".bw")
+gtrack.export_bigwig("dense_track", f)
 
-# With specific region
-gtrack.export_bigwig("dense_track", "/tmp/dense_chr1.bw",
-    intervals = gintervals(1, 0, 1e6)
+# A region, and a track expression in 100 bp bins
+gtrack.export_bigwig("dense_track * 2", f,
+    intervals = gintervals(1, 0, 1e5), iterator = 100
 )
-}
+
+# Read it back
+head(gintervals.import_bigwig(f, gintervals(1, 0, 1000)))
+unlink(f)
 
 }
 \seealso{
 \code{\link{gextract}}, \code{\link{gtrack.export_bedgraph}},
-  \code{\link{gtrack.info}}
+  \code{\link{gtrack.import}}, \code{\link{gtrack.info}}
 }
 \keyword{~bigwig}
 \keyword{~export}

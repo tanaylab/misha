@@ -304,53 +304,314 @@ test_that("bedGraph export errors on missing arguments", {
     expect_error(gtrack.export_bedgraph(), "Usage")
 })
 
-test_that("bigwig export errors when converter not available", {
-    # Skip if bedGraphToBigWig is available (we test success separately)
-    converter <- Sys.which("bedGraphToBigWig")
-    bundled <- system.file("bedGraphToBigWig", package = "misha")
-    wig_converter <- Sys.which("wigToBigWig")
-    bundled_wig <- system.file("wigToBigWig", package = "misha")
+# x rounded to float32, as a bigWig stores its values
+f32 <- function(x) readBin(writeBin(as.numeric(x), raw(), size = 4), "double", n = length(x), size = 4)
 
-    has_converter <- nzchar(converter) ||
-        (nzchar(bundled) && file.exists(bundled)) ||
-        nzchar(wig_converter) ||
-        (nzchar(bundled_wig) && file.exists(bundled_wig))
+# The records gextract returns, without NaN, values rounded to float32: what a bigWig export of the
+# same expression holds
+expected_records <- function(expr, intervals, iterator = NULL) {
+    d <- gextract(expr, intervals = intervals, iterator = iterator, colnames = "value")
+    d <- d[!is.nan(d$value), c("chrom", "start", "end", "value")]
+    d$value <- f32(d$value)
+    d
+}
 
-    skip_if(has_converter, "bedGraphToBigWig or wigToBigWig is available")
+# The parts of a bigWig file that misha's reader does not read: the header, the total summary,
+# the chromosome tree and the records of each zoom level
+read_bigwig_meta <- function(f) {
+    raw <- readBin(f, "raw", file.size(f))
+    uint <- function(off, n) sum(as.numeric(raw[off + seq_len(n)]) * 256^(seq_len(n) - 1))
+    real <- function(off, n, size) readBin(raw[off + seq_len(n * size)], "double", n = n, size = size)
 
-    expect_error(
-        gtrack.export_bigwig("dense_track", tempfile(fileext = ".bw")),
-        "bedGraphToBigWig or wigToBigWig not found"
+    chroms <- data.frame(name = character(0), id = numeric(0), size = numeric(0))
+    tree <- uint(8, 8)
+    key_size <- uint(tree + 8, 4)
+    read_node <- function(off) {
+        count <- uint(off + 2, 2)
+        for (i in seq_len(count) - 1) {
+            item <- off + 4 + i * (key_size + 8)
+            if (as.integer(raw[off + 1]) == 1) {
+                key <- raw[item + seq_len(key_size)]
+                chroms[nrow(chroms) + 1, ] <<- list(rawToChar(key[key != 0]), uint(item + key_size, 4), uint(item + key_size + 4, 4))
+            } else {
+                read_node(uint(item + key_size, 8))
+            }
+        }
+    }
+    read_node(tree + 32)
+
+    # the blocks an R-tree indexes: offset and size of each
+    rtree_leaves <- function(off) {
+        res <- list()
+        walk <- function(node) {
+            count <- uint(node + 2, 2)
+            for (i in seq_len(count) - 1) {
+                if (as.integer(raw[node + 1]) == 1) {
+                    item <- node + 4 + i * 32
+                    res[[length(res) + 1]] <<- c(uint(item + 16, 8), uint(item + 24, 8))
+                } else {
+                    walk(uint(node + 4 + i * 24 + 16, 8))
+                }
+            }
+        }
+        walk(off + 48)
+        res
+    }
+
+    num_zooms <- uint(6, 2)
+    zooms <- lapply(seq_len(num_zooms) - 1, function(z) {
+        hdr <- 64 + 24 * z
+        recs <- do.call(rbind, lapply(rtree_leaves(uint(hdr + 16, 8)), function(block) {
+            data <- memDecompress(raw[block[1] + seq_len(block[2])], "gzip")
+            n <- length(data) / 32
+            ints <- matrix(as.numeric(readBin(data, "integer", n = 8 * n, size = 4)) %% 2^32, nrow = 8)
+            floats <- matrix(readBin(data, "double", n = 8 * n, size = 4), nrow = 8)
+            data.frame(
+                chromid = ints[1, ], start = ints[2, ], end = ints[3, ], count = ints[4, ],
+                min = floats[5, ], max = floats[6, ], sum = floats[7, ], sumsq = floats[8, ]
+            )
+        }))
+        list(reduction = uint(hdr, 4), records = recs)
+    })
+
+    summary_offset <- uint(44, 8)
+    list(
+        magic = uint(0, 4), version = uint(4, 2), chroms = chroms, zooms = zooms,
+        summary = c(count = uint(summary_offset, 8), real(summary_offset + 8, 4, 8))
     )
+}
+
+test_that("bigwig export round-trips a dense track", {
+    f <- tempfile(fileext = ".bw")
+    withr::defer(unlink(f))
+    gtrack.export_bigwig("dense_track", f)
+
+    expect_identical(readBin(f, "integer", n = 1, size = 4), -2003829722L) # 0x888FFC26, the bigWig magic
+    exp <- expected_records("dense_track", gintervals.all())
+    got <- gintervals.import_bigwig(f, gintervals.all())
+    expect_equal(as.character(got$chrom), as.character(exp$chrom))
+    expect_identical(got$start, exp$start)
+    expect_identical(got$end, exp$end)
+    expect_identical(got$value, exp$value)
+
+    withr::defer(gtrack.rm("bw_back_dense", force = TRUE))
+    gtrack.import("bw_back_dense", "", f, binsize = 50)
+    back <- gextract("bw_back_dense", gintervals.all())$bw_back_dense
+    orig <- gextract("dense_track", gintervals.all())$dense_track
+    expect_identical(is.nan(back), is.nan(orig))
+    expect_identical(back[!is.nan(back)], f32(orig[!is.nan(orig)]))
 })
 
-test_that("bigwig export works when converter is available", {
-    converter <- Sys.which("bedGraphToBigWig")
-    bundled <- system.file("bedGraphToBigWig", package = "misha")
-    wig_converter <- Sys.which("wigToBigWig")
-    bundled_wig <- system.file("wigToBigWig", package = "misha")
+test_that("bigwig export round-trips a sparse track", {
+    f <- tempfile(fileext = ".bw")
+    withr::defer(unlink(f))
+    gtrack.export_bigwig("sparse_track", f)
+    exp <- expected_records("sparse_track", gintervals.all())
+    got <- gintervals.import_bigwig(f, gintervals.all())
+    expect_identical(nrow(got), nrow(exp))
+    expect_identical(got$start, exp$start)
+    expect_identical(got$end, exp$end)
+    expect_identical(got$value, exp$value)
+})
 
-    has_converter <- nzchar(converter) ||
-        (nzchar(bundled) && file.exists(bundled)) ||
-        nzchar(wig_converter) ||
-        (nzchar(bundled_wig) && file.exists(bundled_wig))
+test_that("bigwig export of an expression over overlapping intervals writes each base once", {
+    f <- tempfile(fileext = ".bw")
+    withr::defer(unlink(f))
+    ivs <- rbind(gintervals(1, 1000, 50000), gintervals(1, 30000, 80000), gintervals(2, 0, 120000), gintervals("X", 5, 99999))
+    gtrack.export_bigwig("dense_track * 2 + 1", f, intervals = ivs, iterator = 100)
+    exp <- expected_records("dense_track * 2 + 1", gintervals.canonic(ivs, unify_touching_intervals = FALSE), iterator = 100)
+    got <- gintervals.import_bigwig(f, gintervals.all())
+    expect_equal(as.character(got$chrom), as.character(exp$chrom))
+    expect_identical(got$start, exp$start)
+    expect_identical(got$end, exp$end)
+    expect_identical(got$value, exp$value)
+    # the partial bins at the ends of the intervals are kept
+    expect_identical(got$start[got$chrom == "chrX"][1:2], c(5, 100))
+})
 
-    skip_if_not(has_converter, "bedGraphToBigWig or wigToBigWig not available")
+test_that("bigwig export of an array track and of a virtual track writes gextract's values", {
+    f <- tempfile(fileext = ".bw")
+    withr::defer(unlink(f))
+    gtrack.export_bigwig("array_track", f)
+    exp <- expected_records("array_track", gintervals.all())
+    got <- gintervals.import_bigwig(f, gintervals.all())
+    expect_identical(got$start, exp$start)
+    expect_identical(got$value, exp$value)
 
-    outfile <- tempfile(fileext = ".bw")
-    withr::defer(unlink(outfile))
+    withr::defer(gvtrack.rm("bw_vt"))
+    gvtrack.create("bw_vt", "dense_track", func = "max")
+    gtrack.export_bigwig("bw_vt", f, intervals = gintervals(c(1, 2), 0, 33333), iterator = 37)
+    exp <- expected_records("bw_vt", gintervals(c(1, 2), 0, 33333), iterator = 37)
+    got <- gintervals.import_bigwig(f, gintervals.all())
+    expect_identical(got$start, exp$start)
+    expect_identical(got$end, exp$end)
+    expect_identical(got$value, exp$value)
+})
 
-    gtrack.export_bigwig("dense_track", outfile,
-        intervals = gintervals(1, 0, 10000)
+test_that("bigwig export over a big intervals set reads it one chromosome at a time", {
+    withr::local_options(gbig.intervals.size = 2)
+    set <- paste0("test_bw_bigset_", Sys.getpid())
+    withr::defer(gintervals.rm(set, force = TRUE))
+    ivs <- rbind(gintervals(1, c(0, 500, 400), c(1000, 2000, 450)), gintervals(2, 100, 900), gintervals("X", 0, 300))
+    gintervals.save(set, ivs)
+    expect_true(misha:::.gintervals.is_bigset(set, FALSE))
+    f <- tempfile(fileext = ".bw")
+    withr::defer(unlink(f))
+    gtrack.export_bigwig("dense_track", f, intervals = set)
+    exp <- expected_records("dense_track", gintervals.canonic(ivs, unify_touching_intervals = FALSE))
+    got <- gintervals.import_bigwig(f, gintervals.all())
+    expect_identical(got$start, exp$start)
+    expect_identical(got$end, exp$end)
+    expect_identical(got$value, exp$value)
+})
+
+test_that("bigwig export writes the summary and zoom levels of the values", {
+    f <- tempfile(fileext = ".bw")
+    withr::defer(unlink(f))
+    gtrack.export_bigwig("dense_track", f)
+    meta <- read_bigwig_meta(f)
+    exp <- expected_records("dense_track", gintervals.all())
+    w <- exp$end - exp$start
+
+    expect_identical(meta$version, 4)
+    expect_identical(meta$chroms$name, c("chr1", "chr2", "chrX"))
+    expect_identical(meta$chroms$id, c(0, 1, 2))
+    expect_identical(meta$chroms$size, gintervals.all()$end)
+    expect_equal(unname(meta$summary), c(sum(w), min(exp$value), max(exp$value), sum(exp$value * w), sum(exp$value^2 * w)))
+
+    # 16 times the mean record width (50 bp bins), then 4 times larger at each level
+    reductions <- vapply(meta$zooms, `[[`, numeric(1), "reduction")
+    expect_identical(reductions[1], 800)
+    expect_identical(reductions, 800 * 4^(seq_along(reductions) - 1))
+    for (zoom in meta$zooms) {
+        r <- zoom$records
+        expect_identical(sum(r$count), sum(w))
+        expect_equal(sum(r$sum), sum(exp$value * w), tolerance = 1e-6)
+        expect_identical(min(r$min), min(exp$value))
+        expect_identical(max(r$max), max(exp$value))
+        # each record lies inside one bin of the level's size
+        expect_true(all(r$start %/% zoom$reduction == (r$end - 1) %/% zoom$reduction))
+    }
+    # the first level against records summarized here
+    z <- meta$zooms[[1]]$records
+    chrom1 <- exp[exp$chrom == "chr1" & exp$start < 800, ]
+    expect_identical(z$count[1], sum(chrom1$end - chrom1$start))
+    expect_equal(z$sum[1], sum(chrom1$value * (chrom1$end - chrom1$start)), tolerance = 1e-6)
+})
+
+test_that("bigwig export writes the chromosomes in name order when the database's order differs", {
+    local_db_state()
+    withr::with_tempdir({
+        create_db_with_unsorted_chrom_sizes("unsorted_db")
+        gdb.init("unsorted_db")
+        all <- gintervals.all()
+        bins <- giterator.intervals(intervals = all, iterator = 10)
+        set.seed(1)
+        v <- round(rnorm(nrow(bins)), 3)
+        v[sample(length(v), length(v) %/% 4)] <- NaN # NaN gaps
+        v[bins$chrom == "chr10"] <- NaN # a chromosome without values
+        gtrack.create_dense("t", "", bins, v, 10, defval = NaN)
+
+        f <- file.path(getwd(), "t.bw")
+        gtrack.export_bigwig("t", f)
+        meta <- read_bigwig_meta(f)
+        names <- as.character(all$chrom)
+        expect_identical(meta$chroms$name, sort(names, method = "radix"))
+        expect_identical(meta$chroms$id, as.numeric(seq_along(names) - 1))
+        expect_identical(meta$chroms$size, all$end[match(meta$chroms$name, names)])
+
+        exp <- expected_records("t", all)
+        got <- gintervals.import_bigwig(f, all)
+        expect_identical(nrow(got), nrow(exp))
+        expect_identical(got$start, exp$start)
+        expect_identical(got$value, exp$value)
+        expect_false(any(got$chrom == "chr10"))
+
+        gtrack.import("back", "", f, binsize = 10)
+        back <- gextract("back", all, iterator = 10)$back
+        orig <- gextract("t", all, iterator = 10)$t
+        expect_identical(is.nan(back), is.nan(orig))
+        expect_identical(back[!is.nan(back)], f32(orig[!is.nan(orig)]))
+    })
+})
+
+test_that("bigwig export writes coordinates past 2^31", {
+    local_db_state()
+    withr::with_tempdir({
+        dir.create("large_db/tracks", recursive = TRUE)
+        dir.create("large_db/seq")
+        sizes <- c(4.2e9, 1e6)
+        for (i in 1:2) {
+            # a sparse file: only its size matters
+            con <- file(file.path("large_db", "seq", paste0("chr", i, ".seq")), "wb")
+            seek(con, sizes[i] - 1, rw = "write")
+            writeBin(charToRaw("A"), con)
+            close(con)
+        }
+        writeLines(paste(1:2, sprintf("%.0f", sizes), sep = "\t"), file.path("large_db", "chrom_sizes.txt"))
+        gdb.init("large_db")
+        starts <- c(10, 2^31 - 5, 2^31 + 100, 3.5e9, 4.2e9 - 100)
+        ivs <- gintervals(1, starts, starts + c(50, 10, 1000, 1e6, 100))
+        gtrack.create_sparse("s", "", ivs, c(1.5, -2, 3e10, 0.25, 7))
+
+        f <- file.path(getwd(), "s.bw")
+        gtrack.export_bigwig("s", f)
+        got <- gintervals.import_bigwig(f, gintervals.all())
+        expect_identical(got$start, ivs$start)
+        expect_identical(got$end, ivs$end)
+        expect_identical(got$value, f32(c(1.5, -2, 3e10, 0.25, 7)))
+
+        # bins across a batch boundary of the numeric iterator (2^22 bins of 1000 bp)
+        scope <- gintervals(1, 4.19e9, 4.2e9)
+        batches <- misha:::.gbigwig_batches(scope, 1000, gintervals.all(), c("chr1", "chr2"))[[1]]()
+        expect_identical(batches[[1]]$end[1], 1000 * 2^22)
+        gtrack.export_bigwig("s", f, intervals = scope, iterator = 1000)
+        exp <- expected_records("s", scope, iterator = 1000)
+        got <- gintervals.import_bigwig(f, gintervals.all())
+        expect_identical(got$start, exp$start)
+        expect_identical(got$end, exp$end)
+        expect_identical(got$value, exp$value)
+    })
+})
+
+test_that("bigwig export over intervals with no values writes a file without data", {
+    f <- tempfile(fileext = ".bw")
+    withr::defer(unlink(f))
+    expect_warning(gtrack.export_bigwig("sparse_track", f, intervals = gintervals(1, 60, 90)), "no values in the intervals")
+    expect_identical(nrow(gintervals.import_bigwig(f, gintervals.all())), 0L)
+    meta <- read_bigwig_meta(f)
+    expect_identical(meta$chroms$name, c("chr1", "chr2", "chrX"))
+    expect_length(meta$zooms, 0)
+    expect_identical(meta$summary[["count"]], 0)
+})
+
+test_that("bigwig export leaves no file when it fails", {
+    f <- tempfile(fileext = ".bw")
+    expect_error(gtrack.export_bigwig("dense_track + bw_no_such_variable", f))
+    expect_false(file.exists(f))
+})
+
+test_that("the bigWig writer refuses unsorted and overlapping records", {
+    f <- tempfile(fileext = ".bw")
+    withr::defer(unlink(f))
+    chroms <- c("chr1", "chr2")
+    state <- misha:::.gcall("gtrack_bigwig_create", f, chroms, c(1000, 1000), misha:::.misha_env())
+    expect_error(
+        misha:::.gcall("gtrack_bigwig_append", f, state, c(0L, 0L), c(0, 50), c(100, 200), c(1, 2), misha:::.misha_env()),
+        "must not overlap"
     )
-
-    expect_true(file.exists(outfile))
-    expect_true(file.info(outfile)$size > 0)
+    expect_error(
+        misha:::.gcall("gtrack_bigwig_append", f, state, c(1L, 0L), c(0, 0), c(10, 10), c(1, 2), misha:::.misha_env()),
+        "sorted by chromosome"
+    )
+    expect_error(
+        misha:::.gcall("gtrack_bigwig_append", f, state, 0L, 0, 1001, 1, misha:::.misha_env()),
+        "1000 bases long"
+    )
+    expect_error(misha:::.gcall("gtrack_bigwig_create", f, c("chr2", "chr1"), c(1000, 1000), misha:::.misha_env()), "sorted by name")
 })
 
 test_that("bigwig export works when the genome order is not the C order of the chromosome names", {
-    has_converter <- nzchar(Sys.which("bedGraphToBigWig")) || file.exists(system.file("bedGraphToBigWig", package = "misha"))
-    skip_if_not(has_converter, "bedGraphToBigWig not available")
     local_db_state()
     withr::with_tempdir({
         sizes <- c("1" = 1000, "2" = 1000, "10" = 1000)
@@ -359,9 +620,9 @@ test_that("bigwig export works when the genome order is not the C order of the c
         gdb.init("num_db")
         skip_if_not(identical(as.character(gintervals.all()$chrom), names(sizes)), "the database sorts its chromosomes")
         gtrack.create_dense("t", "", gintervals.all(), c(1, 2, 3), 100)
-        # bedGraphToBigWig refuses "10" after "2"
         f <- file.path(getwd(), "t.bw")
         gtrack.export_bigwig("t", f)
+        expect_identical(read_bigwig_meta(f)$chroms$name, c("1", "10", "2"))
         gtrack.import("back", "", f, binsize = 100)
         expect_identical(gextract("back", gintervals.all(), iterator = 100)$back, gextract("t", gintervals.all(), iterator = 100)$t)
     })

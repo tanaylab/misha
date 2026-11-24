@@ -1,3 +1,7 @@
+# misha (development version)
+
+* `gtrack.export_bigwig()` writes bigWig files directly; UCSC `bedGraphToBigWig` is no longer needed.
+
 # misha 5.19.0
 
 * **Behavior fix:** `neighbor.count` virtual tracks count long source intervals correctly over overlapping intervals. This changes `gintervals.summary()` and `gintervals.quantiles()` results over overlapping intervals.
