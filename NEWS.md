@@ -1,3 +1,7 @@
+# misha (development version)
+
+* New `gseq.write_meme()`, `gseq.write_jaspar()` and `gseq.write_homer()` write motifs in the formats the `gseq.read_*()` functions read, so motifs round-trip with their metadata.
+
 # misha 5.19.0
 
 * **Behavior fix:** `neighbor.count` virtual tracks count long source intervals correctly over overlapping intervals. This changes `gintervals.summary()` and `gintervals.quantiles()` results over overlapping intervals.
