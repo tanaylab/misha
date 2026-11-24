@@ -252,6 +252,17 @@ test_that("names are sanitized, attributes copied, chromosomes matched", {
     )
 })
 
+test_that("select compares numbers by value", {
+    db <- local_fw_db()
+    imp <- function(...) suppressWarnings(suppressMessages(gtrack.import_figwig(fw_fixture("numattrs.fw"), ...)))
+    # the file holds rep 2.0 and frac 0.1 for "a", rep 3 for "b"
+    for (i in seq_along(wants <- list(2, 2L, "2", "2.0"))) {
+        expect_identical(imp(select = list(rep = wants[[i]]), track.prefix = paste0("n", i, "_")), paste0("n", i, "_a"))
+    }
+    expect_identical(imp(select = list(rep = 3.0), track.prefix = "t_"), "t_b")
+    expect_identical(imp(select = list(frac = 0.1), track.prefix = "f_"), "f_a")
+})
+
 test_that("tracks are selected by names, indices and attributes", {
     db <- local_fw_db()
     imp <- function(...) suppressWarnings(suppressMessages(gtrack.import_figwig(fw_fixture("semantics.fw"), ...)))

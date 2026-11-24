@@ -1,21 +1,28 @@
 # Import of figwig files (.fw, https://github.com/jmschrei/figwig)
 
-# The text a value of 'select' is compared with: figwig attribute values are text as they become
-# misha attributes (a string as it is, anything else as its JSON text)
-.figwig_filter_text <- function(x) {
+# The canonical text of numbers: a whole number below 1e15 as an integer, anything else as
+# "%.17g", so that 2, 2.0 and "2.0" compare equal. PyMisha's _number_text.
+.figwig_number_text <- function(v) {
+    ifelse(is.finite(v) & v == round(v) & abs(v) < 1e15, sprintf("%.0f", v), sprintf("%.17g", v))
+}
+
+# The text a value of 'select', or a track's attribute value (JSON text, a string as it is), is
+# compared with: a number, or a string that is a JSON number, as .figwig_number_text; a logical as
+# "true" / "false"; any other string as it is. PyMisha's _match_text.
+.figwig_match_text <- function(x) {
     if (is.factor(x)) {
         x <- as.character(x)
-    }
-    if (is.character(x)) {
-        return(x)
     }
     if (is.logical(x)) {
         return(ifelse(x, "true", "false"))
     }
     if (is.numeric(x)) {
-        return(ifelse(is.finite(x) & x == round(x) & abs(x) < 1e15, sprintf("%.0f", x), as.character(x)))
+        return(.figwig_number_text(as.numeric(x)))
     }
-    as.character(x)
+    x <- as.character(x)
+    num <- !is.na(x) & grepl("^-?(0|[1-9][0-9]*)(\\.[0-9]+)?([eE][+-]?[0-9]+)?$", x, perl = TRUE)
+    x[num] <- .figwig_number_text(as.numeric(x[num]))
+    x
 }
 
 # The misha track name a figwig track name becomes: a trailing "+" or "-" (a strand) is spelled
@@ -84,8 +91,8 @@
             if (!key %in% keys) {
                 stop(sprintf("No track of %s has the attribute \"%s\"; its attributes: %s", file, key, paste(sort(keys), collapse = ", ")), call. = FALSE)
             }
-            values <- text_of(key)
-            wanted <- .figwig_filter_text(unlist(select[[key]], use.names = FALSE))
+            values <- .figwig_match_text(text_of(key))
+            wanted <- .figwig_match_text(unlist(select[[key]], use.names = FALSE))
             idx <- idx[!is.na(values[idx]) & values[idx] %in% wanted]
         }
         if (!length(idx)) {
@@ -135,9 +142,10 @@
 #' in the order given, or all of them in the file's order, and then with
 #' 'select', a named list of attribute values (a vector of several values
 #' matches any of them): a track is imported when every attribute given
-#' matches. Values are compared as text, as they become attributes (below),
-#' so \code{list(rep = 1)} and \code{list(rep = "1")} both match a
-#' \code{"rep": 1} record. 'name', 'dtype' and 'group' can be selected on too.
+#' matches. Numbers are compared by value, whether given as numbers or as
+#' text, so \code{list(rep = 1)}, \code{list(rep = "1")} and
+#' \code{list(rep = "1.0")} all match a \code{"rep": 1} or \code{"rep": 1.0}
+#' record; other values are compared as text. 'name', 'dtype' and 'group' can be selected on too.
 #'
 #' The track made from figwig track 'n' is named '[track.prefix]n2', where 'n2'
 #' is the entry of 'names' for it if given (a character vector, one per

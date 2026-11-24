@@ -157,6 +157,14 @@ def write_semantics():
             writer.write(chrom, [0], v)
 
 
+def write_numattrs():
+    # number attributes written as floats, for select matching 2, 2.0 and "2.0" alike
+    tracks = [{"name": "a", "rep": 2.0, "frac": 0.1}, {"name": "b", "rep": 3, "frac": 0.25}]
+    chroms = {"chr1": 100}
+    with FigWigWriter(path("numattrs.fw"), chroms, tracks) as writer:
+        writer.write("chr1", [0], numpy.ones((1, 2, 100), dtype=numpy.uint8))
+
+
 def runs_of(reader):
     rows = []
     for t, rec in enumerate(reader.tracks):
@@ -208,6 +216,7 @@ def main():
     write_blocks()
     write_entries()
     write_semantics()
+    write_numattrs()
 
     codes = ["u1", "u2", "u4", "i1", "i2", "i4", "f4", "one", "f8"]
     format_rows = None
