@@ -126,6 +126,52 @@ test_that("Ctrl-C stops a running gseq.pwm scan", {
     expect_true(r_interrupt_works())
 })
 
+test_that("Ctrl-C stops the bigWig writer's append and finish", {
+    skip_on_cran()
+    # Timing-based as the gseq.pwm test above: each call takes several seconds on 10 million
+    # records, on one thread, and the signal comes after one.
+    delay <- 1
+    n <- 1e7
+    f <- tempfile(fileext = ".bw")
+    withr::defer(unlink(f))
+    withr::local_options(list(gmax.processes = 1))
+    starts <- seq(0, by = 10, length.out = n) + rep_len(c(0, 3), n)
+    ends <- starts + 2 + rep_len(c(0, 1, 2), n)
+    values <- runif(n)
+    env <- .misha_env()
+
+    interrupted <- function(call) {
+        system2("/bin/sh", c("-c", shQuote(sprintf("sleep %g; kill -INT %d", delay, Sys.getpid()))), wait = FALSE)
+        t0 <- Sys.time()
+        res <- tryCatch(
+            {
+                call()
+                "completed"
+            },
+            error = function(e) conditionMessage(e)
+        )
+        elapsed <- as.numeric(difftime(Sys.time(), t0, units = "secs"))
+        tryCatch(Sys.sleep(max(0, delay - elapsed) + 0.5), interrupt = function(i) NULL)
+        if (identical(res, "completed") && elapsed < delay) {
+            skip(sprintf("the call finished in %.1fs, before the %gs signal", elapsed, delay))
+        }
+        expect_match(res, "Command interrupted")
+        expect_lt(elapsed, delay + 3)
+        expect_identical(.glifetime_counters(), c(ref_count = 0L, protect_count = 0L))
+    }
+
+    state <- .gcall("gtrack_bigwig_create", f, "chr1", 4e9, env)
+    interrupted(function() .gcall("gtrack_bigwig_append", f, state, rep(0L, n), starts, ends, values, env))
+
+    # the interrupted append left the file behind its state: start it over
+    state <- .gcall("gtrack_bigwig_create", f, "chr1", 4e9, env)
+    state <- .gcall("gtrack_bigwig_append", f, state, rep(0L, n), starts, ends, values, env)
+    rm(starts, ends, values)
+    interrupted(function() .gcall("gtrack_bigwig_finish", f, state, env))
+
+    expect_true(r_interrupt_works())
+})
+
 test_that("gtrack.lookup reports a readable error when it fails before the first chromosome", {
     # The message used to be built with an uninitialised stack buffer, so it carried
     # arbitrary bytes and could not even be passed to nchar().

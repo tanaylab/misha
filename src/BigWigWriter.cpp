@@ -11,8 +11,12 @@
 
 #include "BigWigWriter.h"
 #include "TGLException.h"
+#include "rdbutils.h"
 
 // See BigWigWriter.h. All integers are little-endian, as in BigWig.cpp, the reader.
+//
+// Ctrl-C is checked (rdb::check_interrupt) in the loops over records and data blocks, on the
+// calling thread only: the threads of parallel_for compress blocks and never check it.
 
 namespace {
 
@@ -44,6 +48,9 @@ const size_t BLOCKS_PER_FLUSH = 256;
 
 // Records of one chromosome gathered before they are laid out as blocks
 const size_t ITEMS_PER_FLUSH = 1 << 20;
+
+// Records appended between two checks for Ctrl-C
+const uint64_t ITEMS_PER_INTERRUPT_CHECK = 1 << 16;
 
 enum { BEDGRAPH = 1, FIXEDSTEP = 3 };
 
@@ -828,6 +835,9 @@ void BigWigWriter::append(const string &filename, vector<char> &state, uint64_t 
 	int64_t num_chroms = s.sizes.size();
 
 	for (uint64_t i = 0; i < n; ++i) {
+		if (!(i % ITEMS_PER_INTERRUPT_CHECK))
+			rdb::check_interrupt();
+
 		int64_t chromid = chromids[i];
 		int64_t start = starts[i];
 		int64_t end = ends[i];
@@ -920,8 +930,10 @@ uint64_t BigWigWriter::finish(const string &filename, const vector<char> &state,
 			}
 
 			reader.open(filename, "rb");
-			for (const Leaf &leaf : s.leaves)
+			for (const Leaf &leaf : s.leaves) {
+				rdb::check_interrupt();
 				read_block(reader, leaf, *levels[0], cbuf, ubuf);
+			}
 			reader.close();
 			levels[0]->finish();
 
