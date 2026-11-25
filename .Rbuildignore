@@ -38,3 +38,4 @@
 ^tests/testthat/fixtures/tiny-hub-groot/\.ro_attributes$
 ^\.worktrees$
 ^\.superpowers$
+^tests/testthat/fixtures/figwig/make_fixtures\.py$
