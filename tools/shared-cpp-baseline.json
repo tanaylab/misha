@@ -319,6 +319,11 @@
     "misha": "2d44a78d954e45a8",
     "pymisha": "2d44a78d954e45a8"
   },
+  "SeqOneHot.h": {
+    "identical": true,
+    "misha": "a964df2f2647ff40",
+    "pymisha": "a964df2f2647ff40"
+  },
   "StatQuadTree.h": {
     "identical": true,
     "misha": "2a298c7dba4f6d9f",

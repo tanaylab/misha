@@ -140,6 +140,7 @@ reference:
       - gdist
       - gextract
       - gextract.matrix
+      - gextract.windows
       - gextract.variants
       - glookup
       - gpartition
@@ -152,6 +153,7 @@ reference:
     desc: Sequence functions
     contents:
       - gseq.extract
+      - gseq.onehot
       - gseq.pwm
       - gseq.pwm_edits
       - gseq.potts
