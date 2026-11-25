@@ -54,6 +54,8 @@ Functions to manipulate and create tracks
   tab-delimited files on disk or FTP
 - [`gtrack.import_parquet()`](https://tanaylab.github.io/misha/reference/gtrack.import_parquet.md)
   : Creates dense tracks from the columns of Parquet files
+- [`gtrack.import_figwig()`](https://tanaylab.github.io/misha/reference/gtrack.import_figwig.md)
+  : Creates tracks from the tracks of a figwig file
 - [`gtrack.info()`](https://tanaylab.github.io/misha/reference/gtrack.info.md)
   : Returns information about a track
 - [`gtrack.path()`](https://tanaylab.github.io/misha/reference/gtrack.path.md)
@@ -192,6 +194,8 @@ Functions to manipulate and create intervals
   : Transforms existing intervals to a chain format
 - [`gintervals.path()`](https://tanaylab.github.io/misha/reference/gintervals.path.md)
   : Returns the path on disk of an interval set
+- [`gintervals.pwm_hits()`](https://tanaylab.github.io/misha/reference/gintervals.pwm_hits.md)
+  : Find PWM motif hits in genomic intervals
 - [`gintervals.ls()`](https://tanaylab.github.io/misha/reference/gintervals.ls.md)
   : Returns a list of named intervals sets
 - [`gintervals.mapply()`](https://tanaylab.github.io/misha/reference/gintervals.mapply.md)
@@ -251,6 +255,8 @@ Data manipulation functions
 - [`gextract.matrix()`](https://tanaylab.github.io/misha/reference/gextract.matrix.md)
   : Returns track expression values over equal-width intervals as a
   matrix
+- [`gextract.windows()`](https://tanaylab.github.io/misha/reference/gextract.windows.md)
+  : Fixed-width windows as arrays for machine learning
 - [`gextract.variants()`](https://tanaylab.github.io/misha/reference/gextract.variants.md)
   : Evaluate a track expression under single-base substitutions
 - [`glookup()`](https://tanaylab.github.io/misha/reference/glookup.md) :
@@ -274,16 +280,22 @@ Sequence functions
 
 - [`gseq.extract()`](https://tanaylab.github.io/misha/reference/gseq.extract.md)
   : Returns DNA sequences
+- [`gseq.onehot()`](https://tanaylab.github.io/misha/reference/gseq.onehot.md)
+  : One-hot encoding of DNA sequences
 - [`gseq.pwm()`](https://tanaylab.github.io/misha/reference/gseq.pwm.md)
   : Score DNA sequences with a PWM over a region of interest
 - [`gseq.pwm_edits()`](https://tanaylab.github.io/misha/reference/gseq.pwm_edits.md)
   : Show optimal edits to reach a PWM score threshold
+- [`gseq.pwm_hits()`](https://tanaylab.github.io/misha/reference/gseq.pwm_hits.md)
+  : Find PWM motif hits in DNA sequences
 - [`gseq.potts()`](https://tanaylab.github.io/misha/reference/gseq.potts.md)
   : Score sequences under a Potts (pairwise energy) model
 - [`gseq.kmer()`](https://tanaylab.github.io/misha/reference/gseq.kmer.md)
   : Score DNA sequences with a k-mer over a region of interest
 - [`gseq.kmer.dist()`](https://tanaylab.github.io/misha/reference/gseq.kmer.dist.md)
   : Compute k-mer distribution in genomic intervals
+- [`gseq.shuffle()`](https://tanaylab.github.io/misha/reference/gseq.shuffle.md)
+  : Shuffle sequences keeping their k-mer counts
 - [`gseq.revcomp()`](https://tanaylab.github.io/misha/reference/gseq.revcomp.md)
   : Get reverse complement of DNA sequence
 - [`grevcomp()`](https://tanaylab.github.io/misha/reference/grevcomp.md)
@@ -302,9 +314,9 @@ Functions to export tracks to standard genomic file formats
 - [`gtrack.export_bigwig()`](https://tanaylab.github.io/misha/reference/gtrack.export_bigwig.md)
   : Export a track to BigWig format
 
-## Motif import
+## Motif import and export
 
-Functions to import motifs from standard motif format files
+Functions to read and write motifs in standard motif file formats
 
 - [`gseq.read_meme()`](https://tanaylab.github.io/misha/reference/gseq.read_meme.md)
   : Read motifs from a MEME minimal motif format file
@@ -312,6 +324,12 @@ Functions to import motifs from standard motif format files
   : Read motifs from a JASPAR PFM format file
 - [`gseq.read_homer()`](https://tanaylab.github.io/misha/reference/gseq.read_homer.md)
   : Read motifs from a HOMER motif format file
+- [`gseq.write_meme()`](https://tanaylab.github.io/misha/reference/gseq.write_meme.md)
+  : Write motifs to a MEME minimal motif format file
+- [`gseq.write_jaspar()`](https://tanaylab.github.io/misha/reference/gseq.write_jaspar.md)
+  : Write motifs to a JASPAR format file
+- [`gseq.write_homer()`](https://tanaylab.github.io/misha/reference/gseq.write_homer.md)
+  : Write motifs to a HOMER motif format file
 
 ## Synthetic genome functions
 

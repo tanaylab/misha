@@ -44,7 +44,10 @@ matrix carries the following attributes:
 
 Other motif functions:
 [`gseq.read_homer()`](https://tanaylab.github.io/misha/reference/gseq.read_homer.md),
-[`gseq.read_meme()`](https://tanaylab.github.io/misha/reference/gseq.read_meme.md)
+[`gseq.read_meme()`](https://tanaylab.github.io/misha/reference/gseq.read_meme.md),
+[`gseq.write_homer()`](https://tanaylab.github.io/misha/reference/gseq.write_homer.md),
+[`gseq.write_jaspar()`](https://tanaylab.github.io/misha/reference/gseq.write_jaspar.md),
+[`gseq.write_meme()`](https://tanaylab.github.io/misha/reference/gseq.write_meme.md)
 
 ## Examples
 

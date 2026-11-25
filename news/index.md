@@ -1,5 +1,63 @@
 # Changelog
 
+## misha (development version)
+
+- **Behavior fix:**
+  [`gtrack.import_mappedseq()`](https://tanaylab.github.io/misha/reference/gtrack.import_mappedseq.md)
+  rejects a truncated BAM (no end-of-file block) instead of importing
+  part of it.
+
+- New
+  [`gextract.windows()`](https://tanaylab.github.io/misha/reference/gextract.windows.md)
+  returns fixed-width windows around loci as arrays for sequence models:
+  one-hot DNA (N x 4 x L) and track values (N x T x L’), with jitter
+  margins, strand-aware reverse complement, exclusion intervals and
+  count filters. New
+  [`gseq.onehot()`](https://tanaylab.github.io/misha/reference/gseq.onehot.md)
+  one-hot encodes intervals (read in C++ straight from the sequence
+  files) or strings.
+
+- New
+  [`gseq.pwm_hits()`](https://tanaylab.github.io/misha/reference/gseq.pwm_hits.md)
+  and
+  [`gintervals.pwm_hits()`](https://tanaylab.github.io/misha/reference/gintervals.pwm_hits.md)
+  return the position, strand and score of every motif window that
+  passes a threshold.
+
+- New
+  [`gseq.write_meme()`](https://tanaylab.github.io/misha/reference/gseq.write_meme.md),
+  [`gseq.write_jaspar()`](https://tanaylab.github.io/misha/reference/gseq.write_jaspar.md)
+  and
+  [`gseq.write_homer()`](https://tanaylab.github.io/misha/reference/gseq.write_homer.md)
+  write motifs in the formats the `gseq.read_*()` functions read, so
+  motifs round-trip with their metadata (JASPAR counts are rounded to
+  whole numbers unless `round_counts = FALSE`).
+
+- New
+  [`gseq.shuffle()`](https://tanaylab.github.io/misha/reference/gseq.shuffle.md)
+  shuffles sequences keeping their exact k-mer (default dinucleotide)
+  counts, drawn uniformly; the same seed gives the same sequences as
+  PyMisha’s `gseq_shuffle()`.
+
+- New
+  [`gtrack.import_figwig()`](https://tanaylab.github.io/misha/reference/gtrack.import_figwig.md)
+  imports the tracks of a figwig (`.fw`) multi-track file as sparse or
+  binned tracks.
+
+- [`gtrack.import_mappedseq()`](https://tanaylab.github.io/misha/reference/gtrack.import_mappedseq.md)
+  reads BAM files directly and no longer needs `samtools`. Results are
+  unchanged and the import is about 3x faster.
+
+- [`gtrack.export_bigwig()`](https://tanaylab.github.io/misha/reference/gtrack.export_bigwig.md)
+  writes bigWig files directly; UCSC `bedGraphToBigWig` is no longer
+  needed.
+
+- `pwm.count`, `pwm.max` and `pwm.max.pos` virtual tracks and
+  [`gseq.pwm()`](https://tanaylab.github.io/misha/reference/gseq.pwm.md)
+  in `"count"`, `"max"` and `"pos"` modes skip windows that cannot reach
+  the threshold or the best score so far: several times faster, with
+  identical results.
+
 ## misha 5.19.0
 
 - **Behavior fix:** `neighbor.count` virtual tracks count long source

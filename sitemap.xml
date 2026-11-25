@@ -55,6 +55,7 @@
 <url><loc>https://tanaylab.github.io/misha/reference/gextract.html</loc></url>
 <url><loc>https://tanaylab.github.io/misha/reference/gextract.matrix.html</loc></url>
 <url><loc>https://tanaylab.github.io/misha/reference/gextract.variants.html</loc></url>
+<url><loc>https://tanaylab.github.io/misha/reference/gextract.windows.html</loc></url>
 <url><loc>https://tanaylab.github.io/misha/reference/ggenome.implant.html</loc></url>
 <url><loc>https://tanaylab.github.io/misha/reference/ggenome.transplant.html</loc></url>
 <url><loc>https://tanaylab.github.io/misha/reference/gintervals.2d.all.html</loc></url>
@@ -99,6 +100,7 @@
 <url><loc>https://tanaylab.github.io/misha/reference/gintervals.neighbors.html</loc></url>
 <url><loc>https://tanaylab.github.io/misha/reference/gintervals.normalize.html</loc></url>
 <url><loc>https://tanaylab.github.io/misha/reference/gintervals.path.html</loc></url>
+<url><loc>https://tanaylab.github.io/misha/reference/gintervals.pwm_hits.html</loc></url>
 <url><loc>https://tanaylab.github.io/misha/reference/gintervals.quantiles.html</loc></url>
 <url><loc>https://tanaylab.github.io/misha/reference/gintervals.random.html</loc></url>
 <url><loc>https://tanaylab.github.io/misha/reference/gintervals.rbind.html</loc></url>
@@ -121,14 +123,20 @@
 <url><loc>https://tanaylab.github.io/misha/reference/gseq.extract.html</loc></url>
 <url><loc>https://tanaylab.github.io/misha/reference/gseq.kmer.dist.html</loc></url>
 <url><loc>https://tanaylab.github.io/misha/reference/gseq.kmer.html</loc></url>
+<url><loc>https://tanaylab.github.io/misha/reference/gseq.onehot.html</loc></url>
 <url><loc>https://tanaylab.github.io/misha/reference/gseq.potts.html</loc></url>
 <url><loc>https://tanaylab.github.io/misha/reference/gseq.pwm.html</loc></url>
 <url><loc>https://tanaylab.github.io/misha/reference/gseq.pwm_edits.html</loc></url>
+<url><loc>https://tanaylab.github.io/misha/reference/gseq.pwm_hits.html</loc></url>
 <url><loc>https://tanaylab.github.io/misha/reference/gseq.read_homer.html</loc></url>
 <url><loc>https://tanaylab.github.io/misha/reference/gseq.read_jaspar.html</loc></url>
 <url><loc>https://tanaylab.github.io/misha/reference/gseq.read_meme.html</loc></url>
 <url><loc>https://tanaylab.github.io/misha/reference/gseq.rev.html</loc></url>
 <url><loc>https://tanaylab.github.io/misha/reference/gseq.revcomp.html</loc></url>
+<url><loc>https://tanaylab.github.io/misha/reference/gseq.shuffle.html</loc></url>
+<url><loc>https://tanaylab.github.io/misha/reference/gseq.write_homer.html</loc></url>
+<url><loc>https://tanaylab.github.io/misha/reference/gseq.write_jaspar.html</loc></url>
+<url><loc>https://tanaylab.github.io/misha/reference/gseq.write_meme.html</loc></url>
 <url><loc>https://tanaylab.github.io/misha/reference/gsummary.html</loc></url>
 <url><loc>https://tanaylab.github.io/misha/reference/gsynth.bin_map.html</loc></url>
 <url><loc>https://tanaylab.github.io/misha/reference/gsynth.cell_merge.html</loc></url>
@@ -167,6 +175,7 @@
 <url><loc>https://tanaylab.github.io/misha/reference/gtrack.export_bedgraph.html</loc></url>
 <url><loc>https://tanaylab.github.io/misha/reference/gtrack.export_bigwig.html</loc></url>
 <url><loc>https://tanaylab.github.io/misha/reference/gtrack.import.html</loc></url>
+<url><loc>https://tanaylab.github.io/misha/reference/gtrack.import_figwig.html</loc></url>
 <url><loc>https://tanaylab.github.io/misha/reference/gtrack.import_mappedseq.html</loc></url>
 <url><loc>https://tanaylab.github.io/misha/reference/gtrack.import_parquet.html</loc></url>
 <url><loc>https://tanaylab.github.io/misha/reference/gtrack.import_set.html</loc></url>

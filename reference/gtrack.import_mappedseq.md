@@ -80,17 +80,21 @@ A list of conversion process statistics.
 This function creates a track from a file of mapped sequences. The file
 can be in SAM format, in a general TAB delimited text format where each
 line describes a single read, in gzipped variants of either
-(\`.sam.gz\`, \`.tsv.gz\`), or in BAM format (detected from its content;
-requires \`samtools\` on \`PATH\`). Without 'paired', any bgzipped file
-is read as SAM. 'file' may also be a named pipe (FIFO) carrying SAM or
-text, plain or gzipped, but not BAM. A pipe is not inspected, so the BAM
-and bgzip rules above do not apply to it: pass 'cols.order = NULL' for
-SAM. An import that brings in no read at all gives a warning.
+(\`.sam.gz\`, \`.tsv.gz\`), or in BAM format (detected from its content
+and read by misha itself; \`samtools\` is not needed). Without 'paired',
+any bgzipped file is read as SAM. 'file' may also be a named pipe (FIFO)
+carrying SAM or text, plain or gzipped, but not BAM. A pipe is not
+inspected, so the BAM and bgzip rules above do not apply to it: pass
+'cols.order = NULL' for SAM. An import that brings in no read at all
+gives a warning.
 
-For a SAM file 'cols.order' must be set to 'NULL'. For BAM input the
-default \`cols.order = c(9, 11, 13, 14)\` is treated as SAM mode because
-\`samtools view\` emits SAM-format payload; passing a non-NULL
-\`cols.order\` explicitly with BAM input is an error.
+For a SAM file 'cols.order' must be set to 'NULL'. BAM records are read
+as the SAM records they encode, so for BAM input the default
+\`cols.order = c(9, 11, 13, 14)\` is treated as SAM mode; passing a
+non-NULL \`cols.order\` explicitly with BAM input is an error. A BAM
+import gives the track that importing the output of \`samtools view\`
+gives. A truncated or corrupt BAM file is an error, including one that
+does not end with the BGZF end-of-file block.
 
 For a general TAB delimited text format the following columns must be
 presented in the file: sequence, chromosome, coordinate and strand. The

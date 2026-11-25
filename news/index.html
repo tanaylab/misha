@@ -40,6 +40,18 @@
     </div>
 
     <div class="section level2">
+<h2 class="pkg-version" data-toc-text="development version" id="misha-development-version">misha (development version)<a class="anchor" aria-label="anchor" href="#misha-development-version"></a></h2>
+<ul><li><p><strong>Behavior fix:</strong> <code><a href="../reference/gtrack.import_mappedseq.html">gtrack.import_mappedseq()</a></code> rejects a truncated BAM (no end-of-file block) instead of importing part of it.</p></li>
+<li><p>New <code><a href="../reference/gextract.windows.html">gextract.windows()</a></code> returns fixed-width windows around loci as arrays for sequence models: one-hot DNA (N x 4 x L) and track values (N x T x L’), with jitter margins, strand-aware reverse complement, exclusion intervals and count filters. New <code><a href="../reference/gseq.onehot.html">gseq.onehot()</a></code> one-hot encodes intervals (read in C++ straight from the sequence files) or strings.</p></li>
+<li><p>New <code><a href="../reference/gseq.pwm_hits.html">gseq.pwm_hits()</a></code> and <code><a href="../reference/gintervals.pwm_hits.html">gintervals.pwm_hits()</a></code> return the position, strand and score of every motif window that passes a threshold.</p></li>
+<li><p>New <code><a href="../reference/gseq.write_meme.html">gseq.write_meme()</a></code>, <code><a href="../reference/gseq.write_jaspar.html">gseq.write_jaspar()</a></code> and <code><a href="../reference/gseq.write_homer.html">gseq.write_homer()</a></code> write motifs in the formats the <code>gseq.read_*()</code> functions read, so motifs round-trip with their metadata (JASPAR counts are rounded to whole numbers unless <code>round_counts = FALSE</code>).</p></li>
+<li><p>New <code><a href="../reference/gseq.shuffle.html">gseq.shuffle()</a></code> shuffles sequences keeping their exact k-mer (default dinucleotide) counts, drawn uniformly; the same seed gives the same sequences as PyMisha’s <code>gseq_shuffle()</code>.</p></li>
+<li><p>New <code><a href="../reference/gtrack.import_figwig.html">gtrack.import_figwig()</a></code> imports the tracks of a figwig (<code>.fw</code>) multi-track file as sparse or binned tracks.</p></li>
+<li><p><code><a href="../reference/gtrack.import_mappedseq.html">gtrack.import_mappedseq()</a></code> reads BAM files directly and no longer needs <code>samtools</code>. Results are unchanged and the import is about 3x faster.</p></li>
+<li><p><code><a href="../reference/gtrack.export_bigwig.html">gtrack.export_bigwig()</a></code> writes bigWig files directly; UCSC <code>bedGraphToBigWig</code> is no longer needed.</p></li>
+<li><p><code>pwm.count</code>, <code>pwm.max</code> and <code>pwm.max.pos</code> virtual tracks and <code><a href="../reference/gseq.pwm.html">gseq.pwm()</a></code> in <code>"count"</code>, <code>"max"</code> and <code>"pos"</code> modes skip windows that cannot reach the threshold or the best score so far: several times faster, with identical results.</p></li>
+</ul></div>
+    <div class="section level2">
 <h2 class="pkg-version" data-toc-text="5.19.0" id="misha-5190">misha 5.19.0<a class="anchor" aria-label="anchor" href="#misha-5190"></a></h2>
 <ul><li><p><strong>Behavior fix:</strong> <code>neighbor.count</code> virtual tracks count long source intervals correctly over overlapping intervals. This changes <code><a href="../reference/gintervals.summary.html">gintervals.summary()</a></code> and <code><a href="../reference/gintervals.quantiles.html">gintervals.quantiles()</a></code> results over overlapping intervals.</p></li>
 <li><p>New <code><a href="../reference/gextract.matrix.html">gextract.matrix()</a></code> returns track expression values over equal-width intervals as an intervals x bins matrix (an array for several expressions).</p></li>
