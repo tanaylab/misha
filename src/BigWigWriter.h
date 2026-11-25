@@ -37,8 +37,8 @@ using namespace std;
 // record summarizes the bases of the records inside one bin of the level's size, the bins being
 // aligned to the chromosome start, so that each level is computed exactly from the one below it.
 //
-// The layout follows libBigWig's and UCSC's writers; the bigWig writer of figwig (Python, by Jacob
-// Schreiber, MIT license) served as a reference for it.
+// The layout follows the bigWig specification (Kent et al. 2010, Bioinformatics 26:2204), with the
+// block, index and zoom-level sizes UCSC's and libBigWig's writers use.
 //
 // !!!!!!!!! IN CASE OF ERROR THIS CLASS THROWS TGLException  !!!!!!!!!!!!!!!!
 
