@@ -108,6 +108,7 @@ reference:
       - gintervals.load_chain
       - gintervals.as_chain
       - gintervals.path
+      - gintervals.pwm_hits
       - gintervals.ls
       - gintervals.mapply
       - gintervals.neighbors
@@ -153,6 +154,7 @@ reference:
       - gseq.extract
       - gseq.pwm
       - gseq.pwm_edits
+      - gseq.pwm_hits
       - gseq.potts
       - gseq.kmer
       - gseq.kmer.dist

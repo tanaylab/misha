@@ -1,3 +1,9 @@
+# misha (development version)
+
+* `pwm.count`, `pwm.max` and `pwm.max.pos` virtual tracks and `gseq.pwm()` in `"count"`, `"max"` and `"pos"` modes skip windows that cannot reach the threshold or the best score so far: several times faster, with identical results.
+
+* New `gseq.pwm_hits()` and `gintervals.pwm_hits()` return the position, strand and score of every motif window that passes a threshold.
+
 # misha 5.19.0
 
 * **Behavior fix:** `neighbor.count` virtual tracks count long source intervals correctly over overlapping intervals. This changes `gintervals.summary()` and `gintervals.quantiles()` results over overlapping intervals.

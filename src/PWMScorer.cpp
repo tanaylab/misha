@@ -147,6 +147,7 @@ PWMScorer::PWMScorer(const DnaPSSM& pssm, const std::string& genome_root, bool e
             m_spat_log_factors[i] = std::log(std::max(1e-30f, spat_factor[i]));
         }
     }
+    init_bound_scanner();
 }
 
 PWMScorer::PWMScorer(const DnaPSSM& pssm, GenomeSeqFetch* shared_seqfetch, bool extend,
@@ -166,6 +167,168 @@ PWMScorer::PWMScorer(const DnaPSSM& pssm, GenomeSeqFetch* shared_seqfetch, bool 
             m_spat_log_factors[i] = std::log(std::max(1e-30f, spat_factor[i]));
         }
     }
+    init_bound_scanner();
+}
+
+void PWMScorer::init_bound_scanner()
+{
+    // Only the thresholded and maximum modes can skip a window; the
+    // log-sum-exp needs every one.
+    m_spat_log_max = 0.0f;
+    if (m_use_spat && !m_spat_log_factors.empty())
+        m_spat_log_max = *std::max_element(m_spat_log_factors.begin(), m_spat_log_factors.end());
+    if (m_mode == TOTAL_LIKELIHOOD || m_pssm.size() == 0)
+        return;
+    // MISHA_DISABLE_PWM_SKIP=1 scores every window, for differential testing
+    const char* disable_env = std::getenv("MISHA_DISABLE_PWM_SKIP");
+    if (disable_env && std::string(disable_env) == "1")
+        return;
+    // The exact float weights calc_like() and calc_like_rc() add
+    const size_t m = m_pssm.size();
+    std::vector<float> logp(m * 4);
+    for (size_t c = 0; c < m; ++c)
+        for (int s = 0; s < 4; ++s)
+            logp[c * 4 + s] = m_pssm[(int)c].get_log_prob_from_code(s);
+    m_bound.init(logp.data(), (int)m);
+}
+
+void PWMScorer::target_strands(bool scan_fwd, bool scan_rev, bool& tf, bool& tr) const
+{
+    const bool minus = (m_strand == -1);
+    tf = (scan_fwd && !minus) || (scan_rev && minus);
+    tr = (scan_fwd && minus) || (scan_rev && !minus);
+}
+
+// Calls fn(i) for every anchor i in [lo, hi] that may reach `cut` on a target
+// strand it reads (tf: calc_like, tr: calc_like_rc); the others provably score
+// below it there. Without a usable scanner, or for a range too short to pay for
+// the codes, every anchor is visited.
+template <class Fn>
+void PWMScorer::visit_anchors(const std::string& target, size_t lo, size_t hi, bool tf, bool tr,
+                              const double& cut, Fn&& fn)
+{
+    if (lo > hi)
+        return;
+    const size_t n = hi - lo + 1;
+    if (!m_bound.usable() || n < pwm_fast_scan::kMinWindows || hi + m_pssm.size() > target.size()) {
+        for (size_t i = lo; i <= hi; ++i)
+            fn(i);
+        return;
+    }
+    m_bound.scan(target.data() + lo, n, tf, tr, cut, [&](size_t x) { fn(lo + x); });
+}
+
+size_t PWMScorer::max_like_match_fast(const std::string& target, float& best_logp, int& best_dir,
+                                      bool combine_strands)
+{
+    // DnaPSSM::max_like_match(), anchor by anchor: the forward strand always,
+    // the reverse too when bidirectional, combined by log-sum-exp or the better
+    // one taken; only a strictly greater value replaces the best.
+    if (m_pssm.get_min_range() < 0) {
+        std::string::const_iterator p = m_pssm.max_like_match(target, best_logp, best_dir, combine_strands);
+        return size_t(p - target.begin());
+    }
+    best_logp = -std::numeric_limits<float>::infinity();
+    if (target.length() < m_pssm.size())
+        return 0;
+    const bool bidirect = m_pssm.is_bidirect();
+    const size_t lo = size_t(m_pssm.get_min_range());
+    const size_t hi = m_pssm.max_offset(target.length());
+    size_t best_pos = 0;
+    double cut = -std::numeric_limits<double>::infinity();
+    visit_anchors(target, lo, hi, true, bidirect, cut, [&](size_t i) {
+        std::string::const_iterator it = target.begin() + i;
+        float logp = 0;
+        m_pssm.calc_like(it, logp);
+        float total_logp = logp;
+        int cur_dir = 1;
+        if (bidirect) {
+            float rlogp = 0;
+            m_pssm.calc_like_rc(it, rlogp);
+            if (combine_strands) {
+                log_sum_log(total_logp, rlogp);
+                cur_dir = 0;
+            } else if (rlogp > logp) {
+                total_logp = rlogp;
+                cur_dir = -1;
+            }
+        }
+        if (total_logp > best_logp) {
+            best_logp = total_logp;
+            best_pos = i;
+            best_dir = cur_dir;
+            cut = pwm_fast_scan::strand_cut(best_logp, (bidirect && combine_strands) ? 2 : 1, 0.0);
+        }
+    });
+    return best_pos;
+}
+
+void PWMScorer::hits_in_range(const std::string& target, size_t lo, size_t hi,
+                              std::vector<size_t>& idx, std::vector<float>& score, std::vector<int>& dir)
+{
+    // The anchors count_motif_hits_*() count, scored the same way
+    const bool scan_both = m_pssm.is_bidirect();
+    const bool scan_fwd  = scan_both || (m_strand == 1);
+    const bool scan_rev  = scan_both || (m_strand == -1);
+    bool tf, tr;
+    target_strands(scan_fwd, scan_rev, tf, tr);
+    const double cut = pwm_fast_scan::strand_cut(m_score_thresh, (scan_fwd && scan_rev) ? 2 : 1,
+                                                 m_use_spat ? m_spat_log_max : 0.0f);
+    visit_anchors(target, lo, hi, tf, tr, cut, [&](size_t i) {
+        const float spat_log = m_use_spat ? get_spatial_log_factor(spat_pos(i)) : 0.0f;
+        float comb = -std::numeric_limits<float>::infinity();
+        float f = comb, rc = comb;
+        bool have = false;
+        if (scan_fwd) {
+            f = score_forward_original(m_pssm, target, i, m_strand);
+            comb = f;
+            have = true;
+        }
+        if (scan_rev) {
+            rc = score_reverse_original(m_pssm, target, i, m_strand);
+            if (have) log_sum_log(comb, rc); else { comb = rc; have = true; }
+        }
+        const float v = m_use_spat ? comb + spat_log : comb;
+        if (v >= m_score_thresh) {
+            idx.push_back(i);
+            score.push_back(v);
+            // the strand read alone, or under bidirect the better one (forward on a tie),
+            // as pwm.max.pos picks it
+            dir.push_back(scan_both ? (rc > f ? -1 : 1) : (m_strand == -1 ? -1 : 1));
+        }
+    });
+}
+
+bool PWMScorer::collect_hits(const GInterval& interval, const GenomeChromKey& chromkey, std::vector<Hit>& hits)
+{
+    const int64_t motif_length = m_pssm.size();
+    GInterval expanded_interval = calculate_expanded_interval(interval, chromkey, motif_length);
+    expanded_interval.strand = m_strand;
+    if (!m_extend && (expanded_interval.end - expanded_interval.start) < motif_length)
+        return false;
+
+    std::string target;
+    size_t i_min = 0, i_max = 0;
+    if (prepare_target(interval, chromkey, expanded_interval, target, i_min, i_max) != 0)
+        return false;
+
+    std::vector<size_t> idx;
+    std::vector<float> score;
+    std::vector<int> dir;
+    hits_in_range(target, i_min, i_max, idx, score, dir);
+
+    // ascending genomic order: on the minus strand the target runs against the genome
+    const size_t n = idx.size();
+    for (size_t k = 0; k < n; ++k) {
+        const size_t j = (m_strand == -1) ? n - 1 - k : k;
+        Hit h;
+        h.start = anchor_genomic_pos(expanded_interval, idx[j], (size_t)motif_length, m_strand);
+        h.end = h.start + motif_length;
+        h.strand = dir[j];
+        h.score = score[j];
+        hits.push_back(h);
+    }
+    return true;
 }
 
 void PWMScorer::invalidate_cache()
@@ -253,8 +416,12 @@ double PWMScorer::count_motif_hits_no_spatial(const std::string& target, size_t 
     const size_t lo = std::max(0, m_pssm.get_min_range());
     const size_t max_pos = m_pssm.max_offset(target.length());
 
-    // Per-position union (LSE) across permitted strands
-    for (size_t i = lo; i <= max_pos; ++i) {
+    // Per-position union (LSE) across permitted strands, over the anchors that
+    // can reach the threshold (visit_anchors skips only provable misses)
+    bool tf, tr;
+    target_strands(scan_fwd, scan_rev, tf, tr);
+    const double cut = pwm_fast_scan::strand_cut(m_score_thresh, (scan_fwd && scan_rev) ? 2 : 1, 0.0);
+    visit_anchors(target, lo, max_pos, tf, tr, cut, [&](size_t i) {
         float comb = -std::numeric_limits<float>::infinity();
         bool have = false;
         if (scan_fwd) {
@@ -266,7 +433,7 @@ double PWMScorer::count_motif_hits_no_spatial(const std::string& target, size_t 
             if (have) log_sum_log(comb, rc); else { comb = rc; have = true; }
         }
         if (comb >= m_score_thresh) count++;
-    }
+    });
 
     return static_cast<float>(count);
 }
@@ -290,7 +457,10 @@ double PWMScorer::count_motif_hits_with_spatial(const std::string& target, size_
 
     // Per-position union (LSE) across permitted strands, with spatial offset.
     // Bins count from the window start, as in the other spatial paths.
-    for (size_t i = lo; i <= max_pos; ++i) {
+    bool tf, tr;
+    target_strands(scan_fwd, scan_rev, tf, tr);
+    const double cut = pwm_fast_scan::strand_cut(m_score_thresh, (scan_fwd && scan_rev) ? 2 : 1, m_spat_log_max);
+    visit_anchors(target, lo, max_pos, tf, tr, cut, [&](size_t i) {
         float spat_log = get_spatial_log_factor(spat_pos(i));
         float comb = -std::numeric_limits<float>::infinity();
         bool have = false;
@@ -303,7 +473,7 @@ double PWMScorer::count_motif_hits_with_spatial(const std::string& target, size_
             if (have) log_sum_log(comb, rc); else { comb = rc; have = true; }
         }
         if (comb + spat_log >= m_score_thresh) count++;
-    }
+    });
 
     return static_cast<float>(count);
 }
@@ -327,7 +497,11 @@ double PWMScorer::get_max_likelihood_pos_with_spatial(const std::string& target,
     bool check_forward = m_pssm.is_bidirect() || (m_strand != -1);
     bool check_reverse = m_pssm.is_bidirect() || (m_strand != 1);
 
-    for (size_t i = min_i_idx; i <= max_i_idx; ++i) {
+    // Only an anchor that can beat the best so far is scored
+    bool tf, tr;
+    target_strands(check_forward, check_reverse, tf, tr);
+    double cut = -std::numeric_limits<double>::infinity();
+    visit_anchors(target, min_i_idx, max_i_idx, tf, tr, cut, [&](size_t i) {
         float spat_log = get_spatial_log_factor(spat_pos(i));
 
         // Forward strand. Must go through the *_original helpers: when m_strand == -1
@@ -351,7 +525,8 @@ double PWMScorer::get_max_likelihood_pos_with_spatial(const std::string& target,
                 best_dir = -1;
             }
         }
-    }
+        cut = pwm_fast_scan::strand_cut(best_val, 1, m_spat_log_max);
+    });
 
     m_last_max_score = best_val;
     if (!std::isfinite(best_val)) {
@@ -379,7 +554,7 @@ double PWMScorer::score_without_spatial(const std::string& target, int64_t motif
     float best_logp;
     int best_dir = 1; // max_like_match() returns early without setting it
     bool combine_strands = (m_mode == MAX_LIKELIHOOD);
-    std::string::const_iterator best_pos = m_pssm.max_like_match(target, best_logp, best_dir, combine_strands);
+    size_t pos_idx = max_like_match_fast(target, best_logp, best_dir, combine_strands);
 
     if (m_mode == MAX_LIKELIHOOD) {
         return best_logp;
@@ -394,7 +569,6 @@ double PWMScorer::score_without_spatial(const std::string& target, int64_t motif
         // a confident 1.
         return std::numeric_limits<double>::quiet_NaN();
     }
-    size_t pos_idx = best_pos - target.begin();
     return compute_position_result(pos_idx, target.length(), motif_length, best_dir);
 }
 
@@ -413,13 +587,25 @@ double PWMScorer::score_with_spatial(const std::string& target, int64_t motif_le
             return energy;
         const size_t lo = std::max(0, m_pssm.get_min_range());
         const size_t hi = m_pssm.max_offset(target.length());
-        for (size_t i = lo; i <= hi; ++i) {
-            const float v = pos_value_with_spat(m_pssm, target, i, m_strand, get_spatial_log_factor(spat_pos(i)));
-            if (m_mode == TOTAL_LIKELIHOOD)
+        if (m_mode == TOTAL_LIKELIHOOD) {
+            for (size_t i = lo; i <= hi; ++i) {
+                const float v = pos_value_with_spat(m_pssm, target, i, m_strand, get_spatial_log_factor(spat_pos(i)));
                 log_sum_log(energy, v);
-            else if (v > energy)
-                energy = v;
+            }
+            return energy;
         }
+        // pwm.max: only an anchor that can beat the best so far is scored
+        const bool bidirect = m_pssm.is_bidirect();
+        bool tf, tr;
+        target_strands(bidirect || m_strand != -1, bidirect || m_strand == -1, tf, tr);
+        double cut = -std::numeric_limits<double>::infinity();
+        visit_anchors(target, lo, hi, tf, tr, cut, [&](size_t i) {
+            const float v = pos_value_with_spat(m_pssm, target, i, m_strand, get_spatial_log_factor(spat_pos(i)));
+            if (v > energy) {
+                energy = v;
+                cut = pwm_fast_scan::strand_cut(energy, bidirect ? 2 : 1, m_spat_log_max);
+            }
+        });
         return energy;
     }
 
@@ -608,59 +794,58 @@ double PWMScorer::try_slide_window(const std::string& target,
                 m_slide.hit_count -= m_slide.hits.back();
                 m_slide.hits.pop_back();
             }
-
-            // Push incoming union hits at front (new minus-strand anchors are near i_min)
-            for (size_t k = stride; k > 0; --k) {
-                size_t incoming_i = i_min + (k - 1);
-                if (incoming_i + motif_len > tlen) {
-                    return std::numeric_limits<float>::quiet_NaN();
-                }
-                float spat_log = get_spatial_log_factor(first_incoming_pos + (stride - k));
-
-                float comb = -std::numeric_limits<float>::infinity();
-                bool have = false;
-                if (scan_fwd) {
-                    float f = score_forward_original(m_pssm, target, incoming_i, strand_mode);
-                    comb = f; have = true;
-                }
-                if (scan_rev) {
-                    float rc = score_reverse_original(m_pssm, target, incoming_i, strand_mode);
-                    if (have) log_sum_log(comb, rc); else { comb = rc; have = true; }
-                }
-
-                uint8_t hit = ((comb + spat_log) >= m_score_thresh) ? 1 : 0;
-                m_slide.hits.push_front(hit);
-                m_slide.hit_count += hit;
-            }
         } else {
             // Plus strand: pop from front, push to back
             for (size_t k = 0; k < stride && !m_slide.hits.empty(); ++k) {
                 m_slide.hit_count -= m_slide.hits.front();
                 m_slide.hits.pop_front();
             }
+        }
 
-            // Push incoming union hits (0/1 per position)
+        // The incoming anchors: near i_min on the minus strand (the target is
+        // reverse-complemented), near i_max on the plus strand.
+        const size_t in_lo = is_minus ? i_min : i_max - (stride - 1);
+        const size_t in_hi = is_minus ? i_min + (stride - 1) : i_max;
+        if (in_hi + motif_len > tlen) {
+            return std::numeric_limits<float>::quiet_NaN();
+        }
+
+        // Union hits (0/1 per anchor, by target index); an anchor that cannot
+        // reach the threshold is a 0 without being scored.
+        std::vector<uint8_t> inc(stride, 0);
+        bool tf, tr;
+        target_strands(scan_fwd, scan_rev, tf, tr);
+        const double cut = pwm_fast_scan::strand_cut(m_score_thresh, (scan_fwd && scan_rev) ? 2 : 1,
+                                                     m_use_spat ? m_spat_log_max : 0.0f);
+        visit_anchors(target, in_lo, in_hi, tf, tr, cut, [&](size_t incoming_i) {
+            const size_t d = incoming_i - in_lo;
+            // spatial slot: walking forward in genomic order from the old window's edge
+            float spat_log = get_spatial_log_factor(first_incoming_pos + (is_minus ? (stride - 1 - d) : d));
+
+            float comb = -std::numeric_limits<float>::infinity();
+            bool have = false;
+            if (scan_fwd) {
+                float f = score_forward_original(m_pssm, target, incoming_i, strand_mode);
+                comb = f; have = true;
+            }
+            if (scan_rev) {
+                float rc = score_reverse_original(m_pssm, target, incoming_i, strand_mode);
+                if (have) log_sum_log(comb, rc); else { comb = rc; have = true; }
+            }
+
+            inc[d] = ((comb + spat_log) >= m_score_thresh) ? 1 : 0;
+        });
+
+        if (is_minus) {
+            // pushed at the front highest target index first, so the deque stays ascending
+            for (size_t k = stride; k > 0; --k) {
+                m_slide.hits.push_front(inc[k - 1]);
+                m_slide.hit_count += inc[k - 1];
+            }
+        } else {
             for (size_t k = 0; k < stride; ++k) {
-                size_t incoming_i = i_max - (stride - 1 - k);
-                if (incoming_i + motif_len > tlen) {
-                    return std::numeric_limits<float>::quiet_NaN();
-                }
-                float spat_log = get_spatial_log_factor(first_incoming_pos + k);
-
-                float comb = -std::numeric_limits<float>::infinity();
-                bool have = false;
-                if (scan_fwd) {
-                    float f = score_forward_original(m_pssm, target, incoming_i, strand_mode);
-                    comb = f; have = true;
-                }
-                if (scan_rev) {
-                    float rc = score_reverse_original(m_pssm, target, incoming_i, strand_mode);
-                    if (have) log_sum_log(comb, rc); else { comb = rc; have = true; }
-                }
-
-                uint8_t hit = ((comb + spat_log) >= m_score_thresh) ? 1 : 0;
-                m_slide.hits.push_back(hit);
-                m_slide.hit_count += hit;
+                m_slide.hits.push_back(inc[k]);
+                m_slide.hit_count += inc[k];
             }
         }
 
@@ -692,16 +877,34 @@ double PWMScorer::reduce_window(const std::string& target,
 {
     const char strand_mode = m_strand;
 
-    if (m_mode == TOTAL_LIKELIHOOD || m_mode == MAX_LIKELIHOOD) {
+    if (m_mode == MAX_LIKELIHOOD) {
+        // The running maximum below, over the anchors that can beat the best so
+        // far: a skipped anchor scores strictly below it, and only a strictly
+        // greater value replaces it.
+        const bool bidirect = m_pssm.is_bidirect();
+        bool tf, tr;
+        target_strands(bidirect || strand_mode != -1, bidirect || strand_mode == -1, tf, tr);
+        float best = -std::numeric_limits<float>::infinity();
+        double cut = -std::numeric_limits<double>::infinity();
+        visit_anchors(target, i_min, i_max, tf, tr, cut, [&](size_t i) {
+            const float v = pos_value_with_spat(m_pssm, target, i, strand_mode,
+                                                get_spatial_log_factor(i - i_min));
+            if (v > best) {
+                best = v;
+                cut = pwm_fast_scan::strand_cut(best, bidirect ? 2 : 1, m_use_spat ? m_spat_log_max : 0.0f);
+            }
+        });
+        return best;
+    }
+
+    if (m_mode == TOTAL_LIKELIHOOD) {
         // A streaming log-sum-exp with the same max shift RunningLogSumExp::init()
-        // applies, and a running maximum, taken over the same per-anchor value.
+        // applies, over the same per-anchor value.
         double M = -std::numeric_limits<double>::infinity();
         double sum = 0.0;
-        float best = -std::numeric_limits<float>::infinity();
         for (size_t i = i_min; i <= i_max; ++i) {
             const float v = pos_value_with_spat(m_pssm, target, i, strand_mode,
                                                 get_spatial_log_factor(i - i_min));
-            if (v > best) best = v;
             if (!std::isfinite(v)) continue;   // -inf contributes nothing
             if (double(v) > M) {
                 if (std::isfinite(M)) sum *= std::exp(M - double(v));
@@ -710,7 +913,6 @@ double PWMScorer::reduce_window(const std::string& target,
             }
             sum += std::exp(double(v) - M);
         }
-        if (m_mode == MAX_LIKELIHOOD) return best;
         // (float), because the populating path returns RunningLogSumExp's
         // value through the same cast. Without it `pwm` became path-dependent
         // by ~2e-07 - under an ulp, but master answered the same number
@@ -750,8 +952,13 @@ double PWMScorer::reduce_window(const std::string& target,
         const bool scan_both = m_pssm.is_bidirect();
         const bool scan_fwd  = scan_both || (strand_mode == 1);
         const bool scan_rev  = scan_both || (strand_mode == -1);
-        size_t count = 0, pos0_local = 0;
-        for (size_t i = i_min; i <= i_max; ++i, ++pos0_local) {
+        size_t count = 0;
+        bool tf, tr;
+        target_strands(scan_fwd, scan_rev, tf, tr);
+        const double cut = pwm_fast_scan::strand_cut(m_score_thresh, (scan_fwd && scan_rev) ? 2 : 1,
+                                                     m_use_spat ? m_spat_log_max : 0.0f);
+        visit_anchors(target, i_min, i_max, tf, tr, cut, [&](size_t i) {
+            const size_t pos0_local = i - i_min;
             const float spat_log = get_spatial_log_factor(pos0_local);
             float comb = -std::numeric_limits<float>::infinity();
             bool have = false;
@@ -761,7 +968,7 @@ double PWMScorer::reduce_window(const std::string& target,
                 if (have) log_sum_log(comb, rc); else { comb = rc; have = true; }
             }
             if ((comb + spat_log) >= m_score_thresh) ++count;
-        }
+        });
         return (double)count;
     }
 
@@ -898,8 +1105,15 @@ double PWMScorer::seed_sliding_window(const std::string& target,
         const bool scan_fwd  = scan_both || (strand_mode == 1);
         const bool scan_rev  = scan_both || (strand_mode == -1);
 
-        size_t pos0_local = 0;
-        for (size_t i = i_min; i <= i_max; ++i, ++pos0_local) {
+        // One 0/1 per anchor in ascending target order; an anchor that cannot
+        // reach the threshold is a 0 without being scored.
+        std::vector<uint8_t> hitv(i_max - i_min + 1, 0);
+        bool tf, tr;
+        target_strands(scan_fwd, scan_rev, tf, tr);
+        const double cut = pwm_fast_scan::strand_cut(m_score_thresh, (scan_fwd && scan_rev) ? 2 : 1,
+                                                     m_use_spat ? m_spat_log_max : 0.0f);
+        visit_anchors(target, i_min, i_max, tf, tr, cut, [&](size_t i) {
+            const size_t pos0_local = i - i_min;
             float spat_log = get_spatial_log_factor(pos0_local);
 
             float comb = -std::numeric_limits<float>::infinity();
@@ -913,7 +1127,9 @@ double PWMScorer::seed_sliding_window(const std::string& target,
                 if (have) log_sum_log(comb, rc); else { comb = rc; have = true; }
             }
 
-            uint8_t hit = ((comb + spat_log) >= m_score_thresh) ? 1 : 0;
+            hitv[pos0_local] = ((comb + spat_log) >= m_score_thresh) ? 1 : 0;
+        });
+        for (uint8_t hit : hitv) {
             m_slide.hits.push_back(hit);
             m_slide.hit_count += hit;
         }
@@ -1003,6 +1219,81 @@ double PWMScorer::score_with_sliding_window(const std::string& target,
     return seed_sliding_window(target, original_interval, expanded_interval, i_min, i_max, motif_len, populate);
 }
 
+int PWMScorer::prepare_target(const GInterval& interval, const GenomeChromKey& chromkey,
+                              const GInterval& expanded_interval, std::string& target,
+                              size_t& i_min, size_t& i_max)
+{
+    // Read sequence
+    std::vector<char> seq;
+    m_seqfetch_ptr->read_interval(expanded_interval, chromkey, seq);
+    target.assign(seq.begin(), seq.end());
+
+    const size_t tlen = target.size();
+    const size_t motif_len = m_pssm.size();
+
+    // Shorter than the motif only at a chromosome end, where the END padding is clipped: no
+    // anchor, so NaN as for any interval without one, pwm.count included (nothing to count)
+    if (tlen < motif_len)
+        return 1;
+
+    // On the minus strand the target is reverse-complemented: put the spat_min/spat_max range, which
+    // counts from the interval start, onto the target indices of the same anchors.
+    if (m_strand == -1) {
+        const int64_t last = int64_t(tlen) - int64_t(motif_len);
+        const int64_t fmin = std::max(0, m_fwd_min_range);
+        const int64_t fmax = std::min<int64_t>(m_fwd_max_range, last);
+        if (fmin > fmax)
+            return 2;
+        m_pssm.set_range(int(last - fmax), int(last - fmin));
+    }
+
+    // Calculate allowed start range
+    i_min = std::max(0, m_pssm.get_min_range());
+    i_max = m_pssm.max_offset(tlen);
+
+    // Clamp the scanning window to anchors whose starts fall inside the iterator
+    const int64_t interval_len = interval.end - interval.start;
+    if (interval_len > 0) {
+        const int64_t extra_left = std::max<int64_t>(0, interval.start - expanded_interval.start);
+        const int64_t max_valid = static_cast<int64_t>(tlen - motif_len);
+
+        auto clamp_index = [&](int64_t idx) -> size_t {
+            if (idx < 0) {
+                return 0;
+            }
+            if (idx > max_valid) {
+                return static_cast<size_t>(std::max<int64_t>(0, max_valid));
+            }
+            return static_cast<size_t>(idx);
+        };
+
+        // For all strand modes, motif anchors start at extra_left in the fetched sequence
+        // (since we extend END only, extra_left is always 0 when extend=true)
+        int64_t desired_min = extra_left;
+        int64_t desired_max = desired_min + interval_len - 1;
+
+        size_t clamped_min = clamp_index(desired_min);
+        size_t clamped_max = clamp_index(desired_max);
+
+        if (clamped_min <= clamped_max) {
+            i_min = std::max(i_min, clamped_min);
+            i_max = std::min(i_max, clamped_max);
+        } else {
+            i_min = clamped_min;
+            i_max = clamped_min;
+        }
+    }
+
+    // No anchor inside both the iterator and the spat_min/spat_max
+    // window (spat_min past a short bin's end): NaN, as for any
+    // interval with no anchor. This used to reset i_min to 0 and scan
+    // anchors outside the window. The caches are dropped, so the next
+    // interval reseeds rather than slides from a window it did not see.
+    if (i_min > i_max)
+        return 2;
+    return 0;
+}
+
 double PWMScorer::score_interval(const GInterval& interval, const GenomeChromKey& chromkey)
 {
     // Calculate expanded interval to include full motif coverage
@@ -1020,132 +1311,67 @@ double PWMScorer::score_interval(const GInterval& interval, const GenomeChromKey
     }
 
     try {
-        // Read sequence
-        std::vector<char> seq;
-        m_seqfetch_ptr->read_interval(expanded_interval, chromkey, seq);
-        std::string target(seq.begin(), seq.end());
-
-        const size_t tlen = target.size();
-        const size_t motif_len = m_pssm.size();
-
-        // Shorter than the motif only at a chromosome end, where the END padding is clipped: no
-        // anchor, so NaN as for any interval without one, pwm.count included (nothing to count)
-        if (tlen < motif_len)
+        std::string target;
+        size_t i_min = 0, i_max = 0;
+        const int prep = prepare_target(interval, chromkey, expanded_interval, target, i_min, i_max);
+        if (prep == 2) {
+            m_slide.valid = false;
+            m_spat_slide.valid = false;
+        }
+        if (prep != 0)
             return std::numeric_limits<float>::quiet_NaN();
 
-        if (tlen >= motif_len) {
-            // On the minus strand the target is reverse-complemented: put the spat_min/spat_max range, which
-            // counts from the interval start, onto the target indices of the same anchors.
-            if (m_strand == -1) {
-                const int64_t last = int64_t(tlen) - int64_t(motif_len);
-                const int64_t fmin = std::max(0, m_fwd_min_range);
-                const int64_t fmax = std::min<int64_t>(m_fwd_max_range, last);
-                if (fmin > fmax) {
-                    m_slide.valid = false;
-                    m_spat_slide.valid = false;
-                    return std::numeric_limits<float>::quiet_NaN();
-                }
-                m_pssm.set_range(int(last - fmax), int(last - fmin));
-            }
+        const size_t motif_len = m_pssm.size();
 
-            // Calculate allowed start range
-            size_t i_min = std::max(0, m_pssm.get_min_range());
-            size_t i_max = m_pssm.max_offset(tlen);
-
-            // Clamp the scanning window to anchors whose starts fall inside the iterator
-            const int64_t interval_len = interval.end - interval.start;
-            if (interval_len > 0) {
-                const int64_t extra_left = std::max<int64_t>(0, interval.start - expanded_interval.start);
-                const int64_t max_valid = static_cast<int64_t>(tlen - motif_len);
-
-                auto clamp_index = [&](int64_t idx) -> size_t {
-                    if (idx < 0) {
-                        return 0;
-                    }
-                    if (idx > max_valid) {
-                        return static_cast<size_t>(std::max<int64_t>(0, max_valid));
-                    }
-                    return static_cast<size_t>(idx);
-                };
-
-                // For all strand modes, motif anchors start at extra_left in the fetched sequence
-                // (since we extend END only, extra_left is always 0 when extend=true)
-                int64_t desired_min = extra_left;
-                int64_t desired_max = desired_min + interval_len - 1;
-
-                size_t clamped_min = clamp_index(desired_min);
-                size_t clamped_max = clamp_index(desired_max);
-
-                if (clamped_min <= clamped_max) {
-                    i_min = std::max(i_min, clamped_min);
-                    i_max = std::min(i_max, clamped_max);
+        // Try spatial sliding window optimization
+        if (m_use_spat) {
+            size_t stride = 0;
+            if (can_use_spatial_sliding(interval, expanded_interval, i_min, i_max, motif_len, stride)) {
+                if (stride == 0) {
+                    // Need to seed
+                    spat_seed(target, expanded_interval, i_min, i_max, motif_len);
                 } else {
-                    i_min = clamped_min;
-                    i_max = clamped_min;
-                }
-            }
-
-            // No anchor inside both the iterator and the spat_min/spat_max
-            // window (spat_min past a short bin's end): NaN, as for any
-            // interval with no anchor. This used to reset i_min to 0 and scan
-            // anchors outside the window. The caches are dropped, so the next
-            // interval reseeds rather than slides from a window it did not see.
-            if (i_min > i_max) {
-                m_slide.valid = false;
-                m_spat_slide.valid = false;
-                return std::numeric_limits<float>::quiet_NaN();
-            }
-
-            // Try spatial sliding window optimization
-            if (m_use_spat) {
-                size_t stride = 0;
-                if (can_use_spatial_sliding(interval, expanded_interval, i_min, i_max, motif_len, stride)) {
-                    if (stride == 0) {
-                        // Need to seed
-                        spat_seed(target, expanded_interval, i_min, i_max, motif_len);
-                    } else {
-                        // Can slide - loop stride times to handle stride>1.
-                        // Step s brings in one anchor: walking forward from the
-                        // old window's edge to the new one. Plus strand takes
-                        // them at the high (i_max) end, minus strand - whose
-                        // target is reverse-complemented - at the low (i_min) end.
-                        for (size_t s = 0; s < stride; ++s) {
-                            const size_t i_in_target = (m_strand == -1)
-                                ? (i_min + (stride - 1 - s))
-                                : (i_max - (stride - 1 - s));
-                            spat_slide_once(target, expanded_interval, i_min, i_max, motif_len, i_in_target);
-                            if (!m_spat_slide.valid) {
-                                // Sliding failed, reseed
-                                spat_seed(target, expanded_interval, i_min, i_max, motif_len);
-                                break;
-                            }
+                    // Can slide - loop stride times to handle stride>1.
+                    // Step s brings in one anchor: walking forward from the
+                    // old window's edge to the new one. Plus strand takes
+                    // them at the high (i_max) end, minus strand - whose
+                    // target is reverse-complemented - at the low (i_min) end.
+                    for (size_t s = 0; s < stride; ++s) {
+                        const size_t i_in_target = (m_strand == -1)
+                            ? (i_min + (stride - 1 - s))
+                            : (i_max - (stride - 1 - s));
+                        spat_slide_once(target, expanded_interval, i_min, i_max, motif_len, i_in_target);
+                        if (!m_spat_slide.valid) {
+                            // Sliding failed, reseed
+                            spat_seed(target, expanded_interval, i_min, i_max, motif_len);
+                            break;
                         }
                     }
-
-                    // Update cache state
-                    m_spat_slide.last_interval_start = interval.start;
-                    m_spat_slide.last_interval_end = interval.end;
-                    m_spat_slide.last_i_min = i_min;
-                    m_spat_slide.last_i_max = i_max;
-
-                    // Return answer based on mode
-                    switch (m_mode) {
-                        case TOTAL_LIKELIHOOD:   return spat_answer_TOTAL();
-                        case MAX_LIKELIHOOD:     return spat_answer_MAX();
-                        case MAX_LIKELIHOOD_POS: return spat_answer_MAXPOS(target, expanded_interval, motif_len, i_min);
-                        case MOTIF_COUNT:        return spat_answer_COUNT();
-                        default: break;
-                    }
                 }
 
-                // Fallback to standard spatial scoring
-                return score_with_spatial(target, motif_length);
+                // Update cache state
+                m_spat_slide.last_interval_start = interval.start;
+                m_spat_slide.last_interval_end = interval.end;
+                m_spat_slide.last_i_min = i_min;
+                m_spat_slide.last_i_max = i_max;
+
+                // Return answer based on mode
+                switch (m_mode) {
+                    case TOTAL_LIKELIHOOD:   return spat_answer_TOTAL();
+                    case MAX_LIKELIHOOD:     return spat_answer_MAX();
+                    case MAX_LIKELIHOOD_POS: return spat_answer_MAXPOS(target, expanded_interval, motif_len, i_min);
+                    case MOTIF_COUNT:        return spat_answer_COUNT();
+                    default: break;
+                }
             }
 
-            // Non-spatial sliding window optimization (original code)
-            if (!m_use_spat && m_mode != MAX_LIKELIHOOD_POS) {
-                return score_with_sliding_window(target, interval, expanded_interval, i_min, i_max, motif_len);
-            }
+            // Fallback to standard spatial scoring
+            return score_with_spatial(target, motif_length);
+        }
+
+        // Non-spatial sliding window optimization (original code)
+        if (!m_use_spat && m_mode != MAX_LIKELIHOOD_POS) {
+            return score_with_sliding_window(target, interval, expanded_interval, i_min, i_max, motif_len);
         }
 
         // Standard scoring without sliding window optimization
