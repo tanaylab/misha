@@ -14,7 +14,7 @@
 
 * `gtrack.import_mappedseq()` reads BAM files directly and no longer needs `samtools`. Results are unchanged and the import is about 3x faster.
 
-* `gtrack.export_bigwig()` writes bigWig files directly; UCSC `bedGraphToBigWig` is no longer needed.
+* `gtrack.export_bigwig()` writes bigWig files directly; UCSC `bedGraphToBigWig` is no longer needed. An export that fails leaves a file already at the path unchanged.
 
 * `pwm.count`, `pwm.max` and `pwm.max.pos` virtual tracks and `gseq.pwm()` in `"count"`, `"max"` and `"pos"` modes skip windows that cannot reach the threshold or the best score so far: several times faster, with identical results.
 

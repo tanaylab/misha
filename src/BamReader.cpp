@@ -153,8 +153,13 @@ void BamReader::open(const string &filename, unsigned nthreads)
 		TGLError<BamReader>(INVALID_FORMAT, "BAM file %s: invalid number of references %d", filename.c_str(), n_ref);
 	m_data_pos += 12 + (size_t)l_text;
 
-	m_ref_names.reserve(n_ref);
-	m_ref_lengths.reserve(n_ref);
+	// A reference takes at least 9 bytes (l_name, a name of at least its NUL, l_ref), so the space
+	// reserved is bounded by what the bytes inflated so far can hold: a corrupt n_ref (up to 2^31 - 1)
+	// would otherwise ask for some 80 GB up front, and fail as "out of memory" rather than as a
+	// corrupt file. The loop below reports the header as incomplete once the data runs out.
+	size_t refs_hint = min<size_t>((size_t)n_ref, (m_data_len - m_data_pos) / 9);
+	m_ref_names.reserve(refs_hint);
+	m_ref_lengths.reserve(refs_hint);
 	for (int32_t i = 0; i < n_ref; ++i) {
 		if (!fill(4))
 			truncated("its header is incomplete");

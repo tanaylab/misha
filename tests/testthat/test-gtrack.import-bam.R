@@ -152,7 +152,8 @@ test_that("a truncated or corrupt BAM is an error, and leaves no track", {
         list(corrupt(bad_crc), "CRC32 mismatch"),
         list(bam_fixture("bad-truncated-record.bam"), "last record is incomplete"),
         list(bam_fixture("bad-cigar-length.bam"), "CIGAR and query sequence lengths differ for bad"),
-        list(bam_fixture("bad-refid.bam"), "refers to a reference that its header does not list")
+        list(bam_fixture("bad-refid.bam"), "refers to a reference that its header does not list"),
+        list(bam_fixture("bad-n-ref.bam"), "truncated or corrupt: its header is incomplete")
     )
     for (case in cases) {
         track <- random_track_name("test")
@@ -162,6 +163,25 @@ test_that("a truncated or corrupt BAM is an error, and leaves no track", {
         # the error leaves the lifetime counters as it found them (C6 in src/rdbutils.h)
         expect_identical(.glifetime_counters(), c(ref_count = 0L, protect_count = 0L))
     }
+})
+
+test_that("a BAM header with more references than the file holds is corrupt, not out of memory", {
+    # bad-n-ref.bam says it lists 2^31 - 1 references. Reserving room for that many names asks for
+    # some 80 GB, which fails as "Out of memory" on a machine with less, and succeeds through overcommit
+    # on one with more: the address space is capped at 4 GB beyond what this process uses, so the
+    # test sees the small machine's outcome on any machine.
+    skip_if_not(file.exists("/proc/self/status"), "needs /proc to size the address space")
+    status <- readLines("/proc/self/status")
+    vm_kb <- as.numeric(sub("^VmSize:\\s*([0-9]+) kB$", "\\1", grep("^VmSize:", status, value = TRUE)))
+    withr::defer(.Call("C_test_address_space_limit", -1))
+    skip_if_not(.Call("C_test_address_space_limit", vm_kb * 1024 + 4 * 2^30), "cannot cap the address space")
+    track <- random_track_name("test")
+    withr::defer(gtrack.rm(track, force = TRUE))
+    msg <- tryCatch(gtrack.import_mappedseq(track, "corrupt", bam_fixture("bad-n-ref.bam")), error = function(e) conditionMessage(e))
+    .Call("C_test_address_space_limit", -1)
+    expect_match(msg, "truncated or corrupt: its header is incomplete")
+    expect_false(gtrack.exists(track))
+    expect_identical(.glifetime_counters(), c(ref_count = 0L, protect_count = 0L))
 })
 
 test_that("gtrack.import_mappedseq accepts gzipped SAM", {

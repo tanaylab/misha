@@ -1,8 +1,8 @@
 {
   "BamReader.cpp": {
     "identical": true,
-    "misha": "0db937a8be4c877b",
-    "pymisha": "0db937a8be4c877b"
+    "misha": "9f3b46ace1ecacb2",
+    "pymisha": "9f3b46ace1ecacb2"
   },
   "BamReader.h": {
     "identical": true,
@@ -21,8 +21,8 @@
   },
   "BigWigWriter.cpp": {
     "identical": true,
-    "misha": "5bf04d91ba71b941",
-    "pymisha": "5bf04d91ba71b941"
+    "misha": "b2a2dcc72d3cb354",
+    "pymisha": "b2a2dcc72d3cb354"
   },
   "BigWigWriter.h": {
     "identical": true,

@@ -165,6 +165,12 @@ def write_numattrs():
         writer.write("chr1", [0], numpy.ones((1, 2, 100), dtype=numpy.uint8))
 
 
+def write_nulgenome():
+    # a genome name holding a NUL byte, which an R string cannot
+    with FigWigWriter(path("nulgenome.fw"), {"chr1": 100}, ["a"], genome="hg\x0038") as writer:
+        writer.write("chr1", [0], numpy.ones((1, 1, 100), dtype=numpy.uint8))
+
+
 def runs_of(reader):
     rows = []
     for t, rec in enumerate(reader.tracks):
@@ -217,6 +223,7 @@ def main():
     write_entries()
     write_semantics()
     write_numattrs()
+    write_nulgenome()
 
     codes = ["u1", "u2", "u4", "i1", "i2", "i4", "f4", "one", "f8"]
     format_rows = None

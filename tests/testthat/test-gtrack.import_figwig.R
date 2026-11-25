@@ -324,6 +324,14 @@ test_that("files that are not figwig, or corrupt, are refused", {
     expect_length(gtrack.ls(), 0)
 })
 
+test_that("a genome name holding a NUL byte is refused as corrupt", {
+    # nulgenome.fw: "genome": "hg\u000038", which an R string cannot hold
+    db <- local_fw_db()
+    expect_error(gtrack.import_figwig(fw_fixture("nulgenome.fw")), "corrupt or unsupported: the genome name holds a NUL byte")
+    expect_length(gtrack.ls(), 0)
+    expect_identical(.glifetime_counters(), c(ref_count = 0L, protect_count = 0L))
+})
+
 test_that("names are sanitized as PyMisha sanitizes them", {
     expect_identical(
         .figwig_sanitize(c("atac.+", "atac.-", "H3K27ac-rep1", "ENCFF001 (rep 2)", "1abc", "+", enc2utf8("café.x")), FALSE),
