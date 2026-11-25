@@ -7,7 +7,8 @@ Authors@R: c(
     person("Aviezer", "Lifshitz", , "aviezer.lifshitz@weizmann.ac.il", role = c("aut", "cre")),
     person("Eitan", "Yaffe", , "eitan.yaffe@weizmann.ac.il", role = "aut"),
     person("Amos", "Tanay", , "amos.tanay@weizmann.ac.il", role = "aut"),
-    person("Weizmann Institute of Science", role="cph")
+    person("Weizmann Institute of Science", role="cph"),
+    person("Jacob", "Schreiber", role = "cph", comment = "code adapted from figwig, memesuite-lite and tangermeme; see inst/COPYRIGHTS")
   )
 Description: A toolkit for analysis of genomic data. The 'misha' package
     implements an efficient data structure for storing genomic data, and
@@ -15,6 +16,7 @@ Description: A toolkit for analysis of genomic data. The 'misha' package
     analysis. Some of the 2D genome algorithms were described in Yaffe and Tanay
     (2011) <doi:10.1038/ng.947>. 
 License: MIT + file LICENSE
+Copyright: See inst/COPYRIGHTS for the copyright holders of code adapted from other projects.
 URL: https://tanaylab.github.io/misha/, https://github.com/tanaylab/misha
 BugReports: https://github.com/tanaylab/misha/issues
 Depends: 

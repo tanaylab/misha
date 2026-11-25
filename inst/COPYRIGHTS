@@ -1,0 +1,114 @@
+Copyright holders of code adapted from other projects
+=====================================================
+
+misha is distributed under the MIT license (see LICENSE). Parts of it are adapted
+from, or follow, the projects below, which are distributed under the MIT license;
+their copyright and permission notices are reproduced in full at the end.
+
+Adapted code
+------------
+
+figwig (https://github.com/jmschrei/figwig), MIT license, Copyright (c) 2026 Jacob Schreiber
+  - src/BamReader.{h,cpp}: the BGZF / BAM reading approach (find the block boundaries, inflate
+    the blocks independently, decode the records) follows figwig/bam2bw.py.
+  - src/BigWigWriter.{h,cpp}: figwig/writer.py served as a reference for the bigWig layout.
+  - src/FigWig.{h,cpp}, src/GenomeTrackImportFigwig.cpp, R/track-figwig.R: written from figwig's format specification (docs/format.rst).
+  - tests/testthat/fixtures/figwig/make_fixtures.py: follows figwig's tests/format_fixtures.py; the .fw test files
+    next to it were written by figwig.
+
+memesuite-lite (https://github.com/jmschrei/memesuite-lite), MIT license, Copyright (c) 2025 Jacob Schreiber
+  - src/PwmFastScan.h: the thresholded PWM scan (5-mer codes, block weight tables, upper
+    bounds that skip windows) is adapted from memelite/fimo.py (_qmer_codes, _block_layout,
+    _qmer_tables, _fast_hits).
+
+tangermeme (https://github.com/jmschrei/tangermeme), MIT license, Copyright (c) 2024-2026 Jacob Schreiber
+  - tests/testthat/test-gseq-shuffle.R: the negative control reimplements tangermeme's dinucleotide shuffle
+    (tangermeme/ersatz.py), to show it is not a uniform draw.
+  - R/extract-windows.R: the window options (input and output widths, jitter margin, exclusion,
+    count filters) follow the design of tangermeme/io.py extract_loci; no code is included.
+
+Algorithms and formats used without code from their sources
+-----------------------------------------------------------
+
+  - k-mer preserving shuffle (src/SeqShuffle.{h,cpp}): implemented from Altschul & Erickson
+    (1985), Kandel et al. (1996) and Jiang et al. (2008, uShuffle).
+  - HOMER consensus (R/motif-export.R): HOMER's rule (the IUPAC code of every base within 0.15
+    of the most probable one). HOMER is GPL-licensed; only the rule is used, no HOMER code.
+  - bigWig writer layout (src/BigWigWriter.{h,cpp}): block and index sizes and the choice of
+    zoom levels follow libBigWig (https://github.com/dpryan79/libBigWig, MIT, Devon Ryan).
+  - bigWig, BAM and MEME / JASPAR / HOMER motif formats: from their published specifications.
+
+License texts
+-------------
+
+--- figwig ---
+
+MIT License
+
+Copyright (c) 2026 Jacob Schreiber
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+--- memesuite-lite ---
+
+MIT License
+
+Copyright (c) 2025 Jacob Schreiber
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+--- tangermeme ---
+
+MIT License
+
+Copyright (c) 2024-2026 Jacob Schreiber
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
