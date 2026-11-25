@@ -1,0 +1,5 @@
+@HD	VN:1.6
+@SQ	SN:chr1	LN:500000
+r1	0	chr1	100	30	10M	*	0	0	AAAAAAAAAA	*
+r2	16	chr1	200	30	10M	*	0	0	AAAAAAAAAA	*
+r3	4	unknown_chrom	1	0	*	*	0	0	*	*

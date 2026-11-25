@@ -1,0 +1,26 @@
+id	name	nsites	E	log_odds_threshold	log_p_value
+R01	TF1	0x1.e8p+7	0x1.022bd117a5d97p-767	0x1.85ae1c18p-3	-0x1.b42e8f6581p+11
+R02		0x1.2bp+8	0x1.3dcf07633d05dp-37	0x1.727ad29ccp+2	-0x1.47c48596b8p+8
+R03		0x1.02p+8	0x1.67db023b8917fp-925		-0x1.b44b54516dp+11
+R04	TF4 family  x		0x1.f6c05cf965235p-856	0x1.3768acdfp+3	-0x1.29baec482e8p+12
+R05		0x1.0fp+8	0x1.5caaca35d05cap-240	0x1.99dc9e8p-3	
+R06	TF6		0x1.8811048d50ab8p-952		-0x1.eef87b20d5p+11
+R07	TF7	0x1.2ap+7			-0x1.7a9cf56479p+11
+R08	TF8 family  x	0x1.36a4852ap+5			-0x1.36c253efa4p+10
+R09	TF9	0x1.bep+7			-0x1.cb806c405bp+11
+R10	TF10	0x1.c6p+7			-0x1.b550c0515fp+11
+R11	TF11	0x1.46p+7			-0x1.17ef0d5e0ap+10
+R12		0x1.6cp+6			
+R13	TF13	0x1.3a05e3392p+4		0x1.66e9b916cp+3	
+R14		0x1.88p+6	0x1.527ff3adaf513p-614		-0x1.708f28dda8p+10
+R15	TF15	0x1.a4p+8	0x1.d2609d126dec6p-488		-0x1.a26f0606a9p+11
+R16		0x1.e2p+8	0x1.5b093b4e357cbp-208	0x1.53d3ef768p+3	-0x1.07f29c607d8p+12
+R17	TF17	0x1.99p+8	0x1.2b1654e3aaf47p-543		
+R18	TF18 family  x	0x1.fp+4			
+R19		0x1.dfp+8		0x1.f6f2e84dcp+2	-0x1.73cbc56c6p+10
+R20	TF20	0x1.a1p+8	0x1.6e8f6b1919349p-829		-0x1.bbe3346205p+11
+R21	TF21 family  x	0x1.03p+8			
+R22	TF22	0x1.1c522b7p+0			-0x1.ab1b72be2p+8
+R23	TF23	0x1.9p+4			-0x1.38440e637p+11
+R24	TF24	0x1.dcp+6			
+R25	TF25 family  x	0x1.cp+5	0x1.128447dda27c4p-128	0x1.5b192aa56p+3	

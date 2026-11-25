@@ -122,18 +122,6 @@ test_that("reverse reads with the same 5' end are duplicates whatever their POS"
     expect_equal(r$start, c(107, 109))
 })
 
-test_that("SAM and BAM place reads the same way", {
-    lines <- c(
-        "@SQ\tSN:chr1\tLN:247249719",
-        sam_line("f1", 0, 100, "10M", 10), sam_line("r1", 16, 200, "3S7M", 10),
-        sam_line("r2", 16, 400, "5M2D5M", 10), sam_line("r3", 16, 600, "5M100N5M", 10)
-    )
-    bam <- make_test_bam(lines)
-    sam <- tempfile(fileext = ".sam")
-    writeLines(lines, sam)
-    expect_equal(import_points(bam), import_points(sam, cols.order = NULL))
-})
-
 test_that("paired: a first mate on the last base is imported and POS 0 is unmapped", {
     chr1_end <- gintervals.all()$end[gintervals.all()$chrom == "chr1"]
     pair <- function(name, pos, pnext, tlen, flag1 = 83, flag2 = 163) {

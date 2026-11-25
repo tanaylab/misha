@@ -2,19 +2,21 @@
 #include <cstring>
 #include <stdio.h>
 
+#include <algorithm>
 #include <memory>
+#include <thread>
 #include <unordered_map>
 #include <string>
 #include <vector>
 
 #include <sys/stat.h>
-#include <sys/wait.h>
 #include <zlib.h>
 
 #include "rdbinterval.h"
 #include "rdbutils.h"
 #include "rdbprogress.h"
 
+#include "BamReader.h"
 #include "BufferedFile.h"
 #include "HashFunc.h"
 
@@ -29,18 +31,15 @@ using namespace rdb;
 namespace {
 
 // ByteSource is a byte-stream abstraction over the import file. open_source()
-// returns a PlainSource (default), GzipSource (1f 8b magic), or PipeSource
-// (bgzip / BAM magic -> samtools view subprocess). The FSM reads via
-// src->getc() and checks src->error() at EOF; error() returns false at clean
-// EOF for all three sources. After EOF the FSM calls check_finalize() to give
-// PipeSource a chance to surface its child's exit status.
+// returns a PlainSource (default), GzipSource (1f 8b magic), or BamSource
+// (bgzip magic and a BAM payload). The FSM reads via src->getc() and checks
+// src->error() at EOF; error() returns false at clean EOF for all three sources.
 
 class ByteSource {
 public:
 	virtual ~ByteSource() = default;
 	virtual int getc() = 0;
 	virtual bool error() const = 0;
-	virtual void check_finalize(const char *infilename) { (void)infilename; }
 };
 
 class PlainSource : public ByteSource {
@@ -82,77 +81,32 @@ public:
 	}
 };
 
-// PipeSource wraps a popen() child (used for BAM auto-detect via
-// `samtools view <path>`). The caller invokes check_finalize() once parsing
-// is done so a non-zero child exit (notably 127 == "command not found"
-// for missing samtools) is surfaced as a clear error.
-class PipeSource : public ByteSource {
-	FILE *fp_;
-	bool finished_;
-public:
-	explicit PipeSource(const std::string &cmd) : fp_(nullptr), finished_(false) {
-		fp_ = popen(cmd.c_str(), "r");
-		if (!fp_)
-			TGLError("Failed to popen '%s': %s", cmd.c_str(), strerror(errno));
-	}
-	~PipeSource() override {
-		// Dtors are implicitly noexcept; any throw during stack unwinding
-		// would call std::terminate. The pclose itself can't throw, and
-		// REprintf is well-behaved on R 4.x, but be defensive.
-		try {
-			if (!fp_) return;
-			// We get here only on the throw path - the success path goes
-			// through check_finalize() which already cleared fp_. Print
-			// the child's exit status so a samtools crash mid-stream
-			// still leaves a breadcrumb after the FSM's parser error.
-			int raw_status = pclose(fp_);
-			if (raw_status != 0) {
-				int code = WIFEXITED(raw_status) ? WEXITSTATUS(raw_status) : -1;
-				REprintf("note: samtools view exited with code %d (raw status %d) "
-				         "after the import error above.\n", code, raw_status);
-			}
-		} catch (...) {
-			// swallow - destructors must not propagate exceptions
-		}
-	}
-	// getc_unlocked avoids the per-byte stdio mutex; PipeSource isn't shared.
-	int getc() override { return getc_unlocked(fp_); }
-	bool error() const override { return fp_ ? ferror(fp_) != 0 : true; }
-	void check_finalize(const char *infilename) override {
-		if (finished_) return;
-		finished_ = true;
-		int raw_status = pclose(fp_);
-		fp_ = nullptr;
-		if (raw_status == 0) return;
-		int code = WIFEXITED(raw_status) ? WEXITSTATUS(raw_status) : -1;
-		if (code == 127) {
-			TGLError("BAM input detected at %s but samtools is not on PATH. "
-			         "Install samtools (e.g. `apt-get install samtools` or "
-			         "`conda install -c bioconda samtools`) or pre-convert: "
-			         "`samtools view %s > %s.sam`.",
-			         infilename, infilename, infilename);
-		} else {
-			TGLError("samtools view %s exited with code %d (raw status %d). "
-			         "Run `samtools view %s | head` to see the underlying error.",
-			         infilename, code, raw_status, infilename);
-		}
-	}
-};
+// BamSource reads a BAM file with BamReader and serves each record as the line `samtools view`
+// prints for it, reduced to the columns the SAM parser below reads (see
+// BamReader::append_sam_line), so that a BAM is imported exactly as its SAM text is. BamReader
+// throws on a corrupt or truncated file, so error() has nothing left to report.
+class BamSource : public ByteSource {
+	BamReader reader_;
+	std::string buf_;
+	size_t pos_ = 0;
 
-// Single-quote escape for paths handed to /bin/sh via popen: every ' becomes
-// '\'' and the whole string is wrapped in '...'. Safe against shell
-// metacharacters in filesystem paths.
-static std::string shellquote_single(const std::string &s) {
-	std::string out;
-	out.reserve(s.size() + 2);
-	out.push_back('\'');
-	for (char c : s) {
-		if (c == '\'') out.append("'\\''");
-		else out.push_back(c);
+	bool refill() {
+		buf_.clear();
+		pos_ = 0;
+		BamReader::Record rec;
+		while (buf_.size() < 65536 && reader_.next(rec))
+			reader_.append_sam_line(rec, buf_);
+		return !buf_.empty();
 	}
-	out.push_back('\'');
-	return out;
-}
+public:
+	BamSource(const std::string &path, unsigned nthreads) { reader_.open(path, nthreads); }
+	int getc() override {
+		if (pos_ >= buf_.size() && !refill())
+			return EOF;
+		return (unsigned char)buf_[pos_++];
+	}
+	bool error() const override { return false; }
+};
 
 // Peek up to nbuf bytes from path. Returns count read (0 on open failure).
 // We deliberately use raw fopen/fread rather than BufferedFile because the
@@ -165,17 +119,8 @@ static size_t read_magic_bytes(const std::string &path, unsigned char *buf, size
 	return n;
 }
 
-// True if the decompressed stream starts with the BAM magic "BAM\1".
-static bool has_bam_payload(const std::string &path) {
-	gzFile gz = gzopen(path.c_str(), "rb");
-	if (!gz) return false;
-	char magic[4];
-	int n = gzread(gz, magic, 4);
-	gzclose(gz);
-	return n == 4 && !memcmp(magic, "BAM\1", 4);
-}
-
-static std::unique_ptr<ByteSource> open_source(const std::string &path) {
+// nthreads: the threads that inflate a BAM file's blocks
+static std::unique_ptr<ByteSource> open_source(const std::string &path, unsigned nthreads) {
 	// A FIFO or other non-regular file (e.g. misha.ext's samtools pipe) cannot be sniffed: reading its first
 	// bytes consumes them and closes the only reader. zlib reads plain or gzipped text from it as a stream.
 	struct stat st;
@@ -192,10 +137,8 @@ static std::unique_ptr<ByteSource> open_source(const std::string &path) {
 	// bgzip uses gzip magic with FLG.FEXTRA (0x04) and method 0x08; that
 	// distinguishes BAM/bgzip from plain gzip (which has FLG 0x00 or 0x08).
 	// A bgzipped text file (e.g. a 10x fragments.tsv.gz) is read with zlib.
-	if (n == 4 && magic[0] == 0x1f && magic[1] == 0x8b &&
-	              magic[2] == 0x08 && magic[3] == 0x04 && has_bam_payload(path)) {
-		return std::make_unique<PipeSource>("samtools view " + shellquote_single(path));
-	}
+	if (BamReader::is_bam(path.c_str()))
+		return std::make_unique<BamSource>(path, nthreads);
 	if (n >= 2 && magic[0] == 0x1f && magic[1] == 0x8b)
 		return std::make_unique<GzipSource>(path);
 	return std::make_unique<PlainSource>(path);
@@ -390,7 +333,8 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 		string dirname = create_track_dir(_envir, track);
 		int64_t total_unmapped = 0;
 		int64_t total_filtered = 0;
-		std::unique_ptr<ByteSource> src = open_source(infilename);
+		unsigned hw = std::thread::hardware_concurrency();
+		std::unique_ptr<ByteSource> src = open_source(infilename, min<unsigned>({ hw ? hw : 1, (unsigned)max<uint64_t>(iu.get_max_processes(), 1), 8 }));
 
 		int col = 1;
 		int active_col_idx = -1;
@@ -599,10 +543,6 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 
 		if (src->error())
 			verror("Error while reading file %s", infilename);
-
-		// For PipeSource this drains the child and surfaces non-zero exit
-		// (including 127 = "samtools not on PATH"); no-op for other sources.
-		src->check_finalize(infilename);
 
 		for (unsigned ichrom = 0; ichrom < num_chroms; ichrom++) {
 			char filename[FILENAME_MAX];

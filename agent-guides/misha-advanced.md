@@ -215,7 +215,7 @@ for (W in c(5e4, 1e5, 2e5, 5e5)) {
 
 **Goal.** Extract genome sequence under intervals, score PSSMs on the fly via vtracks, and persist motif energies as tracks when reuse warrants it.
 
-**Before writing string-level sequence code, check `gseq.*`.** Misha ships a sequence-manipulation family - `gseq.extract`, `gseq.rev`, `gseq.comp`, `gseq.revcomp` (reverse / complement / both), `gseq.kmer` / `gseq.kmer.dist` (kmer counting / distance), `gseq.pwm` / `gseq.pwm_edits` (direct PWM scoring on R character strings), `gseq.read_homer` / `.read_jaspar` / `.read_meme` (motif file readers). Reach for these before hand-rolling reverse complement / kmer scans / PWM scoring in base R.
+**Before writing string-level sequence code, check `gseq.*`.** Misha ships a sequence-manipulation family - `gseq.extract`, `gseq.rev`, `gseq.comp`, `gseq.revcomp` (reverse / complement / both), `gseq.kmer` / `gseq.kmer.dist` (kmer counting / distance), `gseq.shuffle` (shuffles keeping exact k-mer counts), `gseq.pwm` / `gseq.pwm_edits` (direct PWM scoring on R character strings), `gseq.read_homer` / `.read_jaspar` / `.read_meme` (motif file readers). Reach for these before hand-rolling reverse complement / kmer scans / PWM scoring in base R.
 
 **Extract sequence.**
 

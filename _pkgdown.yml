@@ -40,6 +40,7 @@ reference:
       - gtrack.import_mappedseq
       - gtrack.import_set
       - gtrack.import_parquet
+      - gtrack.import_figwig
       - gtrack.info
       - gtrack.path
       - gtrack.liftover
@@ -108,6 +109,7 @@ reference:
       - gintervals.load_chain
       - gintervals.as_chain
       - gintervals.path
+      - gintervals.pwm_hits
       - gintervals.ls
       - gintervals.mapply
       - gintervals.neighbors
@@ -139,6 +141,7 @@ reference:
       - gdist
       - gextract
       - gextract.matrix
+      - gextract.windows
       - gextract.variants
       - glookup
       - gpartition
@@ -151,11 +154,14 @@ reference:
     desc: Sequence functions
     contents:
       - gseq.extract
+      - gseq.onehot
       - gseq.pwm
       - gseq.pwm_edits
+      - gseq.pwm_hits
       - gseq.potts
       - gseq.kmer
       - gseq.kmer.dist
+      - gseq.shuffle
       - gseq.revcomp
       - grevcomp
       - gseq.rev
@@ -165,12 +171,15 @@ reference:
     contents:
       - gtrack.export_bedgraph
       - gtrack.export_bigwig
-  - title: Motif import
-    desc: Functions to import motifs from standard motif format files
+  - title: Motif import and export
+    desc: Functions to read and write motifs in standard motif file formats
     contents:
       - gseq.read_meme
       - gseq.read_jaspar
       - gseq.read_homer
+      - gseq.write_meme
+      - gseq.write_jaspar
+      - gseq.write_homer
   - title: Synthetic genome functions
     desc: Generate synthetic genomes using stratified Markov models
     contents:

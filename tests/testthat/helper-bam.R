@@ -1,48 +1,32 @@
-# Helpers for BAM auto-import tests. Skipped when samtools isn't on PATH.
+# Helpers for the BAM import tests. misha reads BAM itself, so none of them needs samtools.
+#
+# The fixtures in fixtures/bam were made with samtools (see fixtures/bam/make-fixtures.sh). Each
+# <name>.view.sam.gz there is `samtools view -h <name>.bam`: the SAM text misha imported when it
+# read BAM through samtools, so importing it gives the result a BAM import must reproduce.
 
-skip_if_no_samtools <- function() {
-    if (!nzchar(Sys.which("samtools"))) {
-        testthat::skip("samtools not on PATH")
-    }
+bam_fixture <- function(name) {
+    testthat::test_path("fixtures", "bam", name)
 }
 
-# Write a synthetic SAM string and convert it to BAM via samtools view -b.
-# Returns the path to the BAM file (under tempfile()).
-make_test_bam <- function(sam_text) {
-    skip_if_no_samtools()
-    sam <- tempfile(fileext = ".sam")
-    bam <- tempfile(fileext = ".bam")
-    writeLines(sam_text, sam)
-    res <- system2("samtools", c("view", "-b", "-o", bam, sam),
-        stdout = TRUE, stderr = TRUE
-    )
-    if (!file.exists(bam) || file.info(bam)$size == 0) {
-        stop("samtools view -b failed: ", paste(res, collapse = "\n"))
-    }
-    bam
+# A database the fixtures fit: chr1, chr2 and chrX of 500, 300 and 200 kb. Roots the session there
+# until the calling frame ends. Its tracks/test directory takes the tracks of random_track_name("test").
+local_bam_db <- function(env = parent.frame()) {
+    restore_groot_on_exit(env)
+    db <- tempfile("bam_db_")
+    create_test_db(db, data.frame(chrom = c("chr1", "chr2", "chrX"), size = c(500000, 300000, 200000)))
+    dir.create(file.path(db, "tracks", "test"))
+    withr::defer(unlink(db, recursive = TRUE), envir = env)
+    suppressMessages(gsetroot(db))
+    invisible(db)
 }
 
-# Memoized BAM for the default fixture: 4 tests use it; building it once
-# avoids 4 samtools forks (~100-300ms saved per test-file run).
-default_bam_path <- local({
-    cached <- NULL
-    function() {
-        skip_if_no_samtools()
-        if (is.null(cached) || !file.exists(cached)) {
-            cached <<- make_test_bam(default_sam_text())
-        }
-        cached
-    }
-})
-
-# SAM fixture for chrom "chr1" (misha normalizes test-DB chrom names to
-# "chr<N>" internally). Two mapped reads on opposite strands and one
-# unmapped record whose RNAME field will be rewritten to "*" by samtools
-# when converted to BAM, exercising the chrom-mismatch path.
+# SAM fixture for chrom "chr1": two mapped reads on opposite strands and one unmapped record on a
+# chromosome the database does not have. default.bam holds the same records (samtools sets the
+# unmapped record's RNAME to "*").
 default_sam_text <- function() {
     c(
         "@HD\tVN:1.6",
-        "@SQ\tSN:chr1\tLN:247249719",
+        "@SQ\tSN:chr1\tLN:500000",
         "r1\t0\tchr1\t100\t30\t10M\t*\t0\t0\tAAAAAAAAAA\t*",
         "r2\t16\tchr1\t200\t30\t10M\t*\t0\t0\tAAAAAAAAAA\t*",
         "r3\t4\tunknown_chrom\t1\t0\t*\t*\t0\t0\t*\t*"

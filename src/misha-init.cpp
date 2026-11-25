@@ -55,6 +55,8 @@ extern "C" {
     extern SEXP gseqimport(SEXP, SEXP, SEXP, SEXP);
     extern SEXP gseq_multifasta_import(SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gseqread(SEXP, SEXP);
+    extern SEXP C_gseq_onehot(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP C_gseq_onehot_strings(SEXP, SEXP, SEXP);
     extern SEXP gseq_validate_index(SEXP, SEXP);
     extern SEXP gset_tracks_attrs(SEXP, SEXP, SEXP, SEXP);
     extern SEXP gsmooth(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
@@ -92,7 +94,12 @@ extern "C" {
     extern SEXP gintervals_import_bigwig(SEXP, SEXP, SEXP);
     extern SEXP gintervals_import_bigbed(SEXP, SEXP);
     extern SEXP gtrackimportparquet(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP gtrackimportfigwig(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP figwig_info(SEXP, SEXP);
     extern SEXP gtrack_bedgraph_lines(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP gtrack_bigwig_create(SEXP, SEXP, SEXP, SEXP);
+    extern SEXP gtrack_bigwig_append(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP gtrack_bigwig_finish(SEXP, SEXP, SEXP);
     extern SEXP parquet_columns(SEXP, SEXP, SEXP);
     extern SEXP parquet_field_metadata(SEXP, SEXP, SEXP, SEXP);
     extern SEXP gtrackinfo(SEXP, SEXP, SEXP);
@@ -120,12 +127,15 @@ extern "C" {
     extern SEXP C_gseq_pwm(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gseq_pwm_multitask(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gseq_pwm_edits(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP C_gseq_pwm_hits(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP C_gintervals_pwm_hits(SEXP, SEXP, SEXP);
     extern SEXP C_gseq_potts(SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gvariants_reach(SEXP, SEXP);
     extern SEXP C_gextract_variants(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_potts_score_codes_cmp(SEXP, SEXP);
     extern SEXP C_split_by_range_shares(SEXP, SEXP, SEXP);
     extern SEXP C_gseq_kmer(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP C_gseq_shuffle(SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gsynth_train(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gsynth_sample(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gsynth_implicit_binsize(SEXP, SEXP, SEXP);
@@ -193,6 +203,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"gseqimport", (DL_FUNC)&gseqimport, 4},
     {"gseq_multifasta_import", (DL_FUNC)&gseq_multifasta_import, 5},
     {"gseqread", (DL_FUNC)&gseqread, 2},
+    {"C_gseq_onehot", (DL_FUNC)&C_gseq_onehot, 7},
+    {"C_gseq_onehot_strings", (DL_FUNC)&C_gseq_onehot_strings, 3},
     {"gseq_validate_index", (DL_FUNC)&gseq_validate_index, 2},
     {"gset_tracks_attrs", (DL_FUNC)&gset_tracks_attrs, 4},
     {"gsmooth", (DL_FUNC)&gsmooth, 8},
@@ -230,7 +242,12 @@ static const R_CallMethodDef CallEntries[] = {
     {"gintervals_import_bigwig", (DL_FUNC)&gintervals_import_bigwig, 3},
     {"gintervals_import_bigbed", (DL_FUNC)&gintervals_import_bigbed, 2},
     {"gtrackimportparquet", (DL_FUNC)&gtrackimportparquet, 7},
+    {"gtrackimportfigwig", (DL_FUNC)&gtrackimportfigwig, 7},
+    {"figwig_info", (DL_FUNC)&figwig_info, 2},
     {"gtrack_bedgraph_lines", (DL_FUNC)&gtrack_bedgraph_lines, 10},
+    {"gtrack_bigwig_create", (DL_FUNC)&gtrack_bigwig_create, 4},
+    {"gtrack_bigwig_append", (DL_FUNC)&gtrack_bigwig_append, 7},
+    {"gtrack_bigwig_finish", (DL_FUNC)&gtrack_bigwig_finish, 3},
     {"parquet_columns", (DL_FUNC)&parquet_columns, 3},
     {"parquet_field_metadata", (DL_FUNC)&parquet_field_metadata, 4},
     {"gtrackinfo", (DL_FUNC)&gtrackinfo, 3},
@@ -258,12 +275,15 @@ static const R_CallMethodDef CallEntries[] = {
     {"C_gseq_pwm", (DL_FUNC)&C_gseq_pwm, 16},
     {"C_gseq_pwm_multitask", (DL_FUNC)&C_gseq_pwm_multitask, 17},
     {"C_gseq_pwm_edits", (DL_FUNC)&C_gseq_pwm_edits, 14},
+    {"C_gseq_pwm_hits", (DL_FUNC)&C_gseq_pwm_hits, 9},
+    {"C_gintervals_pwm_hits", (DL_FUNC)&C_gintervals_pwm_hits, 3},
     {"C_gseq_potts", (DL_FUNC)&C_gseq_potts, 4},
     {"C_gvariants_reach", (DL_FUNC)&C_gvariants_reach, 2},
     {"C_gextract_variants", (DL_FUNC)&C_gextract_variants, 7},
     {"C_potts_score_codes_cmp", (DL_FUNC)&C_potts_score_codes_cmp, 2},
     {"C_split_by_range_shares", (DL_FUNC)&C_split_by_range_shares, 3},
     {"C_gseq_kmer", (DL_FUNC)&C_gseq_kmer, 9},
+    {"C_gseq_shuffle", (DL_FUNC)&C_gseq_shuffle, 4},
     {"C_gsynth_train", (DL_FUNC)&C_gsynth_train, 15},
     {"C_gsynth_sample", (DL_FUNC)&C_gsynth_sample, 15},
     {"C_gsynth_implicit_binsize", (DL_FUNC)&C_gsynth_implicit_binsize, 3},

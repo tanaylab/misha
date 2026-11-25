@@ -1,4 +1,14 @@
 {
+  "BamReader.cpp": {
+    "identical": true,
+    "misha": "0db937a8be4c877b",
+    "pymisha": "0db937a8be4c877b"
+  },
+  "BamReader.h": {
+    "identical": true,
+    "misha": "2423cb5b1801a345",
+    "pymisha": "2423cb5b1801a345"
+  },
   "BigWig.cpp": {
     "identical": true,
     "misha": "89c7f0bf200d46c6",
@@ -8,6 +18,16 @@
     "identical": true,
     "misha": "483ba859c199f477",
     "pymisha": "483ba859c199f477"
+  },
+  "BigWigWriter.cpp": {
+    "identical": true,
+    "misha": "5bf04d91ba71b941",
+    "pymisha": "5bf04d91ba71b941"
+  },
+  "BigWigWriter.h": {
+    "identical": true,
+    "misha": "bb1943f5bfe96594",
+    "pymisha": "bb1943f5bfe96594"
   },
   "BinFinder.cpp": {
     "identical": true,
@@ -231,13 +251,13 @@
   },
   "PWMScorer.cpp": {
     "identical": false,
-    "misha": "8eaf1f9ae73446e0",
-    "pymisha": "8fb378e9322759d7"
+    "misha": "0793a29d0da5bc68",
+    "pymisha": "a0084935248d60ef"
   },
   "PWMScorer.h": {
     "identical": false,
-    "misha": "efff596fe5edb60f",
-    "pymisha": "2e762e6a6a764b98"
+    "misha": "1a0912d424f4c1ee",
+    "pymisha": "90062043124fa292"
   },
   "Parquet.cpp": {
     "identical": true,
@@ -269,6 +289,11 @@
     "misha": "2a345eb7e7f478c2",
     "pymisha": "2a345eb7e7f478c2"
   },
+  "PwmFastScan.h": {
+    "identical": true,
+    "misha": "98cbc4e67271fa52",
+    "pymisha": "98cbc4e67271fa52"
+  },
   "RaList.h": {
     "identical": true,
     "misha": "eb760180486638aa",
@@ -298,6 +323,21 @@
     "identical": true,
     "misha": "2d44a78d954e45a8",
     "pymisha": "2d44a78d954e45a8"
+  },
+  "SeqOneHot.h": {
+    "identical": true,
+    "misha": "a964df2f2647ff40",
+    "pymisha": "a964df2f2647ff40"
+  },
+  "SeqShuffle.cpp": {
+    "identical": true,
+    "misha": "4b9dc72047c75a6c",
+    "pymisha": "4b9dc72047c75a6c"
+  },
+  "SeqShuffle.h": {
+    "identical": true,
+    "misha": "8ce7fb7707aba463",
+    "pymisha": "8ce7fb7707aba463"
   },
   "StatQuadTree.h": {
     "identical": true,

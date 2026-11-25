@@ -522,6 +522,7 @@ test_that("multitask gextract returns the data frame of the serial path, 1D and 
 test_that("multitask gextract does not hold the kids' results twice at its peak", {
     skip_on_os(c("mac", "windows", "solaris"))
     skip_if(parallel::detectCores() < 2L, "Multitasking test needs at least 2 cores")
+    skip_if_not(file.exists(system.file("Meta", "package.rds", package = "misha")), "misha is not loaded from an installed library")
 
     # Measured in a fresh R process: in this one, memory freed by earlier tests is reused
     # and hides the growth. VmHWM is the process's peak resident size; writing 5 to
