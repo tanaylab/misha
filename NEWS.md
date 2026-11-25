@@ -1,4 +1,4 @@
-# misha (development version)
+# misha 5.20.0
 
 * **Behavior fix:** `gtrack.import_mappedseq()` rejects a truncated BAM (no end-of-file block) instead of importing part of it.
 
