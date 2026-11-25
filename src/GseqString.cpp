@@ -9,6 +9,7 @@
 #include <cmath>
 #include <limits>
 #include <climits>
+#include <cstring>
 #include <unistd.h>
 
 #include <R.h>
@@ -18,6 +19,7 @@
 #include "DnaPSSM.h"
 #include "PWMScorer.h"
 #include "PwmCoreParams.h"
+#include "PwmFastScan.h"
 #include "GenomeUtils.h"
 #include "rdbinterval.h"
 #include "rdbutils.h"
@@ -171,6 +173,48 @@ static void compute_bounds(const std::string& seq, int w, int roi_start, int roi
     start_max0 = end_lim0 - w + 1;
 }
 
+// Calls fn(s) for the window starts s in [lo, hi] of `data` (len letters) that
+// may reach `cut` on a strand the scan reads, skipping only windows that provably
+// cannot (PwmFastScan.h); every start without a scanner or for a short range.
+// fn returns false to stop the scan early, which makes this return false.
+template <class Fn>
+static bool scan_pwm_windows(pwm_fast_scan::BoundScanner* bound, const char* data, size_t len,
+                             int lo, int hi, int w, bool use_fwd, bool use_rc,
+                             const double& cut, Fn&& fn)
+{
+    if (lo > hi)
+        return true;
+    const size_t n = size_t(hi - lo) + 1;
+    if (!bound || !bound->usable() || lo < 0 || n < pwm_fast_scan::kMinWindows || size_t(hi) + size_t(w) > len) {
+        for (int s0 = lo; s0 <= hi; ++s0)
+            if (!fn(s0))
+                return false;
+        return true;
+    }
+    bool ok = true;
+    bound->scan(data + lo, n, use_fwd, use_rc, cut, [&](size_t x) {
+        if (ok && !fn(lo + int(x)))
+            ok = false;
+    });
+    return ok;
+}
+
+// A window-skipping scanner for gseq.pwm's thresholded and maximum modes over
+// the exact float log-probabilities window_log_prob_ptr() adds, or none when
+// MISHA_DISABLE_PWM_SKIP=1 (for differential testing).
+static void init_gseq_bound(pwm_fast_scan::BoundScanner& bound, const DnaPSSM& pssm)
+{
+    const char* disable_env = std::getenv("MISHA_DISABLE_PWM_SKIP");
+    if (disable_env && std::string(disable_env) == "1")
+        return;
+    const int w = pssm.size();
+    std::vector<float> logp((size_t)w * 4);
+    for (int c = 0; c < w; ++c)
+        for (int b = 0; b < 4; ++b)
+            logp[(size_t)c * 4 + b] = pssm[c].get_log_prob_from_code(b);
+    bound.init(logp.data(), w);
+}
+
 // Score PWM over a range (with optional gap support)
 static ScoreResult score_pwm_over_range(
     const std::string& seq,
@@ -181,12 +225,32 @@ static ScoreResult score_pwm_over_range(
     bool skip_gaps = false,
     const GapCharset* gaps = nullptr,
     const NeutralCharset* neutral_chars = nullptr,
-    NeutralPolicy neutral_policy = NEUTRAL_POLICY_AVERAGE
+    NeutralPolicy neutral_policy = NEUTRAL_POLICY_AVERAGE,
+    pwm_fast_scan::BoundScanner* bound = nullptr
 ) {
     ScoreResult result;
     int w = params.pssm.size();
     bool use_spat = !params.spat_log_factors.empty();
     PwmMode pwm_mode = parse_pwm_mode(mode);
+
+    // Window skipping for "count", "max" and "pos": a window is scored only if
+    // it can reach the threshold or beat the best so far. Not for "lse", which
+    // needs every window, nor with neutral characters, whose windows score
+    // outside the scanner's alphabet (and can turn the whole result NA).
+    if (pwm_mode == PWM_LSE || neutral_chars != nullptr)
+        bound = nullptr;
+    double spat_log_max = 0.0;
+    if (use_spat)
+        spat_log_max = *std::max_element(params.spat_log_factors.begin(), params.spat_log_factors.end());
+    const bool scan_fwd_strand = params.strand_mode >= 0;
+    const bool scan_rev_strand = (params.bidirect || params.strand_mode <= 0) && params.strand_mode != 1;
+    double cut = -std::numeric_limits<double>::infinity();
+    if (pwm_mode == PWM_COUNT)
+        cut = pwm_fast_scan::strand_cut(params.score_thresh, params.bidirect ? 2 : 1, spat_log_max);
+    // the cut that beats a best of `best`
+    auto best_cut = [&](double best) {
+        return pwm_fast_scan::strand_cut(best, (pwm_mode == PWM_MAX && params.bidirect) ? 2 : 1, spat_log_max);
+    };
 
     auto log_sum_exp_add = [](double a, double b) -> double {
         if (a == R_NegInf) return b;
@@ -269,7 +333,8 @@ static ScoreResult score_pwm_over_range(
         // Get pointer to sequence data for allocation-free scanning
         const char* seq_data = seq.data();
 
-        for (int s0 = start_min0; s0 <= start_max0; ++s0) {
+        const bool complete = scan_pwm_windows(bound, seq_data, seq.length(), start_min0, start_max0, w,
+                                               scan_fwd_strand, scan_rev_strand, cut, [&](int s0) -> bool {
             int offset_from_roi = (s0 + 1) - roi_start1;
             float spat_log = 0.0f;
             if (use_spat) {
@@ -307,7 +372,7 @@ static ScoreResult score_pwm_over_range(
         }
 
         if ((fwd_eval && std::isnan(fwd_score)) || (rev_eval && std::isnan(rev_score))) {
-            return make_na_result();
+            return false;
         }
 
             if (use_spat) {
@@ -335,6 +400,7 @@ static ScoreResult score_pwm_over_range(
                                         : std::max(fwd_score, rev_score);
                 if (this_score > best_score) {
                     best_score = this_score;
+                    cut = best_cut(best_score);
                 }
             } else if (pwm_mode == PWM_COUNT) {
                 if (params.bidirect) {
@@ -361,7 +427,12 @@ static ScoreResult score_pwm_over_range(
                     best_start0 = s0;
                     best_strand = -1;
                 }
+                cut = best_cut(best_score);
             }
+            return true;
+        });
+        if (!complete) {
+            return make_na_result();
         }
 
         if (pwm_mode == PWM_LSE) {
@@ -405,7 +476,8 @@ static ScoreResult score_pwm_over_range(
         // Get pointer to compacted sequence data for allocation-free scanning
         const char* gp_data = gp.comp.data();
 
-        for (int j = j_min; j <= j_max; ++j) {
+        const bool complete = scan_pwm_windows(bound, gp_data, gp.comp.length(), j_min, j_max, w,
+                                               scan_fwd_strand, scan_rev_strand, cut, [&](int j) -> bool {
             int start_phys0 = gp.log_to_phys[j];
             int start_phys1 = start_phys0 + 1;
 
@@ -439,7 +511,7 @@ static ScoreResult score_pwm_over_range(
             }
 
             if ((fwd_eval && std::isnan(fwd_score)) || (rev_eval && std::isnan(rev_score))) {
-                return make_na_result();
+                return false;
             }
 
             if (use_spat) {
@@ -467,6 +539,7 @@ static ScoreResult score_pwm_over_range(
                                         : std::max(fwd_score, rev_score);
                 if (this_score > best_score) {
                     best_score = this_score;
+                    cut = best_cut(best_score);
                 }
             } else if (pwm_mode == PWM_COUNT) {
                 if (params.bidirect) {
@@ -493,7 +566,12 @@ static ScoreResult score_pwm_over_range(
                     best_j = j;
                     best_strand = -1;
                 }
+                cut = best_cut(best_score);
             }
+            return true;
+        });
+        if (!complete) {
+            return make_na_result();
         }
 
         if (pwm_mode == PWM_LSE) {
@@ -679,6 +757,10 @@ SEXP C_gseq_pwm(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect,
         core.strand_mode = Rf_asInteger(r_strand_mode);
         core.score_thresh = Rf_asReal(r_score_thresh);
 
+        pwm_fast_scan::BoundScanner bound;
+        if (mode != "lse")
+            init_gseq_bound(bound, core.pssm);
+
         int extend_val;
         if (Rf_isLogical(r_extend)) {
             if (!rdb::is_true_or_false(r_extend))
@@ -831,7 +913,8 @@ SEXP C_gseq_pwm(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect,
                 seq, start_min0, start_max0, mode, bin_origin, core,
                 skip_gaps, skip_gaps ? &gap_charset : nullptr,
                 has_neutral_chars ? &neutral_charset : nullptr,
-                core.neutral_policy
+                core.neutral_policy,
+                &bound
             );
             
             // Store result
@@ -880,6 +963,105 @@ SEXP C_gseq_pwm(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect,
         rdb::rerror("Error in C_gseq_pwm: %s", e.what());
     } catch (...) {
         rdb::rerror("Unknown error in C_gseq_pwm");
+    }
+    return R_NilValue;
+}
+
+// The windows gseq.pwm(mode = "count") counts in each sequence, without gaps,
+// spatial weights or neutral characters (pwm_fast_scan::seq_hits()). Returns a
+// list of seq_idx (1-based), start, end (1-based, inclusive), strand and score.
+SEXP C_gseq_pwm_hits(SEXP r_seqs, SEXP r_pssm, SEXP r_score_thresh, SEXP r_bidirect,
+                     SEXP r_strand, SEXP r_roi_start, SEXP r_roi_end, SEXP r_extend,
+                     SEXP r_prior) {
+    try {
+        RdbInitializer rdb_init;
+
+        if (!Rf_isString(r_seqs))
+            rdb::verror("seqs must be a character vector");
+        if (!Rf_isMatrix(r_pssm) || !Rf_isReal(r_pssm))
+            rdb::verror("pssm must be a numeric matrix");
+
+        PwmCoreParams core;
+        core.pssm = PWMScorer::create_pssm_from_matrix(r_pssm);
+        core.prior = Rf_asReal(r_prior);
+        core.apply_prior();
+        const int w = core.pssm.size();
+        const bool bidirect = Rf_asLogical(r_bidirect);
+        const int strand = Rf_asInteger(r_strand);
+        const double thresh = Rf_asReal(r_score_thresh);
+
+        int extend_val;
+        if (Rf_isLogical(r_extend)) {
+            if (!rdb::is_true_or_false(r_extend))
+                rdb::verror("extend must be FALSE, TRUE, or a non-negative integer");
+            extend_val = LOGICAL(r_extend)[0] ? (w - 1) : 0;
+        } else {
+            extend_val = Rf_asInteger(r_extend);
+            if (extend_val == NA_INTEGER)
+                rdb::verror("extend must be FALSE, TRUE, or a non-negative integer");
+            if (extend_val < 0) extend_val = 0;
+        }
+
+        std::vector<float> logp((size_t)w * 4);
+        for (int c = 0; c < w; ++c)
+            for (int b = 0; b < 4; ++b)
+                logp[(size_t)c * 4 + b] = core.pssm[c].get_log_prob_from_code(b);
+        pwm_fast_scan::BoundScanner bound;
+        init_gseq_bound(bound, core.pssm);
+
+        std::vector<int> idx, starts, ends, strands;
+        std::vector<double> scores;
+        std::vector<pwm_fast_scan::SeqHit> hits;
+        const int n_seqs = Rf_length(r_seqs);
+        for (int i = 0; i < n_seqs; ++i) {
+            rdb::check_interrupt();
+            const SEXP r_seq = STRING_ELT(r_seqs, i);
+            if (r_seq == NA_STRING)
+                continue;
+            const char* seq = CHAR(r_seq);
+            const int L = (int)strlen(seq);
+            int roi_start = get_int_elem(r_roi_start, i, 1);
+            int roi_end = get_int_elem(r_roi_end, i, L);
+            if (roi_start < 1) roi_start = 1;
+            if (roi_end > L) roi_end = L;
+            if (roi_start > roi_end)
+                continue;
+            int start_min0, start_max0;
+            compute_bounds(std::string(seq, L), w, roi_start, roi_end, extend_val, nullptr, start_min0, start_max0);
+            hits.clear();
+            pwm_fast_scan::seq_hits(&bound, logp.data(), w, seq, (size_t)L, start_min0, start_max0,
+                                    bidirect, strand, thresh, hits);
+            for (const pwm_fast_scan::SeqHit& h : hits) {
+                idx.push_back(i + 1);
+                starts.push_back((int)h.start + 1);
+                ends.push_back((int)h.start + w);
+                strands.push_back(h.strand);
+                scores.push_back(h.score);
+            }
+        }
+
+        const size_t n = idx.size();
+        SEXP out = rdb::rprotect_ptr(rdb::RSaneAllocVector(VECSXP, 5));
+        SEXP names = rdb::rprotect_ptr(rdb::RSaneAllocVector(STRSXP, 5));
+        const char* cols[5] = {"seq_idx", "start", "end", "strand", "score"};
+        for (int k = 0; k < 5; ++k) {
+            SET_STRING_ELT(names, k, rdb::RSaneMkChar(cols[k]));
+            SEXP col = rdb::RSaneAllocVector(k == 4 ? REALSXP : INTSXP, n);
+            SET_VECTOR_ELT(out, k, col);
+            const std::vector<int>* iv = k == 0 ? &idx : k == 1 ? &starts : k == 2 ? &ends : &strands;
+            for (size_t j = 0; j < n; ++j) {
+                if (k == 4)
+                    REAL(col)[j] = scores[j];
+                else
+                    INTEGER(col)[j] = (*iv)[j];
+            }
+        }
+        Rf_setAttrib(out, R_NamesSymbol, names);
+        return out;
+    } catch (TGLException &e) {
+        rdb::rerror("%s", e.msg());
+    } catch (std::exception& e) {
+        rdb::rerror("Error in C_gseq_pwm_hits: %s", e.what());
     }
     return R_NilValue;
 }

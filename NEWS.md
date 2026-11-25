@@ -7,6 +7,9 @@
 * New `gextract.windows()` returns fixed-width windows around loci as arrays for sequence models: one-hot DNA (N x 4 x L) and track values (N x T x L'), with jitter margins, strand-aware reverse complement, exclusion intervals and count filters. New `gseq.onehot()` one-hot encodes intervals (read in C++ straight from the sequence files) or strings.
 * New `gseq.write_meme()`, `gseq.write_jaspar()` and `gseq.write_homer()` write motifs in the formats the `gseq.read_*()` functions read, so motifs round-trip with their metadata (JASPAR counts are rounded to whole numbers unless `round_counts = FALSE`).
 * New `gseq.shuffle()` shuffles sequences keeping their exact k-mer (default dinucleotide) counts, drawn uniformly; the same seed gives the same sequences as PyMisha's `gseq_shuffle()`.
+* `pwm.count`, `pwm.max` and `pwm.max.pos` virtual tracks and `gseq.pwm()` in `"count"`, `"max"` and `"pos"` modes skip windows that cannot reach the threshold or the best score so far: several times faster, with identical results.
+
+* New `gseq.pwm_hits()` and `gintervals.pwm_hits()` return the position, strand and score of every motif window that passes a threshold.
 
 # misha 5.19.0
 

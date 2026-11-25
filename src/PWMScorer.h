@@ -10,6 +10,7 @@
 #include "DnaPSSM.h"
 #include "utils/RunningLogSumExp.h"
 #include "utils/RunningMaxDeque.h"
+#include "PwmFastScan.h"
 
 class PWMScorer : public GenomeSeqScorer
 {
@@ -52,6 +53,20 @@ public:
     // MAX_LIKELIHOOD_POS maintains it; every other mode returns its score
     // directly.
     double get_last_max_score() const { return m_last_max_score; }
+
+    // One window that passes the threshold of a MOTIF_COUNT scorer: exactly
+    // the windows pwm.count counts over the same interval.
+    struct Hit {
+        int64_t start;   // genomic start of the window (0-based)
+        int64_t end;     // start + motif length
+        int strand;      // 1 or -1: the strand read alone, or the better one under bidirect
+        float score;     // the thresholded score (strand union under bidirect)
+    };
+
+    // Append the hits of a MOTIF_COUNT scorer over `interval` to `hits`, in
+    // ascending genomic order. Returns false where score_interval() would
+    // return NaN (no anchor).
+    bool collect_hits(const GInterval &interval, const GenomeChromKey &chromkey, std::vector<Hit> &hits);
 
 protected:
     int64_t pattern_length() const override { return (int64_t)m_pssm.size(); }
@@ -208,6 +223,30 @@ private:
     double get_max_likelihood_pos_with_spatial(const std::string& target, size_t motif_length);
     double compute_position_result(size_t index, size_t target_length, size_t motif_length, int direction) const;
     
+    // Window skipping for the thresholded and maximum modes (PwmFastScan.h).
+    // The scanner proves which windows cannot reach a cut; the survivors are
+    // scored by the unchanged code, so every result is bit-identical.
+    void init_bound_scanner();
+    template <class Fn>
+    void visit_anchors(const std::string& target, size_t lo, size_t hi, bool tf, bool tr,
+                       const double& cut, Fn&& fn);
+    // Which strands of the TARGET a scan reads, given the strands it reads in
+    // original-genome meaning (the target is reverse-complemented on the minus
+    // strand): tf for calc_like(), tr for calc_like_rc().
+    void target_strands(bool scan_fwd, bool scan_rev, bool& tf, bool& tr) const;
+    // DnaPSSM::max_like_match() with skipping: the same result, bit for bit.
+    size_t max_like_match_fast(const std::string& target, float& best_logp, int& best_dir,
+                               bool combine_strands);
+    // The anchors of `target` that pass the MOTIF_COUNT threshold, with their score and strand.
+    void hits_in_range(const std::string& target, size_t lo, size_t hi,
+                       std::vector<size_t>& idx, std::vector<float>& score, std::vector<int>& dir);
+    // Geometry shared by score_interval() and collect_hits(): reads the target of
+    // `expanded_interval` and the anchor range inside it. Returns 0 when there are
+    // anchors, 1 for NaN with the caches kept, 2 for NaN with the caches dropped.
+    int prepare_target(const GInterval& interval, const GenomeChromKey& chromkey,
+                       const GInterval& expanded_interval, std::string& target,
+                       size_t& i_min, size_t& i_max);
+
     // Utilities
     inline float get_spatial_log_factor(size_t pos_index) const;
     inline size_t spat_pos(size_t i) const;
@@ -230,6 +269,10 @@ private:
     bool m_use_spat = false;
     std::vector<float> m_spat_log_factors;
     int m_spat_bin_size = 1;
+
+    // Window skipping (see init_bound_scanner)
+    pwm_fast_scan::BoundScanner m_bound;
+    float m_spat_log_max = 0.0f;   // the largest spatial log factor, 0 without spatial weights
 
     // Cache
     SlideCache m_slide;

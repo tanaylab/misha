@@ -251,13 +251,13 @@
   },
   "PWMScorer.cpp": {
     "identical": false,
-    "misha": "8eaf1f9ae73446e0",
-    "pymisha": "8fb378e9322759d7"
+    "misha": "0793a29d0da5bc68",
+    "pymisha": "a0084935248d60ef"
   },
   "PWMScorer.h": {
     "identical": false,
-    "misha": "efff596fe5edb60f",
-    "pymisha": "2e762e6a6a764b98"
+    "misha": "1a0912d424f4c1ee",
+    "pymisha": "90062043124fa292"
   },
   "Parquet.cpp": {
     "identical": true,
@@ -288,6 +288,11 @@
     "identical": true,
     "misha": "2a345eb7e7f478c2",
     "pymisha": "2a345eb7e7f478c2"
+  },
+  "PwmFastScan.h": {
+    "identical": true,
+    "misha": "98cbc4e67271fa52",
+    "pymisha": "98cbc4e67271fa52"
   },
   "RaList.h": {
     "identical": true,
