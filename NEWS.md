@@ -1,3 +1,8 @@
+# misha (development version)
+
+* `gtrack.import_mappedseq()` reads BAM files directly and no longer needs `samtools`. Results are unchanged and the import is about 3x faster.
+* **Behavior fix:** `gtrack.import_mappedseq()` rejects a truncated BAM (no end-of-file block) instead of importing part of it.
+
 # misha 5.19.0
 
 * **Behavior fix:** `neighbor.count` virtual tracks count long source intervals correctly over overlapping intervals. This changes `gintervals.summary()` and `gintervals.quantiles()` results over overlapping intervals.

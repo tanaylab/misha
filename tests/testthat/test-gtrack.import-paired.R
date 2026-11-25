@@ -31,7 +31,7 @@ paired_sam_text <- function() {
     )
 }
 
-# plain SAM, so that the tests do not need samtools
+# plain SAM (test-gtrack.import-bam.R checks that BAM gives the same tracks)
 paired_sam_file <- function(lines = paired_sam_text()) {
     sam <- tempfile(fileext = ".sam")
     writeLines(lines, sam)
@@ -213,14 +213,6 @@ test_that("a reverse read past the chromosome end does not overflow the dense tr
     expect_warning(res <- import_tmp(sam, cols.order = NULL, pileup = 100, binsize = 20), "No read was imported")
     expect_equal(res$stats[[1]][["total.mapped"]], 0)
     expect_equal(res$stats[[1]][["total.unmapped"]], 1)
-})
-
-test_that("a paired BAM gives the same track as the SAM", {
-    bam <- make_test_bam(paired_sam_text())
-    from_bam <- import_tmp(bam, binsize = 50, paired = TRUE)
-    from_sam <- import_tmp(paired_sam_file(), binsize = 50, cols.order = NULL, paired = TRUE)
-    expect_equal(from_bam$stats, from_sam$stats)
-    expect_equal(bins_at(from_bam$track, seq(0, 10000, 50)), bins_at(from_sam$track, seq(0, 10000, 50)))
 })
 
 test_that("duplicates are fragments with the same start and end, not the same start", {
