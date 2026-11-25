@@ -48,7 +48,7 @@
 <li><p>New <code><a href="../reference/gseq.shuffle.html">gseq.shuffle()</a></code> shuffles sequences keeping their exact k-mer (default dinucleotide) counts, drawn uniformly; the same seed gives the same sequences as PyMisha’s <code>gseq_shuffle()</code>.</p></li>
 <li><p>New <code><a href="../reference/gtrack.import_figwig.html">gtrack.import_figwig()</a></code> imports the tracks of a figwig (<code>.fw</code>) multi-track file as sparse or binned tracks.</p></li>
 <li><p><code><a href="../reference/gtrack.import_mappedseq.html">gtrack.import_mappedseq()</a></code> reads BAM files directly and no longer needs <code>samtools</code>. Results are unchanged and the import is about 3x faster.</p></li>
-<li><p><code><a href="../reference/gtrack.export_bigwig.html">gtrack.export_bigwig()</a></code> writes bigWig files directly; UCSC <code>bedGraphToBigWig</code> is no longer needed.</p></li>
+<li><p><code><a href="../reference/gtrack.export_bigwig.html">gtrack.export_bigwig()</a></code> writes bigWig files directly; UCSC <code>bedGraphToBigWig</code> is no longer needed. An export that fails leaves a file already at the path unchanged.</p></li>
 <li><p><code>pwm.count</code>, <code>pwm.max</code> and <code>pwm.max.pos</code> virtual tracks and <code><a href="../reference/gseq.pwm.html">gseq.pwm()</a></code> in <code>"count"</code>, <code>"max"</code> and <code>"pos"</code> modes skip windows that cannot reach the threshold or the best score so far: several times faster, with identical results.</p></li>
 </ul></div>
     <div class="section level2">

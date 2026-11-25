@@ -51,6 +51,10 @@ Chromosomes are written in the order of their names (as the bigWig
 format requires), and every chromosome of the genome is listed in the
 file, also those without values.
 
+The file is written under a temporary name in the same directory and
+renamed to `file` once it is complete, so an export that fails or is
+interrupted leaves a file already at `file` unchanged.
+
 ## See also
 
 [`gextract`](https://tanaylab.github.io/misha/reference/gextract.md),

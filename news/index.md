@@ -50,7 +50,8 @@
 
 - [`gtrack.export_bigwig()`](https://tanaylab.github.io/misha/reference/gtrack.export_bigwig.md)
   writes bigWig files directly; UCSC `bedGraphToBigWig` is no longer
-  needed.
+  needed. An export that fails leaves a file already at the path
+  unchanged.
 
 - `pwm.count`, `pwm.max` and `pwm.max.pos` virtual tracks and
   [`gseq.pwm()`](https://tanaylab.github.io/misha/reference/gseq.pwm.md)

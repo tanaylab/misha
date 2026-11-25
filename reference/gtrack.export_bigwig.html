@@ -90,6 +90,9 @@ bedGraph sections. The file has zoom levels (summaries at coarser resolutions), 
 browsers and UCSC's <code>bigWigSummary</code> use for zoomed-out views. Chromosomes are written in
 the order of their names (as the bigWig format requires), and every chromosome of the genome
 is listed in the file, also those without values.</p>
+<p>The file is written under a temporary name in the same directory and renamed to <code>file</code>
+once it is complete, so an export that fails or is interrupted leaves a file already at
+<code>file</code> unchanged.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
