@@ -605,6 +605,47 @@ test_that("a bigwig export that cannot open its file keeps the file already ther
     expect_equal(readLines(f), "keep me")
 })
 
+test_that("a bigwig export that fails after opening its file keeps the file already there", {
+    dir <- withr::local_tempdir()
+    f <- file.path(dir, "x.bw")
+    writeLines("keep me", f)
+
+    # fails in the first gextract, after create() has written the file's header
+    expect_error(gtrack.export_bigwig("dense_track + bw_no_such_variable", f))
+    expect_equal(readLines(f), "keep me")
+    expect_identical(list.files(dir, all.files = TRUE, no.. = TRUE), "x.bw")
+
+    # a write that fails inside create() (as on a full disk)
+    withr::defer(.Call("C_test_file_size_limit", -1))
+    .Call("C_test_file_size_limit", 100)
+    msg <- tryCatch(gtrack.export_bigwig("dense_track", f), error = function(e) conditionMessage(e))
+    .Call("C_test_file_size_limit", -1)
+    expect_match(msg, "Failed to write to bigWig file")
+    expect_equal(readLines(f), "keep me")
+    expect_identical(list.files(dir, all.files = TRUE, no.. = TRUE), "x.bw")
+})
+
+test_that("a bigwig export replaces the file already there, and writes through a symbolic link", {
+    skip_on_os("windows")
+    dir <- withr::local_tempdir()
+    f <- file.path(dir, "x.bw")
+    writeLines("old", f)
+    Sys.chmod(f, "0640", use_umask = FALSE)
+    gtrack.export_bigwig("dense_track", f)
+    expect_identical(as.character(file.mode(f)), "640")
+    expect_gt(nrow(gintervals.import_bigwig(f, gintervals(1, 0, 1000))), 0)
+
+    link <- file.path(dir, "link.bw")
+    file.symlink(f, link)
+    gtrack.export_bigwig("dense_track", link, intervals = gintervals(1, 0, 1000))
+    expect_identical(Sys.readlink(link), f)
+    expect_identical(nrow(gintervals.import_bigwig(f, gintervals.all())), nrow(gintervals.import_bigwig(link, gintervals.all())))
+    expect_equal(max(gintervals.import_bigwig(f, gintervals.all())$end), 1000)
+    expect_setequal(list.files(dir, all.files = TRUE, no.. = TRUE), c("x.bw", "link.bw"))
+
+    expect_error(gtrack.export_bigwig("dense_track", dir), "is a directory")
+})
+
 test_that("the bigWig writer refuses unsorted and overlapping records", {
     f <- tempfile(fileext = ".bw")
     withr::defer(unlink(f))

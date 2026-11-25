@@ -248,6 +248,10 @@ gtrack.export_bedgraph <- function(track, file, intervals = NULL, iterator = NUL
 #' the order of their names (as the bigWig format requires), and every chromosome of the genome
 #' is listed in the file, also those without values.
 #'
+#' The file is written under a temporary name in the same directory and renamed to \code{file}
+#' once it is complete, so an export that fails or is interrupted leaves a file already at
+#' \code{file} unchanged.
+#'
 #' @param track track name or track expression (character string)
 #' @param file output file path (typically ending in \code{.bw} or
 #'   \code{.bigwig}).
@@ -333,11 +337,22 @@ gtrack.export_bigwig <- function(track, file, intervals = NULL, iterator = NULL)
 
     groups <- .gbigwig_batches(intervals, iterator, genome[ord, c("chrom", "start", "end")], file_chroms)
 
-    # The cleanup is registered only once create() has opened the file, so a failure before
-    # that (bad chromosome sizes, an unwritable path) never deletes a file already at the path.
-    state <- .gcall("gtrack_bigwig_create", file, file_chroms, genome$end[ord], .misha_env())
+    # The file is written under a temporary name in the same directory and renamed over 'file'
+    # only once it is complete, so an export that fails (or is interrupted) at any point leaves a
+    # file already at the path as it was, and no partial file behind. A symbolic link is written
+    # through, to the file it points to, as when the file was written in place.
+    dest <- if (nzchar(Sys.readlink(file))) normalizePath(file, mustWork = FALSE) else file
+    if (dir.exists(dest)) {
+        stop(sprintf("Cannot write to '%s': it is a directory", file), call. = FALSE)
+    }
+    if (file.access(dirname(dest), 2) != 0 || (file.exists(dest) && file.access(dest, 2) != 0)) {
+        stop(sprintf("Cannot write to '%s': permission denied", file), call. = FALSE)
+    }
+    tmp <- tempfile(pattern = paste0(".", basename(dest), "."), tmpdir = dirname(dest), fileext = ".tmp")
     success <- FALSE
-    on.exit(if (!success) unlink(file), add = TRUE)
+    on.exit(if (!success) unlink(tmp), add = TRUE)
+
+    state <- .gcall("gtrack_bigwig_create", tmp, file_chroms, genome$end[ord], .misha_env())
     for (group in groups) {
         for (intervs in group()) {
             data <- gextract(track, intervals = intervs, iterator = iterator, colnames = "value")
@@ -355,12 +370,18 @@ gtrack.export_bigwig <- function(track, file, intervals = NULL, iterator = NULL)
                 rows <- seq_along(ids)
             }
             state <- .gcall(
-                "gtrack_bigwig_append", file, state, ids[rows] - 1L, data$start[rows], data$end[rows],
+                "gtrack_bigwig_append", tmp, state, ids[rows] - 1L, data$start[rows], data$end[rows],
                 as.numeric(data$value[rows]), .misha_env()
             )
         }
     }
-    num_records <- .gcall("gtrack_bigwig_finish", file, state, .misha_env())
+    num_records <- .gcall("gtrack_bigwig_finish", tmp, state, .misha_env())
+    if (file.exists(dest)) {
+        Sys.chmod(tmp, file.mode(dest), use_umask = FALSE)
+    }
+    if (!suppressWarnings(file.rename(tmp, dest))) {
+        stop(sprintf("Cannot write to '%s': renaming the finished file into place failed", file), call. = FALSE)
+    }
     success <- TRUE
 
     if (num_records == 0) {
