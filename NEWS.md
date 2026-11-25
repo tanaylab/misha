@@ -6,6 +6,7 @@
 * New `gtrack.import_figwig()` imports the tracks of a figwig (`.fw`) multi-track file as sparse or binned tracks.
 * New `gextract.windows()` returns fixed-width windows around loci as arrays for sequence models: one-hot DNA (N x 4 x L) and track values (N x T x L'), with jitter margins, strand-aware reverse complement, exclusion intervals and count filters. New `gseq.onehot()` one-hot encodes intervals (read in C++ straight from the sequence files) or strings.
 * New `gseq.write_meme()`, `gseq.write_jaspar()` and `gseq.write_homer()` write motifs in the formats the `gseq.read_*()` functions read, so motifs round-trip with their metadata (JASPAR counts are rounded to whole numbers unless `round_counts = FALSE`).
+* New `gseq.shuffle()` shuffles sequences keeping their exact k-mer (default dinucleotide) counts, drawn uniformly; the same seed gives the same sequences as PyMisha's `gseq_shuffle()`.
 
 # misha 5.19.0
 

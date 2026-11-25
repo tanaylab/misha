@@ -159,6 +159,7 @@ reference:
       - gseq.potts
       - gseq.kmer
       - gseq.kmer.dist
+      - gseq.shuffle
       - gseq.revcomp
       - grevcomp
       - gseq.rev
