@@ -19,6 +19,16 @@
     "misha": "483ba859c199f477",
     "pymisha": "483ba859c199f477"
   },
+  "BigWigWriter.cpp": {
+    "identical": true,
+    "misha": "5bf04d91ba71b941",
+    "pymisha": "5bf04d91ba71b941"
+  },
+  "BigWigWriter.h": {
+    "identical": true,
+    "misha": "bb1943f5bfe96594",
+    "pymisha": "bb1943f5bfe96594"
+  },
   "BinFinder.cpp": {
     "identical": true,
     "misha": "595b59f13a5fa668",
