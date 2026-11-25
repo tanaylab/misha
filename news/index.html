@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">misha</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.19.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.20.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -40,7 +40,7 @@
     </div>
 
     <div class="section level2">
-<h2 class="pkg-version" data-toc-text="development version" id="misha-development-version">misha (development version)<a class="anchor" aria-label="anchor" href="#misha-development-version"></a></h2>
+<h2 class="pkg-version" data-toc-text="5.20.0" id="misha-5200">misha 5.20.0<a class="anchor" aria-label="anchor" href="#misha-5200"></a></h2>
 <ul><li><p><strong>Behavior fix:</strong> <code><a href="../reference/gtrack.import_mappedseq.html">gtrack.import_mappedseq()</a></code> rejects a truncated BAM (no end-of-file block) instead of importing part of it.</p></li>
 <li><p>New <code><a href="../reference/gextract.windows.html">gextract.windows()</a></code> returns fixed-width windows around loci as arrays for sequence models: one-hot DNA (N x 4 x L) and track values (N x T x L’), with jitter margins, strand-aware reverse complement, exclusion intervals and count filters. New <code><a href="../reference/gseq.onehot.html">gseq.onehot()</a></code> one-hot encodes intervals (read in C++ straight from the sequence files) or strings.</p></li>
 <li><p>New <code><a href="../reference/gseq.pwm_hits.html">gseq.pwm_hits()</a></code> and <code><a href="../reference/gintervals.pwm_hits.html">gintervals.pwm_hits()</a></code> return the position, strand and score of every motif window that passes a threshold.</p></li>

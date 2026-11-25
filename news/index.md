@@ -1,6 +1,6 @@
 # Changelog
 
-## misha (development version)
+## misha 5.20.0
 
 - **Behavior fix:**
   [`gtrack.import_mappedseq()`](https://tanaylab.github.io/misha/reference/gtrack.import_mappedseq.md)
