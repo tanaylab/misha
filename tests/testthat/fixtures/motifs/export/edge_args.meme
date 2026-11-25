@@ -1,0 +1,28 @@
+MEME version 4
+
+ALPHABET= ACGT
+
+strands: +
+
+Background letter frequencies
+A 0.300000 C 0.200000 G 0.200000 T 0.300000
+
+MOTIF w1 one position name
+letter-probability matrix: alength= 4 w= 1 nsites= 7.5 E= 0
+0.100000 0.200000 0.300000 0.400000
+
+MOTIF zeros
+letter-probability matrix: alength= 4 w= 4
+1.000000 0.000000 0.000000 0.000000
+0.000000 0.000000 0.000000 1.000000
+0.500000 0.500000 0.000000 0.000000
+0.000000 0.500000 0.000000 0.500000
+
+MOTIF thirds thirds
+letter-probability matrix: alength= 4 w= 4
+0.333333 0.333333 0.166667 0.166667
+0.142857 0.285714 0.428571 0.142857
+0.450000 0.400000 0.100000 0.050000
+0.300000 0.300000 0.200000 0.200000
+URL http://example.org/thirds
+
