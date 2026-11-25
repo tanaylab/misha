@@ -23,7 +23,7 @@ test_that("HiC test database is available", {
     } else {
         NULL
     }
-    gsetroot(test_db)
+    gsetroot(test_db_root(test_db))
     withr::defer({
         if (!is.null(old_root)) gsetroot(old_root)
     })
@@ -45,7 +45,7 @@ test_that("HiC test database is available", {
 
 test_that("Real data: K562 tracks are accessible", {
     withr::local_options(list(gmax.data.size = 1e8))
-    gsetroot("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19")
+    gsetroot(test_db_root("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19"))
     gdb.reload()
 
     # Verify symlinked K562 tracks exist
@@ -59,7 +59,7 @@ test_that("Real data: gextract on K562 HiC track with distance bands", {
     # Pattern: hic_basic.r gcis_decay function (lines 38-56)
     # This is the core distance decay analysis pattern
     withr::local_options(list(gmax.data.size = 1e8))
-    gsetroot("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19")
+    gsetroot(test_db_root("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19"))
 
     # Extract cis contacts for chr1 with distance band
     # Use a small region for manageable test size
@@ -86,7 +86,7 @@ test_that("Real data: gcis_decay-style distance analysis on K562", {
     # Pattern: hic_basic.r gcis_decay function
     # Tests binning contacts by distance
     withr::local_options(list(gmax.data.size = 1e8))
-    gsetroot("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19")
+    gsetroot(test_db_root("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19"))
 
     # Sample a small region for testing
     scope <- gintervals.2d("chr1", 0, 2e6, "chr1", 0, 2e6)
@@ -126,7 +126,7 @@ test_that("Real data: gcis_decay-style distance analysis on K562", {
 test_that("Real data: gintervals.2d.band_intersect on K562 regions", {
     # Pattern: hic_basic.r usage of band filtering with domains
     withr::local_options(list(gmax.data.size = 1e8))
-    gsetroot("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19")
+    gsetroot(test_db_root("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19"))
 
     # Create test regions on chr1
     regions <- gintervals("chr1", c(1e6, 2e6), c(1.5e6, 2.5e6))
@@ -156,7 +156,7 @@ test_that("Real data: gintervals.2d.band_intersect on K562 regions", {
 test_that("Real data: Virtual track weighted.sum on K562 score track", {
     # Pattern: high_score.r lines 110-120 (weighted scoring)
     withr::local_options(list(gmax.data.size = 1e8))
-    gsetroot("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19")
+    gsetroot(test_db_root("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19"))
 
     # Create virtual track for weighted sum
     gvtrack.create("v_k562_score", "hic.K562.ela_k562_score", func = "weighted.sum")
@@ -178,7 +178,7 @@ test_that("Real data: Insulation track extraction (1D)", {
     # Pattern: high_score.r lines 94-95, 271
     # Insulation is a 1D track derived from 2D HiC data
     withr::local_options(list(gmax.data.size = 1e8))
-    gsetroot("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19")
+    gsetroot(test_db_root("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19"))
 
     # Extract insulation for chr1 region
     insulation <- gextract(
@@ -197,7 +197,7 @@ test_that("Real data: Insulation track extraction (1D)", {
 test_that("Real data: gscreen-style domain calling from insulation", {
     # Pattern: hic_basic.r lines 100-120 (domain boundary detection)
     withr::local_options(list(gmax.data.size = 1e8))
-    gsetroot("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19")
+    gsetroot(test_db_root("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19"))
 
     # Find local minima in insulation (domain boundaries)
     # Using gscreen to find regions below threshold
@@ -221,7 +221,7 @@ test_that("Real data: Multi-track extraction (score + insulation)", {
     # Pattern: Combining 2D track data with 1D annotation
     # Common pattern in HiC analysis workflows
     withr::local_options(list(gmax.data.size = 1e8))
-    gsetroot("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19")
+    gsetroot(test_db_root("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19"))
 
     # Extract HiC scores for a region
     scope <- gintervals.2d("chr1", 0, 1e6, "chr1", 0, 1e6)
@@ -253,7 +253,7 @@ test_that("Real data: Multi-track extraction (score + insulation)", {
 test_that("gintervals.2d creates 2D intervals from bins", {
     # Pattern: hic_basic.r line 44
     withr::local_options(list(gmax.data.size = 1e8))
-    gsetroot("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19")
+    gsetroot(test_db_root("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19"))
 
     bins <- gintervals("chr1", seq(0, 2e5, 1e4), seq(1e4, 2.1e5, 1e4))
     # gintervals.2d creates 1-to-1 pairs, not Cartesian product
@@ -274,7 +274,7 @@ test_that("gintervals.2d creates 2D intervals from bins", {
 test_that("gintervals.2d.all creates genome-wide scope", {
     # Pattern: figures.r lines 244, 275
     withr::local_options(list(gmax.data.size = 1e8))
-    gsetroot("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19")
+    gsetroot(test_db_root("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19"))
 
     scope <- gintervals.2d.all()
     scope_cis <- scope[scope$chrom1 == scope$chrom2, ]
@@ -290,7 +290,7 @@ test_that("gintervals.2d.all creates genome-wide scope", {
 test_that("gintervals.2d from domains creates self-pairs", {
     # Pattern: hic_basic.r lines 81-83
     withr::local_options(list(gmax.data.size = 1e8))
-    gsetroot("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19")
+    gsetroot(test_db_root("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19"))
 
     domains <- gintervals.load("domains.test")
     dom_2d <- gintervals.2d(
@@ -310,7 +310,7 @@ test_that("gintervals.2d from domains creates self-pairs", {
 test_that("expand.grid pattern creates all feature pairs", {
     # Pattern: hic_basic.r lines 435-451
     withr::local_options(list(gmax.data.size = 1e8))
-    gsetroot("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19")
+    gsetroot(test_db_root("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19"))
 
     f1 <- gintervals("chr1", c(5e5, 1e6, 1.5e6), c(5.1e5, 1.1e6, 1.6e6))
     f2 <- gintervals("chr1", c(7e5, 1.2e6, 1.8e6), c(7.1e5, 1.3e6, 1.9e6))
@@ -336,7 +336,7 @@ test_that("expand.grid pattern creates all feature pairs", {
 test_that("gcis_decay computes distance decay curve", {
     # Pattern: figures.r lines 65-66
     withr::local_options(list(gmax.data.size = 1e8))
-    gsetroot("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19")
+    gsetroot(test_db_root("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19"))
 
     breaks <- 2^seq(10, 20, by = 0.5)
 
@@ -360,7 +360,7 @@ test_that("gcis_decay computes distance decay curve", {
 test_that("gcis_decay within domains combines upstream and downstream", {
     # Pattern: hic_basic.r lines 136-140
     withr::local_options(list(gmax.data.size = 1e8))
-    gsetroot("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19")
+    gsetroot(test_db_root("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19"))
 
     domains <- gintervals.load("domains.test")
     breaks <- 2^seq(10, 18, by = 0.5)
@@ -394,7 +394,7 @@ test_that("gcis_decay within domains combines upstream and downstream", {
 test_that("gextract with band excludes diagonal correctly", {
     # Pattern: Used 30+ times in both scripts
     withr::local_options(list(gmax.data.size = 1e8))
-    gsetroot("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19")
+    gsetroot(test_db_root("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19"))
 
     interval <- gintervals.2d("chr1", 5e5, 1e6, "chr1", 5e5, 1e6)
     min_dist <- 1024
@@ -415,7 +415,7 @@ test_that("gextract with band excludes diagonal correctly", {
 test_that("gextract with band filters to specific ranges", {
     # Pattern: hic_basic.r lines 111, 118
     withr::local_options(list(gmax.data.size = 1e8))
-    gsetroot("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19")
+    gsetroot(test_db_root("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19"))
 
     interval <- gintervals.2d("chr1", 5e5, 1.5e6, "chr1", 5e5, 1.5e6)
 
@@ -445,7 +445,7 @@ test_that("gextract with band filters to specific ranges", {
 test_that("gintervals.2d.band_intersect filters by distance", {
     # Existing pattern from test-2d-parity.R
     withr::local_options(list(gmax.data.size = 1e8))
-    gsetroot("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19")
+    gsetroot(test_db_root("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19"))
 
     starts <- seq(0, 1e6, 1e5)
     ends <- starts + 1e5
@@ -488,7 +488,7 @@ test_that("gintervals.2d.band_intersect filters by distance", {
 test_that("weighted.sum virtual track computes marginals", {
     # Pattern: hic_basic.r lines 40, 78-79
     withr::local_options(list(gmax.data.size = 1e8))
-    gsetroot("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19")
+    gsetroot(test_db_root("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19"))
 
     gvtrack.create("v_test", "hic.test_basic", "weighted.sum")
     withr::defer(gvtrack.rm("v_test"))
@@ -505,7 +505,7 @@ test_that("weighted.sum virtual track computes marginals", {
 test_that("weighted.sum respects band parameter", {
     # Pattern: hic_basic.r lines 46-47
     withr::local_options(list(gmax.data.size = 1e8))
-    gsetroot("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19")
+    gsetroot(test_db_root("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19"))
 
     gvtrack.create("v_test", "hic.test_basic", "weighted.sum")
     withr::defer(gvtrack.rm("v_test"))
@@ -532,7 +532,7 @@ test_that("weighted.sum respects band parameter", {
 test_that("max virtual track finds maximum in region", {
     # Pattern: figures.r lines 522, 763
     withr::local_options(list(gmax.data.size = 1e8))
-    gsetroot("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19")
+    gsetroot(test_db_root("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19"))
 
     gvtrack.create("max_score", "hic.test_score", "max")
     withr::defer(gvtrack.rm("max_score"))
@@ -554,7 +554,7 @@ test_that("max virtual track finds maximum in region", {
 test_that("distance virtual tracks work with 2D iterators", {
     # Pattern: hic_basic.r lines 369-373
     withr::local_options(list(gmax.data.size = 1e8))
-    gsetroot("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19")
+    gsetroot(test_db_root("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19"))
 
     features <- gintervals("chr1", c(5e5, 1e6, 1.5e6), c(5.1e5, 1.1e6, 1.6e6))
 
@@ -586,7 +586,7 @@ test_that("distance virtual tracks work with 2D iterators", {
 test_that("gtrack.2d.get_insu_doms extracts domains from insulation", {
     # Pattern: hic_basic.r line 31
     withr::local_options(list(gmax.data.size = 1e8))
-    gsetroot("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19")
+    gsetroot(test_db_root("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19"))
 
     domains <- gtrack.2d.get_insu_doms("insulation.test", thresh = -3.0)
     domains_filtered <- domains[domains$end - domains$start > 5e4, ]
@@ -601,7 +601,7 @@ test_that("gtrack.2d.get_insu_doms extracts domains from insulation", {
 test_that("intra-domain contacts show enrichment vs far-cis", {
     # Pattern: hic_basic.r lines 75-95
     withr::local_options(list(gmax.data.size = 1e8))
-    gsetroot("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19")
+    gsetroot(test_db_root("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19"))
 
     domains <- gintervals.load("domains.test")
 
@@ -642,7 +642,7 @@ test_that("intra-domain contacts show enrichment vs far-cis", {
 test_that("gscreen filters 2D intervals with spatial iterator", {
     # Pattern: hic_basic.r line 459
     withr::local_options(list(gmax.data.size = 1e8))
-    gsetroot("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19")
+    gsetroot(test_db_root("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19"))
 
     grid <- expand.grid(
         start1 = seq(5e5, 1e6, 1e5),
@@ -675,7 +675,7 @@ test_that("gscreen filters 2D intervals with spatial iterator", {
 test_that("giterator.intervals with band creates filtered set", {
     # Pattern: hic_basic.r line 464
     withr::local_options(list(gmax.data.size = 1e8))
-    gsetroot("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19")
+    gsetroot(test_db_root("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19"))
 
     # Create test directory if needed
     tryCatch(gdir.create("test", showWarnings = FALSE), error = function(e) NULL)
@@ -706,7 +706,7 @@ test_that("giterator.intervals with band creates filtered set", {
 test_that("gscreen handles multiple 2D criteria", {
     # Pattern: hic_basic.r line 545
     withr::local_options(list(gmax.data.size = 1e8))
-    gsetroot("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19")
+    gsetroot(test_db_root("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19"))
 
     starts <- seq(5e5, 1e6, 5e4)
     ends <- starts + 5e4
@@ -729,7 +729,7 @@ test_that("gscreen handles multiple 2D criteria", {
 test_that("marginal extraction with diagonal subtraction", {
     # Pattern: hic_basic.r lines 37-56
     withr::local_options(list(gmax.data.size = 1e8))
-    gsetroot("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19")
+    gsetroot(test_db_root("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19"))
 
     resolution <- 5e4
     intervals <- gintervals("chr1", 0, 5e5)
@@ -765,7 +765,7 @@ test_that("marginal extraction with diagonal subtraction", {
 test_that("marginal extraction handles multiple tracks", {
     # Pattern: hic_basic.r lines 38-42
     withr::local_options(list(gmax.data.size = 1e8))
-    gsetroot("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19")
+    gsetroot(test_db_root("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19"))
 
     tracks <- c("hic.test_basic", "hic.test_shuffle")
     v_tracks <- paste0("v_", tracks)
@@ -794,7 +794,7 @@ test_that("marginal extraction handles multiple tracks", {
 test_that("contact grid bins by distance to features", {
     # Pattern: hic_basic.r lines 366-384
     withr::local_options(list(gmax.data.size = 1e8))
-    gsetroot("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19")
+    gsetroot(test_db_root("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19"))
 
     features1 <- gintervals("chr1", c(5e5, 1e6), c(5.1e5, 1.1e6))
     features2 <- gintervals("chr1", c(7e5, 1.2e6), c(7.1e5, 1.3e6))
@@ -871,7 +871,7 @@ test_that("obs/exp grid normalizes correctly", {
 test_that("gintervals.neighbors respects 2D distance constraints", {
     # Pattern: hic_basic.r line 467
     withr::local_options(list(gmax.data.size = 1e8))
-    gsetroot("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19")
+    gsetroot(test_db_root("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19"))
 
     # Create test directory if needed
     tryCatch(gdir.create("test", showWarnings = FALSE), error = function(e) NULL)
@@ -914,7 +914,7 @@ test_that("gintervals.neighbors respects 2D distance constraints", {
 test_that("spatial max values in grid pattern", {
     # Pattern: figures.r lines 755-777 (simplified)
     withr::local_options(list(gmax.data.size = 1e8))
-    gsetroot("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19")
+    gsetroot(test_db_root("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19"))
 
     distance <- 1e5
     resolution <- 5

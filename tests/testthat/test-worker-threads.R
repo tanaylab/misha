@@ -12,6 +12,7 @@ skip_if_no_nproc_limit <- function() {
 }
 
 run_limited_r <- function(groot, setup, limited) {
+    skip_if_not(file.exists(system.file("Meta", "package.rds", package = "misha")), "misha is not loaded from an installed library")
     script <- withr::local_tempfile(fileext = ".R")
     writeLines(c(
         sprintf("library(misha, lib.loc = %s)", deparse(dirname(find.package("misha")))),

@@ -8,6 +8,7 @@
 # the real condition takes GB of memory and a host whose kernel gives R no huge pages.
 
 run_in_fresh_r <- function(lines, env = character()) {
+    skip_if_not(file.exists(system.file("Meta", "package.rds", package = "misha")), "misha is not loaded from an installed library")
     script <- withr::local_tempfile(fileext = ".R")
     writeLines(c(
         sprintf("library(misha, lib.loc = %s)", deparse(dirname(find.package("misha")))),
