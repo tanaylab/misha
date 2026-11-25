@@ -12,9 +12,10 @@
 // CIGAR. It replaces the `samtools view` pipe misha used to read BAM through.
 //
 // The BGZF blocks are inflated in batches, on up to nthreads threads (the threads run zlib only),
-// and consumed in file order by the calling thread. The approach - find the block boundaries
-// first, then inflate the blocks independently - follows the BAM reader of figwig (bam2bw.py,
-// Copyright (c) 2026 Jacob Schreiber, MIT License).
+// and consumed in file order by the calling thread. Finding the block boundaries first and then
+// inflating the blocks independently is possible because BGZF blocks are independent deflate
+// streams by design (SAM/BAM specification, section 4.1), the same property htslib's threaded
+// reading uses.
 //
 // A partial read cannot pass silently. The file must end with the BGZF end-of-file block, every
 // block must inflate (zlib checks it) to exactly the length and CRC32 its trailer declares, the
