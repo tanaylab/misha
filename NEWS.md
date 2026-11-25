@@ -3,6 +3,7 @@
 * `gtrack.import_mappedseq()` reads BAM files directly and no longer needs `samtools`. Results are unchanged and the import is about 3x faster.
 * **Behavior fix:** `gtrack.import_mappedseq()` rejects a truncated BAM (no end-of-file block) instead of importing part of it.
 * `gtrack.export_bigwig()` writes bigWig files directly; UCSC `bedGraphToBigWig` is no longer needed.
+* New `gtrack.import_figwig()` imports the tracks of a figwig (`.fw`) multi-track file as sparse or binned tracks.
 
 # misha 5.19.0
 

@@ -92,6 +92,8 @@ extern "C" {
     extern SEXP gintervals_import_bigwig(SEXP, SEXP, SEXP);
     extern SEXP gintervals_import_bigbed(SEXP, SEXP);
     extern SEXP gtrackimportparquet(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP gtrackimportfigwig(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP figwig_info(SEXP, SEXP);
     extern SEXP gtrack_bedgraph_lines(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gtrack_bigwig_create(SEXP, SEXP, SEXP, SEXP);
     extern SEXP gtrack_bigwig_append(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
@@ -233,6 +235,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"gintervals_import_bigwig", (DL_FUNC)&gintervals_import_bigwig, 3},
     {"gintervals_import_bigbed", (DL_FUNC)&gintervals_import_bigbed, 2},
     {"gtrackimportparquet", (DL_FUNC)&gtrackimportparquet, 7},
+    {"gtrackimportfigwig", (DL_FUNC)&gtrackimportfigwig, 7},
+    {"figwig_info", (DL_FUNC)&figwig_info, 2},
     {"gtrack_bedgraph_lines", (DL_FUNC)&gtrack_bedgraph_lines, 10},
     {"gtrack_bigwig_create", (DL_FUNC)&gtrack_bigwig_create, 4},
     {"gtrack_bigwig_append", (DL_FUNC)&gtrack_bigwig_append, 7},
