@@ -85,3 +85,7 @@ if __name__ == "__main__":
         open(f"{out}/bad-truncated-record.bam", "wb").write(bgzf(data[:-7]))
         open(f"{out}/bad-cigar-length.bam", "wb").write(bgzf(header(refs) + ok + record("bad", 0, 0, 200, 60, [(40, 0)], l_seq=50)))
         open(f"{out}/bad-refid.bam", "wb").write(bgzf(header(refs) + ok + record("bad", 0, 0, 200, 60, [(50, 0)], next_refid=3)))
+        # a header whose n_ref (2^31 - 1) is more references than the file holds
+        hdr = bytearray(header(refs))
+        struct.pack_into("<i", hdr, 8, 0x7fffffff)
+        open(f"{out}/bad-n-ref.bam", "wb").write(bgzf(bytes(hdr) + ok))

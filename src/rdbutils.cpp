@@ -1645,4 +1645,30 @@ SEXP C_test_file_size_limit(SEXP _limit)
 	return R_NilValue;
 }
 
+// Test support: caps the address space of this process at limit bytes, so that an allocation
+// a machine with less memory than this one could not make fails here too (overcommit lets a large
+// one succeed on a large machine); a negative limit lifts the cap. Returns TRUE if the cap is set.
+// No RdbInitializer, like C_test_file_size_limit.
+SEXP C_test_address_space_limit(SEXP _limit)
+{
+	static struct rlimit s_saved;
+	static bool s_capped = false;
+	double limit = Rf_asReal(_limit);
+	bool capped = false;
+
+	if (limit >= 0) {
+		if (!s_capped) {
+			getrlimit(RLIMIT_AS, &s_saved);
+			s_capped = true;
+		}
+		struct rlimit rl = s_saved;
+		rl.rlim_cur = (rlim_t)limit;
+		capped = !setrlimit(RLIMIT_AS, &rl);
+	} else if (s_capped) {
+		setrlimit(RLIMIT_AS, &s_saved);
+		s_capped = false;
+	}
+	return Rf_ScalarLogical(capped);
+}
+
 }
