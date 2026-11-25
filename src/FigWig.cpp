@@ -636,6 +636,8 @@ void FigWig::parse_metadata(const string &json)
 
 	const JVal *genome = doc.get("genome");
 	if (genome && genome->type == JVal::STR) {
+		if (genome->s.find('\0') != string::npos)
+			corrupt("the genome name holds a NUL byte");
 		m_has_genome = true;
 		m_genome = genome->s;
 	}

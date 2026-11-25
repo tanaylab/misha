@@ -6,6 +6,8 @@
 
 * `gtrack.export_bigwig()` writes to a temporary file and renames it into place when done, so an export that fails or is interrupted leaves a file already at the path unchanged.
 
+* `gtrack.import_figwig()` reports a figwig file whose genome name holds a NUL byte as corrupt, instead of failing with "Allocation failed".
+
 * New `gextract.windows()` returns fixed-width windows around loci as arrays for sequence models: one-hot DNA (N x 4 x L) and track values (N x T x L'), with jitter margins, strand-aware reverse complement, exclusion intervals and count filters. New `gseq.onehot()` one-hot encodes intervals (read in C++ straight from the sequence files) or strings.
 
 * New `gseq.pwm_hits()` and `gintervals.pwm_hits()` return the position, strand and score of every motif window that passes a threshold.
