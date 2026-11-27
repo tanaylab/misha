@@ -87,13 +87,13 @@ gdataset.load(shared_annotations)
 
 # List all sources (working db + loaded datasets)
 gdataset.ls()
-#> [1] "/tmp/RtmpVDyNJp/trackdb/test"       "/tmp/RtmpVDyNJp/shared_annotations"
+#> [1] "/tmp/RtmpHnQQTu/trackdb/test"       "/tmp/RtmpHnQQTu/shared_annotations"
 
 # Get detailed information
 gdataset.ls(dataframe = TRUE)
 #>                                 path tracks_total tracks_visible
-#> 1       /tmp/RtmpVDyNJp/trackdb/test            5              5
-#> 2 /tmp/RtmpVDyNJp/shared_annotations            1              1
+#> 1       /tmp/RtmpHnQQTu/trackdb/test            5              5
+#> 2 /tmp/RtmpHnQQTu/shared_annotations            1              1
 #>   intervals_total intervals_visible has_metadata writable
 #> 1               1                 1        FALSE     TRUE
 #> 2               0                 0        FALSE    FALSE
@@ -119,8 +119,8 @@ gtrack.copy("dense_track", db = other_dataset)
 
 gdataset.load(other_dataset)
 #> Error:
-#> ! Cannot load dataset '/tmp/RtmpVDyNJp/other_dataset':
-#>   - tracks 'dense_track' already exist in working database '/tmp/RtmpVDyNJp/trackdb/test'
+#> ! Cannot load dataset '/tmp/RtmpHnQQTu/other_dataset':
+#>   - tracks 'dense_track' already exist in working database '/tmp/RtmpHnQQTu/trackdb/test'
 #> Use force=TRUE to override.
 ```
 
@@ -134,12 +134,12 @@ gdataset.load(other_dataset, force = TRUE)
 
 # Check which source provides a track
 gtrack.dataset("dense_track")
-#> [1] "/tmp/RtmpVDyNJp/trackdb/test"
+#> [1] "/tmp/RtmpHnQQTu/trackdb/test"
 
 # See all sources where a track exists (for debugging)
 gtrack.dbs("dense_track")
 #>                     dense_track                     dense_track 
-#>  "/tmp/RtmpVDyNJp/trackdb/test" "/tmp/RtmpVDyNJp/other_dataset"
+#>  "/tmp/RtmpHnQQTu/trackdb/test" "/tmp/RtmpHnQQTu/other_dataset"
 
 gdataset.unload(other_dataset)
 ```
@@ -214,24 +214,24 @@ to find which source contains a track or interval set:
 
 # Single track - returns source path
 gtrack.dataset("annotation_track")
-#> [1] "/tmp/RtmpVDyNJp/shared_annotations"
+#> [1] "/tmp/RtmpHnQQTu/shared_annotations"
 
 # All sources containing a track (useful for debugging shadowed tracks)
 gtrack.dbs("dense_track")
 #>                    dense_track 
-#> "/tmp/RtmpVDyNJp/trackdb/test"
+#> "/tmp/RtmpHnQQTu/trackdb/test"
 
 # Multiple tracks (vectorized)
 gtrack.dataset(c("dense_track", "sparse_track", "annotation_track"))
-#> [1] "/tmp/RtmpVDyNJp/trackdb/test"       "/tmp/RtmpVDyNJp/trackdb/test"      
-#> [3] "/tmp/RtmpVDyNJp/shared_annotations"
+#> [1] "/tmp/RtmpHnQQTu/trackdb/test"       "/tmp/RtmpHnQQTu/trackdb/test"      
+#> [3] "/tmp/RtmpHnQQTu/shared_annotations"
 
 # Intervals
 gintervals.dataset("annotations")
-#> [1] "/tmp/RtmpVDyNJp/trackdb/test"
+#> [1] "/tmp/RtmpHnQQTu/trackdb/test"
 gintervals.dbs("annotations")
 #>                    annotations 
-#> "/tmp/RtmpVDyNJp/trackdb/test"
+#> "/tmp/RtmpHnQQTu/trackdb/test"
 ```
 
 Filter track and interval listings by source:
@@ -284,10 +284,10 @@ gdataset.info(chipseq_dataset)
 #> [1] "runner"
 #> 
 #> $created
-#> [1] "2026-11-27T10:16:11Z"
+#> [1] "2026-11-27T10:26:08Z"
 #> 
 #> $original_db
-#> [1] "/tmp/RtmpVDyNJp/trackdb/test"
+#> [1] "/tmp/RtmpHnQQTu/trackdb/test"
 #> 
 #> $misha_version
 #> [1] "5.21.0"
@@ -319,7 +319,7 @@ to create a lightweight database that links to a parent database’s
 my_db <- file.path(tempdir(), "my_db")
 unlink(my_db, recursive = TRUE)
 gdb.create_linked(my_db, parent = my_project)
-#> Created linked database at /tmp/RtmpVDyNJp/my_db (linked to /tmp/RtmpVDyNJp/trackdb/test)
+#> Created linked database at /tmp/RtmpHnQQTu/my_db (linked to /tmp/RtmpHnQQTu/trackdb/test)
 
 # Use as your working database
 gsetroot(my_db)
@@ -404,7 +404,7 @@ gsetroot(my_project)
 gdataset.load(shared_annotations)
 gtrack.copy("annotation_track", "my_local_copy") # Copy to working db
 gtrack.dataset("my_local_copy")
-#> [1] "/tmp/RtmpVDyNJp/trackdb/test"
+#> [1] "/tmp/RtmpHnQQTu/trackdb/test"
 gtrack.rm("my_local_copy", force = TRUE)
 ```
 
@@ -452,7 +452,7 @@ Single-database usage works exactly as before:
 gsetroot(my_project) # Works unchanged
 gdb.init(my_project) # Equivalent, also works
 gdataset.ls()
-#> [1] "/tmp/RtmpVDyNJp/trackdb/test"
+#> [1] "/tmp/RtmpHnQQTu/trackdb/test"
 ```
 
 An example of a Genomic Database file structure:
