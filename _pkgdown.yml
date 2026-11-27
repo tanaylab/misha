@@ -85,6 +85,7 @@ reference:
       - gintervals.attr.set
       - gintervals.canonic
       - gintervals.mark_overlaps
+      - gintervals.remove_overlaps
       - gintervals.chrom_sizes
       - gintervals.covered_bp
       - gintervals.coverage_fraction
@@ -96,6 +97,8 @@ reference:
       - gintervals.from_mat
       - gintervals.from_strings
       - gintervals.normalize
+      - gintervals.expand
+      - gintervals.promoters
       - gintervals.annotate
       - gintervals.import_genes
       - gintervals.import_bed

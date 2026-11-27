@@ -372,6 +372,47 @@ gintervals.mark_overlaps <- function(intervals, group_col = "overlap_group", uni
     return(intervals)
 }
 
+#' Keep one interval of each group of overlapping intervals
+#'
+#' Groups overlapping intervals as \code{\link{gintervals.mark_overlaps}} does
+#' and keeps one interval of each group.
+#'
+#' @param intervals intervals set
+#' @param select which interval of each group to keep: "first" or "last" in
+#' row order, or "random"
+#' @return The kept intervals, in their original row order.
+#'
+#' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
+#'
+#' gdb.init_examples()
+#' intervs <- data.frame(
+#'     chrom = "chr1",
+#'     start = c(11000, 100, 10000, 10500),
+#'     end = c(12000, 200, 13000, 10600),
+#'     data = c(10, 20, 30, 40)
+#' )
+#' gintervals.remove_overlaps(intervs)
+#' gintervals.remove_overlaps(intervs, select = "last")
+#' @inheritParams gintervals.canonic
+#' @seealso \code{\link{gintervals.mark_overlaps}}, \code{\link{gintervals.canonic}}
+#' @export
+gintervals.remove_overlaps <- function(intervals, select = c("first", "last", "random"), unify_touching_intervals = TRUE) {
+    select <- match.arg(select)
+    if (is.character(intervals)) {
+        intervals <- gintervals.load(intervals)
+    }
+    group <- attr(gintervals.canonic(intervals, unify_touching_intervals = unify_touching_intervals), "mapping")
+    if (select == "random") {
+        keep <- sort(vapply(split(seq_along(group), group), function(i) i[sample.int(length(i), 1L)], integer(1)))
+    } else {
+        keep <- which(!duplicated(group, fromLast = select == "last"))
+    }
+    intervals[keep, , drop = FALSE]
+}
+
 
 #' Calculates difference of two intervals sets
 #'
@@ -660,6 +701,93 @@ gintervals.force_range <- function(intervals = NULL, intervals.set.out = NULL) {
     } else {
         retv <- 0
     } # suppress return value
+}
+
+#' Expand intervals on both sides
+#'
+#' Adds 'expansion' bp to each side of every 1D interval, then clips the
+#' result to the chromosome boundaries (see \code{\link{gintervals.force_range}}).
+#'
+#' @param intervals intervals set
+#' @param expansion bp added to each side: one value, or one per interval
+#' @return A data frame of the expanded intervals, with the other columns kept.
+#' @seealso \code{\link{gintervals.normalize}}, \code{\link{gintervals.promoters}}
+#' @keywords ~intervals
+#' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
+#'
+#' gdb.init_examples()
+#' gintervals.expand(gintervals(1, c(1000, 5000), c(2000, 6000)), 100)
+#'
+#' @export gintervals.expand
+gintervals.expand <- function(intervals = NULL, expansion = NULL) {
+    if (is.null(substitute(intervals)) || is.null(expansion)) {
+        stop("Usage: gintervals.expand(intervals, expansion)", call. = FALSE)
+    }
+    .gcheckroot()
+    if (is.character(intervals)) {
+        intervals <- gintervals.load(intervals)
+    }
+    intervals$start <- intervals$start - expansion
+    intervals$end <- intervals$end + expansion
+    gintervals.force_range(intervals)
+}
+
+#' Promoter windows around the 5' end of stranded intervals
+#'
+#' Returns, for each interval, 'upstream' bp before its 5' end and
+#' 'downstream' bp from the 5' base on, following the interval's strand. The
+#' 5' base is 'start' for strand 1 and 'end - 1' for strand -1, so a window is
+#' 'upstream + downstream' bp wide before clipping at the chromosome ends. On a
+#' 1 bp TSS set, such as the 'tss' set that \code{\link{gdb.install_intervals}}
+#' writes, this gives promoters; on transcripts it uses their first base.
+#'
+#' Strand 0 marks features on opposite strands merged into one interval, as
+#' \code{\link{gintervals.import_genes}} does for a TSS that two genes share.
+#' For such an interval the window covers both the strand 1 and the strand -1
+#' window.
+#'
+#' @param intervals intervals set with a 'strand' column (1, -1 or 0)
+#' @param upstream bp upstream of the 5' end
+#' @param downstream bp downstream of the 5' end, the 5' base included
+#' @return A data frame of the windows, with the other columns kept, clipped to
+#' the chromosome boundaries.
+#' @seealso \code{\link{gintervals.expand}}, \code{\link{gintervals.import_genes}}
+#' @keywords ~intervals ~TSS ~strand
+#' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
+#'
+#' gdb.init_examples()
+#' tss <- data.frame(chrom = "chr1", start = c(10000, 20000), end = c(10001, 20001), strand = c(1, -1))
+#' gintervals.promoters(tss, upstream = 500, downstream = 50)
+#'
+#' @export gintervals.promoters
+gintervals.promoters <- function(intervals = NULL, upstream = 500, downstream = 50) {
+    if (is.null(substitute(intervals))) {
+        stop("Usage: gintervals.promoters(intervals, upstream = 500, downstream = 50)", call. = FALSE)
+    }
+    .gcheckroot()
+    if (is.character(intervals)) {
+        intervals <- gintervals.load(intervals)
+    }
+    if (!"strand" %in% colnames(intervals)) {
+        stop("intervals must have a strand column (1, -1 or 0)", call. = FALSE)
+    }
+    strand <- intervals$strand
+    if (!all(strand %in% c(-1, 0, 1))) {
+        stop("strand must be 1, -1 or 0", call. = FALSE)
+    }
+    plus_start <- intervals$start - upstream
+    plus_end <- intervals$start + downstream
+    minus_start <- intervals$end - downstream
+    minus_end <- intervals$end + upstream
+    intervals$start <- ifelse(strand == 1, plus_start, ifelse(strand == -1, minus_start, pmin(plus_start, minus_start)))
+    intervals$end <- ifelse(strand == 1, plus_end, ifelse(strand == -1, minus_end, pmax(plus_end, minus_end)))
+    gintervals.force_range(intervals)
 }
 
 #' Normalize intervals to fixed or variable sizes

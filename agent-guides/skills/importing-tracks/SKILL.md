@@ -48,7 +48,7 @@ Convention used throughout: `binsize > 0` produces a dense fixed-bin track (one 
 | Single-end reads (SAM, BAM, tab-delimited, `.sam.gz` / `.tsv.gz`) | `gtrack.import_mappedseq(name, desc, file, pileup = 200, binsize = 20, remove.dups = TRUE, min.mapq = 30)` | each read is extended `pileup` bp from its 5' end, so set `pileup` to the fragment length (cross-correlation estimate; 200 when unknown, as MACS and nf-core use). SAM needs `cols.order = NULL`; BAM is detected from its content and read by misha itself (no `samtools` needed; a truncated BAM is an error). `min.mapq` (5.13.0+) drops low-MAPQ records (multimappers among them). Tab-delimited input is 0-based unless `one.based = TRUE` (Illumina export files are 1-based) |
 | Paired-end BAM / SAM (misha ≥ 5.13.0) | `gtrack.import_mappedseq(name, desc, "<file>.bam", binsize = 20, paired = TRUE, min.mapq = 30)` | each proper pair covers its own fragment, read from the first mate as MACS3 `-f BAMPE` does; no `pileup`. Fragments are deduplicated on (start, end); `max.fraglen` (default 2000) drops longer ones. Only pairs flagged proper (FLAG 0x2) are read, so the aligner's insert-size limit caps fragment length first: bowtie2's default `-X 500` flags longer pairs improper. Realign with a larger `-X` to keep them. A SAM text file needs `cols.order = NULL`, or it is read as a fragment file. Never import paired-end data as single-end with a fixed `pileup` |
 | Fragment file (BED-like chrom/start/end, 10x `fragments.tsv.gz`, plain or bgzipped; misha ≥ 5.13.0) | `gtrack.import_mappedseq(name, desc, file, binsize = 20, paired = TRUE)` | streamed, so the file never has to fit in R; 0-based half-open; `#` lines skipped; never deduplicated (10x files already are, per cell) |
-| Several BAMs at once | `misha.ext::gtrack.import_mappedseq_bam(bam_files, track, ...)` | streams `samtools cat` + `samtools view` through a FIFO into `gtrack.import_mappedseq`; pass `paired = TRUE`, `min.mapq` etc. through `...` (the wrapper's own `min_mapq` filters with `samtools view -q` instead). Needs misha ≥ 5.13.0 (earlier versions hang on the FIFO). For one BAM, call `gtrack.import_mappedseq` directly with `min.mapq` |
+| Several BAMs at once | `samtools cat -o merged.bam a.bam b.bam`, then `gtrack.import_mappedseq(name, desc, "merged.bam", ...)` | `gtrack.import_mappedseq` reads one file; `samtools cat` needs the BAMs to share one reference header. Deduplication then runs across all of them |
 | 2D Hi-C / capture-C contacts (per-contact adj + fends) | `gtrack.2d.import_contacts(name, desc, contacts, fends = "<redb>/<RE>.fends", allow.duplicates = TRUE)` | `contacts =` accepts a vector (shaman per-rect scores, scHi-C per-core stagings - see "scHi-C pooling" below). `allow.duplicates = TRUE` (the default) sums repeated fend pairs; use `allow.duplicates = FALSE` only for pre-scored shaman per-rectangle outputs where any duplicate is an upstream bug |
 | Restriction-enzyme fragment + fend prerequisites (any new 4C/Hi-C bootstrap) | `gtrack.import('redb.<RE>_flen', flen_file, 0)` + `gtrack.import('redb.<RE>_gc', gc_file, 0)` + `gtrack.create('redb.<RE>_map', mapab_track, iterator = 'redb.<RE>_flen')` | per-fragment iterator promotes a per-base mapability track to per-fragment mean. See "RE fragment-track bootstrap" below |
 | Pooled multi-cell scHi-C track | `gtrack.2d.import_contacts(pool_name, desc, contacts = c(stage_1, ..., stage_N), fends = "<redb>/<RE>.fends")` | parallel-stage per-cell `gextract`s to N TSVs, then a single pool call. See "scHi-C pooling" below |
@@ -84,7 +84,7 @@ Lab-wide convention (high-frequency, cross-user — 95+ files / 23+ projects in 
 | `<sample>.unmeth` | unmethylated read count |
 | `<sample>.avg`    | methylation level `meth / cov` (often materialised; sometimes recomputed as an expression-derived vtrack at the CpG iterator) |
 
-Downstream tooling (lab helpers like `combine.libs` / `copy.lib`, methylation-aware `misha.ext` wrappers) walks the four suffixes by convention. Materialising only `.avg` and skipping the count pair breaks coverage-aware aggregations and re-binning.
+Downstream tooling (lab helpers like `combine.libs` / `copy.lib`) walks the four suffixes by convention. Materialising only `.avg` and skipping the count pair breaks coverage-aware aggregations and re-binning.
 
 ### Importing from a bismark `.cov.gz` (per sample)
 
@@ -138,21 +138,21 @@ Three points the corpus emphasises and that bite if skipped:
 
 ### Parallelising over many samples
 
-For a cohort, wrap the per-sample block in a function and dispatch via `misha.ext::gcluster.run2`:
+For a cohort, wrap the per-sample block in a function and dispatch one `gcluster.run` command per sample:
 
 ```r
 import_one <- function(filename, track_stem, description) {
     # ... the per-sample body above ...
 }
 
-cmds <- samples %>%
-    mutate(cmd = glue("import_one('{cov_path}', '{track_stem}', '{description}')")) %>%
-    pull(cmd)
-misha.ext::gcluster.run2(command_list = cmds, max.jobs = 25, threads = 5, io_saturation = 1)
+cmds <- lapply(seq_len(nrow(samples)), function(i) {
+    bquote(import_one(.(samples$cov_path[i]), .(samples$track_stem[i]), .(samples$description[i])))
+})
+do.call(gcluster.run, c(cmds, list(max.jobs = 25, opt.flags = "-pe threads 5 -l io_saturation=1")))
 gdb.reload()
 ```
 
-`gdb.reload()` afterwards is mandatory - `gcluster.run2` writes the new tracks from worker processes, and the parent gdb won't see them until reload.
+`gdb.reload()` afterwards is mandatory - `gcluster.run` writes the new tracks from worker processes, and the parent gdb won't see them until reload.
 
 ### Population matrices: 450k / EPIC / PBAT cohorts
 
@@ -239,7 +239,7 @@ borzoi_data <- gextract(borzoi_vt, intervals = regs, iterator = 32,
 fwrite(borzoi_data, here("output/data-for-borzoi/borzoi_data.tsv"), sep = "\t")
 ```
 
-`misha.ext::gextract.left_join` is the older R-side wrapper that does the same join via `dplyr::left_join`; deprecated in misha 5.7.1 (the built-in is ~2x faster on wide-window workloads and drops the misha.ext dependency). Don't introduce new calls.
+`misha.ext::gextract.left_join` is the older R-side wrapper that does the same join via `dplyr::left_join`; misha.ext is retired, so don't introduce new calls.
 
 **Parquet (misha >= 5.14.0).** For a genome-wide matrix, `gextract(exprs, intervals = gintervals.all(), iterator = 32, colnames = cols, file = "x.parquet")` writes Parquet directly, in parallel: `chrom`, `start`, `end`, then one column per expression, which pyarrow and pandas read as is: double (float64) since misha 5.17.0, float32 before. Nothing passes through R, so put per-column transforms in the expressions (e.g. `ifelse(is.na(v1), 0, v1) / 6.1 * (blacklisted == 0)`). The other way, `gtrack.import_parquet(description, path, binsize, track.prefix = NULL, columns = NULL, defval = NaN)` creates one dense track per value column, named `<track.prefix><column>`; `path` may be a glob over per-chromosome files, columns are matched by name, and the import is all or nothing. A Parquet file with a single value column also goes through `gtrack.import(name, desc, file, binsize)`.
 
@@ -424,7 +424,6 @@ Use `gtrack.var.set(track, var, value)` (not `attr.set`) when you need to attach
 | SAM/BAM-derived track sits 1bp right of other tools' output | Imported with misha < 5.13.0, which used the 1-based SAM `POS` as 0-based | Re-import with misha ≥ 5.13.0 |
 | `paired = TRUE` track has far fewer fragments than the BAM has pairs | Pairs longer than the aligner's insert-size limit (bowtie2 default `-X 500`) are flagged improper and skipped | Compare TLEN of proper and improper pairs; realign with a larger `-X` |
 | `paired = TRUE` import warns "No fragment was imported" | A SAM text file passed without `cols.order = NULL` (read as a fragment file), or no proper pairs passed the filters | Pass `cols.order = NULL`; check the flags and `min.mapq` |
-| `misha.ext::gtrack.import_mappedseq_bam` never returns | misha 5.8.0 - 5.12.x hang on FIFO input | Upgrade to misha ≥ 5.13.0 |
 | TSV import errors with non-numeric / parse error on coords | R serialized large coordinates in scientific notation | `options(scipen = 20)` BEFORE `write.table` |
 | Re-imports under the same name behave inconsistently | Importer doesn't fully overwrite | `gtrack.rm(name, force = TRUE)` before re-import |
 | `gtrack.create_dense` `func = "coverage"` returns implausibly large values (misha < 5.6.32) | Overlapping intervals of mixed lengths inflated the per-bin coverage | Upgrade to misha ≥ 5.6.32 |
