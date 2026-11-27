@@ -1,6 +1,6 @@
 # Changelog
 
-## misha (development version)
+## misha 5.21.0
 
 - New
   [`gintervals.promoters()`](https://tanaylab.github.io/misha/reference/gintervals.promoters.md):
@@ -11,8 +11,7 @@
   [`gintervals.expand()`](https://tanaylab.github.io/misha/reference/gintervals.expand.md)
   widens intervals on both sides; new
   [`gintervals.remove_overlaps()`](https://tanaylab.github.io/misha/reference/gintervals.remove_overlaps.md)
-  keeps one interval per overlap group. Both moved from the retired
-  misha.ext.
+  keeps one interval per overlap group. Both moved from misha.ext.
 
 ## misha 5.20.0
 
