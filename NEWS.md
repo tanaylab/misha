@@ -1,8 +1,8 @@
-# misha (development version)
+# misha 5.21.0
 
 * New `gintervals.promoters()`: strand-aware promoter windows around the 5' end of intervals, such as a TSS set. Strand 0 covers both directions.
 
-* New `gintervals.expand()` widens intervals on both sides; new `gintervals.remove_overlaps()` keeps one interval per overlap group. Both moved from the retired misha.ext.
+* New `gintervals.expand()` widens intervals on both sides; new `gintervals.remove_overlaps()` keeps one interval per overlap group. Both moved from misha.ext.
 
 # misha 5.20.0
 
