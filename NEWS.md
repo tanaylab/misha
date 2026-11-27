@@ -1,8 +1,8 @@
 # misha (development version)
 
-* New `gintervals.promoters()` returns strand-aware promoter windows around the 5' end of intervals, such as a TSS set. A strand 0 TSS (shared by genes on both strands) gets a window covering both directions.
+* New `gintervals.promoters()`: strand-aware promoter windows around the 5' end of intervals, such as a TSS set. Strand 0 covers both directions.
 
-* New `gintervals.expand()` widens intervals on both sides and clips them to the chromosome; new `gintervals.remove_overlaps()` keeps one interval of each group of overlapping intervals. Both come from misha.ext, which is retired.
+* New `gintervals.expand()` widens intervals on both sides; new `gintervals.remove_overlaps()` keeps one interval per overlap group. Both moved from the retired misha.ext.
 
 # misha 5.20.0
 
