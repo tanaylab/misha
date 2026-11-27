@@ -36,9 +36,14 @@
   <main id="main" class="col-md-9"><div class="page-header">
 
       <h1>Changelog</h1>
-      <small>Source: <a href="https://github.com/tanaylab/misha/blob/v5.20.0/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
+      <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="development version" id="misha-development-version">misha (development version)<a class="anchor" aria-label="anchor" href="#misha-development-version"></a></h2>
+<ul><li><p>New <code><a href="../reference/gintervals.promoters.html">gintervals.promoters()</a></code>: strand-aware promoter windows around the 5’ end of intervals, such as a TSS set. Strand 0 covers both directions.</p></li>
+<li><p>New <code><a href="../reference/gintervals.expand.html">gintervals.expand()</a></code> widens intervals on both sides; new <code><a href="../reference/gintervals.remove_overlaps.html">gintervals.remove_overlaps()</a></code> keeps one interval per overlap group. Both moved from the retired misha.ext.</p></li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="5.20.0" id="misha-5200">misha 5.20.0<a class="anchor" aria-label="anchor" href="#misha-5200"></a></h2>
 <ul><li><p><strong>Behavior fix:</strong> <code><a href="../reference/gtrack.import_mappedseq.html">gtrack.import_mappedseq()</a></code> rejects a truncated BAM (no end-of-file block) instead of importing part of it.</p></li>

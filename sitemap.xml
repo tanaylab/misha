@@ -80,6 +80,7 @@
 <url><loc>https://tanaylab.github.io/misha/reference/gintervals.dbs.html</loc></url>
 <url><loc>https://tanaylab.github.io/misha/reference/gintervals.diff.html</loc></url>
 <url><loc>https://tanaylab.github.io/misha/reference/gintervals.exists.html</loc></url>
+<url><loc>https://tanaylab.github.io/misha/reference/gintervals.expand.html</loc></url>
 <url><loc>https://tanaylab.github.io/misha/reference/gintervals.force_range.html</loc></url>
 <url><loc>https://tanaylab.github.io/misha/reference/gintervals.from_mat.html</loc></url>
 <url><loc>https://tanaylab.github.io/misha/reference/gintervals.from_strings.html</loc></url>
@@ -100,10 +101,12 @@
 <url><loc>https://tanaylab.github.io/misha/reference/gintervals.neighbors.html</loc></url>
 <url><loc>https://tanaylab.github.io/misha/reference/gintervals.normalize.html</loc></url>
 <url><loc>https://tanaylab.github.io/misha/reference/gintervals.path.html</loc></url>
+<url><loc>https://tanaylab.github.io/misha/reference/gintervals.promoters.html</loc></url>
 <url><loc>https://tanaylab.github.io/misha/reference/gintervals.pwm_hits.html</loc></url>
 <url><loc>https://tanaylab.github.io/misha/reference/gintervals.quantiles.html</loc></url>
 <url><loc>https://tanaylab.github.io/misha/reference/gintervals.random.html</loc></url>
 <url><loc>https://tanaylab.github.io/misha/reference/gintervals.rbind.html</loc></url>
+<url><loc>https://tanaylab.github.io/misha/reference/gintervals.remove_overlaps.html</loc></url>
 <url><loc>https://tanaylab.github.io/misha/reference/gintervals.rm.html</loc></url>
 <url><loc>https://tanaylab.github.io/misha/reference/gintervals.save.html</loc></url>
 <url><loc>https://tanaylab.github.io/misha/reference/gintervals.summary.html</loc></url>

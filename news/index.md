@@ -1,5 +1,19 @@
 # Changelog
 
+## misha (development version)
+
+- New
+  [`gintervals.promoters()`](https://tanaylab.github.io/misha/reference/gintervals.promoters.md):
+  strand-aware promoter windows around the 5’ end of intervals, such as
+  a TSS set. Strand 0 covers both directions.
+
+- New
+  [`gintervals.expand()`](https://tanaylab.github.io/misha/reference/gintervals.expand.md)
+  widens intervals on both sides; new
+  [`gintervals.remove_overlaps()`](https://tanaylab.github.io/misha/reference/gintervals.remove_overlaps.md)
+  keeps one interval per overlap group. Both moved from the retired
+  misha.ext.
+
 ## misha 5.20.0
 
 - **Behavior fix:**

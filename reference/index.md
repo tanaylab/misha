@@ -145,6 +145,8 @@ Functions to manipulate and create intervals
   : Converts intervals to canonic form
 - [`gintervals.mark_overlaps()`](https://tanaylab.github.io/misha/reference/gintervals.mark_overlaps.md)
   : Mark overlapping intervals with a group ID
+- [`gintervals.remove_overlaps()`](https://tanaylab.github.io/misha/reference/gintervals.remove_overlaps.md)
+  : Keep one interval of each group of overlapping intervals
 - [`gintervals.chrom_sizes()`](https://tanaylab.github.io/misha/reference/gintervals.chrom_sizes.md)
   : Returns number of intervals per chromosome
 - [`gintervals.covered_bp()`](https://tanaylab.github.io/misha/reference/gintervals.covered_bp.md)
@@ -168,6 +170,10 @@ Functions to manipulate and create intervals
   : Creates 1D intervals from coordinate strings
 - [`gintervals.normalize()`](https://tanaylab.github.io/misha/reference/gintervals.normalize.md)
   : Normalize intervals to fixed or variable sizes
+- [`gintervals.expand()`](https://tanaylab.github.io/misha/reference/gintervals.expand.md)
+  : Expand intervals on both sides
+- [`gintervals.promoters()`](https://tanaylab.github.io/misha/reference/gintervals.promoters.md)
+  : Promoter windows around the 5' end of stranded intervals
 - [`gintervals.annotate()`](https://tanaylab.github.io/misha/reference/gintervals.annotate.md)
   : Annotates intervals using nearest neighbors
 - [`gintervals.import_genes()`](https://tanaylab.github.io/misha/reference/gintervals.import_genes.md)
