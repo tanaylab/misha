@@ -245,7 +245,7 @@ peaks <- gintervals.canonic(peaks)
 
 **Clip to genome bounds.** `gintervals.force_range(intervs)` clamps `start >= 0` and `end <= chrom_len`. Use after any expansion that may push past chromosome ends. It shortens windows silently, so for fixed-width windows (model inputs, `gextract.matrix`) drop the rows whose width changed: `win <- gintervals.force_range(win); win <- win[win$end - win$start == width, ]`.
 
-**Symmetric expansion shortcut.** If `misha.ext` is installed, `misha.ext::gintervals.expand(intervs, expansion = 100)` does the symmetric expand-by-N + `gintervals.force_range` clamp in one call. Use it in place of the explicit arithmetic when expansion is symmetric.
+**Symmetric expansion shortcut.** `gintervals.expand(intervs, 100)` adds N bp to each side and clamps with `gintervals.force_range` in one call. Use it in place of the explicit arithmetic when expansion is symmetric.
 
 **Persist.**
 
@@ -304,22 +304,13 @@ Sign of `dist` (the same for `gintervals.annotate`'s distance column). It is nev
 - **Target without a `strand` column:** `dist` is unsigned (never negative), so a negative `mindist` or `dist < 0` matches nothing.
 - **`use_intervals1_strand = TRUE`** (and `gintervals.neighbors.upstream/downstream/directional`): it follows the query's strand: positive when the target lies downstream of the query, negative upstream, on either strand. A query without a `strand` column counts as +, which gives the sign in genome coordinates (positive = target to the right).
 
-**Promoters from TSS in one call.** Strand-aware promoter windows around `intervs.global.tss` come up constantly. If `misha.ext` is installed:
+**Promoters from TSS in one call.** Strand-aware promoter windows come up constantly:
 
 ```r
-promoters <- misha.ext::get_promoters(upstream = 500, downstream = 50)
+promoters <- gintervals.promoters("intervs.global.tss", upstream = 500, downstream = 50)
 ```
 
-returns one promoter interval per TSS, oriented by strand. Use it as the source for `intervs.global.tss` derived analyses (overlap with peaks, distance-banded screens, etc.) instead of rolling the strand math by hand.
-
-**Snap intervals to nearest landmark.** Different shape from `gintervals.annotate`: instead of attaching a neighbor column, *replace* each interval's coordinates with its nearest match in another set when within a distance band. With `misha.ext`:
-
-```r
-# Snap rough peak calls to the nearest CTCF motif within ±100bp; leave the rest as-is.
-snapped <- misha.ext::gintervals.align(peaks, ctcf_motifs, mindist = -100, maxdist = 100)
-```
-
-Same row count and order as the input; coordinates are rewritten only for rows that found a match. Use when downstream code needs canonical landmark coordinates (anchor-pair pile-ups, motif-centered meta-profiles); use `gintervals.annotate` when you just want to attach the landmark's distance/identity without changing the query's coordinates.
+returns one window per TSS, `upstream` bp before the TSS and `downstream` bp from it on, oriented by the `strand` column (a set built by `gdb.install_intervals` names it `"tss"`). Strand 0, a TSS shared by genes on both strands, gets a window covering both directions. Use it instead of rolling the strand math by hand.
 
 **Avoid:**
 - `gintervals.neighbors` without `na.if.notfound = TRUE` when annotating a fixed set - rows with no neighbor in range are dropped silently.
@@ -479,6 +470,7 @@ The intervals are carried in `attr(mat, "intervals")` - rownames are display-onl
 - Skipping `arrange(intervalID)` when downstream code assumes input row order.
 - `misha.ext::intervs_to_mat` / `mat_to_intervs` - deprecated. Use `gintervals.to_mat` / `gintervals.from_mat` (in misha >= 5.7.0). The legacy versions corrupt chrom names containing underscores and lose integer typing on round-trip.
 - `misha.ext::gextract.left_join(tracks, intervals, ...)` - deprecated. Use `gextract(tracks, intervals = ..., intervals_join = "intervals", ...)` (in misha >= 5.7.1). The built-in attaches the input columns at the C++ layer (~2x faster on wide-window workloads) and drops the misha.ext dependency.
+- Any other `misha.ext` helper - the package is retired. `get_promoters` -> `gintervals.promoters`, `gintervals.expand` / `gintervals.remove_overlaps` -> the misha functions of the same name, `gintervals.centers(x)` -> `gintervals.normalize(x, 1)`, `gintervals.neighbors1(...)` -> `gintervals.neighbors(..., na.if.notfound = TRUE)`, `grandom_genome` -> `gintervals.random`. misha.ext's own `gintervals.normalize` gives `size - 1` bp for odd sizes; misha's gives `size`.
 
 ### 4.5 Aggregate signal in a flanking window
 

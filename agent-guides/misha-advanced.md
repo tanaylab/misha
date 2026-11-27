@@ -240,20 +240,17 @@ gvtrack.create("cg_frac", NULL, "kmer.frac", kmer = "CG", strand = 1)
 
 `src = NULL` selects the genome sequence as the source. Optional named args via `...`: `strand` (0 = both, default; 1 / -1 = stranded), `extend` (TRUE by default, scan past iterator bin edges so a k-mer straddling the boundary still gets counted). `kmer.frac` divides by the anchors whose k-mer fits: all L of an interval of length L with `extend = TRUE`, L-k+1 with `extend = FALSE` (twice that with `strand = 0`).
 
-**Materialize a k-mer track in one call.** When the multi-k-mer-sum-over-window pattern is something you want to persist as a track (not just an ephemeral vtrack), `misha.ext::gtrack.create_kmer` does it in one call - and accepts a *vector* of k-mers, so GC content is direct:
+**Materialize a k-mer track.** To persist the multi-k-mer sum as a track you'll reuse, write the same expression with `gtrack.create`:
 
 ```r
 # 200bp GC fraction at 20bp resolution, written as a dense track:
-misha.ext::gtrack.create_kmer("seq.GC",
-                              description = "GC fraction in 200bp window",
-                              kmer        = c("G", "C"),
-                              iterator    = 20,
-                              window      = 200,
-                              mode        = "frac",
-                              strand      = 1)
+# each 20bp bin is widened by 90bp on each side.
+gvtrack.create("g_frac", NULL, "kmer.frac", kmer = "G", strand = 1)
+gvtrack.create("c_frac", NULL, "kmer.frac", kmer = "C", strand = 1)
+gvtrack.iterator("g_frac", sshift = -90, eshift = 90)
+gvtrack.iterator("c_frac", sshift = -90, eshift = 90)
+gtrack.create("seq.GC", "GC fraction in 200bp window", "g_frac + c_frac", iterator = 20)
 ```
-
-For ephemeral analyses, the two-vtrack-plus-expression form above is fine; for tracks you'll reuse, prefer `gtrack.create_kmer`.
 
 **Where motifs come from.** `prego` is an optional companion package (not in misha's `Imports` / `Suggests`); install it separately when you need curated PSSM libraries:
 
@@ -457,20 +454,7 @@ These have full conventions outside this guide.
 
 **Methylation tracks (WGBS / PBAT / RRBS).** The lab convention is a four-suffix family per sample - `<sample>.cov`, `.meth`, `.unmeth`, `.avg`. For per-region methylation, the rule is `sum(meth) / sum(cov)` from the *count* tracks - **never** `mean(.avg)`, which is biased by low-coverage CpGs and undefined where `cov = 0`. The `.avg` track is for per-CpG views (heatmaps, scatter plots), not region-level aggregation.
 
-With `misha.ext` installed, `gextract_meth` packages this convention in one call:
-
-```r
-meth <- misha.ext::gextract_meth(
-    tracks    = c("wgbs.sample_a", "wgbs.sample_b"),
-    intervals = peaks,
-    iterator  = "intervs.global.seq_CG",   # default: per-CpG resolution
-    d_expand  = NULL,                       # smooth ±d_expand bp before the ratio
-    min_cov   = 5                           # mask samples with cov < 5 to NA
-)
-# Columns: chrom/start/end + one column per sample (the ratio) + ".cov" suffix per sample.
-```
-
-Without `misha.ext`, the hand-rolled equivalent is one `func = "sum"` vtrack per `.meth` and `.cov`, then `gextract(c("meth_v / cov_v", "cov_v"), ...)` and an explicit NA-fill on `.cov`.
+Build one `func = "sum"` vtrack per `.meth` and `.cov`, then `gextract(c("meth_v / cov_v", "cov_v"), ...)` with an explicit NA-fill on `.cov`.
 
 **New genome bootstrap.** Three layers, from low-level to convenience:
 

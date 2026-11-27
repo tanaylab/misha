@@ -1,3 +1,9 @@
+# misha (development version)
+
+* New `gintervals.promoters()`: strand-aware promoter windows around the 5' end of intervals, such as a TSS set. Strand 0 covers both directions.
+
+* New `gintervals.expand()` widens intervals on both sides; new `gintervals.remove_overlaps()` keeps one interval per overlap group. Both moved from the retired misha.ext.
+
 # misha 5.20.0
 
 * **Behavior fix:** `gtrack.import_mappedseq()` rejects a truncated BAM (no end-of-file block) instead of importing part of it.
