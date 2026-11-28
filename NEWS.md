@@ -1,3 +1,7 @@
+# misha 5.21.1
+
+* The macOS conda package builds again; 5.20.0 and 5.21.0 could not be built with the current macOS conda toolchain (clang 23).
+
 # misha 5.21.0
 
 * New `gintervals.promoters()`: strand-aware promoter windows around the 5' end of intervals, such as a TSS set. Strand 0 covers both directions.

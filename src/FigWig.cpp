@@ -10,6 +10,7 @@
 #include <cerrno>
 #include <cmath>
 #include <cstdarg>
+#include <cstdlib>
 #include <cstring>
 #include <fcntl.h>
 #include <limits>
